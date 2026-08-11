@@ -132,7 +132,7 @@ Run 2 → Retry recovered.
 
 ### Public SDK与 Extension差异
 
-Extension观察两个底层 Run，但没有收到：
+Extension没有收到以下 Session级 Retry语义：
 
 ```text
 auto_retry_start
