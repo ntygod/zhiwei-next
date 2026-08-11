@@ -86,6 +86,8 @@ for (const required of [
   "zhiwei-independent-review",
   "merge_method: \"squash\"",
   "context.payload.repository.default_branch",
+  "testedBaseSha",
+  "pr.base.sha !== testedBaseSha",
   "pr.mergeable !== true",
   "metadata[\"independent-review\"] !== \"complete\"",
 ]) {
