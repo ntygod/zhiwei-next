@@ -225,6 +225,7 @@ async function run() {
     "message_start",
     "message_update",
     "message_end",
+    "queue_update",
     "turn_end",
     "agent_end",
     "agent_settled",
