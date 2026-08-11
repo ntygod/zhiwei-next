@@ -1,0 +1,527 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scenario": "follow-up-queue",
+  "upstream": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "artifact": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "installScriptsExecuted": false
+  },
+  "environment": {
+    "node": "22.23.1",
+    "npm": "10.9.8",
+    "platform": "linux-x64",
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+  },
+  "isolation": {
+    "hostSecretsPassedToProbe": false,
+    "hostWorkspaceMounted": false,
+    "sourceBundleReadOnly": true,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true
+  },
+  "capture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scenario": "follow-up-queue",
+    "package": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1"
+    },
+    "provider": {
+      "id": "zhiwei-follow-up-faux",
+      "api": "zhiwei-follow-up-faux-api",
+      "callCount": 2,
+      "pendingResponses": 0,
+      "promptsSentToExternalProvider": 0
+    },
+    "prompts": {
+      "initial": "Produce the first response before processing the queued follow-up.",
+      "followUp": "Process the queued follow-up now."
+    },
+    "responses": {
+      "first": "First response complete.",
+      "followUp": "Follow-up response complete."
+    },
+    "queue": {
+      "mode": "one-at-a-time",
+      "actions": [
+        {
+          "phase": "queued",
+          "text": "Process the queued follow-up now.",
+          "triggerSequence": 5,
+          "queueUpdateSequence": 6
+        }
+      ],
+      "updates": [
+        {
+          "sequence": 6,
+          "type": "queue_update",
+          "steering": [],
+          "followUp": [
+            "Process the queued follow-up now."
+          ]
+        },
+        {
+          "sequence": 13,
+          "type": "queue_update",
+          "steering": [],
+          "followUp": []
+        }
+      ],
+      "pendingMessageCountBeforeShutdown": 0,
+      "pendingFollowUpsBeforeShutdown": []
+    },
+    "outcome": {
+      "finalText": "Follow-up response complete.",
+      "expectedFinalText": "Follow-up response complete.",
+      "finalMessages": [
+        {
+          "index": 0,
+          "role": "user",
+          "text": "Produce the first response before processing the queued follow-up."
+        },
+        {
+          "index": 1,
+          "role": "assistant",
+          "text": "First response complete.",
+          "stopReason": "stop"
+        },
+        {
+          "index": 2,
+          "role": "user",
+          "text": "Process the queued follow-up now."
+        },
+        {
+          "index": 3,
+          "role": "assistant",
+          "text": "Follow-up response complete.",
+          "stopReason": "stop"
+        }
+      ],
+      "sessionWasIdleBeforeShutdown": true
+    },
+    "counts": {
+      "sessionEvents": 23,
+      "extensionEvents": 24,
+      "publicQueueUpdates": 2,
+      "publicAgentStarts": 1,
+      "publicAgentEnds": 1,
+      "publicAgentSettled": 1,
+      "publicTurnStarts": 2,
+      "publicTurnEnds": 2,
+      "extensionAgentStarts": 1,
+      "extensionAgentEnds": 1,
+      "extensionAgentSettled": 1,
+      "extensionTurnStarts": 2,
+      "extensionTurnEnds": 2,
+      "extensionQueueUpdates": 0,
+      "extensionSessionShutdowns": 1
+    },
+    "ordering": {
+      "queueFilledSequence": 6,
+      "queueClearedSequence": 13,
+      "followUpMessageStartIndex": 13,
+      "finalAssistantEndIndex": 19,
+      "publicAgentEndIndex": 21,
+      "publicSettledIndex": 22,
+      "queueClearedBeforeFollowUpMessage": true,
+      "finalAssistantBeforeAgentEnd": true,
+      "agentEndBeforeSettled": true,
+      "extensionSettledBeforeShutdown": true
+    },
+    "sessionEvents": [
+      {
+        "sequence": 1,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 2,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 3,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Produce the first response before processing the queued follow-up."
+      },
+      {
+        "sequence": 4,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Produce the first response before processing the queued follow-up."
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 6,
+        "type": "queue_update",
+        "steering": [],
+        "followUp": [
+          "Process the queued follow-up now."
+        ]
+      },
+      {
+        "sequence": 7,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 9,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 10,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 11,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 12,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 13,
+        "type": "queue_update",
+        "steering": [],
+        "followUp": []
+      },
+      {
+        "sequence": 14,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Process the queued follow-up now."
+      },
+      {
+        "sequence": 15,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Process the queued follow-up now."
+      },
+      {
+        "sequence": 16,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 17,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 18,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 19,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 20,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 21,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 22,
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "sequence": 23,
+        "type": "agent_settled"
+      }
+    ],
+    "extensionEvents": [
+      {
+        "sequence": 1,
+        "type": "input",
+        "source": "interactive"
+      },
+      {
+        "sequence": 2,
+        "type": "before_agent_start"
+      },
+      {
+        "sequence": 3,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 4,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Produce the first response before processing the queued follow-up."
+      },
+      {
+        "sequence": 6,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Produce the first response before processing the queued follow-up."
+      },
+      {
+        "sequence": 7,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 9,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 10,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 11,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 12,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "First response complete."
+      },
+      {
+        "sequence": 13,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 14,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Process the queued follow-up now."
+      },
+      {
+        "sequence": 15,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Process the queued follow-up now."
+      },
+      {
+        "sequence": 16,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 17,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 18,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 19,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 20,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 21,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Follow-up response complete."
+      },
+      {
+        "sequence": 22,
+        "type": "agent_end"
+      },
+      {
+        "sequence": 23,
+        "type": "agent_settled"
+      },
+      {
+        "sequence": 24,
+        "type": "session_shutdown",
+        "reason": "exit"
+      }
+    ],
+    "lifecycleNotes": [
+      {
+        "type": "shutdown-host-boundary",
+        "mechanism": "session.extensionRunner.emit",
+        "reason": "exit"
+      }
+    ],
+    "sanitization": {
+      "absolutePathsIncluded": false,
+      "rawSessionIdIncluded": false,
+      "environmentDumpIncluded": false,
+      "credentialsIncluded": false,
+      "rawChainOfThoughtIncluded": false
+    },
+    "contractFingerprint": "5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386"
+  },
+  "contractFingerprint": "00c3f7916a129869b768f7e7147a55a8c783b33e5a55e0e79c13eb45a1d692e8"
+}
