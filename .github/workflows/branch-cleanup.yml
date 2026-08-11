@@ -55,21 +55,33 @@ jobs:
               for (const pullRequest of closedPullRequests) {
                 if (pullRequest.head?.repo?.full_name !== repositoryFullName) continue;
                 const headRef = pullRequest.head.ref;
-                const pullNumbers = closedPullRequestsByHeadRef.get(headRef) ?? [];
-                pullNumbers.push(pullRequest.number);
-                closedPullRequestsByHeadRef.set(headRef, pullNumbers);
+                const records = closedPullRequestsByHeadRef.get(headRef) ?? [];
+                records.push({
+                  number: pullRequest.number,
+                  headSha: pullRequest.head.sha,
+                });
+                closedPullRequestsByHeadRef.set(headRef, records);
               }
 
               const selected = [];
-              for (const [branchName, pullNumbers] of closedPullRequestsByHeadRef) {
+              for (const [branchName, pullRecords] of closedPullRequestsByHeadRef) {
                 const branch = existingBranches.get(branchName);
                 if (!branch) continue;
                 if (branchName === defaultBranch) continue;
                 if (branch.protected === true) continue;
                 if (openPullRequestHeadRefs.has(branchName)) continue;
+
+                const matchingClosedPullRequests = pullRecords.filter(
+                  (record) => record.headSha === branch.commit?.sha,
+                );
+                if (matchingClosedPullRequests.length === 0) continue;
+
                 selected.push({
                   name: branchName,
-                  pullRequests: [...pullNumbers].sort((left, right) => left - right),
+                  headSha: branch.commit.sha,
+                  pullRequests: matchingClosedPullRequests
+                    .map((record) => record.number)
+                    .sort((left, right) => left - right),
                 });
               }
 
@@ -77,13 +89,19 @@ jobs:
             }
 
             function runPolicySelfTests() {
-              const branch = (name, protectedBranch = false) => ({
+              const branch = (name, protectedBranch = false, sha = `${name}-sha`) => ({
                 name,
                 protected: protectedBranch,
+                commit: { sha },
               });
-              const pullRequest = (number, ref, fullName = "owner/repo") => ({
+              const pullRequest = (
                 number,
-                head: { ref, repo: { full_name: fullName } },
+                ref,
+                fullName = "owner/repo",
+                sha = `${ref}-sha`,
+              ) => ({
+                number,
+                head: { ref, sha, repo: { full_name: fullName } },
               });
               const scenarios = [
                 {
@@ -101,12 +119,21 @@ jobs:
                   expected: [],
                 },
                 {
+                  name: "reused or advanced branch is preserved",
+                  branches: [branch("main"), branch("feat/reused", false, "new-head")],
+                  openPullRequests: [],
+                  closedPullRequests: [
+                    pullRequest(3, "feat/reused", "owner/repo", "closed-pr-head"),
+                  ],
+                  expected: [],
+                },
+                {
                   name: "default and protected branches are preserved",
                   branches: [branch("main"), branch("release/stable", true)],
                   openPullRequests: [],
                   closedPullRequests: [
-                    pullRequest(3, "main"),
-                    pullRequest(4, "release/stable"),
+                    pullRequest(4, "main"),
+                    pullRequest(5, "release/stable"),
                   ],
                   expected: [],
                 },
@@ -114,14 +141,14 @@ jobs:
                   name: "fork and no-PR branches are preserved",
                   branches: [branch("main"), branch("fork/work"), branch("local/no-pr")],
                   openPullRequests: [],
-                  closedPullRequests: [pullRequest(5, "fork/work", "other/repo")],
+                  closedPullRequests: [pullRequest(6, "fork/work", "other/repo")],
                   expected: [],
                 },
                 {
                   name: "missing branch is idempotently ignored",
                   branches: [branch("main")],
                   openPullRequests: [],
-                  closedPullRequests: [pullRequest(6, "already/deleted")],
+                  closedPullRequests: [pullRequest(7, "already/deleted")],
                   expected: [],
                 },
               ];
@@ -187,7 +214,7 @@ jobs:
                   ref: `heads/${candidate.name}`,
                 });
                 core.notice(
-                  `Deleted branch ${candidate.name} from closed PRs ` +
+                  `Deleted branch ${candidate.name} at ${candidate.headSha} from closed PRs ` +
                   `${candidate.pullRequests.map((number) => `#${number}`).join(", ")}.`,
                 );
               } catch (error) {
