@@ -11,12 +11,10 @@
   "defaultMergeMethod": "squash",
   "defaultAutonomousMerge": true,
   "developmentPause": {
-    "active": true,
-    "reason": "best-effort-live-proof-pending",
-    "incidentIssue": 9,
-    "allowedPullRequestMetadata": {
-      "main-incident-recovery": "yes"
-    }
+    "active": false,
+    "reason": null,
+    "incidentIssue": null,
+    "allowedPullRequestMetadata": {}
   },
   "mainProtection": {
     "serverEnforced": false,
@@ -24,6 +22,8 @@
     "ownerActionRequired": false,
     "residualRiskAccepted": true,
     "riskAcceptanceRecord": "docs/harness/risk-acceptance/2026-08-11-private-free.json",
+    "liveProofVerified": true,
+    "liveProofRecord": "docs/harness/provenance-proofs/2026-08-11-pr-12.json",
     "instructions": "docs/harness/main-protection.md",
     "provenanceWorkflow": ".github/workflows/main-provenance.yml",
     "provenanceDispatchWorkflow": ".github/workflows/main-provenance-dispatch.yml",
@@ -77,6 +77,7 @@
     "docs/harness/main-protection.md",
     "docs/harness/incidents/2026-08-11-direct-main.json",
     "docs/harness/risk-acceptance/2026-08-11-private-free.json",
+    "docs/harness/provenance-proofs/2026-08-11-pr-12.json",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
     ".github/workflows/autonomous-merge.yml",
