@@ -35,12 +35,24 @@ const defaultExecutable = join(
 const executable = resolve(process.env.PI_EXECUTABLE ?? defaultExecutable);
 if (!existsSync(executable)) {
   throw new Error(
-    `Pi binary not found at the configured isolated executable. Install ${baseline.package.name}@${baseline.package.version} first.`,
+    `Pi executable not found at the configured isolated path. Install ${baseline.package.name}@${baseline.package.version} first.`,
   );
 }
 
+let prefixArgs = [];
+if (process.env.PI_EXECUTABLE_ARGS_JSON) {
+  const parsed = JSON.parse(process.env.PI_EXECUTABLE_ARGS_JSON);
+  if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
+    throw new Error("PI_EXECUTABLE_ARGS_JSON must be a JSON array of strings.");
+  }
+  prefixArgs = parsed.map((value) => resolve(value));
+  for (const value of prefixArgs) {
+    if (!existsSync(value)) throw new Error("A configured Pi executable argument does not exist.");
+  }
+}
+
 const probeCwd = resolve(process.env.PI_PROBE_CWD ?? process.cwd());
-const child = spawn(executable, ["--mode", "rpc", "--no-session"], {
+const child = spawn(executable, [...prefixArgs, "--mode", "rpc", "--no-session"], {
   cwd: probeCwd,
   env: { ...process.env, AI_AGENT: "zhiwei-pi-rpc-probe" },
   stdio: ["pipe", "pipe", "pipe"],
@@ -133,6 +145,7 @@ console.log(
       status: "ok",
       package: `${baseline.package.name}@${baseline.package.version}`,
       node: process.versions.node,
+      executionMode: prefixArgs.length > 0 ? "node-cli-entry" : "package-bin",
       sessionIdPresent: true,
       isStreaming: state.data.isStreaming,
       messageCount: messages.data.messages.length,
