@@ -4,7 +4,8 @@ import { join } from "node:path";
 const root = process.cwd();
 const violations = [];
 const riskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
-const proofPath = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
+const proof12Path = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
+const proof13Path = "docs/harness/provenance-proofs/2026-08-11-pr-13.json";
 
 async function exists(path) {
   try {
@@ -26,7 +27,8 @@ function requireValue(condition, message) {
 const config = JSON.parse(await read("harness.config.json"));
 const packageJson = JSON.parse(await read("package.json"));
 const risk = JSON.parse(await read(riskPath));
-const proof = JSON.parse(await read(proofPath));
+const proof12 = JSON.parse(await read(proof12Path));
+const proof13 = JSON.parse(await read(proof13Path));
 const scripts = packageJson.scripts ?? {};
 
 requireValue(config.schemaVersion === 3, "harness.config.json schemaVersion must be 3.");
@@ -39,7 +41,7 @@ requireValue(config.directMainWritesAllowed === false, "Direct main writes must 
 requireValue(config.defaultMergeMethod === "squash", "Default merge method must be squash.");
 requireValue(config.branchPrefixes?.includes("recovery/"), "Harness branch prefixes must include recovery/.");
 
-requireValue(config.developmentPause?.active === false, "Development pause must be released after live proof.");
+requireValue(config.developmentPause?.active === false, "Development pause must remain released after incident closure.");
 requireValue(config.developmentPause?.reason === null, "Released developmentPause.reason must be null.");
 requireValue(config.developmentPause?.incidentIssue === null, "Released developmentPause.incidentIssue must be null.");
 requireValue(
@@ -55,7 +57,8 @@ for (const [field, expected] of Object.entries({
   residualRiskAccepted: true,
   riskAcceptanceRecord: riskPath,
   liveProofVerified: true,
-  liveProofRecord: proofPath,
+  liveProofRecord: proof12Path,
+  incidentClosureProofRecord: proof13Path,
   instructions: "docs/harness/main-protection.md",
   provenanceWorkflow: ".github/workflows/main-provenance.yml",
   provenanceDispatchWorkflow: ".github/workflows/main-provenance-dispatch.yml",
@@ -75,20 +78,45 @@ requireValue(risk.ownerDecision?.continueAutonomousDevelopment === true, "Owner 
 requireValue(risk.evidence?.incidentIssue === 9 && risk.evidence?.ownerDecisionCommentId === 5253754189, "Risk acceptance evidence is incorrect.");
 requireValue(risk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."), "A second incident must trigger reassessment.");
 
-requireValue(proof.schemaVersion === 1 && proof.status === "verified", "Live proof must be verified schema 1.");
-requireValue(proof.pullRequest === 12, "Live proof must identify PR #12.");
-requireValue(proof.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Live proof merge commit is incorrect.");
-for (const [field, runId] of Object.entries({
-  ci: 31498003965,
-  autonomousMerge: 31498045898,
-  provenanceDispatch: 31498045864,
-  provenanceReceiver: 31498068302,
-})) {
-  requireValue(proof.canonicalChain?.[field]?.runId === runId, `Live proof ${field} run ID is incorrect.`);
-  requireValue(proof.canonicalChain?.[field]?.conclusion === "success", `Live proof ${field} must be successful.`);
+function verifyProof(proof, expected) {
+  requireValue(proof.schemaVersion === 1 && proof.status === "verified", `${expected.label} proof must be verified schema 1.`);
+  requireValue(proof.pullRequest === expected.pullRequest, `${expected.label} proof pull request is incorrect.`);
+  requireValue(proof.mergeCommit === expected.mergeCommit, `${expected.label} proof merge commit is incorrect.`);
+  for (const [field, runId] of Object.entries(expected.runs)) {
+    requireValue(proof.canonicalChain?.[field]?.runId === runId, `${expected.label} proof ${field} run ID is incorrect.`);
+    requireValue(proof.canonicalChain?.[field]?.conclusion === "success", `${expected.label} proof ${field} must be successful.`);
+  }
+  requireValue(proof.canonicalChain?.provenanceReceiver?.event === "repository_dispatch", `${expected.label} receiver event is incorrect.`);
 }
-requireValue(proof.canonicalChain?.provenanceReceiver?.event === "repository_dispatch", "Live proof receiver event is incorrect.");
-requireValue(proof.additionalObservations?.duplicateSafeDispatchesObserved === true, "Duplicate safe dispatch observation must remain disclosed.");
+
+verifyProof(proof12, {
+  label: "PR #12",
+  pullRequest: 12,
+  mergeCommit: "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  runs: {
+    ci: 31498003965,
+    autonomousMerge: 31498045898,
+    provenanceDispatch: 31498045864,
+    provenanceReceiver: 31498068302,
+  },
+});
+requireValue(proof12.additionalObservations?.duplicateSafeDispatchesObserved === true, "PR #12 duplicate safe dispatch observation must remain disclosed.");
+
+verifyProof(proof13, {
+  label: "PR #13",
+  pullRequest: 13,
+  mergeCommit: "10c963ef8bee978543dccf73047d3bd2d18baae5",
+  runs: {
+    ci: 31499190699,
+    autonomousMerge: 31499233718,
+    provenanceDispatch: 31499233680,
+    provenanceReceiver: 31499253092,
+  },
+});
+requireValue(proof13.incidentClosure?.issue === 9, "PR #13 proof must identify Incident #9.");
+requireValue(proof13.incidentClosure?.state === "closed", "PR #13 proof must record the issue as closed.");
+requireValue(proof13.incidentClosure?.stateReason === "completed", "PR #13 proof must record completed state reason.");
+requireValue(proof13.incidentClosure?.closedAt === "2026-08-11T14:03:22Z", "PR #13 proof closedAt is incorrect.");
 
 for (const riskLevel of ["R0", "R1", "R2", "R3"]) {
   requireValue(Boolean(config.riskLevels?.[riskLevel]), `Missing risk level: ${riskLevel}.`);
@@ -99,7 +127,8 @@ for (const path of config.governanceFiles ?? []) {
 }
 for (const required of [
   riskPath,
-  proofPath,
+  proof12Path,
+  proof13Path,
   "docs/harness/main-protection.md",
   "docs/harness/incidents/2026-08-11-direct-main.json",
   ".github/workflows/main-provenance.yml",
@@ -135,15 +164,22 @@ const stateBlock = /<!--\s*zhiwei-project-state([\s\S]*?)-->/.exec(state)?.[1] ?
 const milestone = /^milestone:\s*(\S+)\s*$/m.exec(stateBlock)?.[1];
 const status = /^status:\s*(\S+)\s*$/m.exec(stateBlock)?.[1];
 requireValue(milestone === config.currentMilestone, "project-state milestone differs from Harness config.");
-requireValue(status === "active", "project-state status must be active after live proof.");
+requireValue(status === "active", "project-state status must be active after incident closure.");
 for (const token of [
   "best-effort-private-free",
   "developmentPause.active=false",
+  "Issue #9 已关闭",
   "31498003965",
   "31498045898",
   "31498045864",
   "31498068302",
-  "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  "31499190699",
+  "31499233718",
+  "31499233680",
+  "31499253092",
+  "10c963ef8bee978543dccf73047d3bd2d18baae5",
+  proof12Path,
+  proof13Path,
   "Pi SDK / Extension",
 ]) {
   requireValue(state.includes(token), `project-state.md is missing continuity token: ${token}`);
@@ -289,4 +325,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Autonomous development Harness: OK (best-effort-private-free, live proof verified, active)");
+console.log("Autonomous development Harness: OK (best-effort-private-free, incident closed, active)");
