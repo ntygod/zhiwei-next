@@ -8,12 +8,13 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run test",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
     "check:main-provenance": "node scripts/check-main-provenance.mjs",
     "check:main-provenance-dispatch": "node scripts/check-main-provenance-dispatch.mjs",
+    "check:branch-cleanup": "node scripts/check-branch-cleanup.mjs",
     "check:harness": "node scripts/check-harness.mjs",
     "check:pi-spike": "node scripts/check-pi-spike.mjs",
     "check:pi-artifact": "node scripts/check-pi-artifact-result.mjs",
