@@ -41,12 +41,32 @@ function changedPaths(parent, commit) {
   return git(["diff", "--name-only", parent, commit]).split(/\r?\n/).filter(Boolean);
 }
 
-function decision({ associatedMergedPullRequest, currentHeadMatchesAfter, beforeTree, afterTree }) {
+function provenanceDecision({ associatedMergedPullRequest, currentHeadMatchesAfter, beforeTree, afterTree }) {
   if (associatedMergedPullRequest) return { authorized: true, incident: false, recoveryDraft: false };
   return {
     authorized: false,
     incident: true,
     recoveryDraft: currentHeadMatchesAfter && beforeTree !== afterTree,
+  };
+}
+
+function mergeHaltDecision({ configuredPause, activeIncidentNumbers, recoveryMetadata, referencedIncidentNumbers }) {
+  const required = new Set(activeIncidentNumbers);
+  if (configuredPause) required.add(9);
+  const recoveryRequired = configuredPause || activeIncidentNumbers.length > 0;
+  if (!recoveryRequired) {
+    return recoveryMetadata === "yes"
+      ? { allowed: false, reason: "recovery-without-halt", missing: [] }
+      : { allowed: true, reason: "no-halt", missing: [] };
+  }
+  if (recoveryMetadata !== "yes") {
+    return { allowed: false, reason: "halt-requires-recovery", missing: [...required] };
+  }
+  const missing = [...required].filter((number) => !referencedIncidentNumbers.includes(number));
+  return {
+    allowed: missing.length === 0,
+    reason: missing.length === 0 ? "recovery-authorized" : "missing-incident-reference",
+    missing,
   };
 }
 
@@ -132,9 +152,14 @@ const workflowTokens = [
   "issues: write",
   "pull-requests: write",
   "listPullRequestsAssociatedWithCommit",
+  "attempt < 15",
   "merge_commit_sha === after",
   "zhiwei-main-incident",
   "status: open",
+  "github.rest.pulls.list",
+  "state: \"all\"",
+  "github.rest.git.getRef",
+  "Existing recovery branch",
   "github.rest.git.createCommit",
   "github.rest.git.createRef",
   "github.rest.pulls.create",
@@ -149,10 +174,16 @@ requireValue(!workflow.includes("pull_request_target:"), "Main provenance workfl
 requireValue(!/\$\{\{\s*secrets\./.test(workflow), "Main provenance workflow must not inject repository secrets.");
 
 const autoMergeTokens = [
+  "readTrustedJson(\"harness.config.json\")",
+  "developmentPause?.active",
+  "configuredIncidentIssue",
+  "requiredIncidentNumbers",
+  "trusted config pause",
   "zhiwei-main-incident",
   "main-incident-recovery",
-  "Active main incident",
-  "Recovery PR must reference every active main incident",
+  "Active main safety halt",
+  "Recovery PR must reference every required main incident",
+  "cannot be used when no trusted pause or active main incident exists",
 ];
 for (const token of autoMergeTokens) {
   requireValue(autoMerge.includes(token), `Autonomous merge workflow is missing incident halt token: ${token}`);
@@ -160,7 +191,7 @@ for (const token of autoMergeTokens) {
 
 requireValue(template.includes("main-incident-recovery: no"), "PR template must default main-incident-recovery to no.");
 
-const scenarios = [
+const provenanceScenarios = [
   {
     name: "merged PR is authorized",
     input: { associatedMergedPullRequest: true, currentHeadMatchesAfter: true, beforeTree: "a", afterTree: "b" },
@@ -182,9 +213,36 @@ const scenarios = [
     expected: { authorized: false, incident: true, recoveryDraft: false },
   },
 ];
-for (const scenario of scenarios) {
-  const actual = decision(scenario.input);
-  requireValue(JSON.stringify(actual) === JSON.stringify(scenario.expected), `Scenario failed: ${scenario.name}`);
+for (const scenario of provenanceScenarios) {
+  const actual = provenanceDecision(scenario.input);
+  requireValue(JSON.stringify(actual) === JSON.stringify(scenario.expected), `Provenance scenario failed: ${scenario.name}`);
+}
+
+const haltScenarios = [
+  {
+    name: "trusted config blocks ordinary merge even when issue was closed",
+    input: { configuredPause: true, activeIncidentNumbers: [], recoveryMetadata: "no", referencedIncidentNumbers: [] },
+    expected: { allowed: false, reason: "halt-requires-recovery", missing: [9] },
+  },
+  {
+    name: "trusted config recovery requires configured incident reference",
+    input: { configuredPause: true, activeIncidentNumbers: [], recoveryMetadata: "yes", referencedIncidentNumbers: [] },
+    expected: { allowed: false, reason: "missing-incident-reference", missing: [9] },
+  },
+  {
+    name: "recovery with all config and issue references is allowed",
+    input: { configuredPause: true, activeIncidentNumbers: [11], recoveryMetadata: "yes", referencedIncidentNumbers: [9, 11] },
+    expected: { allowed: true, reason: "recovery-authorized", missing: [] },
+  },
+  {
+    name: "recovery metadata cannot be used without a halt",
+    input: { configuredPause: false, activeIncidentNumbers: [], recoveryMetadata: "yes", referencedIncidentNumbers: [] },
+    expected: { allowed: false, reason: "recovery-without-halt", missing: [] },
+  },
+];
+for (const scenario of haltScenarios) {
+  const actual = mergeHaltDecision(scenario.input);
+  requireValue(JSON.stringify(actual) === JSON.stringify(scenario.expected), `Merge-halt scenario failed: ${scenario.name}`);
 }
 
 if (violations.length > 0) {
