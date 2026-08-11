@@ -14,7 +14,8 @@
 6. 什么条件下可以自主合并；
 7. 上一次任务留下了哪些风险和阻塞；
 8. 默认分支的每次更新能否关联到经过验证的 Pull Request；
-9. 当前 GitHub 方案没有硬保护时，哪些残余风险已被接受。
+9. 当前 GitHub 方案没有硬保护时，哪些残余风险已被接受；
+10. 已结束 PR 的临时工作分支是否已被安全回收。
 
 ## 事实源
 
@@ -28,6 +29,7 @@
 | 可执行约束 | 根目录及局部 `AGENTS.md` |
 | 自主治理机器配置 | `harness.config.json` |
 | 默认分支事故与补偿控制 | `main-protection.md`、`incidents/`、Main Provenance Workflows |
+| 工作分支生命周期 | `branch-lifecycle.md`、Branch Cleanup Workflow |
 | 所有者接受的残余风险 | `risk-acceptance/` |
 | 已实现现实 | 代码、测试、CI 和合并后的 PR |
 | 待办队列 | GitHub Issues 与当前里程碑 |
@@ -47,7 +49,8 @@ Harness 因此提供的是：
 - 自主 squash merge；
 - 外部 push 与 token-driven merge 的双路径 provenance 审计；
 - 未验证 main 更新的 R3 Incident 停机；
-- 可信 push 场景下的 Draft 恢复 PR。
+- 可信 push 场景下的 Draft 恢复 PR；
+- 已关闭 PR 工作分支的安全、幂等回收。
 
 它不能声称从服务端绝对阻止 direct push。详细边界见 `main-protection.md`。
 
@@ -74,10 +77,12 @@ Harness 因此提供的是：
         ↓
 Main Provenance Dispatch 与 Main Provenance 验证合并来源
         ↓
+Branch Cleanup 回收已关闭 PR 的临时工作分支
+        ↓
 更新 Issue、项目状态和下一步候选
 ```
 
-详细步骤见 `development-loop.md`。
+详细步骤见 `development-loop.md`；分支回收规则见 `branch-lifecycle.md`。
 
 ## 权限模型
 
@@ -105,6 +110,20 @@ Main Provenance Dispatch 与 Main Provenance 验证合并来源
 
 若未来 GitHub 方案或仓库可见性改变，服务端 Ruleset 应作为第四层加入，但不得删除上述三层。
 
+## 工作分支回收
+
+工作分支是单个任务的临时工作区，不承担长期归档职责。PR 关闭后，审计历史继续由 PR、Commit SHA、Issue、Fixture、ADR、Incident 和 Actions 证据保存。
+
+Branch Cleanup 只删除同时满足以下条件的分支：
+
+- 位于当前仓库；
+- 关联至少一个已关闭 PR；
+- 没有开放 PR继续使用；
+- 不是默认分支；
+- 不是 protected 分支。
+
+Fork、无 PR 历史分支和开放 PR 分支都保留。Workflow 不 checkout 或执行 PR代码，策略自检失败时不会执行真实删除。完整选择规则、幂等语义与恢复路径见 `branch-lifecycle.md`。
+
 ## 机器门禁
 
 `npm run check` 至少包含：
@@ -118,6 +137,8 @@ Main Provenance Dispatch 与 Main Provenance 验证合并来源
 - 自动化测试。
 
 PR 还会执行 `scripts/check-pr-contract.mjs`，核对风险、治理变更、独立审查和 Main Incident Recovery 声明。CI 成功后，默认分支上的 `autonomous-merge.yml` 只会合并满足当前安全状态的非 Draft PR。
+
+所有 Workflow Action 必须固定完整 Commit SHA。Branch Cleanup 作为治理文件被 `harness.config.json` 注册，并由通用 Harness 检查验证存在性与 Action 固定要求；真实运行前还会执行内置策略场景。
 
 ## 连续性
 
