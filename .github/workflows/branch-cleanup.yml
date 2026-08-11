@@ -22,153 +22,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Checkout trusted workflow revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Delete closed pull request branches
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
+            const { pathToFileURL } = require("node:url");
+            const policyUrl = pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/scripts/branch-cleanup-policy.mjs`,
+            ).href;
+            const {
+              runBranchCleanupPolicySelfTests,
+              selectClosedPullRequestBranches,
+            } = await import(policyUrl);
+
             const { owner, repo } = context.repo;
             const repositoryFullName = `${owner}/${repo}`;
             const { data: repository } = await github.rest.repos.get({ owner, repo });
             const defaultBranch = repository.default_branch;
 
-            function selectClosedPullRequestBranches({
-              repositoryFullName,
-              defaultBranch,
-              branches,
-              openPullRequests,
-              closedPullRequests,
-            }) {
-              const existingBranches = new Map(
-                branches.map((branch) => [branch.name, branch]),
-              );
-              const openPullRequestHeadRefs = new Set(
-                openPullRequests
-                  .filter((pullRequest) =>
-                    pullRequest.head?.repo?.full_name === repositoryFullName
-                  )
-                  .map((pullRequest) => pullRequest.head.ref),
-              );
-              const closedPullRequestsByHeadRef = new Map();
-
-              for (const pullRequest of closedPullRequests) {
-                if (pullRequest.head?.repo?.full_name !== repositoryFullName) continue;
-                const headRef = pullRequest.head.ref;
-                const records = closedPullRequestsByHeadRef.get(headRef) ?? [];
-                records.push({
-                  number: pullRequest.number,
-                  headSha: pullRequest.head.sha,
-                });
-                closedPullRequestsByHeadRef.set(headRef, records);
-              }
-
-              const selected = [];
-              for (const [branchName, pullRecords] of closedPullRequestsByHeadRef) {
-                const branch = existingBranches.get(branchName);
-                if (!branch) continue;
-                if (branchName === defaultBranch) continue;
-                if (branch.protected === true) continue;
-                if (openPullRequestHeadRefs.has(branchName)) continue;
-
-                const matchingClosedPullRequests = pullRecords.filter(
-                  (record) => record.headSha === branch.commit?.sha,
-                );
-                if (matchingClosedPullRequests.length === 0) continue;
-
-                selected.push({
-                  name: branchName,
-                  headSha: branch.commit.sha,
-                  pullRequests: matchingClosedPullRequests
-                    .map((record) => record.number)
-                    .sort((left, right) => left - right),
-                });
-              }
-
-              return selected.sort((left, right) => left.name.localeCompare(right.name));
-            }
-
-            function runPolicySelfTests() {
-              const branch = (name, protectedBranch = false, sha = `${name}-sha`) => ({
-                name,
-                protected: protectedBranch,
-                commit: { sha },
-              });
-              const pullRequest = (
-                number,
-                ref,
-                fullName = "owner/repo",
-                sha = `${ref}-sha`,
-              ) => ({
-                number,
-                head: { ref, sha, repo: { full_name: fullName } },
-              });
-              const scenarios = [
-                {
-                  name: "closed same-repository branch is selected",
-                  branches: [branch("main"), branch("feat/closed")],
-                  openPullRequests: [],
-                  closedPullRequests: [pullRequest(1, "feat/closed")],
-                  expected: ["feat/closed"],
-                },
-                {
-                  name: "open pull request branch is preserved",
-                  branches: [branch("main"), branch("feat/open")],
-                  openPullRequests: [pullRequest(2, "feat/open")],
-                  closedPullRequests: [pullRequest(1, "feat/open")],
-                  expected: [],
-                },
-                {
-                  name: "reused or advanced branch is preserved",
-                  branches: [branch("main"), branch("feat/reused", false, "new-head")],
-                  openPullRequests: [],
-                  closedPullRequests: [
-                    pullRequest(3, "feat/reused", "owner/repo", "closed-pr-head"),
-                  ],
-                  expected: [],
-                },
-                {
-                  name: "default and protected branches are preserved",
-                  branches: [branch("main"), branch("release/stable", true)],
-                  openPullRequests: [],
-                  closedPullRequests: [
-                    pullRequest(4, "main"),
-                    pullRequest(5, "release/stable"),
-                  ],
-                  expected: [],
-                },
-                {
-                  name: "fork and no-PR branches are preserved",
-                  branches: [branch("main"), branch("fork/work"), branch("local/no-pr")],
-                  openPullRequests: [],
-                  closedPullRequests: [pullRequest(6, "fork/work", "other/repo")],
-                  expected: [],
-                },
-                {
-                  name: "missing branch is idempotently ignored",
-                  branches: [branch("main")],
-                  openPullRequests: [],
-                  closedPullRequests: [pullRequest(7, "already/deleted")],
-                  expected: [],
-                },
-              ];
-
-              for (const scenario of scenarios) {
-                const actual = selectClosedPullRequestBranches({
-                  repositoryFullName: "owner/repo",
-                  defaultBranch: "main",
-                  branches: scenario.branches,
-                  openPullRequests: scenario.openPullRequests,
-                  closedPullRequests: scenario.closedPullRequests,
-                }).map((entry) => entry.name);
-                if (JSON.stringify(actual) !== JSON.stringify(scenario.expected)) {
-                  throw new Error(
-                    `Branch cleanup policy self-test failed: ${scenario.name}; ` +
-                    `expected=${JSON.stringify(scenario.expected)}, actual=${JSON.stringify(actual)}`,
-                  );
-                }
-              }
-            }
-
-            runPolicySelfTests();
+            runBranchCleanupPolicySelfTests();
 
             const [branches, openPullRequests, closedPullRequests] = await Promise.all([
               github.paginate(github.rest.repos.listBranches, {
