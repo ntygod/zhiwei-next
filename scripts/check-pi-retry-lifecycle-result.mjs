@@ -87,6 +87,10 @@ requireValue(capture?.provider?.pendingResponses === 0, "Retry recovery must con
 requireValue(capture?.provider?.promptsSentToExternalProvider === 0, "Retry capture must not contact an external provider.");
 requireValue(capture?.prompt?.source === "interactive", "Retry prompt source must be interactive.");
 requireValue(capture?.outcome?.finalText === "Retry recovered.", "Retry final assistant text is incorrect.");
+requireValue(
+  JSON.stringify(capture?.outcome?.messageRoles) === JSON.stringify(["user", "assistant"]),
+  "Final Session messages must retain only the user prompt and recovered assistant answer.",
+);
 requireValue(capture?.outcome?.sessionWasIdleBeforeShutdown === true, "Retry prompt must resolve only after Session is idle.");
 requireValue(capture?.outcome?.sessionWasRetryingBeforeShutdown === false, "Retry prompt must resolve after retry state clears.");
 
@@ -96,38 +100,145 @@ requireValue(
   "Retry settings differ from the fixed scenario.",
 );
 requireValue(capture?.retry?.retryableError === "overloaded_error", "Retryable error identity drifted.");
-requireValue(capture?.counts?.publicRetryStarts === 1, "Expected one public auto_retry_start.");
-requireValue(capture?.counts?.publicRetryEnds === 1, "Expected one public auto_retry_end.");
-requireValue(capture?.counts?.publicAgentEnds === 2, "Expected two public agent_end events.");
-requireValue(capture?.counts?.publicAgentSettled === 1, "Expected one public agent_settled event.");
-requireValue(capture?.counts?.extensionSessionShutdowns === 1, "Expected one Extension session_shutdown event.");
+for (const [field, expected] of Object.entries({
+  sessionEvents: 23,
+  extensionEvents: 24,
+  publicRetryStarts: 1,
+  publicRetryEnds: 1,
+  publicAgentEnds: 2,
+  publicAgentSettled: 1,
+  extensionRetryStarts: 0,
+  extensionRetryEnds: 0,
+  extensionAgentEnds: 2,
+  extensionAgentSettled: 1,
+  extensionSessionShutdowns: 1,
+})) {
+  requireValue(capture?.counts?.[field] === expected, `Retry counts.${field} must be ${expected}.`);
+}
 requireValue(
   JSON.stringify(capture?.retry?.public?.agentEndWillRetry) === JSON.stringify([true, false]),
   "Public agent_end willRetry sequence must be [true, false].",
 );
+requireValue(
+  JSON.stringify(capture?.retry?.extension?.agentEndWillRetry) === JSON.stringify([null, null]),
+  "Extension agent_end events must not claim the Session-only willRetry augmentation.",
+);
+requireValue(
+  capture?.retry?.extension?.startEvents?.length === 0 &&
+    capture?.retry?.extension?.endEvents?.length === 0,
+  "Extension lifecycle must not invent public auto_retry_start/auto_retry_end events.",
+);
 const retryStart = capture?.retry?.public?.startEvents?.[0];
+requireValue(retryStart?.sequence === 12, "auto_retry_start sequence must remain 12.");
 requireValue(retryStart?.attempt === 1, "auto_retry_start attempt must be 1.");
 requireValue(retryStart?.maxAttempts === 3, "auto_retry_start maxAttempts must be 3.");
 requireValue(retryStart?.delayMs === 1, "auto_retry_start delayMs must be 1.");
 requireValue(retryStart?.errorMessage === "overloaded_error", "auto_retry_start errorMessage drifted.");
 const retryEnd = capture?.retry?.public?.endEvents?.[0];
+requireValue(retryEnd?.sequence === 20, "auto_retry_end sequence must remain 20.");
 requireValue(retryEnd?.success === true, "auto_retry_end must report success.");
 requireValue(retryEnd?.attempt === 1, "auto_retry_end attempt must be 1.");
 requireValue(retryEnd?.finalError === undefined, "Successful retry must not retain finalError.");
 
-requireValue(capture?.ordering?.public?.retryStartBeforeSettled === true, "Retry start must precede settled.");
-requireValue(capture?.ordering?.public?.retryEndBeforeSettled === true, "Retry end must precede settled.");
-requireValue(capture?.ordering?.public?.finalAgentEndBeforeSettled === true, "Final agent_end must precede settled.");
-requireValue(capture?.ordering?.extension?.settledBeforeShutdown === true, "Extension settled must precede shutdown.");
+requireValue(
+  JSON.stringify(capture?.ordering?.public) ===
+    JSON.stringify({
+      firstAgentEndIndex: 10,
+      retryStartIndex: 11,
+      retryEndIndex: 19,
+      finalAgentEndIndex: 21,
+      settledIndex: 22,
+      retryStartBeforeSettled: true,
+      retryEndBeforeSettled: true,
+      finalAgentEndBeforeSettled: true,
+    }),
+  "Public retry ordering differs from the committed Runtime contract.",
+);
+requireValue(
+  JSON.stringify(capture?.ordering?.extension) ===
+    JSON.stringify({ settledIndex: 22, shutdownIndex: 23, settledBeforeShutdown: true }),
+  "Extension settled/shutdown ordering differs from the committed Runtime contract.",
+);
 
 const sessionEvents = capture?.sessionEvents ?? [];
 const extensionEvents = capture?.extensionEvents ?? [];
 checkContiguousSequence(sessionEvents, "Retry Session events");
 checkContiguousSequence(extensionEvents, "Retry Extension events");
-requireValue(count(sessionEvents, "auto_retry_start") === 1, "Session trace must contain one auto_retry_start.");
-requireValue(count(sessionEvents, "auto_retry_end") === 1, "Session trace must contain one auto_retry_end.");
-requireValue(count(sessionEvents, "agent_end") === 2, "Session trace must contain two agent_end events.");
-requireValue(count(sessionEvents, "agent_settled") === 1, "Session trace must contain one agent_settled event.");
+const expectedSessionTypes = [
+  "agent_start",
+  "turn_start",
+  "message_start",
+  "message_end",
+  "message_start",
+  "message_update",
+  "message_update",
+  "message_update",
+  "message_end",
+  "turn_end",
+  "agent_end",
+  "auto_retry_start",
+  "agent_start",
+  "turn_start",
+  "message_start",
+  "message_update",
+  "message_update",
+  "message_update",
+  "message_end",
+  "auto_retry_end",
+  "turn_end",
+  "agent_end",
+  "agent_settled",
+];
+requireValue(
+  JSON.stringify(sessionEvents.map((event) => event.type)) === JSON.stringify(expectedSessionTypes),
+  "Public retry event type sequence drifted.",
+);
+const expectedExtensionTypes = [
+  "input",
+  "before_agent_start",
+  "agent_start",
+  "turn_start",
+  "message_start",
+  "message_end",
+  "message_start",
+  "message_update",
+  "message_update",
+  "message_update",
+  "message_end",
+  "turn_end",
+  "agent_end",
+  "agent_start",
+  "turn_start",
+  "message_start",
+  "message_update",
+  "message_update",
+  "message_update",
+  "message_end",
+  "turn_end",
+  "agent_end",
+  "agent_settled",
+  "session_shutdown",
+];
+requireValue(
+  JSON.stringify(extensionEvents.map((event) => event.type)) === JSON.stringify(expectedExtensionTypes),
+  "Extension retry event type sequence drifted.",
+);
+requireValue(count(extensionEvents, "session_start") === 0, "Inline Extension must not claim an unobserved session_start.");
+requireValue(count(extensionEvents, "auto_retry_start") === 0, "Extension must not claim auto_retry_start.");
+requireValue(count(extensionEvents, "auto_retry_end") === 0, "Extension must not claim auto_retry_end.");
+requireValue(
+  sessionEvents[8]?.stopReason === "error" &&
+    sessionEvents[8]?.messageError === "overloaded_error",
+  "Failed Assistant event evidence is missing before the retry boundary.",
+);
+requireValue(
+  sessionEvents[10]?.type === "agent_end" && sessionEvents[10]?.willRetry === true,
+  "First public agent_end must expose willRetry=true before auto_retry_start.",
+);
+requireValue(
+  sessionEvents[21]?.type === "agent_end" && sessionEvents[21]?.willRetry === false,
+  "Final public agent_end must expose willRetry=false.",
+);
 requireValue(
   sessionEvents.every((event) => !event.type.startsWith("tool_execution_")),
   "Retry recovery scenario must not execute tools.",
