@@ -32,7 +32,74 @@ function checkContiguousSequence(events, label) {
   }
 }
 
-const result = JSON.parse(await readFile(inputPath, "utf8"));
+const [
+  resultText,
+  packageText,
+  ci,
+  spikeReport,
+  retryDocument,
+  architecture,
+  projectState,
+] = await Promise.all([
+  readFile(inputPath, "utf8"),
+  readFile("package.json", "utf8"),
+  readFile(".github/workflows/ci.yml", "utf8"),
+  readFile("docs/spikes/pi-runtime-contract/README.md", "utf8"),
+  readFile("docs/spikes/pi-runtime-contract/retry-success-lifecycle.md", "utf8"),
+  readFile("docs/architecture/pi-integration.md", "utf8"),
+  readFile("docs/harness/project-state.md", "utf8"),
+]);
+const result = JSON.parse(resultText);
+const packageJson = JSON.parse(packageText);
+
+requireValue(
+  packageJson.scripts?.["check:pi-retry-lifecycle"] ===
+    "node scripts/check-pi-retry-lifecycle-result.mjs",
+  "package.json must expose the exact check:pi-retry-lifecycle command.",
+);
+requireValue(
+  packageJson.scripts?.check?.includes("npm run check:pi-retry-lifecycle"),
+  "package.json scripts.check must execute check:pi-retry-lifecycle.",
+);
+requireValue(
+  packageJson.scripts?.["probe:pi:retry-lifecycle"] ===
+    "PI_LIFECYCLE_SCENARIO=retry-success PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-retry-lifecycle-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
+  "package.json must expose the exact probe:pi:retry-lifecycle command.",
+);
+
+for (const required of [
+  "pi-retry-lifecycle-probe:",
+  "name: Pi automatic retry lifecycle probe",
+  "needs.check.outputs.pi-lifecycle-probe == 'true'",
+  "packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json",
+  "scripts/check-pi-retry-lifecycle-result.mjs",
+  "scripts/probes/pi-retry-lifecycle-capture.mjs",
+  "PI_LIFECYCLE_SCENARIO=retry-success",
+  "PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json",
+  "node scripts/probes/pi-lifecycle-ci.mjs",
+  "node scripts/check-pi-retry-lifecycle-result.mjs \"$PI_RETRY_LIFECYCLE_OUTPUT\"",
+  "Upload sanitized retry lifecycle evidence",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "if: always()",
+]) {
+  requireValue(ci.includes(required), `CI workflow is missing retry lifecycle token: ${required}`);
+}
+requireValue(!ci.includes("pull_request_target:"), "CI retry capture must not use pull_request_target.");
+requireValue(!/\$\{\{\s*secrets\./.test(ci), "CI retry capture must not inject repository secrets.");
+const retryJobStart = ci.indexOf("  pi-retry-lifecycle-probe:");
+const retryJob = retryJobStart >= 0 ? ci.slice(retryJobStart) : "";
+for (const required of [
+  "permissions:\n      contents: read",
+  "persist-credentials: false",
+  "--read-only",
+  "--user=1000:1000",
+  "--cap-drop=ALL",
+  "--security-opt=no-new-privileges",
+  "PI_PROBE_HOST_WORKSPACE_MOUNTED=false",
+]) {
+  requireValue(retryJob.includes(required), `Retry lifecycle job is missing trust-boundary token: ${required}`);
+}
+
 requireValue(result.schemaVersion === 1, "Retry lifecycle result schemaVersion must be 1.");
 requireValue(result.status === "passed", `Retry lifecycle result status must be passed, got ${result.status}.`);
 requireValue(result.scenario === "retry-success", "Retry lifecycle scenario must be retry-success.");
@@ -273,6 +340,61 @@ for (const pattern of [
 requireValue(!serialized.includes('"sessionId"'), "Retry lifecycle result must not contain a raw sessionId field.");
 requireValue(result.contractFingerprint === fingerprint(result), "Outer retry contract fingerprint is invalid.");
 requireValue(capture.contractFingerprint === fingerprint(capture), "Nested retry contract fingerprint is invalid.");
+
+for (const [name, document, tokens] of [
+  [
+    "retry lifecycle document",
+    retryDocument,
+    [
+      "runtime-verified",
+      "agent_end(willRetry=true)",
+      "auto_retry_start",
+      "auto_retry_end",
+      "Extension没有收到",
+      "session.messages",
+      "e87f7365eefbb4d7de7a4570a6c99df7a1fdf26f58aa2a40fab9149cb6deff02",
+      "ed1c450ce6e26be60c29aa6d9a29f13d339cb975999e1a3b4c0a43a5f9b4ac85",
+    ],
+  ],
+  [
+    "Pi spike report",
+    spikeReport,
+    [
+      "source-and-runtime-verified-retry-success",
+      "pi-lifecycle-retry-success.json",
+      "retry-success-lifecycle.md",
+      "agent_end.willRetry",
+      "Extension auto_retry_start",
+      "e87f7365eefbb4d7de7a4570a6c99df7a1fdf26f58aa2a40fab9149cb6deff02",
+    ],
+  ],
+  [
+    "Pi integration architecture",
+    architecture,
+    [
+      "source-and-runtime-verified-retry-success",
+      "Extension没有收到",
+      "Public SDK与 Extension差异",
+      "被 Retry替代",
+      "一个 Prompt可包含多个 Agent Run",
+    ],
+  ],
+  [
+    "project state",
+    projectState,
+    [
+      "自动重试恢复成功 Fixture",
+      "agent_end.willRetry=[true,false]",
+      "Extension没有 `auto_retry_start/end`",
+      "Follow-up队列 Fixture",
+      "Main Provenance Dispatch可能遭遇 GitHub API瞬时故障",
+    ],
+  ],
+]) {
+  for (const token of tokens) {
+    requireValue(document.includes(token), `${name} is missing token: ${token}`);
+  }
+}
 
 if (violations.length > 0) {
   console.error("Pi retry lifecycle result violations:\n" + violations.map((item) => `- ${item}`).join("\n"));
