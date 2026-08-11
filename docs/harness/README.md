@@ -13,7 +13,8 @@
 5. 如何证明改动正确；
 6. 什么条件下可以自主合并；
 7. 上一次任务留下了哪些风险和阻塞；
-8. 默认分支的每次更新是否来自经过验证的 Pull Request。
+8. 默认分支的每次更新能否关联到经过验证的 Pull Request；
+9. 当前 GitHub 方案没有硬保护时，哪些残余风险已被接受。
 
 ## 事实源
 
@@ -26,9 +27,29 @@
 | 当前进展和连续性 | `docs/harness/project-state.md` |
 | 可执行约束 | 根目录及局部 `AGENTS.md` |
 | 自主治理机器配置 | `harness.config.json` |
-| 默认分支保护与事故 | `main-protection.md`、`incidents/`、Main Provenance workflow |
+| 默认分支事故与补偿控制 | `main-protection.md`、`incidents/`、Main Provenance Workflows |
+| 所有者接受的残余风险 | `risk-acceptance/` |
 | 已实现现实 | 代码、测试、CI 和合并后的 PR |
 | 待办队列 | GitHub Issues 与当前里程碑 |
+
+## 当前运行模式
+
+```text
+best-effort-private-free
+```
+
+仓库保持 Private，GitHub 方案保持 Free。当前方案不提供可用的私有仓库 pre-receive Ruleset / Protected Branch 硬保护；所有者已明确接受该残余风险。
+
+Harness 因此提供的是：
+
+- 非默认分支写入前置协议；
+- PR、CI、风险合同与 cold-read AI 审查；
+- 自主 squash merge；
+- 外部 push 与 token-driven merge 的双路径 provenance 审计；
+- 未验证 main 更新的 R3 Incident 停机；
+- 可信 push 场景下的 Draft 恢复 PR。
+
+它不能声称从服务端绝对阻止 direct push。详细边界见 `main-protection.md`。
 
 ## 自主循环
 
@@ -37,7 +58,7 @@
         ↓
 没有安全停机时，选择当前里程碑最高价值 Issue
         ↓
-读取 main HEAD并创建非默认分支
+读取 main HEAD 并创建非默认分支
         ↓
 声明目标、非目标、风险和验证
         ↓
@@ -51,7 +72,7 @@
         ↓
 满足门禁后自主 squash merge
         ↓
-Main Provenance 验证合并提交关联的 PR
+Main Provenance Dispatch 与 Main Provenance 验证合并来源
         ↓
 更新 Issue、项目状态和下一步候选
 ```
@@ -62,7 +83,7 @@ Main Provenance 验证合并提交关联的 PR
 
 项目所有者授予 AI 长期开发权限，不要求人工逐次批准。AI 可以修改仓库内容和治理规则，也可以管理 Issue、PR、CI、依赖、迁移和发布。
 
-权限不包含绕过默认分支保护：
+权限不包含绕过默认分支流程：
 
 - 所有正常仓库内容写入必须先创建非默认分支；
 - 全部重要工作通过 PR 留痕；
@@ -74,15 +95,15 @@ Main Provenance 验证合并提交关联的 PR
 
 完整政策见 `autonomy-policy.md`。
 
-## Main 分支保护
+## Main 分支补偿控制
 
-仓库采用三层防护：
+仓库采用三层最佳努力防护：
 
-1. **GitHub 服务端 Ruleset / Branch Protection**：真正阻止 direct push；配置见 `main-protection.md`。
-2. **Main Provenance workflow**：检查每次 main push 是否关联已合并 PR；未授权时创建 R3 Incident，并在 tree 仍处于该提交时创建 Draft 恢复 PR。
-3. **Incident-aware autonomous merge**：开放 Main Incident 存在时，普通 PR 自动合并停机；只有引用全部事故的 R3 恢复 PR可以继续。
+1. **写入前置协议**：Connector 正常写入必须显式指定非默认分支。
+2. **Main Provenance 双路径审计**：外部 direct push 使用 `push`；自动合并使用受控 `repository_dispatch`，两者都重新查询真实 PR 和 Git commit。
+3. **Incident-aware autonomous merge**：开放 Main Incident 或可信配置停机时，普通 PR 自动合并暂停；只有引用要求事故的 R3恢复 PR可以继续。
 
-仓库内 Workflow 是检测与恢复提案层，不能替代服务端 pre-receive 规则。当前服务端保护状态以 `harness.config.json` 和 `project-state.md` 为准。
+若未来 GitHub 方案或仓库可见性改变，服务端 Ruleset 应作为第四层加入，但不得删除上述三层。
 
 ## 机器门禁
 
@@ -91,7 +112,8 @@ Main Provenance 验证合并提交关联的 PR
 - 架构边界检查；
 - `AGENTS.md` 层级与引用检查；
 - main provenance 事故与恢复链检查；
-- Harness 配置和必需文件检查；
+- token-driven provenance dispatch 合同检查；
+- Harness 配置、风险接受记录和必需文件检查；
 - Pi source/runtime 契约检查；
 - 自动化测试。
 
