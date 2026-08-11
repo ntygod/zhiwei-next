@@ -317,6 +317,7 @@ async function run() {
     stopReason: message.stopReason,
   }));
   const sessionWasIdleBeforeShutdown = session.isIdle;
+  const followUpModeBeforeShutdown = session.followUpMode;
   const pendingMessageCountBeforeShutdown = session.pendingMessageCount;
   const pendingFollowUpsBeforeShutdown = [...session.getFollowUpMessages()];
 
@@ -391,7 +392,7 @@ async function run() {
       followUp: FOLLOW_UP_RESPONSE,
     },
     queue: {
-      mode: session?.followUpMode ?? "one-at-a-time",
+      mode: followUpModeBeforeShutdown,
       actions: followUpActions,
       updates: queueUpdates,
       pendingMessageCountBeforeShutdown,
@@ -456,6 +457,7 @@ async function run() {
     [fauxHandle.state.callCount === 2, `Expected two Faux calls, got ${fauxHandle.state.callCount}`],
     [fauxHandle.getPendingResponseCount() === 0, "Faux responses were not fully consumed."],
     [sessionWasIdleBeforeShutdown === true, "Session was not idle when prompt resolved."],
+    [followUpModeBeforeShutdown === "one-at-a-time", `Unexpected follow-up mode: ${followUpModeBeforeShutdown}`],
     [pendingMessageCountBeforeShutdown === 0, "Pending message count was not zero after follow-up processing."],
     [pendingFollowUpsBeforeShutdown.length === 0, "Follow-up queue was not empty after prompt resolution."],
     [queueFilled !== undefined, "No public queue_update exposed the queued follow-up."],
