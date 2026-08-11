@@ -5,7 +5,8 @@
   "upstream": {
     "repository": "earendil-works/pi",
     "historicalRedirectFrom": "badlogic/pi-mono",
-    "commit": "b647d187932c76d4003728010daeed9c1b496a6a"
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112",
+    "releaseTag": "v0.84.1"
   },
   "package": {
     "name": "@earendil-works/pi-coding-agent",
@@ -17,62 +18,63 @@
       ".",
       "./rpc-entry",
       "./client"
-    ]
+    ],
+    "registryArtifactVerified": false
   },
   "sources": [
     {
       "role": "package-manifest",
       "path": "packages/coding-agent/package.json",
       "blobSha": "f6fc21a3d587c352bf849c70eddac23dec12cfd1",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/package.json"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/package.json"
     },
     {
       "role": "sdk-documentation",
       "path": "packages/coding-agent/docs/sdk.md",
       "blobSha": "edced9186299d34fd61e8c48a81283888828f54b",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/docs/sdk.md"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/docs/sdk.md"
     },
     {
       "role": "agent-session-event-types",
       "path": "packages/coding-agent/src/core/agent-session.ts",
       "blobSha": "b210c5ace4fc77dc4a1fdd63264fd1697a203a57",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/core/agent-session.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/core/agent-session.ts"
     },
     {
       "role": "core-agent-event-types",
       "path": "packages/agent/src/types.ts",
       "blobSha": "5b20b21f4ea0bc6e6d54fb2c27e57b87037e8c24",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/agent/src/types.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/agent/src/types.ts"
     },
     {
       "role": "agent-settled-regression-test",
       "path": "packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts",
       "blobSha": "d31010478cbb5bdd468f05ffc83176ed3fcd43df",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts"
     },
     {
       "role": "rpc-documentation",
       "path": "packages/coding-agent/docs/rpc.md",
       "blobSha": "499ca673b765d1707c5ace4fe9a058e7bf5c9882",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/docs/rpc.md"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/docs/rpc.md"
     },
     {
       "role": "rpc-types",
       "path": "packages/coding-agent/src/modes/rpc/rpc-types.ts",
       "blobSha": "5957eebc717658694592b27d047a20089851e7ae",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/modes/rpc/rpc-types.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/modes/rpc/rpc-types.ts"
     },
     {
       "role": "rpc-jsonl-implementation",
       "path": "packages/coding-agent/src/modes/rpc/jsonl.ts",
       "blobSha": "8962c734021eee0d39d3a35ad8b5c020b0c2c14b",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/modes/rpc/jsonl.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/modes/rpc/jsonl.ts"
     },
     {
       "role": "rpc-jsonl-tests",
       "path": "packages/coding-agent/test/rpc-jsonl.test.ts",
       "blobSha": "c8fc89e13e878877e5b82984e192abdc40b98f0f",
-      "url": "https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/test/rpc-jsonl.test.ts"
+      "url": "https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/test/rpc-jsonl.test.ts"
     }
   ],
   "confirmed": {
@@ -123,7 +125,7 @@
       "no model-provider credential required for surface and RPC state probes"
     ],
     "recheckCommands": [
-      "npm install --save-exact @earendil-works/pi-coding-agent@0.84.1",
+      "npm install --no-save --package-lock=false @earendil-works/pi-coding-agent@0.84.1",
       "npm run probe:pi:sdk",
       "npm run probe:pi:rpc"
     ]
