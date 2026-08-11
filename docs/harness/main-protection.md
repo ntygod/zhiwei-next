@@ -1,88 +1,95 @@
-# Main 分支服务端保护
+# Main 分支保护与残余风险
 
-## 状态
+## 当前状态
 
-**必须由仓库所有者完成一次性配置。**
+本仓库保持 **Private + GitHub Free**。在这一组合下，GitHub 不向当前仓库提供可强制执行的私有仓库 Ruleset / Protected Branch pre-receive 屏障。
 
-ChatGPT Codex Connector 当前安装权限包含仓库内容、工作流、Issue 和 Pull Request 写入，但不包含 repository administration / ruleset mutation，因此 AI 无法通过当前连接直接创建 GitHub Ruleset 或 Branch Protection Rule。
+项目所有者已经明确决定：
 
-仓库内的 `Main Provenance` workflow 是检测、停机和恢复提案层，不是 pre-receive 屏障。直接写入者也可能在同一个提交里篡改 workflow；因此只有 GitHub 服务端规则能够真正阻止再次直写。
+- 保持仓库私有；
+- 不升级 GitHub 方案；
+- 删除刚才创建但当前套餐下不可生效的 Ruleset；
+- 接受缺少服务端硬保护的残余风险；
+- 允许 AI 以 `best-effort-private-free` 模式继续自主开发。
+
+机器可读决策见：
+
+```text
+docs/harness/risk-acceptance/2026-08-11-private-free.json
+```
 
 关联 Incident：[#9](https://github.com/ntygod/zhiwei-next/issues/9)
 
-## 推荐：Branch Ruleset
+## 这意味着什么
 
-在 GitHub 仓库页面执行：
+当前模式能做到：
 
 ```text
-Settings
-→ Rules
-→ Rulesets
-→ New ruleset
-→ New branch ruleset
+非默认分支写入前置检查
+        ↓
+Pull Request + CI + 风险合同
+        ↓
+R2/R3 当前 HEAD 冷读审查
+        ↓
+自主 squash merge
+        ↓
+push / repository_dispatch 双路径 Main Provenance
+        ↓
+未验证 main 更新触发 R3 Incident 和普通合并停机
+        ↓
+可信 push 场景仅生成 Draft 恢复 PR
 ```
 
-建议配置：
+当前模式**不能**做到：
+
+- 在 GitHub 接收提交之前绝对拒绝拥有 `contents: write` 的主体直写 `main`；
+- 阻止一个恶意或错误的 direct writer 在同一提交中尝试修改仓库内检测 Workflow；
+- 等价替代 GitHub 服务端 Ruleset / Branch Protection。
+
+因此文档、PR 和状态汇报中必须使用“最佳努力检测与恢复”，不能使用“硬保护”“无法直写”或类似表述。
+
+## 强制补偿控制
+
+即使没有服务端硬保护，以下规则仍是仓库合同：
+
+1. 正常内容写入必须显式指定非默认分支；不得省略 `branch` 并依赖默认值。
+2. 正常变更必须通过 Pull Request 进入 `main`。
+3. `R2/R3` 必须有绑定当前 HEAD 的独立 cold-read AI 审查。
+4. Main Provenance 同时审计外部 `push` 和由自动合并触发的 `repository_dispatch`。
+5. 未验证的 `main` 更新必须创建 R3 Incident 并暂停普通自动合并。
+6. 自动恢复只能来自可信的真实 push 事件，并且只创建 Draft PR；不得直接 reset、force-push 或更新 `main`。
+7. 事故历史不得重写，恢复必须可审计。
+
+## 何时必须重新评估
+
+出现以下任一条件时，AI 必须创建 R3 治理 Issue，并重新评估 GitHub 方案、仓库可见性或迁移到具有 Team/Enterprise 能力的组织：
+
+- 仓库准备公开；
+- GitHub 方案发生变化；
+- 开始保存真实用户记忆、生产凭证或生产数据；
+- 多于一名人类协作者获得写权限；
+- 引入生产发布、签名或部署 Workflow；
+- 再次发生未经授权的 direct-main Incident。
+
+## 将来可用时的推荐硬保护
+
+若未来仓库公开、升级方案或迁移到支持私有仓库 Ruleset 的组织，推荐配置：
 
 | 设置 | 值 |
 |---|---|
-| Ruleset name | `protect-main-ai-primary` |
-| Enforcement status | `Active` |
-| Target branch | `main` |
-| Bypass list | 空；不要给 ChatGPT Codex Connector `Always allow` |
+| Target branch | 默认分支 `main` |
+| Bypass list | 空；ChatGPT Codex Connector 不得拥有 direct-push bypass |
 | Require a pull request before merging | 开启 |
-| Required approvals | `0`；独立 AI 审查由 Harness 合同处理 |
-| Require status checks | 开启，选择 CI 的 `check` Job |
+| Required approvals | `0`；AI Review 由 Harness 处理 |
+| Require status checks | `check` |
 | Require linear history | 开启 |
 | Block force pushes | 开启 |
 | Restrict deletions | 开启 |
 
-不要授予 ChatGPT Codex Connector **direct-push bypass**。如果确实需要给其他 App 设置 bypass，只允许 **For pull requests only**，不能允许直接 push。正常自动合并通过 GitHub Pull Request API 完成，不需要默认分支直写 bypass。
+服务端规则一旦可用，应作为第四层屏障加入，但不得删除现有 provenance、Incident 和恢复机制。
 
-## 备选：Branch Protection Rule
+## 验证原则
 
-若界面没有 Rulesets：
-
-```text
-Settings
-→ Branches
-→ Add branch protection rule
-→ Branch name pattern: main
-```
-
-至少开启：
-
-- Require a pull request before merging；
-- Require status checks to pass before merging：`check`；
-- Require linear history；
-- Do not allow bypassing the above settings；
-- 不允许 force push；
-- 不允许删除 branch。
-
-不要要求 GitHub 原生人工 Approval；本项目的 R2/R3 审查由当前 HEAD 绑定的机器可读 AI Review 记录完成。服务端规则只负责确保所有变更经过 PR 和 CI。
-
-## 完成后的确认
-
-配置后，在 Issue #9 留言：
-
-```text
-main protection configured
-method: ruleset | branch-protection
-require-pr: yes
-required-check: check
-force-push: blocked
-delete: blocked
-chatgpt-direct-push-bypass: no
-```
-
-AI 随后会：
-
-1. 将 Incident Fixture 的 `serverProtection.status` 改为 `confirmed`；
-2. 将 `harness.config.json` 的安全停机改为解除；
-3. 用 R3 恢复 PR 完成独立审查；
-4. 关闭 Issue #9；
-5. 恢复产品功能开发。
-
-## 不采用破坏性验证
-
-不通过再次尝试向 `main` 创建测试文件来验证保护。所有者的配置确认、GitHub UI 规则状态和后续正常 PR 合并记录共同构成证据。若未来连接器获得只读 administration 权限，可增加非破坏性的 Ruleset API 检查。
+- 不通过再次向 `main` 写测试文件来验证任何保护能力。
+- 当前最佳努力模式通过真实 PR 合并、Workflow 结果、Commit/PR 关联和机器 Fixture 验证。
+- 若将来服务端规则可用，优先通过只读 Ruleset API 或 GitHub UI 配置证据验证，而不是破坏性 push。
