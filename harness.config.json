@@ -33,10 +33,14 @@
   "branchLifecycle": {
     "cleanupWorkflow": ".github/workflows/branch-cleanup.yml",
     "policy": "docs/harness/branch-lifecycle.md",
+    "policyModule": "scripts/branch-cleanup-policy.mjs",
+    "checker": "scripts/check-branch-cleanup.mjs",
     "deleteClosedPullRequestBranches": true,
     "preserveOpenPullRequestBranches": true,
     "preserveDefaultAndProtectedBranches": true,
-    "preserveBranchesWithoutPullRequestHistory": true
+    "preserveBranchesWithoutPullRequestHistory": true,
+    "requireClosedPullRequestHeadMatch": true,
+    "revalidateBeforeDelete": true
   },
   "branchPrefixes": [
     "ai/",
@@ -95,7 +99,9 @@
     ".github/workflows/branch-cleanup.yml",
     ".github/workflows/main-provenance.yml",
     ".github/workflows/main-provenance-dispatch.yml",
+    "scripts/branch-cleanup-policy.mjs",
     "scripts/check-agents.mjs",
+    "scripts/check-branch-cleanup.mjs",
     "scripts/check-harness.mjs",
     "scripts/check-pr-contract.mjs",
     "scripts/check-main-provenance.mjs",
