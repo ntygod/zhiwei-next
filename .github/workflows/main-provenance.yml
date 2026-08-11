@@ -55,7 +55,7 @@ jobs:
             }
 
             let associatedPullRequests = [];
-            for (let attempt = 0; attempt < 6; attempt += 1) {
+            for (let attempt = 0; attempt < 15; attempt += 1) {
               associatedPullRequests = await github.paginate(
                 github.rest.repos.listPullRequestsAssociatedWithCommit,
                 { owner, repo, commit_sha: after, per_page: 100 },
@@ -128,58 +128,94 @@ jobs:
             } else if (beforeTree === afterTree) {
               recoverySummary = "没有创建自动恢复 PR：未经授权的提交没有改变 Git tree。";
             } else {
-              const branch = `recovery/main-${after.slice(0, 12)}-${context.runId}`;
-              const { data: recoveryCommit } = await github.rest.git.createCommit({
+              const branch = `recovery/main-${after}`;
+              const existingPullRequests = await github.paginate(github.rest.pulls.list, {
                 owner,
                 repo,
-                message: `revert: restore main tree before unauthorized update ${after.slice(0, 12)}`,
-                tree: beforeTree,
-                parents: [after],
-              });
-              await github.rest.git.createRef({
-                owner,
-                repo,
-                ref: `refs/heads/${branch}`,
-                sha: recoveryCommit.sha,
+                state: "all",
+                head: `${owner}:${branch}`,
+                base: defaultBranch,
+                per_page: 100,
               });
 
-              const recoveryBody = `## 目标与结果
+              if (existingPullRequests.length > 0) {
+                const existing = existingPullRequests[0];
+                recoverySummary = `已存在恢复 PR #${existing.number}（state=${existing.state}, merged=${Boolean(existing.merged_at)}），不重复创建。`;
+              } else {
+                let recoveryCommitSha;
+                try {
+                  const { data: existingRef } = await github.rest.git.getRef({
+                    owner,
+                    repo,
+                    ref: `heads/${branch}`,
+                  });
+                  const { data: existingCommit } = await github.rest.git.getCommit({
+                    owner,
+                    repo,
+                    commit_sha: existingRef.object.sha,
+                  });
+                  const validParent = existingCommit.parents?.length === 1 && existingCommit.parents[0].sha === after;
+                  if (!validParent || existingCommit.tree.sha !== beforeTree) {
+                    core.setFailed(`Existing recovery branch ${branch} does not match the expected parent/tree contract.`);
+                    return;
+                  }
+                  recoveryCommitSha = existingRef.object.sha;
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                  const { data: recoveryCommit } = await github.rest.git.createCommit({
+                    owner,
+                    repo,
+                    message: `revert: restore main tree before unauthorized update ${after.slice(0, 12)}`,
+                    tree: beforeTree,
+                    parents: [after],
+                  });
+                  await github.rest.git.createRef({
+                    owner,
+                    repo,
+                    ref: `refs/heads/${branch}`,
+                    sha: recoveryCommit.sha,
+                  });
+                  recoveryCommitSha = recoveryCommit.sha;
+                }
+
+                const recoveryBody = `## 目标与结果
 
 ` +
-                `恢复未经 PR 更新 \`${after}\` 之前的 Git tree。该 PR 由 Main Provenance workflow 自动创建，保持 Draft，等待 R3 独立 AI 审查。\n\n` +
-                `Addresses #${incident.number}\n\n` +
-                `## 范围与非目标\n\n` +
-                `- 将 main tree 从 \`${afterTree}\` 恢复到 \`${beforeTree}\`；\n` +
-                `- 不重写历史，不直接更新 main；\n` +
-                `- 不关闭主 Incident，服务端 Ruleset 确认前保持安全停机。\n\n` +
-                `## 关键不变量\n\n` +
-                `- 恢复 commit 的 parent 是未经授权提交；\n` +
-                `- 恢复 commit 的 tree 与 before commit 完全一致；\n` +
-                `- 必须经过完整 CI 和当前 HEAD 绑定的 R3 审查。\n\n` +
-                `## 风险与回滚\n\n` +
-                `- 风险：R3；\n` +
-                `- 若 before tree 不是正确恢复目标，关闭本 PR 并由人工/AI 从 Incident 证据重新构造；\n` +
-                `- 合并后可以通过新的恢复 PR 回滚，不 force-push。\n\n` +
-                `## 验证证据\n\n` +
-                `- [ ] npm run check\n` +
-                `- [ ] tree 与 before commit 一致\n` +
-                `- [ ] 当前 HEAD 独立 AI 审查\n\n` +
-                `## 自主交付记录\n\n` +
-                `- 来源：Main Provenance workflow run ${context.runId}；\n` +
-                `- Incident：#${incident.number}；\n` +
-                `- 当前保持 Draft，不绕过 R3 门禁。\n\n` +
-                `<!--\nzhiwei-harness\nrisk: R3\nautonomous-merge: yes\nindependent-review: required\ngovernance-change: yes\nproject-state: not-needed\nrollback: provided\nmain-incident-recovery: yes\n-->`;
+                  `恢复未经 PR 更新 \`${after}\` 之前的 Git tree。该 PR 由 Main Provenance workflow 自动创建，保持 Draft，等待 R3 独立 AI 审查。\n\n` +
+                  `Addresses #${incident.number}\n\n` +
+                  `## 范围与非目标\n\n` +
+                  `- 将 main tree 从 \`${afterTree}\` 恢复到 \`${beforeTree}\`；\n` +
+                  `- 不重写历史，不直接更新 main；\n` +
+                  `- 不关闭主 Incident，服务端 Ruleset 确认前保持安全停机。\n\n` +
+                  `## 关键不变量\n\n` +
+                  `- 恢复 commit 的 parent 是未经授权提交；\n` +
+                  `- 恢复 commit 的 tree 与 before commit 完全一致；\n` +
+                  `- 必须经过完整 CI 和当前 HEAD 绑定的 R3 审查。\n\n` +
+                  `## 风险与回滚\n\n` +
+                  `- 风险：R3；\n` +
+                  `- 若 before tree 不是正确恢复目标，关闭本 PR 并由人工/AI 从 Incident 证据重新构造；\n` +
+                  `- 合并后可以通过新的恢复 PR 回滚，不 force-push。\n\n` +
+                  `## 验证证据\n\n` +
+                  `- [ ] npm run check\n` +
+                  `- [ ] tree 与 before commit 一致\n` +
+                  `- [ ] 当前 HEAD 独立 AI 审查\n\n` +
+                  `## 自主交付记录\n\n` +
+                  `- 来源：Main Provenance workflow run ${context.runId}；\n` +
+                  `- Incident：#${incident.number}；\n` +
+                  `- 当前保持 Draft，不绕过 R3 门禁。\n\n` +
+                  `<!--\nzhiwei-harness\nrisk: R3\nautonomous-merge: yes\nindependent-review: required\ngovernance-change: yes\nproject-state: not-needed\nrollback: provided\nmain-incident-recovery: yes\n-->`;
 
-              const { data: recoveryPr } = await github.rest.pulls.create({
-                owner,
-                repo,
-                title: `revert(main): recover unauthorized update ${after.slice(0, 12)}`,
-                head: branch,
-                base: defaultBranch,
-                body: recoveryBody,
-                draft: true,
-              });
-              recoverySummary = `已创建 Draft 恢复 PR #${recoveryPr.number}，tree ${afterTree} → ${beforeTree}。`;
+                const { data: recoveryPr } = await github.rest.pulls.create({
+                  owner,
+                  repo,
+                  title: `revert(main): recover unauthorized update ${after.slice(0, 12)}`,
+                  head: branch,
+                  base: defaultBranch,
+                  body: recoveryBody,
+                  draft: true,
+                });
+                recoverySummary = `已创建 Draft 恢复 PR #${recoveryPr.number}，commit ${recoveryCommitSha}，tree ${afterTree} → ${beforeTree}。`;
+              }
             }
 
             await github.rest.issues.createComment({
