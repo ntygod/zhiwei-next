@@ -3,14 +3,20 @@ import { readFile } from "node:fs/promises";
 
 const root = process.cwd();
 const fixturePath = "docs/harness/incidents/2026-08-11-direct-main.json";
+const riskAcceptancePath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
 const workflowPath = ".github/workflows/main-provenance.yml";
+const dispatchPath = ".github/workflows/main-provenance-dispatch.yml";
 const autoMergePath = ".github/workflows/autonomous-merge.yml";
 const templatePath = ".github/pull_request_template.md";
 const violations = [];
 
 function git(args) {
   try {
-    return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   } catch (error) {
     const stderr = error?.stderr?.toString?.("utf8")?.trim();
     throw new Error(`git ${args.join(" ")} failed${stderr ? `: ${stderr}` : ""}`);
@@ -50,9 +56,9 @@ function provenanceDecision({ associatedMergedPullRequest, currentHeadMatchesAft
   };
 }
 
-function mergeHaltDecision({ configuredPause, activeIncidentNumbers, recoveryMetadata, referencedIncidentNumbers }) {
+function mergeHaltDecision({ configuredPause, configuredIncidentIssue, activeIncidentNumbers, recoveryMetadata, referencedIncidentNumbers }) {
   const required = new Set(activeIncidentNumbers);
-  if (configuredPause) required.add(9);
+  if (configuredPause && configuredIncidentIssue) required.add(configuredIncidentIssue);
   const recoveryRequired = configuredPause || activeIncidentNumbers.length > 0;
   if (!recoveryRequired) {
     return recoveryMetadata === "yes"
@@ -70,26 +76,101 @@ function mergeHaltDecision({ configuredPause, activeIncidentNumbers, recoveryMet
   };
 }
 
-const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
-const workflow = await readFile(workflowPath, "utf8");
-const autoMerge = await readFile(autoMergePath, "utf8");
-const template = await readFile(templatePath, "utf8");
+const [fixtureText, riskText, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
+  readFile(fixturePath, "utf8"),
+  readFile(riskAcceptancePath, "utf8"),
+  readFile(workflowPath, "utf8"),
+  readFile(dispatchPath, "utf8"),
+  readFile(autoMergePath, "utf8"),
+  readFile(templatePath, "utf8"),
+]);
+const fixture = JSON.parse(fixtureText);
+const riskAcceptance = JSON.parse(riskText);
 
-requireValue(fixture.schemaVersion === 1, "Incident fixture schemaVersion must be 1.");
+requireValue(fixture.schemaVersion === 2, "Incident fixture schemaVersion must be 2.");
 requireValue(fixture.incidentId === "MAIN-2026-08-11-001", "Unexpected incident ID.");
 requireValue(fixture.issue === 9, "Incident fixture must point to Issue #9.");
-requireValue(fixture.status === "open-human-action-required", "Incident must remain open until server protection is confirmed.");
+requireValue(
+  fixture.status === "mitigated-live-proof-pending",
+  "Incident must remain mitigated-live-proof-pending until the live dispatch chain is observed.",
+);
 requireValue(isSha(fixture.safeBaseline?.commit), "Safe baseline commit must be a full SHA.");
 requireValue(isSha(fixture.safeBaseline?.tree), "Safe baseline tree must be a full SHA.");
 requireValue(Array.isArray(fixture.events) && fixture.events.length === 4, "Incident fixture must contain four ordered events.");
-requireValue(fixture.serverProtection?.status === "required-owner-action", "Server protection must remain an explicit owner action.");
 requireValue(
-  fixture.serverProtection?.requiredRules?.includes("require pull request before merging"),
-  "Server protection must require pull requests.",
+  fixture.serverProtection?.status === "unavailable-risk-accepted",
+  "Server protection status must disclose unavailable-risk-accepted.",
 );
 requireValue(
-  fixture.serverProtection?.requiredRules?.includes("do not grant the ChatGPT Connector a direct-push bypass"),
-  "ChatGPT Connector must not receive a direct-push bypass.",
+  fixture.serverProtection?.operatingMode === "best-effort-private-free",
+  "Incident fixture must disclose best-effort-private-free mode.",
+);
+requireValue(
+  fixture.serverProtection?.riskAcceptanceRecord === riskAcceptancePath,
+  "Incident fixture must point to the machine-readable risk acceptance record.",
+);
+requireValue(
+  fixture.serverProtection?.residualRiskAcceptedByOwner === true,
+  "Incident fixture must record owner acceptance of residual risk.",
+);
+requireValue(fixture.technicalMitigation?.status === "implemented", "Technical mitigation must be implemented.");
+requireValue(
+  JSON.stringify(fixture.technicalMitigation?.pullRequests) === JSON.stringify([10, 11]),
+  "Technical mitigation must identify PRs #10 and #11.",
+);
+for (const sha of [
+  "852fd1e483bc07b8736e5da08b2f70e66544e4cf",
+  "70224f51d37cce3427dc6480c2039bc98bf1ba53",
+]) {
+  requireValue(
+    fixture.technicalMitigation?.mergedCommits?.includes(sha),
+    `Technical mitigation is missing merged commit ${sha}.`,
+  );
+}
+requireValue(
+  fixture.technicalMitigation?.liveProof?.status === "pending",
+  "Live provenance proof must remain pending in the intermediate recovery PR.",
+);
+requireValue(
+  fixture.technicalMitigation?.liveProof?.expectedFirstProofPullRequest === 12,
+  "The first live provenance proof must be assigned to PR #12.",
+);
+for (const workflowName of ["Autonomous Merge", "Main Provenance Dispatch", "Main Provenance"]) {
+  requireValue(
+    fixture.technicalMitigation?.liveProof?.requiredWorkflows?.includes(workflowName),
+    `Live proof is missing workflow: ${workflowName}.`,
+  );
+}
+
+requireValue(riskAcceptance.schemaVersion === 1, "Risk acceptance schemaVersion must be 1.");
+requireValue(riskAcceptance.status === "accepted", "Risk acceptance status must be accepted.");
+requireValue(
+  riskAcceptance.operatingMode === "best-effort-private-free",
+  "Risk acceptance operating mode must be best-effort-private-free.",
+);
+requireValue(riskAcceptance.repositoryVisibility === "private", "Risk acceptance must preserve private visibility.");
+requireValue(riskAcceptance.githubPlan === "free", "Risk acceptance must identify the GitHub Free plan.");
+requireValue(riskAcceptance.ownerDecision?.keepPrivate === true, "Owner decision must keep the repository private.");
+requireValue(riskAcceptance.ownerDecision?.upgradePlan === false, "Owner decision must reject a plan upgrade.");
+requireValue(
+  riskAcceptance.ownerDecision?.continueAutonomousDevelopment === true,
+  "Owner decision must explicitly continue autonomous development.",
+);
+requireValue(
+  riskAcceptance.evidence?.incidentIssue === 9 && riskAcceptance.evidence?.ownerDecisionCommentId === 5253754189,
+  "Risk acceptance evidence must point to Issue #9 and the owner decision comment.",
+);
+requireValue(
+  Array.isArray(riskAcceptance.acceptedResidualRisks) && riskAcceptance.acceptedResidualRisks.length >= 3,
+  "Risk acceptance must list the accepted residual risks.",
+);
+requireValue(
+  riskAcceptance.mandatoryCompensatingControls?.includes("All normal changes must enter main through pull requests."),
+  "Risk acceptance must retain the PR-only normal change contract.",
+);
+requireValue(
+  riskAcceptance.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."),
+  "A second direct-main incident must trigger risk reassessment.",
 );
 
 try {
@@ -148,18 +229,17 @@ const workflowTokens = [
   "name: Main Provenance",
   "push:",
   "branches: [main]",
+  "repository_dispatch:",
+  "types: [main-provenance]",
   "contents: write",
   "issues: write",
   "pull-requests: write",
   "listPullRequestsAssociatedWithCommit",
-  "attempt < 15",
-  "merge_commit_sha === after",
-  "zhiwei-main-incident",
-  "status: open",
+  "associatedMergedPullRequest.base?.sha !== before",
+  "parents.length !== 1 || parents[0].sha !== before",
+  "repository_dispatch payload 不是可信的 tree 恢复来源",
   "github.rest.pulls.list",
-  "state: \"all\"",
   "github.rest.git.getRef",
-  "Existing recovery branch",
   "github.rest.git.createCommit",
   "github.rest.git.createRef",
   "github.rest.pulls.create",
@@ -172,6 +252,17 @@ for (const token of workflowTokens) {
 }
 requireValue(!workflow.includes("pull_request_target:"), "Main provenance workflow must not use pull_request_target.");
 requireValue(!/\$\{\{\s*secrets\./.test(workflow), "Main provenance workflow must not inject repository secrets.");
+
+for (const token of [
+  "name: Main Provenance Dispatch",
+  "workflow_run:",
+  "async function failClosed",
+  "squash-parent-contract-mismatch",
+  "github.rest.repos.createDispatchEvent",
+  "reason: \"provenance-dispatch-failed\"",
+]) {
+  requireValue(dispatchWorkflow.includes(token), `Main provenance dispatch workflow is missing token: ${token}`);
+}
 
 const autoMergeTokens = [
   "readTrustedJson(\"harness.config.json\")",
@@ -220,23 +311,47 @@ for (const scenario of provenanceScenarios) {
 
 const haltScenarios = [
   {
-    name: "trusted config blocks ordinary merge even when issue was closed",
-    input: { configuredPause: true, activeIncidentNumbers: [], recoveryMetadata: "no", referencedIncidentNumbers: [] },
+    name: "trusted live-proof pause blocks an ordinary merge",
+    input: {
+      configuredPause: true,
+      configuredIncidentIssue: 9,
+      activeIncidentNumbers: [],
+      recoveryMetadata: "no",
+      referencedIncidentNumbers: [],
+    },
     expected: { allowed: false, reason: "halt-requires-recovery", missing: [9] },
   },
   {
-    name: "trusted config recovery requires configured incident reference",
-    input: { configuredPause: true, activeIncidentNumbers: [], recoveryMetadata: "yes", referencedIncidentNumbers: [] },
+    name: "recovery requires the configured incident reference",
+    input: {
+      configuredPause: true,
+      configuredIncidentIssue: 9,
+      activeIncidentNumbers: [],
+      recoveryMetadata: "yes",
+      referencedIncidentNumbers: [],
+    },
     expected: { allowed: false, reason: "missing-incident-reference", missing: [9] },
   },
   {
-    name: "recovery with all config and issue references is allowed",
-    input: { configuredPause: true, activeIncidentNumbers: [11], recoveryMetadata: "yes", referencedIncidentNumbers: [9, 11] },
+    name: "recovery with all required incident references is allowed",
+    input: {
+      configuredPause: true,
+      configuredIncidentIssue: 9,
+      activeIncidentNumbers: [11],
+      recoveryMetadata: "yes",
+      referencedIncidentNumbers: [9, 11],
+    },
     expected: { allowed: true, reason: "recovery-authorized", missing: [] },
   },
   {
     name: "recovery metadata cannot be used without a halt",
-    input: { configuredPause: false, activeIncidentNumbers: [], recoveryMetadata: "yes", referencedIncidentNumbers: [] },
+    input: {
+      configuredPause: false,
+      configuredIncidentIssue: undefined,
+      activeIncidentNumbers: [],
+      recoveryMetadata: "yes",
+      referencedIncidentNumbers: [],
+    },
     expected: { allowed: false, reason: "recovery-without-halt", missing: [] },
   },
 ];
@@ -250,4 +365,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Main provenance incident and recovery contract: OK");
+console.log("Main provenance incident, risk acceptance and recovery contract: OK");
