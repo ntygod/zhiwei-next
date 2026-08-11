@@ -13,6 +13,7 @@ const outputPath = resolve(
 const captureScript = resolve(
   process.env.PI_LIFECYCLE_CAPTURE_SCRIPT ?? "scripts/probes/pi-lifecycle-capture.mjs",
 );
+const scenario = process.env.PI_LIFECYCLE_SCENARIO ?? "normal-tool";
 const committedFixturePath = process.env.PI_LIFECYCLE_COMMITTED_FIXTURE
   ? resolve(process.env.PI_LIFECYCLE_COMMITTED_FIXTURE)
   : undefined;
@@ -195,18 +196,22 @@ async function main() {
       PI_LIFECYCLE_OUTPUT: captureOutput,
       PI_LIFECYCLE_WORKSPACE: workspaceDir,
       PI_LIFECYCLE_AGENT_DIR: agentDir,
+      PI_LIFECYCLE_SCENARIO: scenario,
     }),
   });
   const capture = JSON.parse(await readFile(captureOutput, "utf8"));
   if (capture.status !== "passed") {
     throw new Error(`Lifecycle capture did not pass: ${JSON.stringify(capture.error ?? capture)}`);
   }
+  if (capture.scenario !== scenario) {
+    throw new Error(`Lifecycle capture scenario drift: expected ${scenario}, got ${capture.scenario}`);
+  }
 
   stage = "compose-result";
   const result = {
     schemaVersion: 1,
     status: "passed",
-    scenario: "normal-tool",
+    scenario,
     upstream: {
       repository: baseline.upstream.repository,
       releaseTag: baseline.upstream.releaseTag,
@@ -256,7 +261,7 @@ try {
   const failure = {
     schemaVersion: 1,
     status: "failed",
-    scenario: "normal-tool",
+    scenario,
     error: normalizeError(error),
     isolation: {
       hostSecretsPassedToProbe: false,
