@@ -208,6 +208,41 @@ jobs:
             const failures = [];
             for (const candidate of candidates) {
               try {
+                const [{ data: latestBranch }, currentlyOpenPullRequests] = await Promise.all([
+                  github.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: candidate.name,
+                  }),
+                  github.paginate(github.rest.pulls.list, {
+                    owner,
+                    repo,
+                    state: "open",
+                    head: `${owner}:${candidate.name}`,
+                    per_page: 100,
+                  }),
+                ]);
+
+                if (currentlyOpenPullRequests.length > 0) {
+                  core.warning(
+                    `Preserving ${candidate.name}: an open PR appeared after candidate selection.`,
+                  );
+                  continue;
+                }
+                if (latestBranch.protected === true) {
+                  core.warning(
+                    `Preserving ${candidate.name}: it became protected after candidate selection.`,
+                  );
+                  continue;
+                }
+                if (latestBranch.commit.sha !== candidate.headSha) {
+                  core.warning(
+                    `Preserving ${candidate.name}: HEAD moved from ${candidate.headSha} ` +
+                    `to ${latestBranch.commit.sha} after candidate selection.`,
+                  );
+                  continue;
+                }
+
                 await github.rest.git.deleteRef({
                   owner,
                   repo,
