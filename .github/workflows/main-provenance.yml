@@ -3,6 +3,8 @@ name: Main Provenance
 on:
   push:
     branches: [main]
+  repository_dispatch:
+    types: [main-provenance]
 
 permissions:
   contents: write
@@ -23,9 +25,15 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const before = context.payload.before;
-            const after = context.payload.after;
-            const defaultBranch = context.payload.repository.default_branch;
+            const dispatched = context.eventName === "repository_dispatch";
+            const provenancePayload = dispatched ? (context.payload.client_payload ?? {}) : context.payload;
+            const before = provenancePayload.before;
+            const after = provenancePayload.after;
+            const defaultBranch = provenancePayload.default_branch ?? context.payload.repository.default_branch;
+            const eventSource = dispatched ? provenancePayload.source : "push";
+            const expectedPullNumber = Number.isInteger(provenancePayload.pull_number)
+              ? provenancePayload.pull_number
+              : Number.parseInt(provenancePayload.pull_number, 10);
             const zeroSha = /^0{40}$/;
 
             function parseBlock(text, marker) {
@@ -45,8 +53,19 @@ jobs:
               return result;
             }
 
-            if (!before || !after || zeroSha.test(after)) {
-              core.setFailed("Main branch deletion or malformed push payload cannot be authorized.");
+            if (dispatched) {
+              if (context.payload.action !== "main-provenance" || eventSource !== "autonomous-merge") {
+                core.setFailed(`Unsupported repository_dispatch provenance source: action=${context.payload.action}, source=${eventSource}.`);
+                return;
+              }
+              if (!Number.isInteger(expectedPullNumber) || expectedPullNumber <= 0) {
+                core.setFailed("Autonomous-merge provenance dispatch is missing a valid pull_number.");
+                return;
+              }
+            }
+
+            if (!before || !after || !defaultBranch || zeroSha.test(after)) {
+              core.setFailed("Main branch deletion or malformed provenance payload cannot be authorized.");
               return;
             }
             if (zeroSha.test(before)) {
@@ -70,7 +89,15 @@ jobs:
               pr.merged_at && pr.merge_commit_sha === after && pr.base?.ref === defaultBranch
             );
             if (associatedMergedPullRequest) {
-              core.notice(`Authorized main update ${after} from merged PR #${associatedMergedPullRequest.number}.`);
+              if (dispatched && associatedMergedPullRequest.number !== expectedPullNumber) {
+                core.setFailed(
+                  `Provenance dispatch expected PR #${expectedPullNumber}, but commit ${after} is associated with PR #${associatedMergedPullRequest.number}.`,
+                );
+                return;
+              }
+              core.notice(
+                `Authorized main update ${after} from merged PR #${associatedMergedPullRequest.number} via ${eventSource}.`,
+              );
               return;
             }
 
@@ -91,6 +118,7 @@ jobs:
               `Main Provenance workflow 检测到默认分支更新没有关联到已合并 Pull Request。\n\n` +
               `- before: \`${before}\`\n` +
               `- after: \`${after}\`\n` +
+              `- event source: \`${eventSource}\`\n` +
               `- actor: \`${context.actor}\`\n` +
               `- workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
               `仓库已进入安全停机：除标记为 main incident recovery 的 R3 PR 外，自动合并暂停。` +
@@ -109,7 +137,7 @@ jobs:
                 owner,
                 repo,
                 issue_number: incident.number,
-                body: `检测到新的未经 PR main 更新。\n\n- before: \`${before}\`\n- after: \`${after}\`\n- actor: \`${context.actor}\`\n- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                body: `检测到新的未经 PR main 更新。\n\n- before: \`${before}\`\n- after: \`${after}\`\n- event source: \`${eventSource}\`\n- actor: \`${context.actor}\`\n- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
               });
             }
 
@@ -222,7 +250,7 @@ jobs:
               owner,
               repo,
               issue_number: incident.number,
-              body: `${recoverySummary}\n\nMain Provenance workflow 将本次 push 标记为失败；服务端 Ruleset 配置前，非恢复 PR 的自动合并保持暂停。`,
+              body: `${recoverySummary}\n\nMain Provenance workflow 将本次更新标记为失败；服务端 Ruleset 配置前，非恢复 PR 的自动合并保持暂停。`,
             });
 
             core.setFailed(`Unauthorized direct update to ${defaultBranch}: ${after}. Incident #${incident.number}. ${recoverySummary}`);
