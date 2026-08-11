@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -123,12 +122,26 @@ async function writeResult(result) {
 }
 
 async function loadInstalledModules() {
-  const installPackage = join(installDir, "package.json");
-  await readFile(installPackage, "utf8");
-  const requireFromInstall = createRequire(installPackage);
-  const codingEntry = requireFromInstall.resolve("@earendil-works/pi-coding-agent");
-  const aiEntry = requireFromInstall.resolve("@earendil-works/pi-ai");
-  const fauxEntry = requireFromInstall.resolve("@earendil-works/pi-ai/providers/faux");
+  const codingDir = join(
+    installDir,
+    "node_modules",
+    "@earendil-works",
+    "pi-coding-agent",
+  );
+  const aiDir = join(installDir, "node_modules", "@earendil-works", "pi-ai");
+  const [codingManifest, aiManifest] = await Promise.all([
+    readFile(join(codingDir, "package.json"), "utf8").then(JSON.parse),
+    readFile(join(aiDir, "package.json"), "utf8").then(JSON.parse),
+  ]);
+  if (codingManifest.name !== "@earendil-works/pi-coding-agent" || codingManifest.version !== "0.84.1") {
+    throw new Error(`Unexpected coding-agent manifest: ${codingManifest.name}@${codingManifest.version}`);
+  }
+  if (aiManifest.name !== "@earendil-works/pi-ai" || aiManifest.version !== "0.84.1") {
+    throw new Error(`Unexpected pi-ai manifest: ${aiManifest.name}@${aiManifest.version}`);
+  }
+  const codingEntry = join(codingDir, codingManifest.main ?? "dist/index.js");
+  const aiEntry = join(aiDir, aiManifest.main ?? "dist/index.js");
+  const fauxEntry = join(aiDir, "dist", "providers", "faux.js");
   const [coding, ai, faux] = await Promise.all([
     import(pathToFileURL(codingEntry).href),
     import(pathToFileURL(aiEntry).href),
