@@ -37,7 +37,7 @@ Settings
 | Block force pushes | 开启 |
 | Restrict deletions | 开启 |
 
-如果确实需要给某个 App 设置 bypass，只允许 **For pull requests only**，不能允许直接 push。正常自动合并通过 GitHub Pull Request API 完成，不需要默认分支直写 bypass。
+不要授予 ChatGPT Codex Connector **direct-push bypass**。如果确实需要给其他 App 设置 bypass，只允许 **For pull requests only**，不能允许直接 push。正常自动合并通过 GitHub Pull Request API 完成，不需要默认分支直写 bypass。
 
 ## 备选：Branch Protection Rule
 
