@@ -20,7 +20,9 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Extension正常单 Tool生命周期 | 已验证，包含 Tool、settled与 shutdown边界 |
 | 自动重试恢复成功 | 已验证，首次 retryable error后第二次 Run成功 |
 | Retry公共/Extension表面差异 | 已验证，Extension无 Retry专有事件和 `willRetry`增强 |
-| 验证状态 | `source-and-runtime-verified-retry-success` |
+| Follow-up队列 | 已验证，同一公共 Run内两个 Turn、队列先非空后清空、最终单次 `agent_settled` |
+| Queue公共/Extension表面差异 | 已验证，公共 Session有 `queue_update`，Extension无队列事件 |
+| 验证状态 | `source-and-runtime-verified-follow-up-queue` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -28,6 +30,7 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 packages/pi-adapter/fixtures/pi-artifact-runtime.json
 packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
+packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 ```
 
 当前固定的是 **M0契约基线**，不是生产依赖承诺。仓库仍未将 Pi加入正式依赖，也未冻结 `NormalizedRuntimeEvent`。
@@ -38,8 +41,8 @@ Pi至少暴露三类不能混为一谈的表面：
 
 | 表面 | 用途 | 当前确认程度 |
 |---|---|---|
-| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool和 Retry恢复均已动态验证 |
-| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool和 Retry底层 Run已动态验证；没有公共 Retry专有事件增强 |
+| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry恢复和 Follow-up队列均已动态验证 |
+| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry和 Follow-up底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
 | RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型及无凭证空 Session启动已验证；真实任务时序待录制 |
 
 `pi-adapter`必须显式标记事件来自哪个表面，不能仅凭同名事件假设载荷和时序相同。
@@ -59,7 +62,7 @@ Pi至少暴露三类不能混为一谈的表面：
 - 不挂载宿主仓库，只挂载只读 curated probe bundle；
 - 不传 GitHub Secret、真实 Provider Credential、用户数据或完整环境变量；
 - Runtime场景只使用 Pi发布包自带内存 Faux Provider；
-- Normal Tool的 `echo`和 Retry场景都没有外部副作用；
+- Normal Tool的 `echo`、Retry和 Follow-up场景都没有外部副作用；
 - 只输出脱敏、可机器复验结果。
 
 这些验证证明发布 Artifact的公开 manifest与目标运行表面符合当前基线。它们不是完整供应链审计，也不证明 Tarball每个源码字节都可由 Git Tag可重现构建得到。
@@ -156,9 +159,70 @@ agent_end.willRetry
 - Retry attempt与原因；
 - 恢复 Run及最终稳定边界。
 
+## 已验证的 Follow-up队列生命周期
+
+详细事件表见 [`follow-up-queue-lifecycle.md`](../spikes/pi-runtime-contract/follow-up-queue-lifecycle.md)。
+
+固定场景：
+
+```text
+Initial prompt
+  → 第一个 Assistant message_start
+  → session.followUp(queued message)
+  → queue_update(followUp=[queued message])
+  → First response complete.
+  → 第二个 Turn开始
+  → queue_update(followUp=[])
+  → queued user message
+  → Follow-up response complete.
+  → agent_end(willRetry=false)
+  → agent_settled
+```
+
+关键证据：
+
+- Faux Provider调用两次，外部 Prompt数为零；
+- 公共 `agent_start=1`、`turn_start=2`、`turn_end=2`、`agent_end=1`、`agent_settled=1`；
+- Follow-up在该固定场景中没有创建第二个公共 Agent Run，而是在同一 Run内追加第二个 Turn；
+- 公共 `queue_update`先暴露非空 Follow-up，再在 queued user message进入事件流前暴露空队列；
+- 队列清空后仍有完整的用户消息、Assistant响应、`turn_end`、`agent_end`和 `agent_settled`，所以队列为空不等于 Prompt完成；
+- `session.messages`最终角色为 `user → assistant → user → assistant`；
+- `session.prompt()`返回时 `isIdle=true`、Pending Message为零、Pending Follow-up为空；
+- fresh CI Capture与 committed Fixture完整指纹一致。
+
+### Public SDK与 Extension差异
+
+公共 Session事件中：
+
+```text
+queue_update count = 2
+```
+
+Extension事件中：
+
+```text
+queue_update count = 0
+```
+
+因此：
+
+> Follow-up队列是 Public Session表面的状态语义。Extension只能观察对应 Turn、Message、Agent和 Settled生命周期，不能无损重建队列何时填充或清空。
+
+### 对 Observation Ledger的直接约束
+
+Ledger需要分别记录：
+
+- Follow-up请求何时由宿主排入；
+- 公共 Session队列何时变为非空；
+- 队列何时清空并进入后续 Turn；
+- Follow-up用户消息和 Assistant结果；
+- 最终单次 `agent_settled`。
+
+不能仅凭 `queue_update(followUp=[])`关闭 Prompt，也不能把 Follow-up固定映射成新 Agent Run。
+
 ## Extension生命周期映射
 
-| Pi Extension生命周期 | 知微动作 | 当前证据 |
+| Pi生命周期 / Session事件 | 知微动作 | 当前证据 |
 |---|---|---|
 | session_start | 建立 Runtime Session映射 | SDK `createAgentSession` Fixture中 Inline Extension未观察到；不能作为唯一建链入口 |
 | input | 写入用户 Observation | 已观察，为 Inline Extension首事件 |
@@ -166,9 +230,10 @@ agent_end.willRetry
 | context | 控制每次模型调用认知预算（M2） | 未纳入当前 Capture |
 | tool_call | Policy评估（M5） | Normal Tool已观察，携带真实 `toolCallId`和结构化 input |
 | tool_result | 写入证据和 Outcome线索 | Normal Tool已观察，与 `tool_call`使用同一 ID |
-| agent_end | 一次底层 Agent Run结束 | Normal和 Retry均已观察；Extension不携带 Session层 `willRetry` |
+| queue_update | 记录 Steering / Follow-up队列状态 | Public Session已观察；Extension未观察，必须保留来源差异 |
+| agent_end | 一次底层 Agent Run结束 | Normal、Retry和 Follow-up均已观察；Extension不携带 Session层 `willRetry` |
 | auto_retry_start/end | Session自动重试状态 | Extension未观察；必须从 Public SDK或等价 Session表面获得 |
-| agent_settled | 形成 Session本轮稳定边界 | Normal和 Retry均已观察，发生在最终 `agent_end`之后 |
+| agent_settled | 形成 Session本轮稳定边界 | Normal、Retry和 Follow-up均已观察，发生在最终 `agent_end`之后 |
 | session_before_compact | 固化工作状态（M2） | 待 Compaction Fixture |
 | session_shutdown | 完成会话/Worker收尾 | 已观察；由宿主通过 ExtensionRunner明确发出 |
 
@@ -201,15 +266,19 @@ session.extensionRunner.emit({ type: session_shutdown, reason: exit })
 
 固定源码与动态 Fixture已经确认：
 
-- `AgentSession.subscribe()`提供 Agent/Turn/Message/Tool/Retry生命周期；
-- 一个 Prompt可能包含多个底层 Agent Run；
+- `AgentSession.subscribe()`提供 Agent、Turn、Message、Tool、Retry、Queue和最终 Settled生命周期；
+- 一个 Prompt可能包含多个底层 Agent Run，例如自动重试；
+- 一个 Agent Run也可能包含多个 Turn，已验证 Follow-up场景即为一个 Run、两个 Turn；
 - Tool Start/Update/End都携带真实 `toolCallId`；
 - Tool Result Message在 Tool Execution End之后进入消息流；
 - 一个 Tool Use会结束当前 Turn并触发新 Turn获取最终 Assistant输出；
 - Public `agent_end`带 `willRetry`，Extension同名事件不具备该增强；
 - `auto_retry_start/end`属于 Session表面，不是 Extension生命周期；
+- Public `queue_update`属于 Session表面，Extension不提供等价队列事件；
+- Queue清空表示消息离开待处理队列，不表示 Prompt完成；
 - Session最终 idle后才发出一次 `agent_settled`；
 - 被 Retry替代的失败消息可能不在最终 `session.messages`；
+- Follow-up最终消息会保留在 `session.messages`，但排队时序仍只能从事件流获得；
 - `AgentSessionRuntime`替换 Session后，旧订阅不会自动迁移；
 - 并行工具完成事件顺序和 Tool Result消息顺序可能不同；
 - Message Update是流式分块，不是持久化领域边界。
@@ -237,7 +306,10 @@ defineTool
 - 自行编造 Tool Call关联键；
 - 把第一次 `agent_end`当成 Prompt最终结果；
 - 从 Extension `agent_end`推断 `willRetry`；
-- 只从最终 `session.messages`重建失败/Retry历史；
+- 从 Extension事件补造不存在的 `queue_update`；
+- 把 Follow-up固定建模成新 Agent Run；
+- 把队列清空当成 Prompt完成；
+- 只从最终 `session.messages`重建失败、Retry或队列历史；
 - 把 `agent_settled`、Extension Shutdown和 Worker进程退出合并；
 - 仅凭事件到达顺序重建 Assistant原始并行工具顺序；
 - 把每一个流式 `message_update`直接写成长期 Observation；
@@ -276,14 +348,16 @@ get_messages
 9. 未验证行为必须作为 Open Question保留，不能为匹配预想 Schema补字段。
 10. SDK Session映射由宿主 Session创建边界负责；Extension `session_start`只能作为附加信号。
 11. `session_shutdown`由宿主明确发出并单独记录；`dispose()`只负责资源释放。
-12. 一个 Prompt可包含多个 Agent Run；每次 `agent_end`、Retry状态和最终 `agent_settled`分别记录。
-13. 被 Retry替代且未进入最终 Session消息列表的失败证据仍必须持久化。
+12. Prompt、Agent Run和 Turn必须分别建模；不得假设它们一一对应。
+13. 每次 `agent_end`、Retry状态和最终 `agent_settled`分别记录。
+14. 被 Retry替代且未进入最终 Session消息列表的失败证据仍必须持久化。
+15. Follow-up入队、公共 `queue_update`、后续 Turn与最终 Settled必须分别记录；队列为空不能替代稳定边界。
+16. Extension缺少 Session层 Retry或 Queue事件时必须保留负证据，不能补造为等价事件。
 
 ## M0后续技术验证
 
 下一步继续验证：
 
-- Follow-up队列与最终 `agent_settled`；
 - 用户取消、`abortRetry()`和 retry exhaustion边界；
 - 并行 Tool Call / Tool Result完整序列；
 - Compaction前后可回放信息；

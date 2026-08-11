@@ -9,6 +9,13 @@ const inputPath = resolve(
 );
 const violations = [];
 
+const INITIAL_PROMPT = "Produce the first response before processing the queued follow-up.";
+const FOLLOW_UP_PROMPT = "Process the queued follow-up now.";
+const FIRST_RESPONSE = "First response complete.";
+const FOLLOW_UP_RESPONSE = "Follow-up response complete.";
+const EXPECTED_OUTER_FINGERPRINT = "00c3f7916a129869b768f7e7147a55a8c783b33e5a55e0e79c13eb45a1d692e8";
+const EXPECTED_CAPTURE_FINGERPRINT = "5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386";
+
 function requireValue(condition, message) {
   if (!condition) violations.push(message);
 }
@@ -30,6 +37,10 @@ function checkContiguousSequence(events, label) {
       `${label} sequence is not contiguous at index ${index}.`,
     );
   }
+}
+
+function eventTypes(events) {
+  return events.map((event) => event.type);
 }
 
 const result = JSON.parse(await readFile(inputPath, "utf8"));
@@ -58,6 +69,7 @@ requireValue(
 );
 requireValue(result.artifact?.installScriptsExecuted === false, "Follow-up install scripts must remain disabled.");
 requireValue(result.environment?.node === "22.23.1", `Follow-up Node version must be 22.23.1, got ${result.environment?.node}.`);
+requireValue(result.environment?.npm === "10.9.8", `Follow-up npm version must be 10.9.8, got ${result.environment?.npm}.`);
 requireValue(result.environment?.platform === "linux-x64", "Follow-up platform must be linux-x64.");
 requireValue(
   result.environment?.containerImage ===
@@ -75,57 +87,171 @@ const capture = result.capture;
 requireValue(capture?.schemaVersion === 1, "Nested follow-up capture schemaVersion must be 1.");
 requireValue(capture?.status === "passed", `Nested follow-up capture status must be passed, got ${capture?.status}.`);
 requireValue(capture?.scenario === "follow-up-queue", "Nested follow-up scenario must be follow-up-queue.");
+requireValue(
+  capture?.package?.name === "@earendil-works/pi-coding-agent" && capture?.package?.version === "0.84.1",
+  "Nested Follow-up package identity is incorrect.",
+);
 requireValue(capture?.provider?.id === "zhiwei-follow-up-faux", "Follow-up capture must use the dedicated Faux provider.");
 requireValue(capture?.provider?.api === "zhiwei-follow-up-faux-api", "Follow-up Faux API is incorrect.");
 requireValue(capture?.provider?.callCount === 2, "Follow-up scenario must consume exactly two Faux responses.");
 requireValue(capture?.provider?.pendingResponses === 0, "Follow-up scenario must consume all Faux responses.");
 requireValue(capture?.provider?.promptsSentToExternalProvider === 0, "Follow-up capture must not contact an external provider.");
-requireValue(capture?.outcome?.finalText === "Follow-up response complete.", "Follow-up final text is incorrect.");
-requireValue(capture?.outcome?.sessionWasIdleBeforeShutdown === true, "Prompt must resolve only after Session is idle.");
+requireValue(capture?.prompts?.initial === INITIAL_PROMPT, "Initial Follow-up prompt drifted.");
+requireValue(capture?.prompts?.followUp === FOLLOW_UP_PROMPT, "Queued Follow-up prompt drifted.");
+requireValue(capture?.responses?.first === FIRST_RESPONSE, "First Faux response drifted.");
+requireValue(capture?.responses?.followUp === FOLLOW_UP_RESPONSE, "Follow-up Faux response drifted.");
+
+requireValue(capture?.queue?.mode === "one-at-a-time", "Follow-up queue mode must be one-at-a-time.");
+requireValue(capture?.queue?.actions?.length === 1, "Follow-up must be queued exactly once.");
+requireValue(
+  capture?.queue?.actions?.[0]?.phase === "queued" &&
+    capture?.queue?.actions?.[0]?.text === FOLLOW_UP_PROMPT &&
+    capture?.queue?.actions?.[0]?.triggerSequence === 5 &&
+    capture?.queue?.actions?.[0]?.queueUpdateSequence === 6,
+  "Follow-up queue action differs from the verified capture.",
+);
+requireValue(
+  JSON.stringify(capture?.queue?.updates) ===
+    JSON.stringify([
+      { sequence: 6, type: "queue_update", steering: [], followUp: [FOLLOW_UP_PROMPT] },
+      { sequence: 13, type: "queue_update", steering: [], followUp: [] },
+    ]),
+  "Follow-up queue updates differ from the verified fill/clear sequence.",
+);
 requireValue(capture?.queue?.pendingMessageCountBeforeShutdown === 0, "Pending message count must be zero after follow-up.");
 requireValue(
   Array.isArray(capture?.queue?.pendingFollowUpsBeforeShutdown) &&
     capture.queue.pendingFollowUpsBeforeShutdown.length === 0,
   "Follow-up queue must be empty when prompt resolves.",
 );
-requireValue(capture?.queue?.actions?.length === 1, "Follow-up must be queued exactly once.");
+
+requireValue(capture?.outcome?.finalText === FOLLOW_UP_RESPONSE, "Follow-up final text is incorrect.");
+requireValue(capture?.outcome?.expectedFinalText === FOLLOW_UP_RESPONSE, "Follow-up expected final text drifted.");
+requireValue(capture?.outcome?.sessionWasIdleBeforeShutdown === true, "Prompt must resolve only after Session is idle.");
 requireValue(
-  capture?.queue?.actions?.[0]?.text === "Process the queued follow-up now.",
-  "Follow-up queued text drifted.",
+  JSON.stringify(capture?.outcome?.finalMessages) ===
+    JSON.stringify([
+      { index: 0, role: "user", text: INITIAL_PROMPT },
+      { index: 1, role: "assistant", text: FIRST_RESPONSE, stopReason: "stop" },
+      { index: 2, role: "user", text: FOLLOW_UP_PROMPT },
+      { index: 3, role: "assistant", text: FOLLOW_UP_RESPONSE, stopReason: "stop" },
+    ]),
+  "Final Session messages differ from the verified two-turn conversation.",
 );
-requireValue(capture?.counts?.publicAgentStarts === 1, "Expected one public agent_start.");
-requireValue(capture?.counts?.publicAgentEnds === 1, "Expected one public agent_end.");
-requireValue(capture?.counts?.publicAgentSettled === 1, "Expected one public agent_settled.");
-requireValue(capture?.counts?.publicTurnStarts === 2, "Expected two public turn_start events.");
-requireValue(capture?.counts?.publicTurnEnds === 2, "Expected two public turn_end events.");
-requireValue(capture?.counts?.publicQueueUpdates >= 2, "Expected at least two public queue_update events.");
-requireValue(capture?.ordering?.queueClearedBeforeFollowUpMessage === true, "Queue must clear before Follow-up message delivery.");
-requireValue(capture?.ordering?.finalAssistantBeforeAgentEnd === true, "Follow-up response must precede agent_end.");
-requireValue(capture?.ordering?.agentEndBeforeSettled === true, "agent_end must precede agent_settled.");
-requireValue(capture?.ordering?.extensionSettledBeforeShutdown === true, "Extension settled must precede shutdown.");
+
+const expectedCounts = {
+  sessionEvents: 23,
+  extensionEvents: 24,
+  publicQueueUpdates: 2,
+  publicAgentStarts: 1,
+  publicAgentEnds: 1,
+  publicAgentSettled: 1,
+  publicTurnStarts: 2,
+  publicTurnEnds: 2,
+  extensionAgentStarts: 1,
+  extensionAgentEnds: 1,
+  extensionAgentSettled: 1,
+  extensionTurnStarts: 2,
+  extensionTurnEnds: 2,
+  extensionQueueUpdates: 0,
+  extensionSessionShutdowns: 1,
+};
+for (const [field, expected] of Object.entries(expectedCounts)) {
+  requireValue(capture?.counts?.[field] === expected, `Follow-up counts.${field} must be ${expected}.`);
+}
+
+const expectedOrdering = {
+  queueFilledSequence: 6,
+  queueClearedSequence: 13,
+  followUpMessageStartIndex: 13,
+  finalAssistantEndIndex: 19,
+  publicAgentEndIndex: 21,
+  publicSettledIndex: 22,
+  queueClearedBeforeFollowUpMessage: true,
+  finalAssistantBeforeAgentEnd: true,
+  agentEndBeforeSettled: true,
+  extensionSettledBeforeShutdown: true,
+};
+for (const [field, expected] of Object.entries(expectedOrdering)) {
+  requireValue(capture?.ordering?.[field] === expected, `Follow-up ordering.${field} must be ${expected}.`);
+}
+requireValue(
+  capture?.ordering?.queueFilledSequence < capture?.ordering?.queueClearedSequence,
+  "Follow-up queue must clear after it was filled.",
+);
 
 const sessionEvents = capture?.sessionEvents ?? [];
 const extensionEvents = capture?.extensionEvents ?? [];
 checkContiguousSequence(sessionEvents, "Follow-up Session events");
 checkContiguousSequence(extensionEvents, "Follow-up Extension events");
 requireValue(
-  sessionEvents.some(
-    (event) =>
-      event.type === "queue_update" &&
-      event.followUp?.includes("Process the queued follow-up now."),
-  ),
-  "Public queue trace never exposed the queued Follow-up.",
+  JSON.stringify(eventTypes(sessionEvents)) ===
+    JSON.stringify([
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "queue_update",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "turn_start",
+      "queue_update",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "agent_end",
+      "agent_settled",
+    ]),
+  "Public Follow-up event type sequence differs from the verified capture.",
 );
 requireValue(
-  sessionEvents.some(
-    (event) => event.type === "queue_update" && Array.isArray(event.followUp) && event.followUp.length === 0,
-  ),
-  "Public queue trace never exposed the cleared Follow-up queue.",
+  JSON.stringify(eventTypes(extensionEvents)) ===
+    JSON.stringify([
+      "input",
+      "before_agent_start",
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "agent_end",
+      "agent_settled",
+      "session_shutdown",
+    ]),
+  "Extension Follow-up event type sequence differs from the verified capture.",
 );
 requireValue(count(sessionEvents, "agent_start") === 1, "Session trace must contain one agent_start.");
 requireValue(count(sessionEvents, "agent_end") === 1, "Session trace must contain one agent_end.");
 requireValue(count(sessionEvents, "agent_settled") === 1, "Session trace must contain one agent_settled.");
 requireValue(count(extensionEvents, "session_shutdown") === 1, "Extension trace must contain one session_shutdown.");
+requireValue(sessionEvents.at(-2)?.type === "agent_end" && sessionEvents.at(-2)?.willRetry === false, "Final public agent_end must have willRetry=false.");
+requireValue(sessionEvents.at(-1)?.type === "agent_settled", "Public trace must end at agent_settled.");
+const extensionAgentEnd = extensionEvents.find((event) => event.type === "agent_end");
+requireValue(extensionAgentEnd && !("willRetry" in extensionAgentEnd), "Extension agent_end must not invent willRetry.");
+requireValue(count(extensionEvents, "queue_update") === 0, "Extension trace must not expose public queue_update events.");
 requireValue(
   sessionEvents.every((event) => !event.type.startsWith("tool_execution_")),
   "Follow-up scenario must not execute tools.",
@@ -133,6 +259,18 @@ requireValue(
 requireValue(
   extensionEvents.every((event) => event.type !== "tool_call" && event.type !== "tool_result"),
   "Follow-up Extension trace must not contain Tool events.",
+);
+requireValue(
+  sessionEvents.every((event) => !event.type.startsWith("auto_retry_")) &&
+    extensionEvents.every((event) => !event.type.startsWith("auto_retry_")),
+  "Follow-up scenario must not include Retry events.",
+);
+requireValue(
+  JSON.stringify(capture?.lifecycleNotes) ===
+    JSON.stringify([
+      { type: "shutdown-host-boundary", mechanism: "session.extensionRunner.emit", reason: "exit" },
+    ]),
+  "Follow-up lifecycle notes differ from the verified host shutdown boundary.",
 );
 
 for (const [field, expected] of Object.entries({
@@ -160,6 +298,8 @@ for (const pattern of [
 requireValue(!serialized.includes('"sessionId"'), "Follow-up result must not contain a raw sessionId field.");
 requireValue(result.contractFingerprint === fingerprint(result), "Outer follow-up contract fingerprint is invalid.");
 requireValue(capture.contractFingerprint === fingerprint(capture), "Nested follow-up contract fingerprint is invalid.");
+requireValue(result.contractFingerprint === EXPECTED_OUTER_FINGERPRINT, "Outer follow-up contract fingerprint drifted.");
+requireValue(capture.contractFingerprint === EXPECTED_CAPTURE_FINGERPRINT, "Nested follow-up contract fingerprint drifted.");
 
 if (violations.length > 0) {
   console.error("Pi follow-up lifecycle result violations:\n" + violations.map((item) => `- ${item}`).join("\n"));

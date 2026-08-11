@@ -26,6 +26,8 @@ best-effort-private-free
 - SDK、Extension和 Tool `execute()`使用同一真实 `toolCallId`，并将 Inline Extension未收到 `session_start`固化为负证据；
 - 自动重试恢复成功 Fixture：首次 `overloaded_error`后第二次 Run成功，公共 `agent_end.willRetry=[true,false]`，最终单次 `agent_settled`；
 - 确认 Extension没有 `auto_retry_start/end`或 `willRetry`增强，且最终 `session.messages`不能重建被替代失败 Run；
+- Follow-up队列 Fixture：公共队列先非空后清空，一个公共 Agent Run包含两个 Turn，最终仍只有一次 `agent_end`和一次 `agent_settled`；
+- 确认 Extension没有 `queue_update`，且队列清空早于 Follow-up用户消息进入事件流，不能把空队列当作 Prompt完成；
 - Branch Cleanup Harness已通过 PR #19进入默认分支并持续回收关闭 PR工作分支；
 - Issue #9完整记录两次 direct-main误写和恢复；PR #10–#14建立并验证 Main Provenance、风险接受、事故停机与恢复链；
 - `developmentPause.active=false`，Issue #9 已关闭；事故、风险接受和两条 provenance proof永久保留。
@@ -115,12 +117,15 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 - Retry恢复路径：第一次 `agent_end(willRetry=true)`、Session Retry事件、恢复 Run、最终 `agent_end(willRetry=false)`和单次 `agent_settled`；
 - Public SDK与 Extension在 Retry事件和 `willRetry`字段上的差异；
 - 被 Retry替代的失败消息不会保留在最终 `session.messages`，必须从事件流持久化；
+- Follow-up队列路径：Public `queue_update`由非空变为空，同一 Agent Run内追加第二个 Turn，最终单次 `agent_settled`；
+- Public SDK与 Extension在 Queue事件上的差异，Extension不能重建 Follow-up排队/清空时序；
+- 初始 `session.prompt()`会等到 Follow-up完成、队列排空并进入 idle后才返回；
+- Prompt、Agent Run和 Turn不能一一对应，队列为空也不能替代最终稳定边界；
 - 宿主 Session创建和 Shutdown边界；
 - Runtime Fixture、隔离 Probe、Harness、架构边界与基础测试由 CI持续检查。
 
 尚未冻结：
 
-- Follow-up队列；
 - 用户取消、`abortRetry()`和 retry exhaustion；
 - 并行 Tool完成顺序与消息顺序；
 - Compaction前后状态；
@@ -132,13 +137,12 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 按真实 Runtime风险排序：
 
-1. 录制 Follow-up队列 Fixture，验证额外 Run与最终单次 `agent_settled`；
-2. 录制用户取消、`abortRetry()`和 retry exhaustion边界；
-3. 录制并行 Tool执行完成顺序与 Tool Result消息顺序；
-4. 验证 Compaction与 Session Replacement；
-5. 比较 SDK与 RPC对同一任务的事件差异；
-6. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
-7. 冻结 Observation Ledger Schema并进入 SQLite实现。
+1. 录制用户取消、`abortRetry()`和 retry exhaustion边界；
+2. 录制并行 Tool执行完成顺序与 Tool Result消息顺序；
+3. 验证 Compaction与 Session Replacement；
+4. 比较 SDK与 RPC对同一任务的事件差异；
+5. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
+6. 冻结 Observation Ledger Schema并进入 SQLite实现。
 
 ## 已知风险
 
@@ -154,6 +158,6 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 ## 产品能力状态
 
-- Pi source-and-runtime baseline已验证到正常 Tool和自动重试恢复路径；
+- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复和 Follow-up队列路径；
 - 真实 Observation持久化、记忆、Context、Attention和桌面端尚未进入实现阶段；
 - M0继续以 Runtime边界证据为先，未完成取消、并发、压缩和替换 Fixture前不提前冻结 Ledger。
