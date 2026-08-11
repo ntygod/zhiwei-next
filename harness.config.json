@@ -22,6 +22,7 @@
     "ownerActionRequired": true,
     "instructions": "docs/harness/main-protection.md",
     "provenanceWorkflow": ".github/workflows/main-provenance.yml",
+    "provenanceDispatchWorkflow": ".github/workflows/main-provenance-dispatch.yml",
     "incidentFixture": "docs/harness/incidents/2026-08-11-direct-main.json"
   },
   "branchPrefixes": [
@@ -75,9 +76,11 @@
     ".github/workflows/ci.yml",
     ".github/workflows/autonomous-merge.yml",
     ".github/workflows/main-provenance.yml",
+    ".github/workflows/main-provenance-dispatch.yml",
     "scripts/check-agents.mjs",
     "scripts/check-harness.mjs",
     "scripts/check-pr-contract.mjs",
-    "scripts/check-main-provenance.mjs"
+    "scripts/check-main-provenance.mjs",
+    "scripts/check-main-provenance-dispatch.mjs"
   ]
 }
