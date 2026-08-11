@@ -97,6 +97,7 @@ requireValue(capture?.ordering?.settledBeforeShutdown === true, "agent_settled m
 const sessionEvents = capture?.sessionEvents ?? [];
 const extensionEvents = capture?.extensionEvents ?? [];
 const toolExecutions = capture?.tool?.executions ?? [];
+const lifecycleNotes = capture?.lifecycleNotes ?? [];
 checkContiguousSequence(sessionEvents, "Session events");
 checkContiguousSequence(extensionEvents, "Extension events");
 checkContiguousSequence(toolExecutions, "Tool executions");
@@ -109,12 +110,28 @@ requireValue(count(extensionEvents, "tool_result") === 1, "Expected one extensio
 requireValue(count(extensionEvents, "agent_end") === 1, "Expected one extension agent_end.");
 requireValue(count(extensionEvents, "agent_settled") === 1, "Expected one extension agent_settled.");
 requireValue(count(extensionEvents, "session_shutdown") === 1, "Expected one extension session_shutdown.");
-requireValue(eventIndex(extensionEvents, "session_start") >= 0, "Extension session_start was not captured.");
+requireValue(
+  count(extensionEvents, "session_start") === 0,
+  "Pinned SDK createAgentSession normal-tool capture must not expose session_start to the inline extension handler.",
+);
+requireValue(
+  extensionEvents[0]?.type === "input",
+  `Pinned SDK inline extension event surface must begin at input, got ${extensionEvents[0]?.type ?? "<empty>"}.`,
+);
 requireValue(eventIndex(extensionEvents, "agent_start") >= 0, "Extension agent_start was not captured.");
 requireValue(eventIndex(extensionEvents, "turn_start") >= 0, "Extension turn_start was not captured.");
 requireValue(eventIndex(extensionEvents, "tool_call") < eventIndex(extensionEvents, "tool_result"), "Extension tool_call must precede tool_result.");
 requireValue(eventIndex(extensionEvents, "agent_end") < eventIndex(extensionEvents, "agent_settled"), "Extension agent_end must precede agent_settled.");
 requireValue(eventIndex(extensionEvents, "agent_settled") < eventIndex(extensionEvents, "session_shutdown"), "Extension agent_settled must precede session_shutdown.");
+requireValue(
+  lifecycleNotes.some(
+    (note) =>
+      note.type === "shutdown-host-boundary" &&
+      note.mechanism === "session.extensionRunner.emit" &&
+      note.reason === "exit",
+  ),
+  "Lifecycle capture must disclose the explicit host-owned session_shutdown boundary.",
+);
 
 requireValue(toolExecutions.length === 2, "Echo execution trace must contain start and end records.");
 requireValue(toolExecutions[0]?.phase === "start" && toolExecutions[1]?.phase === "end", "Echo execution phases are incorrect.");
