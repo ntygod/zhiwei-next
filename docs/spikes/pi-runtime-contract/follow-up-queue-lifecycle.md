@@ -199,4 +199,25 @@ packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 - ä¸ä½¿ç”¨ `pull_request_target`æˆ– `${{ secrets.* }}`ï¼›
 - ç²¾ç¡® npm Artifact integrityä¸ shasumï¼›
 - npm install scriptsç¦ç”¨ï¼›
-- digest-pinned Nodeå®¹åš;ï&Â‹H9cêº+îù¨.y¥¡ù.í¹ìîùîçûï&Â‹H:ggˆ›Ûİ8à XØ\Y›ÜPS8à X›Ë[™]Ë\š]š[YÙ\Ø;ï&Â‹H9.#y£ º/oyk¯ù..ùéày§"HÚXÚÛİ];ï&Â‹Hİ\˜]Y›Ø™H[™ycêº+îûï&Â‹H9i,z-)yîäù§§9."¹/(9/aˆ›Ø¹/çy£ yi,z-){ï&Â‹H9.#y/çykf9îçykîH[›™\º-ëùo¡8à yc§ùiâÈÙ\ÜÚ[ÛˆQ8à PÜ™Y[X[8à yã«ùh ú/k9`ª9¢%¹ª(yg¢ùc§ùiâù 'yîí:dï¸à ‚‚ˆÈÈ9kîHL9ccú+«¹æ¡9olydãB‚¹d#¹îëH›Ü›X[^™Y[[YQ]™[:!ìùl$yoázhnú(j:/¯»ï&‚‚‹H9.¢ù.í¹§iy®¤;ï&”X›XÈÑÈÈ^[œÚ[ÛˆÈ”ûï&Â‹H›Û\8à PYÙ[[¹d£\›¹¦+ù.#yd#9l`¹î©ûï&Â‹H›ÛİË]\9£¤ºf'ù.#¹®!yên¹â­¹  {ï&Â‹H:f'ùb%ù®!yên¹.#yëby.£ˆ›Û\9k£9¢$;ï&Â‹H9. 9.*ˆYÙ[[¹a¡ycëú ïykf9g*9i&¹.*ˆ\›»ï&Â‹H9b'yiâÈ›Û\9.#¹£¤¹aiH›ÛİË]\9aly.ªù§ 9îâ9ê,ùk¦º/®yåc;ï&Â‹H9§ 9îâ9cey«(HYÙ[ÜÙ]Y9d£9k¯ù..ÈÚ]İÛ»ï&Â‹H^[œÚ[Û¹ï.¹l$H]Y]YWİ\]X9¥í¹.#yo¥ú(iz`(Ù\ÜÚ[Ûºf'ùb%ù.¢ù.í¸à ‚‚¹odùbcy.ãy.#ya®ùîäù«hùo#ùccú+«»ï&ú/æ:g :) ycå¹­¢8à T™]H^]\İ[Û¸à ynmº(cÛÛ8à PÛÛ\Xİ[Û¸à TÙ\ÜÚ[Ûˆ™\XÙ[Y[9d£”ùç'ùk§ˆ›Û\š^\™xà ‚
+- digest-pinned Nodeå®¹å™¨ï¼›
+- åªè¯»æ ¹æ–‡ä»¶ç³»ç»Ÿï¼›
+- é rootã€`cap-drop=ALL`ã€`no-new-privileges`ï¼›
+- ä¸æŒ‚è½½å®¿ä¸»ç§æœ‰ checkoutï¼›
+- curated Probe Bundleåªè¯»ï¼›
+- å¤±è´¥ç»“æœä¸Šä¼ ä½† Jobä¿æŒå¤±è´¥ï¼›
+- ä¸ä¿å­˜ç»å¯¹ Runnerè·¯å¾„ã€åŸå§‹ Session IDã€Credentialã€ç¯å¢ƒè½¬å‚¨æˆ–æ¨¡å‹åŸå§‹æ€ç»´é“¾ã€‚
+
+## å¯¹ M0åè®®çš„å½±å“
+
+åç»­ `NormalizedRuntimeEvent`è‡³å°‘å¿…é¡»è¡¨è¾¾ï¼š
+
+- äº‹ä»¶æ¥æºï¼šPublic SDK / Extension / RPCï¼›
+- Promptã€Agent Runå’Œ Turnæ˜¯ä¸åŒå±‚çº§ï¼›
+- Follow-upæ’é˜Ÿä¸æ¸…ç©ºçŠ¶æ€ï¼›
+- é˜Ÿåˆ—æ¸…ç©ºä¸ç­‰äº Promptå®Œæˆï¼›
+- ä¸€ä¸ª Agent Runå†…å¯èƒ½å­˜åœ¨å¤šä¸ª Turnï¼›
+- åˆå§‹ Promptä¸æ’å…¥ Follow-upå…±äº«æœ€ç»ˆç¨³å®šè¾¹ç•Œï¼›
+- æœ€ç»ˆå•æ¬¡ `agent_settled`å’Œå®¿ä¸» shutdownï¼›
+- Extensionç¼ºå°‘ `queue_update`æ—¶ä¸å¾—è¡¥é€  Sessioné˜Ÿåˆ—äº‹ä»¶ã€‚
+
+å½“å‰ä»ä¸å†»ç»“æ­£å¼åè®®ï¼›è¿˜éœ€è¦å–æ¶ˆã€Retry exhaustionã€å¹¶è¡Œ Toolã€Compactionã€Session Replacementå’Œ RPCçœŸå® Prompt Fixtureã€‚
