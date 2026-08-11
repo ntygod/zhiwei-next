@@ -6,6 +6,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   workflow_dispatch:
+    inputs:
+      run_pi_artifact_probe:
+        description: Run the isolated Pi npm Artifact probe
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "17 3 * * 1"
 
@@ -21,6 +27,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      pi-artifact-probe: ${{ steps.probe-gate.outputs.required }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -46,7 +54,39 @@ jobs:
               pull_number: context.issue.number,
               per_page: 100,
             });
-            return JSON.stringify(files.map((file) => file.filename));
+            const filenames = files.map((file) => file.filename);
+            const probePaths = [
+              ".github/workflows/ci.yml",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-artifact-runtime.json",
+              "scripts/check-pi-artifact-result.mjs",
+              "scripts/probes/pi-artifact-ci.mjs",
+              "scripts/probes/pi-sdk-surface.mjs",
+              "scripts/probes/pi-rpc-state.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+            ];
+            const required = filenames.some((filename) => probePaths.includes(filename));
+            core.setOutput("pi-artifact-probe", String(required));
+            return JSON.stringify(filenames);
+
+      - name: Read manual Pi Artifact probe request
+        if: github.event_name == 'workflow_dispatch'
+        id: manual-probe
+        env:
+          RUN_PI_ARTIFACT_PROBE: ${{ inputs.run_pi_artifact_probe }}
+        run: echo "pi-artifact-probe=${RUN_PI_ARTIFACT_PROBE}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Pi Artifact probe gate
+        id: probe-gate
+        env:
+          PR_GATE: ${{ steps.changed-files.outputs.pi-artifact-probe || 'false' }}
+          MANUAL_GATE: ${{ steps.manual-probe.outputs.pi-artifact-probe || 'false' }}
+        run: |
+          if [[ "$PR_GATE" == "true" || "$MANUAL_GATE" == "true" ]]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate autonomous pull request contract
         if: github.event_name == 'pull_request'
@@ -54,3 +94,41 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body || '' }}
           CHANGED_FILES_JSON: ${{ steps.changed-files.outputs.result }}
         run: npm run check:pr
+
+  pi-artifact-probe:
+    name: Pi npm Artifact probe
+    needs: check
+    if: needs.check.outputs.pi-artifact-probe == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup exact Node.js runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.1
+
+      - name: Probe exact Pi npm Artifact
+        env:
+          PI_PROBE_OUTPUT: ${{ runner.temp }}/zhiwei-pi-artifact-result/result.json
+        run: npm run probe:pi:artifact
+
+      - name: Validate sanitized runtime evidence
+        env:
+          PI_PROBE_OUTPUT: ${{ runner.temp }}/zhiwei-pi-artifact-result/result.json
+        run: node scripts/check-pi-artifact-result.mjs "$PI_PROBE_OUTPUT"
+
+      - name: Upload sanitized probe evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pi-artifact-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zhiwei-pi-artifact-result/result.json
+          if-no-files-found: error
+          retention-days: 14
