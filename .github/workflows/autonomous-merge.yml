@@ -111,7 +111,7 @@ jobs:
             }
 
             const metadata = parseBlock(body, "zhiwei-harness");
-            core.info(`Harness metadata for PR #${pullNumber}: autonomous-merge=${metadata?.["autonomous-merge"] ?? "<missing>"}, risk=${metadata?.risk ?? "<missing>"}, independent-review=${metadata?.["independent-review"] ?? "<missing>"}.`);
+            core.info(`Harness metadata for PR #${pullNumber}: autonomous-merge=${metadata?.["autonomous-merge"] ?? "<missing>"}, risk=${metadata?.risk ?? "<missing>"}, independent-review=${metadata?.["independent-review"] ?? "<missing>"}, main-incident-recovery=${metadata?.["main-incident-recovery"] ?? "<missing>"}.`);
             if (!metadata || metadata["autonomous-merge"] !== "yes") {
               core.info("Autonomous merge is not enabled in the PR contract.");
               return;
@@ -165,7 +165,8 @@ jobs:
                 path.startsWith(".github/workflows/") ||
                 path === "scripts/check-agents.mjs" ||
                 path === "scripts/check-harness.mjs" ||
-                path === "scripts/check-pr-contract.mjs"
+                path === "scripts/check-pr-contract.mjs" ||
+                path === "scripts/check-main-provenance.mjs"
               );
             }
 
@@ -195,6 +196,10 @@ jobs:
               core.warning("rollback must be provided or not-required.");
               return;
             }
+            if (!new Set(["yes", "no"]).has(metadata["main-incident-recovery"])) {
+              core.warning("main-incident-recovery must be yes or no.");
+              return;
+            }
             if (governanceChange(filenames) && metadata["governance-change"] !== "yes") {
               core.warning("Governance files changed without governance-change: yes.");
               return;
@@ -215,6 +220,38 @@ jobs:
               !new Set(["not-required", "complete"]).has(metadata["independent-review"])
             ) {
               core.warning("Low-risk independent-review must be not-required or complete.");
+              return;
+            }
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            const activeMainIncidents = openIssues.filter((issue) => {
+              const record = parseBlock(issue.body, "zhiwei-main-incident");
+              return record?.status === "open" && record?.kind === "unauthorized-main-write";
+            });
+
+            if (activeMainIncidents.length > 0) {
+              if (metadata["main-incident-recovery"] !== "yes") {
+                core.info(`Active main incident blocks autonomous merge: ${activeMainIncidents.map((issue) => `#${issue.number}`).join(", ")}.`);
+                return;
+              }
+              if (declaredRisk !== "R3" || metadata["governance-change"] !== "yes") {
+                core.warning("A main incident recovery PR must declare R3 and governance-change: yes.");
+                return;
+              }
+              const missingIncidentReferences = activeMainIncidents.filter((issue) =>
+                !new RegExp(`(?:Addresses|Closes|Fixes)\\s+#${issue.number}\\b`, "i").test(body)
+              );
+              if (missingIncidentReferences.length > 0) {
+                core.warning(`Recovery PR must reference every active main incident: ${missingIncidentReferences.map((issue) => `#${issue.number}`).join(", ")}.`);
+                return;
+              }
+            } else if (metadata["main-incident-recovery"] === "yes") {
+              core.warning("main-incident-recovery: yes cannot be used when no active main incident exists.");
               return;
             }
 
