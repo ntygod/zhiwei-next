@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "source-verified-runtime-unverified",
+  "status": "source-and-runtime-verified",
   "capturedAt": "2026-08-11",
   "upstream": {
     "repository": "earendil-works/pi",
@@ -19,7 +19,7 @@
       "./rpc-entry",
       "./client"
     ],
-    "registryArtifactVerified": false
+    "registryArtifactVerified": true
   },
   "sources": [
     {
@@ -102,32 +102,65 @@
     }
   },
   "dynamicProbe": {
-    "status": "blocked",
-    "attemptedAt": "2026-08-11",
-    "environment": {
-      "node": "22.16.0",
-      "requiredNode": ">=22.19.0",
-      "network": "DNS resolution unavailable for github.com and the npm registry"
+    "status": "passed",
+    "verifiedAt": "2026-08-11T10:23:59.008Z",
+    "resultPath": "packages/pi-adapter/fixtures/pi-artifact-runtime.json",
+    "contractFingerprint": "8862439aa1c3744ec1465ec7336aca7494fa24b859568266e42203d15d84c6d3",
+    "workflow": {
+      "runId": 31481982629,
+      "runUrl": "https://github.com/ntygod/zhiwei-next/actions/runs/31481982629",
+      "artifactId": 9097595194,
+      "artifactName": "pi-artifact-probe-31481982629-1",
+      "artifactDigest": "sha256:c7ecf534c07a94606ff801f979444629caa221da99d700ad4c8311887a4b9ece"
     },
-    "attempts": [
+    "environment": {
+      "node": "22.23.1",
+      "npm": "10.9.8",
+      "platform": "linux-x64",
+      "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+    },
+    "registryArtifact": {
+      "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+      "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+      "manifestSha256": "f9aaa275eac3292508bd9a1325d705a41c2d24c9a34da2b690e400d5a761a985",
+      "installScriptsExecuted": false
+    },
+    "sdk": {
+      "status": "ok",
+      "packageSource": "isolated-package-dir",
+      "credentialsUsed": false
+    },
+    "rpc": {
+      "status": "ok",
+      "executionMode": "node-cli-entry",
+      "commands": [
+        "get_state",
+        "get_messages"
+      ],
+      "promptsSent": 0,
+      "credentialsUsed": false
+    },
+    "isolation": {
+      "workflowPermissions": "contents-read",
+      "hostSecretsPassedToProbe": false,
+      "hostWorkspaceMounted": false,
+      "sourceBundleReadOnly": true,
+      "containerRootFilesystemReadOnly": true,
+      "containerCapabilitiesDropped": true,
+      "containerNoNewPrivileges": true
+    },
+    "recoveryEvidence": [
       {
-        "command": "npm install --save-exact @earendil-works/pi-coding-agent@0.84.1",
-        "result": "timed out without producing a lockfile"
+        "runId": 31481031560,
+        "outcome": "rejected-after-review",
+        "reason": "The package ran on the host and the result retained a hosted-toolcache path; no runtime conclusion was persisted."
       },
       {
-        "command": "git clone https://github.com/earendil-works/pi.git",
-        "result": "failed: Could not resolve host github.com"
+        "runId": 31481751198,
+        "outcome": "expected-failure",
+        "stage": "rpc-probe",
+        "reason": "The noexec temporary filesystem rejected direct npm bin execution; the sandbox remained unchanged and the probe was corrected to invoke the verified CLI through Node."
       }
-    ],
-    "minimumRecheckEnvironment": [
-      "Node.js >= 22.19.0",
-      "npm registry access",
-      "no model-provider credential required for surface and RPC state probes"
-    ],
-    "recheckCommands": [
-      "npm install --no-save --package-lock=false @earendil-works/pi-coding-agent@0.84.1",
-      "npm run probe:pi:sdk",
-      "npm run probe:pi:rpc"
     ]
   }
 }

@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "status": "runtime-verified",
+  "capturedAt": "2026-08-11T10:23:59.008Z",
+  "sourceBaseline": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "package": {
+    "spec": "@earendil-works/pi-coding-agent@0.84.1",
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1"
+  },
+  "environment": {
+    "node": "22.23.1",
+    "platform": "linux",
+    "arch": "x64",
+    "githubActions": true,
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+    "npm": "10.9.8"
+  },
+  "attempts": [
+    {
+      "stage": "npm-version",
+      "command": "npm --version",
+      "status": "ok",
+      "durationMs": 105,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "source-bundle-read-only",
+      "command": "write <repo>/.zhiwei-probe-write-test",
+      "status": "ok",
+      "durationMs": 1,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "registry-metadata",
+      "command": "npm view @earendil-works/pi-coding-agent@0.84.1 --json --registry=https://registry.npmjs.org/",
+      "status": "ok",
+      "durationMs": 383,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "npm-pack",
+      "command": "npm pack @earendil-works/pi-coding-agent@0.84.1 --json --ignore-scripts --pack-destination=<temp>/pack --registry=https://registry.npmjs.org/",
+      "status": "ok",
+      "durationMs": 608,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "tarball-manifest",
+      "command": "tar -xOf <temp>/pack/earendil-works-pi-coding-agent-0.84.1.tgz package/package.json",
+      "status": "ok",
+      "durationMs": 81,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "isolated-install",
+      "command": "npm install --ignore-scripts --no-audit --no-fund --no-save --package-lock=false <temp>/pack/earendil-works-pi-coding-agent-0.84.1.tgz",
+      "status": "ok",
+      "durationMs": 14375,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "stage": "sdk-probe",
+      "command": "node <repo>/scripts/probes/pi-sdk-surface.mjs",
+      "status": "ok",
+      "durationMs": 1139,
+      "exitCode": 0,
+      "stderrPresent": false
+    },
+    {
+      "stage": "rpc-probe",
+      "command": "node <repo>/scripts/probes/pi-rpc-state.mjs",
+      "status": "ok",
+      "durationMs": 1259,
+      "exitCode": 0,
+      "stderrPresent": false
+    }
+  ],
+  "registry": {
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "tarballUrl": "https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.84.1.tgz",
+    "nodeEngine": ">=22.19.0",
+    "license": "MIT"
+  },
+  "tarball": {
+    "filename": "earendil-works-pi-coding-agent-0.84.1.tgz",
+    "size": 5103866,
+    "unpackedSize": 13649587,
+    "fileCount": 968,
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "computedIntegrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "computedShasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "manifestSha256": "f9aaa275eac3292508bd9a1325d705a41c2d24c9a34da2b690e400d5a761a985",
+    "manifest": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1",
+      "type": "module",
+      "license": "MIT",
+      "nodeEngine": ">=22.19.0",
+      "exports": [
+        ".",
+        "./client",
+        "./rpc-entry"
+      ],
+      "bin": [
+        "pi"
+      ],
+      "main": "./dist/index.js"
+    }
+  },
+  "checks": {
+    "registryVersionMatches": true,
+    "registryIntegrityMatchesPack": true,
+    "packIntegrityMatchesBytes": true,
+    "registryShasumMatchesPack": true,
+    "packShasumMatchesBytes": true,
+    "manifestNameMatches": true,
+    "manifestVersionMatches": true,
+    "manifestNodeEngineMatches": true,
+    "manifestLicenseMatches": true,
+    "manifestExportsMatch": true,
+    "manifestBinaryMatches": true
+  },
+  "sdkProbe": {
+    "status": "ok",
+    "package": "@earendil-works/pi-coding-agent@0.84.1",
+    "node": "22.23.1",
+    "packageSource": "isolated-package-dir",
+    "exports": [
+      "createAgentSession",
+      "createAgentSessionRuntime",
+      "SessionManager",
+      "ModelRuntime"
+    ],
+    "credentialsUsed": false
+  },
+  "rpcProbe": {
+    "status": "ok",
+    "package": "@earendil-works/pi-coding-agent@0.84.1",
+    "node": "22.23.1",
+    "executionMode": "node-cli-entry",
+    "sessionIdPresent": true,
+    "isStreaming": false,
+    "messageCount": 0,
+    "credentialsUsed": false,
+    "promptsSent": 0,
+    "stderrPresent": false
+  },
+  "security": {
+    "workflowPermissions": "contents-read",
+    "hostSecretsPassedToProbe": false,
+    "providerCredentialsInjected": false,
+    "promptsSent": 0,
+    "installScriptsExecuted": false,
+    "sourceBundleReadOnly": true,
+    "sourceBundleMutationDetected": false,
+    "hostWorkspaceMounted": false,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true,
+    "packageExecutedFromVerifiedTarball": true
+  },
+  "contractFingerprint": "8862439aa1c3744ec1465ec7336aca7494fa24b859568266e42203d15d84c6d3",
+  "evidence": {
+    "workflowRunId": 31481982629,
+    "workflowRunUrl": "https://github.com/ntygod/zhiwei-next/actions/runs/31481982629",
+    "artifactId": 9097595194,
+    "artifactName": "pi-artifact-probe-31481982629-1",
+    "artifactDigest": "sha256:c7ecf534c07a94606ff801f979444629caa221da99d700ad4c8311887a4b9ece"
+  }
+}

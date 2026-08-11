@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const baselineUrl = new URL("../../packages/pi-adapter/fixtures/pi-upstream-baseline.json", import.meta.url);
 const baseline = JSON.parse(await readFile(baselineUrl, "utf8"));
@@ -26,20 +26,45 @@ if (!atLeast(versionTuple(process.versions.node), [22, 19, 0])) {
   );
 }
 
-const executable = join(
+const defaultExecutable = join(
   process.cwd(),
   "node_modules",
   ".bin",
   process.platform === "win32" ? "pi.cmd" : "pi",
 );
+const executable = resolve(process.env.PI_EXECUTABLE ?? defaultExecutable);
 if (!existsSync(executable)) {
   throw new Error(
-    `Pi binary not found at ${executable}. Install ${baseline.package.name}@${baseline.package.version} first.`,
+    `Pi executable not found at the configured isolated path. Install ${baseline.package.name}@${baseline.package.version} first.`,
   );
 }
 
-const child = spawn(executable, ["--mode", "rpc", "--no-session"], {
-  cwd: process.cwd(),
+let prefixArgs = [];
+if (process.env.PI_EXECUTABLE_ARGS_JSON) {
+  const parsed = JSON.parse(process.env.PI_EXECUTABLE_ARGS_JSON);
+  if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
+    throw new Error("PI_EXECUTABLE_ARGS_JSON must be a JSON array of strings.");
+  }
+  prefixArgs = parsed.map((value) => resolve(value));
+  for (const value of prefixArgs) {
+    if (!existsSync(value)) throw new Error("A configured Pi executable argument does not exist.");
+  }
+}
+
+let spawnExecutable = executable;
+let executionMode = prefixArgs.length > 0 ? "configured-node-entry" : "package-bin";
+if (prefixArgs.length === 0 && process.platform !== "win32") {
+  const realExecutable = realpathSync(executable);
+  if (/\.(?:c?m?js)$/.test(realExecutable)) {
+    spawnExecutable = process.execPath;
+    prefixArgs = [realExecutable];
+    executionMode = "node-cli-entry";
+  }
+}
+
+const probeCwd = resolve(process.env.PI_PROBE_CWD ?? process.cwd());
+const child = spawn(spawnExecutable, [...prefixArgs, "--mode", "rpc", "--no-session"], {
+  cwd: probeCwd,
   env: { ...process.env, AI_AGENT: "zhiwei-pi-rpc-probe" },
   stdio: ["pipe", "pipe", "pipe"],
 });
@@ -52,7 +77,7 @@ function stopChild() {
   if (!child.killed) child.kill();
 }
 
-const completion = new Promise((resolve, reject) => {
+const completion = new Promise((resolvePromise, reject) => {
   const timer = setTimeout(() => {
     stopChild();
     reject(
@@ -65,7 +90,7 @@ const completion = new Promise((resolve, reject) => {
   function maybeResolve() {
     if (!responses.has("state-1") || !responses.has("messages-1")) return;
     clearTimeout(timer);
-    resolve();
+    resolvePromise();
   }
 
   child.on("error", (error) => {
@@ -131,10 +156,12 @@ console.log(
       status: "ok",
       package: `${baseline.package.name}@${baseline.package.version}`,
       node: process.versions.node,
+      executionMode,
       sessionIdPresent: true,
       isStreaming: state.data.isStreaming,
       messageCount: messages.data.messages.length,
       credentialsUsed: false,
+      promptsSent: 0,
       stderrPresent: stderr.length > 0,
     },
     null,

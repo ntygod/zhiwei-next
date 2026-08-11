@@ -8,15 +8,17 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:harness && npm run check:pi-spike && npm run test",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
     "check:harness": "node scripts/check-harness.mjs",
     "check:pi-spike": "node scripts/check-pi-spike.mjs",
+    "check:pi-artifact": "node scripts/check-pi-artifact-result.mjs",
     "check:pr": "node scripts/check-pr-contract.mjs",
     "probe:pi:sdk": "node scripts/probes/pi-sdk-surface.mjs",
     "probe:pi:rpc": "node scripts/probes/pi-rpc-state.mjs",
+    "probe:pi:artifact": "node scripts/probes/pi-artifact-ci.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
   }

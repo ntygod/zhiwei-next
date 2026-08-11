@@ -46,7 +46,7 @@ for (const command of config.requiredCommands ?? []) {
 }
 
 const checkScript = scripts.check ?? "";
-for (const required of ["check:architecture", "check:agents", "check:harness", "test"]) {
+for (const required of ["check:architecture", "check:agents", "check:harness", "check:pi-artifact", "test"]) {
   if (!checkScript.includes(`npm run ${required}`)) {
     violations.push(`package.json scripts.check must invoke npm run ${required}.`);
   }
@@ -74,8 +74,52 @@ for (const field of ["risk:", "autonomous-merge:", "independent-review:", "gover
 }
 
 const ci = await read(".github/workflows/ci.yml");
-for (const required of ["pull_request:", "edited", "npm run check", "npm run check:pr"]) {
+for (const required of [
+  "pull_request:",
+  "edited",
+  "npm run check",
+  "npm run check:pr",
+  "run_pi_artifact_probe:",
+  "schedule:",
+  "EVENT_NAME: ${{ github.event_name }}",
+  "\"$EVENT_NAME\" == \"schedule\"",
+  "pi-artifact-probe:",
+  "needs.check.outputs.pi-artifact-probe == 'true'",
+  "persist-credentials: false",
+  "node-version: 22.23.1",
+  "node scripts/probes/pi-artifact-ci.mjs",
+  "scripts/check-pi-artifact-result.mjs",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "if: always()",
+  "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "--read-only",
+  "--user=1000:1000",
+  "--cap-drop=ALL",
+  "--security-opt=no-new-privileges",
+  "--mount type=bind,src=\"$BUNDLE\",dst=/probe,readonly",
+  "PI_PROBE_HOST_WORKSPACE_MOUNTED=false",
+]) {
   if (!ci.includes(required)) violations.push(`CI workflow is missing required Harness token: ${required}`);
+}
+if (ci.includes("pull_request_target:")) {
+  violations.push("CI must not use pull_request_target for the third-party Artifact probe.");
+}
+if (/\$\{\{\s*secrets\./.test(ci)) {
+  violations.push("CI must not inject repository secrets into the Pi Artifact probe workflow.");
+}
+const probeJobStart = ci.indexOf("  pi-artifact-probe:");
+const probeJob = probeJobStart >= 0 ? ci.slice(probeJobStart) : "";
+for (const required of [
+  "permissions:\n      contents: read",
+  "Checkout without persisted credentials",
+  "Setup exact Node.js runtime for host validation",
+  "Probe exact Pi npm Artifact in sandbox",
+  "Upload sanitized probe evidence",
+]) {
+  if (!probeJob.includes(required)) violations.push(`Pi Artifact probe job is missing trust-boundary token: ${required}`);
+}
+if (probeJob.includes("$GITHUB_WORKSPACE") || probeJob.includes("src=\"$PWD\"")) {
+  violations.push("Pi Artifact container must not mount the host repository workspace.");
 }
 
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");

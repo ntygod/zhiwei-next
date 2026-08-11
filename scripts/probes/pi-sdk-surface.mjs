@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const baselineUrl = new URL("../../packages/pi-adapter/fixtures/pi-upstream-baseline.json", import.meta.url);
 const baseline = JSON.parse(await readFile(baselineUrl, "utf8"));
@@ -17,6 +19,15 @@ function atLeast(current, minimum) {
   return true;
 }
 
+function resolveRootExport(manifest) {
+  const root = manifest.exports?.["."];
+  if (typeof root === "string") return root;
+  if (root && typeof root.import === "string") return root.import;
+  if (root && typeof root.default === "string") return root.default;
+  if (typeof manifest.main === "string") return manifest.main;
+  throw new Error("Published Pi package does not expose a resolvable root ESM entry.");
+}
+
 const requiredNode = [22, 19, 0];
 const currentNode = versionTuple(process.versions.node);
 if (!atLeast(currentNode, requiredNode)) {
@@ -25,13 +36,28 @@ if (!atLeast(currentNode, requiredNode)) {
   );
 }
 
+const isolatedPackageDir = process.env.PI_PACKAGE_DIR ? resolve(process.env.PI_PACKAGE_DIR) : undefined;
+let importTarget = baseline.package.name;
+let packageSource = "node-resolution";
+
+if (isolatedPackageDir) {
+  const manifest = JSON.parse(await readFile(join(isolatedPackageDir, "package.json"), "utf8"));
+  if (manifest.name !== baseline.package.name || manifest.version !== baseline.package.version) {
+    throw new Error(
+      `Isolated package mismatch: expected ${baseline.package.name}@${baseline.package.version}, received ${manifest.name}@${manifest.version}.`,
+    );
+  }
+  importTarget = pathToFileURL(join(isolatedPackageDir, resolveRootExport(manifest))).href;
+  packageSource = "isolated-package-dir";
+}
+
 let pi;
 try {
-  pi = await import(baseline.package.name);
+  pi = await import(importTarget);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   throw new Error(
-    `Unable to import ${baseline.package.name}@${baseline.package.version}. Run the exact npm install command recorded in the spike first. Cause: ${message}`,
+    `Unable to import ${baseline.package.name}@${baseline.package.version}. Run the exact isolated install command recorded in the spike first. Cause: ${message}`,
   );
 }
 
@@ -59,6 +85,7 @@ console.log(
       status: "ok",
       package: `${baseline.package.name}@${baseline.package.version}`,
       node: process.versions.node,
+      packageSource,
       exports: requiredExports,
       credentialsUsed: false,
     },
