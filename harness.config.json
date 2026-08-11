@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "project": "zhiwei-next",
   "mode": "ai-primary",
+  "operatingMode": "best-effort-private-free",
   "currentMilestone": "M0",
   "defaultBranch": "main",
   "humanReviewRequired": false,
@@ -11,7 +12,7 @@
   "defaultAutonomousMerge": true,
   "developmentPause": {
     "active": true,
-    "reason": "main-protection-unconfirmed",
+    "reason": "best-effort-live-proof-pending",
     "incidentIssue": 9,
     "allowedPullRequestMetadata": {
       "main-incident-recovery": "yes"
@@ -19,7 +20,10 @@
   },
   "mainProtection": {
     "serverEnforced": false,
-    "ownerActionRequired": true,
+    "availability": "unavailable-current-plan",
+    "ownerActionRequired": false,
+    "residualRiskAccepted": true,
+    "riskAcceptanceRecord": "docs/harness/risk-acceptance/2026-08-11-private-free.json",
     "instructions": "docs/harness/main-protection.md",
     "provenanceWorkflow": ".github/workflows/main-provenance.yml",
     "provenanceDispatchWorkflow": ".github/workflows/main-provenance-dispatch.yml",
@@ -72,6 +76,7 @@
     "docs/harness/project-state.md",
     "docs/harness/main-protection.md",
     "docs/harness/incidents/2026-08-11-direct-main.json",
+    "docs/harness/risk-acceptance/2026-08-11-private-free.json",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
     ".github/workflows/autonomous-merge.yml",
