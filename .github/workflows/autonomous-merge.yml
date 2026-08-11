@@ -1,0 +1,257 @@
+name: Autonomous Merge
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Merge eligible pull request
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = context.payload.workflow_run;
+            let candidates = run.pull_requests ?? [];
+
+            if (candidates.length === 0) {
+              candidates = await github.paginate(
+                github.rest.repos.listPullRequestsAssociatedWithCommit,
+                { owner, repo, commit_sha: run.head_sha, per_page: 100 },
+              );
+            }
+
+            const numberedCandidates = candidates.filter((candidate) => candidate.number);
+            if (numberedCandidates.length !== 1) {
+              core.info(`Expected one pull request for CI run, found ${numberedCandidates.length}.`);
+              return;
+            }
+
+            const candidate = numberedCandidates[0];
+            const pullNumber = candidate.number;
+            const testedBaseSha = candidate.base?.sha;
+            if (!testedBaseSha) {
+              core.info("The successful CI run does not expose the tested base SHA.");
+              return;
+            }
+
+            let pr;
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+              ({ data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber }));
+              if (pr.mergeable !== null) break;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+
+            if (pr.state !== "open" || pr.draft) {
+              core.info("Pull request is closed or still draft; autonomous merge is skipped.");
+              return;
+            }
+            if (pr.base.ref !== context.payload.repository.default_branch) {
+              core.info(`Pull request targets ${pr.base.ref}, not the default branch.`);
+              return;
+            }
+            if (pr.base.sha !== testedBaseSha) {
+              core.info("Default branch moved after the successful CI run; a fresh CI run is required.");
+              return;
+            }
+            if (pr.head.sha !== run.head_sha) {
+              core.info("Pull request HEAD moved after the successful CI run; waiting for the new run.");
+              return;
+            }
+            if (pr.mergeable !== true) {
+              core.info(`Pull request is not currently mergeable: ${pr.mergeable_state ?? "unknown"}.`);
+              return;
+            }
+
+            function parseBlock(text, marker) {
+              const match = new RegExp(`<!--\\s*${marker}([\\s\\S]*?)-->`, "i").exec(text ?? "");
+              if (!match) return undefined;
+              const result = {};
+              for (const rawLine of match[1].split(/\\r?\\n/)) {
+                const line = rawLine.trim();
+                const separator = line.indexOf(":");
+                if (separator <= 0) continue;
+                result[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+              }
+              return result;
+            }
+
+            const body = pr.body ?? "";
+            const requiredHeadings = [
+              "## 目标与结果",
+              "## 范围与非目标",
+              "## 风险与回滚",
+              "## 验证证据",
+              "## 自主交付记录",
+            ];
+            const missingHeadings = requiredHeadings.filter((heading) => !body.includes(heading));
+            if (missingHeadings.length > 0) {
+              core.warning(`PR contract is missing headings: ${missingHeadings.join(", ")}`);
+              return;
+            }
+
+            const metadata = parseBlock(body, "zhiwei-harness");
+            if (!metadata || metadata["autonomous-merge"] !== "yes") {
+              core.info("Autonomous merge is not enabled in the PR contract.");
+              return;
+            }
+
+            const ranks = { R0: 0, R1: 1, R2: 2, R3: 3 };
+            function maxRisk(left, right) {
+              return ranks[left] >= ranks[right] ? left : right;
+            }
+            function inferMinimumRisk(files) {
+              let risk = "R0";
+              for (const path of files) {
+                if (
+                  path === "SECURITY.md" ||
+                  path === "docs/architecture/trust-and-safety.md" ||
+                  path.startsWith(".github/workflows/") ||
+                  /(?:secret|credential|privacy|deletion|forget)/i.test(path)
+                ) {
+                  risk = maxRisk(risk, "R3");
+                } else if (
+                  path === "AGENTS.md" ||
+                  path.endsWith("/AGENTS.md") ||
+                  path === "harness.config.json" ||
+                  path.startsWith("docs/harness/") ||
+                  path.startsWith("docs/adr/") ||
+                  path.startsWith("packages/domain/") ||
+                  path.startsWith("packages/protocol/") ||
+                  path.startsWith("packages/memory-store/") ||
+                  path === "package.json" ||
+                  path === ".github/pull_request_template.md" ||
+                  path.startsWith("scripts/check-")
+                ) {
+                  risk = maxRisk(risk, "R2");
+                } else if (
+                  path.startsWith("apps/") ||
+                  path.startsWith("packages/") ||
+                  /\\.(?:ts|tsx|js|jsx|mjs|cjs|json|yml|yaml)$/.test(path)
+                ) {
+                  risk = maxRisk(risk, "R1");
+                }
+              }
+              return risk;
+            }
+            function governanceChange(files) {
+              return files.some((path) =>
+                path === "AGENTS.md" ||
+                path.endsWith("/AGENTS.md") ||
+                path === "harness.config.json" ||
+                path.startsWith("docs/harness/") ||
+                path === ".github/pull_request_template.md" ||
+                path.startsWith(".github/workflows/") ||
+                path === "scripts/check-agents.mjs" ||
+                path === "scripts/check-harness.mjs" ||
+                path === "scripts/check-pr-contract.mjs"
+              );
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: pullNumber,
+              per_page: 100,
+            });
+            const filenames = files.map((file) => file.filename);
+            const minimumRisk = inferMinimumRisk(filenames);
+            const declaredRisk = metadata.risk;
+
+            if (!(declaredRisk in ranks) || ranks[declaredRisk] < ranks[minimumRisk]) {
+              core.warning(`Risk declaration ${declaredRisk} is below minimum ${minimumRisk}.`);
+              return;
+            }
+            if (!new Set(["yes", "no"]).has(metadata["governance-change"])) {
+              core.warning("governance-change must be yes or no.");
+              return;
+            }
+            if (!new Set(["updated", "not-needed"]).has(metadata["project-state"])) {
+              core.warning("project-state must be updated or not-needed.");
+              return;
+            }
+            if (!new Set(["provided", "not-required"]).has(metadata.rollback)) {
+              core.warning("rollback must be provided or not-required.");
+              return;
+            }
+            if (governanceChange(filenames) && metadata["governance-change"] !== "yes") {
+              core.warning("Governance files changed without governance-change: yes.");
+              return;
+            }
+            if (ranks[declaredRisk] >= ranks.R2 && metadata.rollback !== "provided") {
+              core.warning(`${declaredRisk} requires rollback: provided.`);
+              return;
+            }
+            if (
+              ranks[declaredRisk] >= ranks.R2 &&
+              metadata["independent-review"] !== "complete"
+            ) {
+              core.info(`${declaredRisk} requires independent-review: complete.`);
+              return;
+            }
+            if (
+              ranks[declaredRisk] < ranks.R2 &&
+              !new Set(["not-required", "complete"]).has(metadata["independent-review"])
+            ) {
+              core.warning("Low-risk independent-review must be not-required or complete.");
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            });
+            const trustedAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+            const reviewRecords = comments
+              .map((comment) => ({
+                comment,
+                record: parseBlock(comment.body, "zhiwei-independent-review"),
+              }))
+              .filter(({ record }) => Boolean(record))
+              .filter(({ comment }) =>
+                trustedAssociations.has(comment.author_association) || comment.user?.type === "Bot"
+              )
+              .filter(({ record }) => record.head === pr.head.sha);
+
+            if (reviewRecords.some(({ record }) => record.verdict === "blocked")) {
+              core.info("A trusted current-head independent review blocks this PR.");
+              return;
+            }
+            if (
+              ranks[declaredRisk] >= ranks.R2 &&
+              !reviewRecords.some(({ record }) =>
+                record.verdict === "approved" && Boolean(record.reviewer)
+              )
+            ) {
+              core.info(`${declaredRisk} requires a trusted approved independent AI review for the current HEAD.`);
+              return;
+            }
+
+            const { data: merge } = await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              sha: pr.head.sha,
+              merge_method: "squash",
+              commit_title: `${pr.title} (#${pullNumber})`,
+            });
+
+            if (!merge.merged) {
+              core.setFailed(`GitHub refused the merge: ${merge.message}`);
+              return;
+            }
+            core.notice(`Autonomously merged PR #${pullNumber} at ${merge.sha}.`);

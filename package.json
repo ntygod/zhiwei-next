@@ -8,9 +8,12 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "node scripts/check-architecture.mjs && node scripts/test.mjs",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:harness && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "check:agents": "node scripts/check-agents.mjs",
+    "check:harness": "node scripts/check-harness.mjs",
+    "check:pr": "node scripts/check-pr-contract.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
   }
