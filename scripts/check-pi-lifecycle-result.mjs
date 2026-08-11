@@ -33,7 +33,75 @@ function checkContiguousSequence(events, label) {
   }
 }
 
-const result = JSON.parse(await readFile(inputPath, "utf8"));
+const [resultText, packageText, ci] = await Promise.all([
+  readFile(inputPath, "utf8"),
+  readFile("package.json", "utf8"),
+  readFile(".github/workflows/ci.yml", "utf8"),
+]);
+const result = JSON.parse(resultText);
+const packageJson = JSON.parse(packageText);
+
+requireValue(
+  packageJson.scripts?.["check:pi-lifecycle"] === "node scripts/check-pi-lifecycle-result.mjs",
+  "package.json must expose the exact check:pi-lifecycle command.",
+);
+requireValue(
+  packageJson.scripts?.check?.includes("npm run check:pi-lifecycle"),
+  "package.json scripts.check must execute check:pi-lifecycle.",
+);
+requireValue(
+  packageJson.scripts?.["probe:pi:lifecycle"] === "node scripts/probes/pi-lifecycle-ci.mjs",
+  "package.json must expose the exact probe:pi:lifecycle command.",
+);
+
+for (const required of [
+  "run_pi_lifecycle_probe:",
+  "pi-lifecycle-probe: ${{ steps.probe-gate.outputs.lifecycle-required }}",
+  "pi-lifecycle-probe:",
+  "name: Pi SDK and Extension lifecycle probe",
+  "needs.check.outputs.pi-lifecycle-probe == 'true'",
+  "packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json",
+  "scripts/check-pi-lifecycle-result.mjs",
+  "scripts/probes/pi-lifecycle-ci.mjs",
+  "scripts/probes/pi-lifecycle-capture.mjs",
+  "node scripts/probes/pi-lifecycle-ci.mjs",
+  "node scripts/check-pi-lifecycle-result.mjs \"$PI_LIFECYCLE_OUTPUT\"",
+  "PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json",
+  "Upload sanitized lifecycle evidence",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "if: always()",
+]) {
+  requireValue(ci.includes(required), `CI workflow is missing lifecycle token: ${required}`);
+}
+requireValue(!ci.includes("pull_request_target:"), "CI lifecycle capture must not use pull_request_target.");
+requireValue(!/\$\{\{\s*secrets\./.test(ci), "CI lifecycle capture must not inject repository secrets.");
+
+const lifecycleJobStart = ci.indexOf("  pi-lifecycle-probe:");
+const lifecycleJob = lifecycleJobStart >= 0 ? ci.slice(lifecycleJobStart) : "";
+for (const required of [
+  "permissions:\n      contents: read",
+  "Checkout without persisted credentials",
+  "persist-credentials: false",
+  "node-version: 22.23.1",
+  "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "--read-only",
+  "--user=1000:1000",
+  "--cap-drop=ALL",
+  "--security-opt=no-new-privileges",
+  "--mount type=bind,src=\"$BUNDLE\",dst=/probe,readonly",
+  "PI_PROBE_SOURCE_READ_ONLY=true",
+  "PI_PROBE_HOST_WORKSPACE_MOUNTED=false",
+  "PI_PROBE_CONTAINER_ROOT_READ_ONLY=true",
+  "PI_PROBE_CAPABILITIES_DROPPED=true",
+  "PI_PROBE_NO_NEW_PRIVILEGES=true",
+]) {
+  requireValue(lifecycleJob.includes(required), `Lifecycle job is missing trust-boundary token: ${required}`);
+}
+requireValue(
+  !lifecycleJob.includes("$GITHUB_WORKSPACE") && !lifecycleJob.includes("src=\"$PWD\""),
+  "Lifecycle container must not mount the host repository workspace.",
+);
+
 requireValue(result.schemaVersion === 1, "Lifecycle result schemaVersion must be 1.");
 requireValue(result.status === "passed", `Lifecycle result status must be passed, got ${result.status}.`);
 requireValue(result.scenario === "normal-tool", "Lifecycle scenario must be normal-tool.");
