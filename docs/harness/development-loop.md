@@ -72,9 +72,9 @@ npm run check
 
 未能执行的验证必须写入 PR，不能用“应该没问题”代替。
 
-## 7. 自审
+## 7. 自审与 Draft PR
 
-作者 AI 在创建 ready PR 前检查：
+作者 AI 在 Draft PR 中检查：
 
 - diff 是否只包含任务范围；
 - 是否修改了错误的事实源；
@@ -84,9 +84,11 @@ npm run check
 - 是否需要 ADR、迁移或项目状态更新；
 - PR metadata 的风险等级是否不低于机器推断。
 
+R0/R1 完成自审后即可把 PR 标为 Ready。
+
 ## 8. 独立 AI 审查
 
-R2/R3 需要新的 AI 上下文：
+R2/R3 在 PR 仍为 Draft 时使用新的 AI 上下文：
 
 1. 从 PR 和当前 HEAD 开始，不读取作者的隐藏推理；
 2. 检查目标、架构、数据、安全、测试和回滚；
@@ -101,17 +103,21 @@ reviewer: fresh-context-ai
 -->
 ```
 
-HEAD 变化后旧批准自动失效，必须重新审查。
+5. 将 PR metadata 的 `independent-review` 更新为 `complete`；
+6. 最后才把 PR 标为 Ready，让 `ready_for_review` 触发一轮绑定最终 HEAD 和最终合同的新 CI。
+
+HEAD 变化后旧批准自动失效，必须回到 Draft 或保持 Draft，重新审查后再触发最终 CI。
 
 ## 9. 合并
 
 可自主合并的条件：
 
 - PR 非 Draft；
-- CI 成功；
+- CI 成功且绑定当前 HEAD；
 - PR 合同完整；
 - 风险声明不低于机器推断；
-- R2/R3 有匹配当前 HEAD 的独立批准；
+- R2/R3 的 metadata 为 `independent-review: complete`；
+- R2/R3 有匹配当前 HEAD 的可信独立批准；
 - 回滚要求已满足；
 - 不存在明确阻塞评论或人类暂停指令。
 
