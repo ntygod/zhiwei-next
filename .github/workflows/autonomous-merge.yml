@@ -39,7 +39,14 @@ jobs:
               return;
             }
 
-            const pullNumber = numberedCandidates[0].number;
+            const candidate = numberedCandidates[0];
+            const pullNumber = candidate.number;
+            const testedBaseSha = candidate.base?.sha;
+            if (!testedBaseSha) {
+              core.info("The successful CI run does not expose the tested base SHA.");
+              return;
+            }
+
             let pr;
             for (let attempt = 0; attempt < 5; attempt += 1) {
               ({ data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber }));
@@ -53,6 +60,10 @@ jobs:
             }
             if (pr.base.ref !== context.payload.repository.default_branch) {
               core.info(`Pull request targets ${pr.base.ref}, not the default branch.`);
+              return;
+            }
+            if (pr.base.sha !== testedBaseSha) {
+              core.info("Default branch moved after the successful CI run; a fresh CI run is required.");
               return;
             }
             if (pr.head.sha !== run.head_sha) {
