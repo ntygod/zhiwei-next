@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "project": "zhiwei-next",
+  "mode": "ai-primary",
+  "currentMilestone": "M0",
+  "humanReviewRequired": false,
+  "pullRequestRequired": true,
+  "directMainWritesAllowed": false,
+  "defaultMergeMethod": "squash",
+  "defaultAutonomousMerge": true,
+  "branchPrefixes": [
+    "ai/",
+    "feat/",
+    "fix/",
+    "docs/",
+    "chore/",
+    "spike/"
+  ],
+  "requiredCommands": [
+    "npm run check"
+  ],
+  "riskLevels": {
+    "R0": {
+      "description": "仅文档、注释、格式或无行为变化的机械性维护",
+      "independentReviewRequired": false,
+      "rollbackPlanRequired": false
+    },
+    "R1": {
+      "description": "可逆的局部实现，不改变长期架构、数据语义或安全边界",
+      "independentReviewRequired": false,
+      "rollbackPlanRequired": false
+    },
+    "R2": {
+      "description": "架构、协议、领域语义、依赖、迁移或跨模块行为变化",
+      "independentReviewRequired": true,
+      "rollbackPlanRequired": true
+    },
+    "R3": {
+      "description": "安全、隐私、删除、自动合并、发布、凭证或不可逆外部副作用",
+      "independentReviewRequired": true,
+      "rollbackPlanRequired": true
+    }
+  },
+  "governanceFiles": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "harness.config.json",
+    "docs/harness/README.md",
+    "docs/harness/AGENTS.md",
+    "docs/harness/autonomy-policy.md",
+    "docs/harness/development-loop.md",
+    "docs/harness/risk-model.md",
+    "docs/harness/self-maintenance.md",
+    "docs/harness/project-state.md",
+    ".github/pull_request_template.md",
+    ".github/workflows/ci.yml",
+    ".github/workflows/autonomous-merge.yml",
+    "scripts/check-agents.mjs",
+    "scripts/check-harness.mjs",
+    "scripts/check-pr-contract.mjs"
+  ]
+}
