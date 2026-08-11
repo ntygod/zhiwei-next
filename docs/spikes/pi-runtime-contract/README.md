@@ -1,11 +1,11 @@
 # Pi Runtime 契约 Spike
 
-关联工作：Issue #5、Issue #7、Issue #16、Issue #20。
+关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22。
 
 ## 状态
 
 ```text
-source-and-runtime-verified-retry-success
+source-and-runtime-verified-follow-up-queue
 ```
 
 ### 历史状态演化
@@ -14,7 +14,8 @@ source-and-runtime-verified-retry-success
 PR #6   source-verified / runtime-unverified
 PR #8   source-and-runtime-verified
 PR #17  source-and-runtime-verified-normal-tool
-当前    source-and-runtime-verified-retry-success
+PR #21  source-and-runtime-verified-retry-success
+当前    source-and-runtime-verified-follow-up-queue
 ```
 
 早期状态作为证据链保留，不代表当前能力回退。
@@ -27,9 +28,11 @@ PR #17  source-and-runtime-verified-normal-tool
 - 无外部 Provider Prompt的 SDK + Extension正常单 Tool生命周期；
 - Tool correlation、`agent_end`、`agent_settled`和宿主 `session_shutdown`的真实顺序；
 - 一次 retryable Provider错误后自动重试并恢复成功；
-- 公共 `AgentSession` Retry事件与 Extension生命周期表面的差异。
+- 公共 `AgentSession` Retry事件与 Extension生命周期表面的差异；
+- Follow-up队列填充/清空、同一 Run内的双 Turn和最终单次 `agent_settled`；
+- 公共 `queue_update`与 Extension无队列事件的表面差异。
 
-尚未验证 Follow-up、取消、重试耗尽、并行 Tool、Compaction、Session Replacement和 RPC真实 Prompt。
+尚未验证取消、重试耗尽、并行 Tool、Compaction、Session Replacement和 RPC真实 Prompt。
 
 ## 固定上游基线
 
@@ -58,10 +61,12 @@ packages/pi-adapter/fixtures/rpc-contract.jsonl
 packages/pi-adapter/fixtures/pi-artifact-runtime.json
 packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
+packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 scripts/check-pi-spike.mjs
 scripts/check-pi-artifact-result.mjs
 scripts/check-pi-lifecycle-result.mjs
 scripts/check-pi-retry-lifecycle-result.mjs
+scripts/check-pi-follow-up-lifecycle-result.mjs
 ```
 
 其中：
@@ -69,7 +74,8 @@ scripts/check-pi-retry-lifecycle-result.mjs
 - `sdk-event-surface.json`、`rpc-contract.jsonl`是 source-derived Fixture；
 - `pi-artifact-runtime.json`是 Registry Artifact空会话动态结果；
 - `pi-lifecycle-normal-tool.json`是真实 SDK + Extension Prompt/Tool生命周期动态结果；
-- `pi-lifecycle-retry-success.json`是真实自动重试恢复成功动态结果。
+- `pi-lifecycle-retry-success.json`是真实自动重试恢复成功动态结果；
+- `pi-lifecycle-follow-up-queue.json`是真实 Follow-up队列与最终稳定边界动态结果。
 
 ## 一、源码契约
 
@@ -90,6 +96,7 @@ tool_execution_update
 tool_execution_end
 auto_retry_start
 auto_retry_end
+queue_update
 agent_settled
 ```
 
@@ -107,7 +114,8 @@ toolCallId
 
 - `agent_end`：一次底层 Agent Run结束；
 - `willRetry=true`时，随后可能自动重试；
-- queued Follow-up也可能产生后续 Run；
+- Follow-up在已验证场景中追加了同一 Run内的新 Turn；
+- 其他输入模式不能仅凭名称推断是否创建新 Run，必须以事件为准；
 - `agent_settled`：Retry和 Follow-up均处理完、Session真正 idle后只发一次。
 
 ### Session Replacement
@@ -352,6 +360,73 @@ e87f7365eefbb4d7de7a4570a6c99df7a1fdf26f58aa2a40fab9149cb6deff02
 ed1c450ce6e26be60c29aa6d9a29f13d339cb975999e1a3b4c0a43a5f9b4ac85
 ```
 
+## 五、Follow-up队列验证
+
+详细文档：[`follow-up-queue-lifecycle.md`](follow-up-queue-lifecycle.md)。
+
+固定场景：
+
+```text
+Initial Prompt
+  → First assistant message_start
+  → session.followUp(queued message)
+  → queue_update(non-empty)
+  → First assistant response ends
+  → Second turn starts
+  → queue_update(empty)
+  → Follow-up user message
+  → Follow-up assistant response
+  → agent_end(willRetry=false)
+  → agent_settled
+  → host-owned session_shutdown(reason=exit)
+```
+
+关键计数：
+
+```text
+Session events          23
+Extension events        24
+provider calls           2
+external prompts         0
+public queue updates     2
+public agent_start       1
+public turns             2
+public agent_end         1
+public settled           1
+Extension queue updates  0
+```
+
+真实队列边界：
+
+```text
+queue filled(sequence=6)
+  < first assistant end
+  < second turn_start
+  < queue cleared(sequence=13)
+  < follow-up user message_start(sequence=14)
+```
+
+这说明：
+
+- 已验证 Follow-up在一个公共 Agent Run内追加第二个 Turn；
+- 公共 `queue_update`先暴露非空队列，再在 Follow-up消息交付前暴露空队列；
+- 队列清空不等于 Prompt结束，后续仍有完整 Follow-up响应和稳定事件；
+- Extension不接收 `queue_update`，不能独立重建 Session队列状态；
+- `session.prompt()`覆盖排入的 Follow-up，直到队列清空、Session idle和最终单次 `agent_settled`后才返回；
+- 最终 Session消息完整保留 `user → assistant → user → assistant`。
+
+外层契约指纹：
+
+```text
+00c3f7916a129869b768f7e7147a55a8c783b33e5a55e0e79c13eb45a1d692e8
+```
+
+内层 Capture指纹：
+
+```text
+5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386
+```
+
 ## 隔离与信任模型
 
 Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
@@ -393,6 +468,13 @@ Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
 2. 首轮结果没有被源码测试覆盖物替代，而是下载真实 Actions Artifact后固化。
 3. Checker随后收紧到完整事件顺序、精确计数、最终消息角色、Extension负证据和双层契约指纹；fresh Capture必须与 committed Fixture完整一致。
 
+### Follow-up Lifecycle阶段
+
+1. 首轮动态 Capture成功，证明固定场景是一个公共 Agent Run内的两个 Turn，而不是两个公共 Run。
+2. 真实 Actions Artifact显示公共队列先非空后清空，同时 Extension完全没有 `queue_update`；没有向 Extension补造事件。
+3. 首轮结果下载后原样固化为 committed Fixture；Checker收紧到完整事件类型顺序、精确计数、队列序列、最终消息、Extension负证据和双层指纹。
+4. committed Fixture建立后，隔离 Job必须重新捕获并做完整对象比较，任何上游行为漂移都会保持失败可见。
+
 ## CI入口
 
 静态/Committed检查：
@@ -402,6 +484,7 @@ npm run check:pi-spike
 npm run check:pi-artifact
 npm run check:pi-lifecycle
 npm run check:pi-retry-lifecycle
+npm run check:pi-follow-up-lifecycle
 ```
 
 动态 Probe：
@@ -412,6 +495,7 @@ npm run probe:pi:rpc
 npm run probe:pi:artifact
 npm run probe:pi:lifecycle
 npm run probe:pi:retry-lifecycle
+npm run probe:pi:follow-up-lifecycle
 ```
 
 Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行；普通功能 PR不依赖 npm网络。
@@ -421,13 +505,15 @@ Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行
 现在可以基于真实证据：
 
 - 为 Normal Tool Path定义 Tool correlation；
-- 把一个 Prompt建模为可能包含多个 Agent Run；
+- 把 Prompt、Agent Run和 Turn作为不同层级建模；
 - 把公共 `agent_end.willRetry`与 Extension `agent_end`分开；
 - 保存被 Retry替代但未进入最终 `session.messages`的失败运行证据；
-- 把最终单次 `agent_settled`作为 Retry恢复后的稳定边界；
+- 保存 Follow-up队列填充/清空事件，并避免把队列清空误判为 Prompt完成；
+- 把一个 Agent Run建模为可能包含多个 Turn；
+- 把最终单次 `agent_settled`作为 Retry和 Follow-up处理完成后的稳定边界；
 - 把 Session创建映射放在宿主 SDK边界；
 - 把 `session_shutdown`作为宿主显式事件；
-- 为 Follow-up、取消、重试耗尽、并行 Tool、Compaction和 Session Replacement建立下一批独立 Fixtures；
+- 为取消、重试耗尽、并行 Tool、Compaction和 Session Replacement建立下一批独立 Fixtures；
 - 在这些场景完成后修订 `NormalizedRuntimeEvent`。
 
 当前仍不能直接实现 SQLite Observation Ledger，因为取消、并发、压缩和替换边界尚未冻结。
