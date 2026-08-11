@@ -76,7 +76,8 @@ function isGovernanceChange(files) {
     path.startsWith(".github/workflows/") ||
     path === "scripts/check-agents.mjs" ||
     path === "scripts/check-harness.mjs" ||
-    path === "scripts/check-pr-contract.mjs"
+    path === "scripts/check-pr-contract.mjs" ||
+    path === "scripts/check-main-provenance.mjs"
   );
 }
 
@@ -118,6 +119,9 @@ if (!metadata) {
   if (!new Set(["provided", "not-required"]).has(metadata.rollback)) {
     violations.push("rollback must be provided or not-required.");
   }
+  if (!new Set(["yes", "no"]).has(metadata["main-incident-recovery"])) {
+    violations.push("main-incident-recovery must be yes or no.");
+  }
 
   const effectiveRisk = declaredRisk in ranks ? declaredRisk : minimumRisk;
   if (ranks[effectiveRisk] >= ranks.R2 && metadata["independent-review"] === "not-required") {
@@ -133,6 +137,18 @@ if (!metadata) {
   }
   if (!governance && metadata["governance-change"] === "yes" && ranks[effectiveRisk] < ranks.R2) {
     violations.push("A declared governance change must use at least risk R2.");
+  }
+
+  if (metadata["main-incident-recovery"] === "yes") {
+    if (declaredRisk !== "R3") {
+      violations.push("A main incident recovery PR must declare risk R3.");
+    }
+    if (metadata["governance-change"] !== "yes") {
+      violations.push("A main incident recovery PR must declare governance-change: yes.");
+    }
+    if (!/(?:Addresses|Closes|Fixes)\s+#\d+\b/i.test(body)) {
+      violations.push("A main incident recovery PR must reference an Incident using Addresses/Closes/Fixes #N.");
+    }
   }
 }
 
