@@ -4,9 +4,16 @@ const changedFiles = JSON.parse(process.env.CHANGED_FILES_JSON ?? "[]");
 const violations = [];
 
 function parseMetadata(text) {
-  const block = /<!--\s*zhiwei-harness([\s\S]*?)-->/i.exec(text)?.[1];
-  if (!block) return undefined;
+  const source = text ?? "";
+  const marker = "zhiwei-harness";
+  const markerIndex = source.lastIndexOf(marker);
+  if (markerIndex < 0) return undefined;
+  const commentStart = source.lastIndexOf("<!--", markerIndex);
+  const commentEnd = source.indexOf("-->", markerIndex + marker.length);
+  if (commentStart < 0 || commentEnd < 0 || commentStart > markerIndex) return undefined;
+
   const result = {};
+  const block = source.slice(markerIndex + marker.length, commentEnd);
   for (const rawLine of block.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || !line.includes(":")) continue;
