@@ -37,6 +37,7 @@ function sha256(value) {
 function fingerprintPayload(result) {
   return canonicalize({
     sourceBaseline: result.sourceBaseline,
+    runtime: { containerImage: result.environment?.containerImage },
     package: result.package,
     registry: {
       version: result.registry?.version,
@@ -146,13 +147,21 @@ function validate(result, rawText, label) {
   ) {
     violations.push(`${prefix}RPC probe did not satisfy the credential-free state contract.`);
   }
+  if (!/^node:22\.23\.1-bookworm-slim@sha256:[0-9a-f]{64}$/.test(result.environment?.containerImage ?? "")) {
+    violations.push(`${prefix}container image must be the digest-pinned Node 22.23.1 slim image.`);
+  }
   const expectedSecurity = {
     workflowPermissions: "contents-read",
-    repositorySecretsInjected: false,
+    hostSecretsPassedToProbe: false,
     providerCredentialsInjected: false,
     promptsSent: 0,
     installScriptsExecuted: false,
-    repositoryMutationDetected: false,
+    sourceBundleReadOnly: true,
+    sourceBundleMutationDetected: false,
+    hostWorkspaceMounted: false,
+    containerRootFilesystemReadOnly: true,
+    containerCapabilitiesDropped: true,
+    containerNoNewPrivileges: true,
     packageExecutedFromVerifiedTarball: true,
   };
   for (const [key, expected] of Object.entries(expectedSecurity)) {
@@ -162,7 +171,7 @@ function validate(result, rawText, label) {
     violations.push(`${prefix}all recorded attempts must be successful.`);
   }
   if (/"sessionId"\s*:/.test(rawText)) violations.push(`${prefix}raw sessionId must not be persisted.`);
-  if (/\/(?:home|Users)\/[^\s"']+|[A-Za-z]:\\[^\s"']+/.test(rawText)) {
+  if (/(?:\/home\/runner\/|\/opt\/hostedtoolcache\/|\/__w\/|[A-Za-z]:\\)/.test(rawText)) {
     violations.push(`${prefix}absolute runner paths must not be persisted.`);
   }
   if (/\b(?:ghp|gho|ghu|ghs|ghr|github_pat|npm)_[A-Za-z0-9_=-]{8,}\b/.test(rawText)) {
