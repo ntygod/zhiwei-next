@@ -43,7 +43,14 @@ function eventTypes(events) {
   return events.map((event) => event.type);
 }
 
-const result = JSON.parse(await readFile(inputPath, "utf8"));
+const [resultText, followUpDocument, spikeReport, architecture, projectState] = await Promise.all([
+  readFile(inputPath, "utf8"),
+  readFile("docs/spikes/pi-runtime-contract/follow-up-queue-lifecycle.md", "utf8"),
+  readFile("docs/spikes/pi-runtime-contract/README.md", "utf8"),
+  readFile("docs/architecture/pi-integration.md", "utf8"),
+  readFile("docs/harness/project-state.md", "utf8"),
+]);
+const result = JSON.parse(resultText);
 requireValue(result.schemaVersion === 1, "Follow-up lifecycle result schemaVersion must be 1.");
 requireValue(result.status === "passed", `Follow-up lifecycle status must be passed, got ${result.status}.`);
 requireValue(result.scenario === "follow-up-queue", "Follow-up scenario must be follow-up-queue.");
@@ -300,6 +307,64 @@ requireValue(result.contractFingerprint === fingerprint(result), "Outer follow-u
 requireValue(capture.contractFingerprint === fingerprint(capture), "Nested follow-up contract fingerprint is invalid.");
 requireValue(result.contractFingerprint === EXPECTED_OUTER_FINGERPRINT, "Outer follow-up contract fingerprint drifted.");
 requireValue(capture.contractFingerprint === EXPECTED_CAPTURE_FINGERPRINT, "Nested follow-up contract fingerprint drifted.");
+
+for (const [name, document, tokens] of [
+  [
+    "follow-up lifecycle document",
+    followUpDocument,
+    [
+      "runtime-verified",
+      "一个 public agent_start",
+      "两个 Turn",
+      "queue_update(followUp=[])",
+      "session.prompt()",
+      "显式注册 `queue_update` Listener",
+      EXPECTED_OUTER_FINGERPRINT,
+      EXPECTED_CAPTURE_FINGERPRINT,
+    ],
+  ],
+  [
+    "Pi spike report",
+    spikeReport,
+    [
+      "source-and-runtime-verified-follow-up-queue",
+      "pi-lifecycle-follow-up-queue.json",
+      "follow-up-queue-lifecycle.md",
+      "一个公共 Agent Run内追加第二个 Turn",
+      "队列清空不等于 Prompt结束",
+      "Extension不接收 `queue_update`",
+      "`session.prompt()`覆盖排入的 Follow-up",
+      EXPECTED_OUTER_FINGERPRINT,
+    ],
+  ],
+  [
+    "Pi integration architecture",
+    architecture,
+    [
+      "source-and-runtime-verified-follow-up-queue",
+      "一个 Prompt可包含多个 Agent Run",
+      "一个 Agent Run也可能包含多个 Turn",
+      "显式注册 `queue_update` Listener",
+      "队列为空不等于 Prompt完成",
+      "不能把 Follow-up固定映射成新 Agent Run",
+    ],
+  ],
+  [
+    "project state",
+    projectState,
+    [
+      "Follow-up队列 Fixture",
+      "一个公共 Agent Run包含两个 Turn",
+      "Extension没有 `queue_update`",
+      "初始 `session.prompt()`会等到 Follow-up完成",
+      "用户取消、`abortRetry()`和 retry exhaustion",
+    ],
+  ],
+]) {
+  for (const token of tokens) {
+    requireValue(document.includes(token), `${name} is missing token: ${token}`);
+  }
+}
 
 if (violations.length > 0) {
   console.error("Pi follow-up lifecycle result violations:\n" + violations.map((item) => `- ${item}`).join("\n"));
