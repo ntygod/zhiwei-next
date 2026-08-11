@@ -89,6 +89,8 @@ for (const required of [
   "testedBaseSha",
   "pr.base.sha !== testedBaseSha",
   "pr.mergeable !== true",
+  "lastIndexOf(marker)",
+  "Harness metadata for PR",
   "metadata[\"independent-review\"] !== \"complete\"",
 ]) {
   if (!autoMerge.includes(required)) violations.push(`Autonomous merge workflow is missing required token: ${required}`);
