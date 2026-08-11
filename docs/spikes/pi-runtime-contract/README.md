@@ -12,7 +12,8 @@
 |---|---|
 | 权威仓库 | `earendil-works/pi` |
 | 历史重定向来源 | `badlogic/pi-mono` |
-| 上游 Commit | `b647d187932c76d4003728010daeed9c1b496a6a` |
+| Release Tag | `v0.84.1` |
+| Tag Commit | `53fa77ccd8a279eb87e92294ef3687b03ff80112` |
 | 正式包名 | `@earendil-works/pi-coding-agent` |
 | 包版本 | `0.84.1` |
 | Node 要求 | `>=22.19.0` |
@@ -23,19 +24,19 @@
 
 ## 证据来源
 
-所有来源都绑定同一个完整 Commit SHA，不引用浮动的 `main`：
+所有来源都绑定发布 Tag `v0.84.1` 指向的完整 Commit SHA，不引用浮动的 `main`。该 Tag 证明源码发布基线；npm registry Tarball 仍需动态探针确认：
 
 | 证据 | 固定来源 |
 |---|---|
-| 包名、版本、exports、Node 要求 | [`packages/coding-agent/package.json`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/package.json) |
-| SDK 使用与 `AgentSession` 表面 | [`docs/sdk.md`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/docs/sdk.md) |
-| `AgentSessionEvent` | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/core/agent-session.ts) |
-| 核心 `AgentEvent` 与 `toolCallId` | [`packages/agent/src/types.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/agent/src/types.ts) |
-| `agent_settled` 语义 | [`6363-agent-settled-event.test.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts) |
-| RPC 文档 | [`docs/rpc.md`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/docs/rpc.md) |
-| RPC 命令与响应类型 | [`rpc-types.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/modes/rpc/rpc-types.ts) |
-| LF-only JSONL 实现 | [`jsonl.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/src/modes/rpc/jsonl.ts) |
-| JSONL 边界测试 | [`rpc-jsonl.test.ts`](https://github.com/earendil-works/pi/blob/b647d187932c76d4003728010daeed9c1b496a6a/packages/coding-agent/test/rpc-jsonl.test.ts) |
+| 包名、版本、exports、Node 要求 | [`packages/coding-agent/package.json`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/package.json) |
+| SDK 使用与 `AgentSession` 表面 | [`docs/sdk.md`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/docs/sdk.md) |
+| `AgentSessionEvent` | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/core/agent-session.ts) |
+| 核心 `AgentEvent` 与 `toolCallId` | [`packages/agent/src/types.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/agent/src/types.ts) |
+| `agent_settled` 语义 | [`6363-agent-settled-event.test.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts) |
+| RPC 文档 | [`docs/rpc.md`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/docs/rpc.md) |
+| RPC 命令与响应类型 | [`rpc-types.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/modes/rpc/rpc-types.ts) |
+| LF-only JSONL 实现 | [`jsonl.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/src/modes/rpc/jsonl.ts) |
+| JSONL 边界测试 | [`rpc-jsonl.test.ts`](https://github.com/earendil-works/pi/blob/53fa77ccd8a279eb87e92294ef3687b03ff80112/packages/coding-agent/test/rpc-jsonl.test.ts) |
 
 各文件 Blob SHA 记录在机器基线中，用于发现同一 Commit 下证据清单被误改或替换。
 
@@ -174,7 +175,7 @@ npm 请求超时，未生成 package-lock.json
 仓库提供两个无 Provider Credential 探针：
 
 ```bash
-npm install --save-exact @earendil-works/pi-coding-agent@0.84.1
+npm install --no-save --package-lock=false @earendil-works/pi-coding-agent@0.84.1
 npm run probe:pi:sdk
 npm run probe:pi:rpc
 ```
@@ -196,7 +197,7 @@ Node.js >= 22.19.0
 本次可以据此继续：
 
 - 使用 `earendil-works/pi` 作为权威上游名称；
-- 使用固定 Commit 和精确包版本作为 M0 Spike 基线；
+- 使用 Release Tag Commit 和精确包版本作为 M0 Spike 基线；
 - 以 `toolCallId` 作为工具生命周期真实关联字段；
 - 在协议设计中分开 `agent_end`、`agent_settled` 与 Shutdown；
 - 为 RPC 实现严格 LF-only JSONL reader。
@@ -205,6 +206,7 @@ Node.js >= 22.19.0
 
 - SDK、Extension 或 RPC 哪一个是最终主集成面；
 - 正常、取消、并行工具、Compaction 的完整真实事件顺序；
+- npm registry Tarball 与 Release Tag 源码的一致性；
 - 发布包在无凭证环境中的实际启动行为；
 - Raw Payload 的持久化和脱敏策略；
 - 正式 `NormalizedRuntimeEvent` 字段。
