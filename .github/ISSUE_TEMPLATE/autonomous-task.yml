@@ -1,0 +1,61 @@
+name: Autonomous development task
+description: 为 AI 主开发流程创建一个可独立验收的工作项
+title: ""
+body:
+  - type: markdown
+    attributes:
+      value: |
+        一个 Issue 对应一个可验证目标。请描述结果，而不是预设大量实现细节。
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 目标与用户可感知结果
+      description: 完成后用户或下一层系统能观察到什么？
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      description: 本次允许触及哪些边界？
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: 明确不做
+      description: 为防止范围膨胀，本次排除什么？
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 使用可重复、可观察的 Given/When/Then 或检查清单。
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: 初始风险等级
+      options:
+        - R0 - 机械性
+        - R1 - 局部可逆实现
+        - R2 - 结构性变化
+        - R3 - 高影响与治理根
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: 回滚与恢复
+      description: R2/R3 必填；低风险可写“不需要”。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已知证据与依赖
+      description: 相关 ADR、日志、复现、前置 PR、外部凭证或阻塞。
+    validations:
+      required: false
