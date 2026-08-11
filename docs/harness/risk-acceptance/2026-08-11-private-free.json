@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "decisionId": "RISK-MAIN-PRIVATE-FREE-2026-08-11",
+  "status": "accepted",
+  "repository": "ntygod/zhiwei-next",
+  "repositoryVisibility": "private",
+  "githubPlan": "free",
+  "operatingMode": "best-effort-private-free",
+  "decidedAt": "2026-08-11",
+  "decidedBy": "repository-owner",
+  "evidence": {
+    "incidentIssue": 9,
+    "ownerDecisionCommentId": 5253754189
+  },
+  "ownerDecision": {
+    "keepPrivate": true,
+    "upgradePlan": false,
+    "removeIneffectiveRuleset": true,
+    "continueAutonomousDevelopment": true
+  },
+  "acceptedResidualRisks": [
+    "The current GitHub plan does not provide server-side pre-receive protection for this private repository.",
+    "A contents-write actor can technically create a main commit before post-push detection reacts.",
+    "A direct writer could attempt to modify repository-hosted detection workflows in the same commit."
+  ],
+  "mandatoryCompensatingControls": [
+    "Normal writes must explicitly target a non-default branch.",
+    "All normal changes must enter main through pull requests.",
+    "Main Provenance audits external push and token-driven autonomous merge paths.",
+    "An unverified main update creates an R3 incident and halts ordinary autonomous merges.",
+    "Automatic recovery is proposed only as a Draft pull request from a trusted push event.",
+    "R2 and R3 changes require a current-HEAD cold-read AI review."
+  ],
+  "revisitTriggers": [
+    "The repository becomes public.",
+    "The GitHub plan changes.",
+    "Real user memory, production credentials, or production data are introduced.",
+    "More than one human collaborator receives write access.",
+    "A production release workflow is introduced.",
+    "A second unauthorized direct-main incident occurs."
+  ]
+}
