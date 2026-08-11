@@ -1,0 +1,82 @@
+name: AI align parallel Tool checker with isolated workflow
+
+on:
+  push:
+    branches:
+      - spike/m0-pi-parallel-tool-ordering
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-align-parallel-tool-checker
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: spike/m0-pi-parallel-tool-ordering
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Align static workflow assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/check-pi-parallel-tool-ordering-result.mjs")
+          source = path.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  'readFile(".github/workflows/ci.yml", "utf8"),',
+                  'readFile(".github/workflows/pi-parallel-tool-ordering.yml", "utf8"),',
+              ),
+              (
+                  '''  "pi-parallel-tool-ordering-probe:",
+            "name: Pi parallel Tool ordering lifecycle probe",
+            "needs.check.outputs.pi-lifecycle-probe == 'true'",
+          ''',
+                  '''  "name: Pi parallel Tool ordering contract",
+            "probe:",
+            "name: Pi parallel Tool ordering lifecycle probe",
+          ''',
+              ),
+          ]
+
+          changed = False
+          for old, new in replacements:
+              if new in source:
+                  continue
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one checker repair target, found {count}: {old!r}")
+              source = source.replace(old, new, 1)
+              changed = True
+
+          if changed:
+              path.write_text(source, encoding="utf-8")
+          PY
+          node --check scripts/check-pi-parallel-tool-ordering-result.mjs
+          git diff --check
+
+      - name: Commit checker repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add scripts/check-pi-parallel-tool-ordering-result.mjs
+          if git diff --cached --quiet; then
+            echo "Checker is already aligned."
+            exit 0
+          fi
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git commit -m "fix(spike): validate isolated parallel Tool workflow"
+          git push origin HEAD:spike/m0-pi-parallel-tool-ordering
