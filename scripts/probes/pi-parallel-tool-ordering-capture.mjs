@@ -505,7 +505,7 @@ async function run() {
   const finalText = session.getLastAssistantText();
   const activeToolsAfterPrompt = session.getActiveToolNames();
   const sessionWasIdleBeforeShutdown = session.isIdle;
-  const pendingMessageCountBeforeShutdown = session.getPendingMessageCount();
+  const pendingMessageCountBeforeShutdown = session.pendingMessageCount;
   const finalMessages = session.messages.map(summarizeFinalMessage);
 
   stage = "session-shutdown";
