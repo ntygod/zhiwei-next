@@ -4,13 +4,23 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,5 +30,27 @@ jobs:
         with:
           node-version: 22
 
-      - name: Architecture and tests
+      - name: Architecture, Harness and tests
         run: npm run check
+
+      - name: Read pull request changed files
+        if: github.event_name == 'pull_request'
+        id: changed-files
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            return JSON.stringify(files.map((file) => file.filename));
+
+      - name: Validate autonomous pull request contract
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          CHANGED_FILES_JSON: ${{ steps.changed-files.outputs.result }}
+        run: npm run check:pr
