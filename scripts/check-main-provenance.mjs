@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 const root = process.cwd();
 const fixturePath = "docs/harness/incidents/2026-08-11-direct-main.json";
 const riskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
-const proofPath = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
+const proof12Path = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
+const proof13Path = "docs/harness/provenance-proofs/2026-08-11-pr-13.json";
 const violations = [];
 
 function git(args) {
@@ -63,10 +64,11 @@ function mergeHaltDecision({ configuredPause, configuredIncidentIssue, activeInc
     : "recovery-missing-reference";
 }
 
-const [fixtureText, riskText, proofText, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
+const [fixtureText, riskText, proof12Text, proof13Text, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
   readFile(fixturePath, "utf8"),
   readFile(riskPath, "utf8"),
-  readFile(proofPath, "utf8"),
+  readFile(proof12Path, "utf8"),
+  readFile(proof13Path, "utf8"),
   readFile(".github/workflows/main-provenance.yml", "utf8"),
   readFile(".github/workflows/main-provenance-dispatch.yml", "utf8"),
   readFile(".github/workflows/autonomous-merge.yml", "utf8"),
@@ -74,12 +76,13 @@ const [fixtureText, riskText, proofText, workflow, dispatchWorkflow, autoMerge, 
 ]);
 const fixture = JSON.parse(fixtureText);
 const risk = JSON.parse(riskText);
-const proof = JSON.parse(proofText);
+const proof12 = JSON.parse(proof12Text);
+const proof13 = JSON.parse(proof13Text);
 
 requireValue(fixture.schemaVersion === 2, "Incident fixture schemaVersion must be 2.");
 requireValue(fixture.incidentId === "MAIN-2026-08-11-001", "Unexpected incident ID.");
 requireValue(fixture.issue === 9, "Incident fixture must point to Issue #9.");
-requireValue(fixture.status === "mitigated", "Incident status must be mitigated after live proof.");
+requireValue(fixture.status === "mitigated", "Incident status must remain mitigated.");
 requireValue(Array.isArray(fixture.events) && fixture.events.length === 4, "Incident fixture must retain four events.");
 requireValue(fixture.impact?.currentTreeRestored === true, "Incident must record the restored tree.");
 for (const field of ["productCodeChanged", "secretsExposed", "userDataExposed", "databaseChanged", "releaseChanged", "historyRewritten"]) {
@@ -93,21 +96,23 @@ requireValue(fixture.serverProtection?.residualRiskAcceptedByOwner === true, "Ow
 
 requireValue(fixture.technicalMitigation?.status === "implemented-and-live-verified", "Technical mitigation must be live verified.");
 requireValue(
-  JSON.stringify(fixture.technicalMitigation?.pullRequests) === JSON.stringify([10, 11, 12]),
-  "Technical mitigation must identify PRs #10, #11 and #12.",
+  JSON.stringify(fixture.technicalMitigation?.pullRequests) === JSON.stringify([10, 11, 12, 13]),
+  "Technical mitigation must identify PRs #10 through #13.",
 );
 for (const sha of [
   "852fd1e483bc07b8736e5da08b2f70e66544e4cf",
   "70224f51d37cce3427dc6480c2039bc98bf1ba53",
   "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  "10c963ef8bee978543dccf73047d3bd2d18baae5",
 ]) {
   requireValue(fixture.technicalMitigation?.mergedCommits?.includes(sha), `Mitigation is missing merged commit ${sha}.`);
 }
+
 const liveProof = fixture.technicalMitigation?.liveProof;
-requireValue(liveProof?.status === "verified", "Incident live proof must be verified.");
-requireValue(liveProof?.pullRequest === 12, "Incident live proof must identify PR #12.");
-requireValue(liveProof?.record === proofPath, "Incident live proof must point to the proof record.");
-requireValue(liveProof?.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Incident live proof merge commit is incorrect.");
+requireValue(liveProof?.status === "verified", "Initial incident live proof must be verified.");
+requireValue(liveProof?.pullRequest === 12, "Initial live proof must identify PR #12.");
+requireValue(liveProof?.record === proof12Path, "Initial live proof must point to the PR #12 proof record.");
+requireValue(liveProof?.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Initial live proof merge commit is incorrect.");
 requireValue(
   JSON.stringify(liveProof?.workflowRuns) === JSON.stringify({
     ci: 31498003965,
@@ -115,10 +120,26 @@ requireValue(
     provenanceDispatch: 31498045864,
     provenanceReceiver: 31498068302,
   }),
-  "Incident live proof workflow runs are incorrect.",
+  "Initial live proof workflow runs are incorrect.",
 );
-requireValue(fixture.closure?.status === "pending-final-recovery-pr-provenance", "Incident closure must wait for PR #13 post-merge proof.");
-requireValue(fixture.closure?.expectedPullRequest === 13, "Incident closure must identify PR #13.");
+
+const closure = fixture.closure;
+requireValue(closure?.status === "completed", "Incident closure status must be completed.");
+requireValue(closure?.pullRequest === 13, "Incident closure must identify PR #13.");
+requireValue(closure?.mergeCommit === "10c963ef8bee978543dccf73047d3bd2d18baae5", "Incident closure merge commit is incorrect.");
+requireValue(closure?.proofRecord === proof13Path, "Incident closure must point to the PR #13 proof record.");
+requireValue(
+  JSON.stringify(closure?.workflowRuns) === JSON.stringify({
+    ci: 31499190699,
+    autonomousMerge: 31499233718,
+    provenanceDispatch: 31499233680,
+    provenanceReceiver: 31499253092,
+  }),
+  "Incident closure workflow runs are incorrect.",
+);
+requireValue(closure?.issueState === "closed", "Incident issue state must be closed.");
+requireValue(closure?.stateReason === "completed", "Incident issue state reason must be completed.");
+requireValue(closure?.closedAt === "2026-08-11T14:03:22Z", "Incident closedAt timestamp is incorrect.");
 
 requireValue(risk.schemaVersion === 1 && risk.status === "accepted", "Risk acceptance must remain accepted schema 1.");
 requireValue(risk.operatingMode === "best-effort-private-free", "Risk acceptance operating mode is incorrect.");
@@ -129,32 +150,57 @@ requireValue(risk.ownerDecision?.continueAutonomousDevelopment === true, "Owner 
 requireValue(risk.evidence?.incidentIssue === 9 && risk.evidence?.ownerDecisionCommentId === 5253754189, "Risk acceptance evidence is incorrect.");
 requireValue(risk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."), "A second incident must trigger reassessment.");
 
-requireValue(proof.schemaVersion === 1 && proof.status === "verified", "Provenance proof must be verified schema 1.");
-requireValue(proof.pullRequest === 12, "Provenance proof must identify PR #12.");
-requireValue(proof.headCommit === "e1c281615c3daf8ef7116d2c57aa2ae929af08f6", "Proof head SHA is incorrect.");
-requireValue(proof.baseCommit === "70224f51d37cce3427dc6480c2039bc98bf1ba53", "Proof base SHA is incorrect.");
-requireValue(proof.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Proof merge SHA is incorrect.");
-for (const [field, runId] of Object.entries({
-  ci: 31498003965,
-  autonomousMerge: 31498045898,
-  provenanceDispatch: 31498045864,
-  provenanceReceiver: 31498068302,
-})) {
-  requireValue(proof.canonicalChain?.[field]?.runId === runId, `Proof ${field} run ID is incorrect.`);
-  requireValue(proof.canonicalChain?.[field]?.conclusion === "success", `Proof ${field} must be successful.`);
+function verifyProof(proof, expected) {
+  requireValue(proof.schemaVersion === 1 && proof.status === "verified", `${expected.label} proof must be verified schema 1.`);
+  requireValue(proof.pullRequest === expected.pullRequest, `${expected.label} proof pull request is incorrect.`);
+  requireValue(proof.headCommit === expected.head, `${expected.label} proof head SHA is incorrect.`);
+  requireValue(proof.baseCommit === expected.base, `${expected.label} proof base SHA is incorrect.`);
+  requireValue(proof.mergeCommit === expected.merge, `${expected.label} proof merge SHA is incorrect.`);
+  for (const [field, runId] of Object.entries(expected.runs)) {
+    requireValue(proof.canonicalChain?.[field]?.runId === runId, `${expected.label} proof ${field} run ID is incorrect.`);
+    requireValue(proof.canonicalChain?.[field]?.conclusion === "success", `${expected.label} proof ${field} must be successful.`);
+  }
+  requireValue(proof.canonicalChain?.provenanceReceiver?.event === "repository_dispatch", `${expected.label} receiver event must be repository_dispatch.`);
+  requireValue(proof.canonicalChain?.provenanceDispatch?.notice === expected.dispatchNotice, `${expected.label} dispatch notice is incorrect.`);
+  requireValue(proof.canonicalChain?.provenanceReceiver?.notice === expected.receiverNotice, `${expected.label} receiver notice is incorrect.`);
 }
-requireValue(proof.canonicalChain?.provenanceReceiver?.event === "repository_dispatch", "Receiver proof event must be repository_dispatch.");
-requireValue(
-  proof.canonicalChain?.provenanceDispatch?.notice ===
-    "Dispatched Main Provenance for PR #12 at c05eba9f840c82d7b61494ae6bb06833d140d6c0.",
-  "Dispatch proof notice is incorrect.",
-);
-requireValue(
-  proof.canonicalChain?.provenanceReceiver?.notice ===
-    "Authorized main update c05eba9f840c82d7b61494ae6bb06833d140d6c0 from merged PR #12 via autonomous-merge.",
-  "Receiver proof notice is incorrect.",
-);
-requireValue(proof.additionalObservations?.duplicateSafeDispatchesObserved === true, "Duplicate safe dispatch observation must be disclosed.");
+
+verifyProof(proof12, {
+  label: "PR #12",
+  pullRequest: 12,
+  head: "e1c281615c3daf8ef7116d2c57aa2ae929af08f6",
+  base: "70224f51d37cce3427dc6480c2039bc98bf1ba53",
+  merge: "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  runs: {
+    ci: 31498003965,
+    autonomousMerge: 31498045898,
+    provenanceDispatch: 31498045864,
+    provenanceReceiver: 31498068302,
+  },
+  dispatchNotice: "Dispatched Main Provenance for PR #12 at c05eba9f840c82d7b61494ae6bb06833d140d6c0.",
+  receiverNotice: "Authorized main update c05eba9f840c82d7b61494ae6bb06833d140d6c0 from merged PR #12 via autonomous-merge.",
+});
+requireValue(proof12.additionalObservations?.duplicateSafeDispatchesObserved === true, "PR #12 duplicate safe dispatch observation must remain disclosed.");
+
+verifyProof(proof13, {
+  label: "PR #13",
+  pullRequest: 13,
+  head: "e4861248628d7e42e7397ac63aa542dfe1773c3a",
+  base: "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  merge: "10c963ef8bee978543dccf73047d3bd2d18baae5",
+  runs: {
+    ci: 31499190699,
+    autonomousMerge: 31499233718,
+    provenanceDispatch: 31499233680,
+    provenanceReceiver: 31499253092,
+  },
+  dispatchNotice: "Dispatched Main Provenance for PR #13 at 10c963ef8bee978543dccf73047d3bd2d18baae5.",
+  receiverNotice: "Authorized main update 10c963ef8bee978543dccf73047d3bd2d18baae5 from merged PR #13 via autonomous-merge.",
+});
+requireValue(proof13.incidentClosure?.issue === 9, "PR #13 proof must identify Incident #9.");
+requireValue(proof13.incidentClosure?.state === "closed", "PR #13 proof must record the issue as closed.");
+requireValue(proof13.incidentClosure?.stateReason === "completed", "PR #13 proof must record completed state reason.");
+requireValue(proof13.incidentClosure?.closedAt === "2026-08-11T14:03:22Z", "PR #13 proof closedAt is incorrect.");
 
 try {
   git(["merge-base", "--is-ancestor", fixture.safeBaseline.commit, "HEAD"]);
@@ -264,4 +310,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Main provenance incident, risk acceptance and live proof: OK");
+console.log("Main provenance incident, risk acceptance and closure proofs: OK");
