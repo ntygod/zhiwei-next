@@ -1,0 +1,18 @@
+{"origin":"source-derived-not-runtime-capture","direction":"stdin","record":{"id":"state-1","type":"get_state"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"id":"state-1","type":"response","command":"get_state","success":true,"data":{"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionId":"fixture-session","autoCompactionEnabled":true,"messageCount":0,"pendingMessageCount":0}}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdin","record":{"id":"messages-1","type":"get_messages"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"id":"messages-1","type":"response","command":"get_messages","success":true,"data":{"messages":[]}}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdin","record":{"id":"prompt-1","type":"prompt","message":"fixture only"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"id":"prompt-1","type":"response","command":"prompt","success":true}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"agent_start"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"turn_start"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"tool_execution_start","toolCallId":"tool-1","toolName":"read","args":{"path":"fixture.txt"}}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"tool_execution_update","toolCallId":"tool-1","toolName":"read","args":{"path":"fixture.txt"},"partialResult":{"content":[{"type":"text","text":"partial fixture"}],"details":{}}}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"tool_execution_end","toolCallId":"tool-1","toolName":"read","result":{"content":[{"type":"text","text":"fixture"}],"details":{}},"isError":false}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"turn_end","message":{"role":"assistant","content":[]},"toolResults":[]}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"agent_end","messages":[],"willRetry":false}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"agent_settled"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdin","record":{"id":"bash-1","type":"bash","command":"printf fixture"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"type":"bash_execution_update","id":"bash-1","delta":"fixture"}}
+{"origin":"source-derived-not-runtime-capture","direction":"stdout","record":{"id":"bash-1","type":"response","command":"bash","success":true,"data":{"output":"fixture","exitCode":0,"cancelled":false,"truncated":false}}}
+{"origin":"source-derived-not-runtime-capture","direction":"framing-test","record":{"type":"fixture","text":"a b c"}}
