@@ -1,0 +1,206 @@
+name: Branch Cleanup
+
+on:
+  workflow_run:
+    workflows: ["Autonomous Merge"]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 4 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete closed pull request branches
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repositoryFullName = `${owner}/${repo}`;
+            const repository = context.payload.repository ?? (
+              await github.rest.repos.get({ owner, repo })
+            ).data;
+            const defaultBranch = repository.default_branch;
+
+            function selectClosedPullRequestBranches({
+              repositoryFullName,
+              defaultBranch,
+              branches,
+              openPullRequests,
+              closedPullRequests,
+            }) {
+              const existingBranches = new Map(
+                branches.map((branch) => [branch.name, branch]),
+              );
+              const openPullRequestHeadRefs = new Set(
+                openPullRequests
+                  .filter((pullRequest) =>
+                    pullRequest.head?.repo?.full_name === repositoryFullName
+                  )
+                  .map((pullRequest) => pullRequest.head.ref),
+              );
+              const closedPullRequestsByHeadRef = new Map();
+
+              for (const pullRequest of closedPullRequests) {
+                if (pullRequest.head?.repo?.full_name !== repositoryFullName) continue;
+                const headRef = pullRequest.head.ref;
+                const pullNumbers = closedPullRequestsByHeadRef.get(headRef) ?? [];
+                pullNumbers.push(pullRequest.number);
+                closedPullRequestsByHeadRef.set(headRef, pullNumbers);
+              }
+
+              const selected = [];
+              for (const [branchName, pullNumbers] of closedPullRequestsByHeadRef) {
+                const branch = existingBranches.get(branchName);
+                if (!branch) continue;
+                if (branchName === defaultBranch) continue;
+                if (branch.protected === true) continue;
+                if (openPullRequestHeadRefs.has(branchName)) continue;
+                selected.push({
+                  name: branchName,
+                  pullRequests: [...pullNumbers].sort((left, right) => left - right),
+                });
+              }
+
+              return selected.sort((left, right) => left.name.localeCompare(right.name));
+            }
+
+            function runPolicySelfTests() {
+              const branch = (name, protectedBranch = false) => ({
+                name,
+                protected: protectedBranch,
+              });
+              const pullRequest = (number, ref, fullName = "owner/repo") => ({
+                number,
+                head: { ref, repo: { full_name: fullName } },
+              });
+              const scenarios = [
+                {
+                  name: "closed same-repository branch is selected",
+                  branches: [branch("main"), branch("feat/closed")],
+                  openPullRequests: [],
+                  closedPullRequests: [pullRequest(1, "feat/closed")],
+                  expected: ["feat/closed"],
+                },
+                {
+                  name: "open pull request branch is preserved",
+                  branches: [branch("main"), branch("feat/open")],
+                  openPullRequests: [pullRequest(2, "feat/open")],
+                  closedPullRequests: [pullRequest(1, "feat/open")],
+                  expected: [],
+                },
+                {
+                  name: "default and protected branches are preserved",
+                  branches: [branch("main"), branch("release/stable", true)],
+                  openPullRequests: [],
+                  closedPullRequests: [
+                    pullRequest(3, "main"),
+                    pullRequest(4, "release/stable"),
+                  ],
+                  expected: [],
+                },
+                {
+                  name: "fork and no-PR branches are preserved",
+                  branches: [branch("main"), branch("fork/work"), branch("local/no-pr")],
+                  openPullRequests: [],
+                  closedPullRequests: [pullRequest(5, "fork/work", "other/repo")],
+                  expected: [],
+                },
+                {
+                  name: "missing branch is idempotently ignored",
+                  branches: [branch("main")],
+                  openPullRequests: [],
+                  closedPullRequests: [pullRequest(6, "already/deleted")],
+                  expected: [],
+                },
+              ];
+
+              for (const scenario of scenarios) {
+                const actual = selectClosedPullRequestBranches({
+                  repositoryFullName: "owner/repo",
+                  defaultBranch: "main",
+                  branches: scenario.branches,
+                  openPullRequests: scenario.openPullRequests,
+                  closedPullRequests: scenario.closedPullRequests,
+                }).map((entry) => entry.name);
+                if (JSON.stringify(actual) !== JSON.stringify(scenario.expected)) {
+                  throw new Error(
+                    `Branch cleanup policy self-test failed: ${scenario.name}; ` +
+                    `expected=${JSON.stringify(scenario.expected)}, actual=${JSON.stringify(actual)}`,
+                  );
+                }
+              }
+            }
+
+            runPolicySelfTests();
+
+            const [branches, openPullRequests, closedPullRequests] = await Promise.all([
+              github.paginate(github.rest.repos.listBranches, {
+                owner,
+                repo,
+                per_page: 100,
+              }),
+              github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+              }),
+              github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: "closed",
+                per_page: 100,
+              }),
+            ]);
+
+            const candidates = selectClosedPullRequestBranches({
+              repositoryFullName,
+              defaultBranch,
+              branches,
+              openPullRequests,
+              closedPullRequests,
+            });
+
+            if (candidates.length === 0) {
+              core.notice("No closed pull request branches require cleanup.");
+              return;
+            }
+
+            const failures = [];
+            for (const candidate of candidates) {
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `heads/${candidate.name}`,
+                });
+                core.notice(
+                  `Deleted branch ${candidate.name} from closed PRs ` +
+                  `${candidate.pullRequests.map((number) => `#${number}`).join(", ")}.`,
+                );
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(`Branch ${candidate.name} was already absent; cleanup remains idempotent.`);
+                  continue;
+                }
+                failures.push(`${candidate.name}: ${error.message ?? String(error)}`);
+              }
+            }
+
+            if (failures.length > 0) {
+              core.setFailed(
+                `Unable to delete ${failures.length} closed PR branch(es): ${failures.join("; ")}`,
+              );
+            }
