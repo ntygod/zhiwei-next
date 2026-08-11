@@ -7,6 +7,7 @@
 - Harness 是治理代码，不是建议性文档。
 - 本目录只描述 AI 如何持续开发、验证、审查、合并和交接；产品与架构事实仍放在各自目录。
 - `harness.config.json` 是机器可读配置，本文档体系解释其语义。
+- 当前仓库运行在 `best-effort-private-free` 模式：有检测、停机和恢复提案，但没有 GitHub 服务端 pre-receive 硬保护。
 
 ## 修改规则
 
@@ -15,6 +16,7 @@
 - 当前治理任务仍受任务开始时的旧规则约束，不能依赖本次新规则获得通过。
 - 修改文档时同步机器检查；修改机器检查时同步文档和回滚说明。
 - 不复制根 `AGENTS.md` 的完整规则，只补充 Harness 局部语义。
+- 不得把最佳努力模式描述成“硬保护”“无法直写”或“服务端已阻止”。
 
 ## GitHub Connector 写入前置条件
 
@@ -27,17 +29,19 @@
 5. 写入后确认移动的是工作分支，不是 `main`；
 6. 通过 PR 进入默认分支。
 
-禁止把 `branch: main`、默认分支名或空 branch 参数传给仓库内容写工具。唯一例外是已经发生直接写入后，为消除正在暴露的有害内容所做的紧急恢复；恢复后必须立即创建 R3 Incident，并暂停普通开发。
+禁止把 `branch: main`、默认分支名或空 branch 参数传给仓库内容写工具。唯一例外是已经发生直接写入后，为消除正在暴露的敏感或持续有害内容所做的最小紧急恢复；恢复后必须立即创建 R3 Incident，并暂停普通开发。
 
-行为约束不是充分屏障。服务端保护要求与配置步骤见 `main-protection.md`。
+残余风险和补偿控制见 `main-protection.md` 与 `risk-acceptance/2026-08-11-private-free.json`。
 
 ## Main Incident 安全停机
 
 - 带 `zhiwei-main-incident` 开放标记的 Issue 存在时，暂停所有产品功能和普通维护工作。
+- 可信 `harness.config.json` 中的 `developmentPause.active` 也可以独立维持停机，即使 Incident Issue 被误关。
 - 只有 `main-incident-recovery: yes` 的 R3 治理/恢复 PR 可以进入自动合并评估。
-- 恢复 PR 必须引用所有开放 Main Incident，提供回滚，并完成当前 HEAD 绑定的独立 AI 审查。
-- Main Provenance workflow 可以创建 Draft 恢复 PR，但不得直接回写或重置 `main`。
-- 服务端 Ruleset 未确认前，Incident 不得关闭。
+- 恢复 PR 必须引用所有要求的 Incident，提供回滚，并完成当前 HEAD 绑定的独立 AI 审查。
+- Main Provenance 可以创建 Draft 恢复 PR，但不得直接回写、重置或 force-push `main`。
+- 只有真实 push 事件可提供恢复 tree；`repository_dispatch` payload 不得用来构造恢复提交。
+- 当前 Incident #9 只有在 live provenance proof 完成、暂停解除且风险接受记录保持有效后才可关闭。
 
 ## 验证
 
@@ -45,8 +49,9 @@
 
 ```bash
 npm run check:agents
-npm run check:harness
 npm run check:main-provenance
+npm run check:main-provenance-dispatch
+npm run check:harness
 npm run check
 ```
 
