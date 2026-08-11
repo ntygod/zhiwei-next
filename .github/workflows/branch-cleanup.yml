@@ -1,0 +1,155 @@
+name: Branch Cleanup
+
+on:
+  workflow_run:
+    workflows: ["Autonomous Merge"]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 4 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted workflow revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Delete closed pull request branches
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const policyUrl = pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/scripts/branch-cleanup-policy.mjs`,
+            ).href;
+            const {
+              runBranchCleanupPolicySelfTests,
+              selectClosedPullRequestBranches,
+            } = await import(policyUrl);
+
+            const { owner, repo } = context.repo;
+            const repositoryFullName = `${owner}/${repo}`;
+            const { data: repository } = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repository.default_branch;
+
+            runBranchCleanupPolicySelfTests();
+
+            const [branches, openPullRequests, closedPullRequests] = await Promise.all([
+              github.paginate(github.rest.repos.listBranches, {
+                owner,
+                repo,
+                per_page: 100,
+              }),
+              github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+              }),
+              github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: "closed",
+                per_page: 100,
+              }),
+            ]);
+
+            const candidates = selectClosedPullRequestBranches({
+              repositoryFullName,
+              defaultBranch,
+              branches,
+              openPullRequests,
+              closedPullRequests,
+            });
+
+            if (candidates.length === 0) {
+              core.notice("No closed pull request branches require cleanup.");
+              return;
+            }
+
+            const failures = [];
+            for (const candidate of candidates) {
+              try {
+                const [
+                  { data: latestRepository },
+                  { data: latestBranch },
+                  currentlyOpenPullRequests,
+                ] = await Promise.all([
+                  github.rest.repos.get({ owner, repo }),
+                  github.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: candidate.name,
+                  }),
+                  github.paginate(github.rest.pulls.list, {
+                    owner,
+                    repo,
+                    state: "open",
+                    head: `${owner}:${candidate.name}`,
+                    per_page: 100,
+                  }),
+                ]);
+
+                if (candidate.name === latestRepository.default_branch) {
+                  core.warning(
+                    `Preserving ${candidate.name}: it became the default branch after candidate selection.`,
+                  );
+                  continue;
+                }
+                if (currentlyOpenPullRequests.length > 0) {
+                  core.warning(
+                    `Preserving ${candidate.name}: an open PR appeared after candidate selection.`,
+                  );
+                  continue;
+                }
+                if (latestBranch.protected === true) {
+                  core.warning(
+                    `Preserving ${candidate.name}: it became protected after candidate selection.`,
+                  );
+                  continue;
+                }
+                if (latestBranch.commit.sha !== candidate.headSha) {
+                  core.warning(
+                    `Preserving ${candidate.name}: HEAD moved from ${candidate.headSha} ` +
+                    `to ${latestBranch.commit.sha} after candidate selection.`,
+                  );
+                  continue;
+                }
+
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `heads/${candidate.name}`,
+                });
+                core.notice(
+                  `Deleted branch ${candidate.name} at ${candidate.headSha} from closed PRs ` +
+                  `${candidate.pullRequests.map((number) => `#${number}`).join(", ")}.`,
+                );
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(`Branch ${candidate.name} was already absent; cleanup remains idempotent.`);
+                  continue;
+                }
+                failures.push(`${candidate.name}: ${error.message ?? String(error)}`);
+              }
+            }
+
+            if (failures.length > 0) {
+              core.setFailed(
+                `Unable to delete ${failures.length} closed PR branch(es): ${failures.join("; ")}`,
+              );
+            }
