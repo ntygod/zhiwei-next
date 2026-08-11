@@ -46,7 +46,7 @@ for (const command of config.requiredCommands ?? []) {
 }
 
 const checkScript = scripts.check ?? "";
-for (const required of ["check:architecture", "check:agents", "check:harness", "test"]) {
+for (const required of ["check:architecture", "check:agents", "check:harness", "check:pi-artifact", "test"]) {
   if (!checkScript.includes(`npm run ${required}`)) {
     violations.push(`package.json scripts.check must invoke npm run ${required}.`);
   }
@@ -74,8 +74,38 @@ for (const field of ["risk:", "autonomous-merge:", "independent-review:", "gover
 }
 
 const ci = await read(".github/workflows/ci.yml");
-for (const required of ["pull_request:", "edited", "npm run check", "npm run check:pr"]) {
+for (const required of [
+  "pull_request:",
+  "edited",
+  "npm run check",
+  "npm run check:pr",
+  "run_pi_artifact_probe:",
+  "pi-artifact-probe:",
+  "needs.check.outputs.pi-artifact-probe == 'true'",
+  "persist-credentials: false",
+  "node-version: 22.23.1",
+  "npm run probe:pi:artifact",
+  "scripts/check-pi-artifact-result.mjs",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "if: always()",
+]) {
   if (!ci.includes(required)) violations.push(`CI workflow is missing required Harness token: ${required}`);
+}
+if (ci.includes("pull_request_target:")) {
+  violations.push("CI must not use pull_request_target for the third-party Artifact probe.");
+}
+if (/\$\{\{\s*secrets\./.test(ci)) {
+  violations.push("CI must not inject repository secrets into the Pi Artifact probe workflow.");
+}
+const probeJobStart = ci.indexOf("  pi-artifact-probe:");
+const probeJob = probeJobStart >= 0 ? ci.slice(probeJobStart) : "";
+for (const required of [
+  "permissions:\n      contents: read",
+  "Checkout without persisted credentials",
+  "Setup exact Node.js runtime",
+  "Upload sanitized probe evidence",
+]) {
+  if (!probeJob.includes(required)) violations.push(`Pi Artifact probe job is missing trust-boundary token: ${required}`);
 }
 
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");
