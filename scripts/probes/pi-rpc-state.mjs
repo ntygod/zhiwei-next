@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -51,8 +51,19 @@ if (process.env.PI_EXECUTABLE_ARGS_JSON) {
   }
 }
 
+let spawnExecutable = executable;
+let executionMode = prefixArgs.length > 0 ? "configured-node-entry" : "package-bin";
+if (prefixArgs.length === 0 && process.platform !== "win32") {
+  const realExecutable = realpathSync(executable);
+  if (/\.(?:c?m?js)$/.test(realExecutable)) {
+    spawnExecutable = process.execPath;
+    prefixArgs = [realExecutable];
+    executionMode = "node-cli-entry";
+  }
+}
+
 const probeCwd = resolve(process.env.PI_PROBE_CWD ?? process.cwd());
-const child = spawn(executable, [...prefixArgs, "--mode", "rpc", "--no-session"], {
+const child = spawn(spawnExecutable, [...prefixArgs, "--mode", "rpc", "--no-session"], {
   cwd: probeCwd,
   env: { ...process.env, AI_AGENT: "zhiwei-pi-rpc-probe" },
   stdio: ["pipe", "pipe", "pipe"],
@@ -145,7 +156,7 @@ console.log(
       status: "ok",
       package: `${baseline.package.name}@${baseline.package.version}`,
       node: process.versions.node,
-      executionMode: prefixArgs.length > 0 ? "node-cli-entry" : "package-bin",
+      executionMode,
       sessionIdPresent: true,
       isStreaming: state.data.isStreaming,
       messageCount: messages.data.messages.length,
