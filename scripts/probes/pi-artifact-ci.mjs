@@ -15,6 +15,12 @@ const outputPath = resolve(
     process.argv[2] ??
     join(process.env.RUNNER_TEMP ?? tmpdir(), "zhiwei-pi-artifact-result", "result.json"),
 );
+const sourceBundleReadOnly = process.env.PI_PROBE_SOURCE_READ_ONLY === "true";
+const hostWorkspaceMounted = process.env.PI_PROBE_HOST_WORKSPACE_MOUNTED === "true";
+const containerRootFilesystemReadOnly = process.env.PI_PROBE_CONTAINER_ROOT_READ_ONLY === "true";
+const containerCapabilitiesDropped = process.env.PI_PROBE_CAPABILITIES_DROPPED === "true";
+const containerNoNewPrivileges = process.env.PI_PROBE_NO_NEW_PRIVILEGES === "true";
+const containerImage = process.env.PI_PROBE_CONTAINER_IMAGE;
 const tempRoot = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), "zhiwei-pi-artifact-"));
 const homeDir = join(tempRoot, "home");
 const cacheDir = join(tempRoot, "npm-cache");
@@ -43,6 +49,7 @@ const result = {
     platform: process.platform,
     arch: process.arch,
     githubActions: process.env.GITHUB_ACTIONS === "true",
+    containerImage,
   },
   attempts,
 };
@@ -60,6 +67,7 @@ function redact(value) {
   let text = String(value ?? "");
   text = text.replaceAll(repoRoot, "<repo>");
   text = text.replaceAll(tempRoot, "<temp>");
+  text = text.replaceAll(process.execPath, "node");
   text = text.replace(/\b(?:ghp|gho|ghu|ghs|ghr|github_pat|npm)_[A-Za-z0-9_=-]{8,}\b/g, "<redacted-token>");
   text = text.replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "<redacted-key>");
   text = text.replace(/Bearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer <redacted>");
@@ -105,7 +113,8 @@ function childEnvironment(extra = {}) {
 }
 
 function formatCommand(command, args) {
-  return [command, ...args]
+  const displayCommand = command === process.execPath ? "node" : command;
+  return [displayCommand, ...args]
     .map((part) => (/^[A-Za-z0-9_./:@=-]+$/.test(part) ? part : JSON.stringify(part)))
     .join(" ");
 }
@@ -240,6 +249,36 @@ async function pathExists(path) {
   }
 }
 
+async function verifySourceBundleReadOnly() {
+  const startedAt = Date.now();
+  const attempt = {
+    stage: "source-bundle-read-only",
+    command: "write <repo>/.zhiwei-probe-write-test",
+    status: "running",
+  };
+  attempts.push(attempt);
+  const testPath = join(repoRoot, ".zhiwei-probe-write-test");
+  try {
+    await writeFile(testPath, "unexpected write\n", "utf8");
+    await rm(testPath, { force: true });
+    attempt.status = "failed";
+    attempt.durationMs = Date.now() - startedAt;
+    throw new ProbeError("source-bundle-read-only", "The curated source bundle was writable.");
+  } catch (error) {
+    if (error instanceof ProbeError) throw error;
+    if (!["EROFS", "EACCES", "EPERM"].includes(error.code)) {
+      attempt.status = "failed";
+      attempt.durationMs = Date.now() - startedAt;
+      attempt.stderrSummary = redact(error.message);
+      throw new ProbeError("source-bundle-read-only", `Unexpected write-check error: ${error.message}`);
+    }
+    attempt.status = "ok";
+    attempt.durationMs = Date.now() - startedAt;
+    attempt.exitCode = 0;
+    attempt.stderrPresent = false;
+  }
+}
+
 async function writeResult() {
   await mkdir(dirname(outputPath), { recursive: true });
   const serialized = `${JSON.stringify(result, null, 2)}\n`;
@@ -283,10 +322,15 @@ try {
   const npmVersion = (await runCommand("npm-version", "npm", ["--version"])).stdout.trim();
   result.environment.npm = npmVersion;
 
-  const beforeStatus = (
-    await runCommand("repository-status-before", "git", ["status", "--porcelain=v1", "--untracked-files=all"])
-  ).stdout;
-  requireCheck("repository-status-before", beforeStatus.trim() === "", "Repository was not clean before the probe.");
+  let beforeStatus = "";
+  if (sourceBundleReadOnly) {
+    await verifySourceBundleReadOnly();
+  } else {
+    beforeStatus = (
+      await runCommand("repository-status-before", "git", ["status", "--porcelain=v1", "--untracked-files=all"])
+    ).stdout;
+    requireCheck("repository-status-before", beforeStatus.trim() === "", "Repository was not clean before the probe.");
+  }
 
   const registryMetadata = parseJson(
     "registry-metadata",
@@ -424,25 +468,40 @@ try {
   requireCheck("rpc-probe", rpcProbe.status === "ok", "RPC probe did not report ok.");
   requireCheck("rpc-probe", rpcProbe.promptsSent === 0, "RPC probe unexpectedly sent a prompt.");
 
-  const afterStatus = (
-    await runCommand("repository-status-after", "git", ["status", "--porcelain=v1", "--untracked-files=all"])
-  ).stdout;
-  requireCheck("repository-status-after", afterStatus === beforeStatus, "Probe mutated the repository working tree.");
+  if (!sourceBundleReadOnly) {
+    const afterStatus = (
+      await runCommand("repository-status-after", "git", ["status", "--porcelain=v1", "--untracked-files=all"])
+    ).stdout;
+    requireCheck("repository-status-after", afterStatus === beforeStatus, "Probe mutated the repository working tree.");
+  }
 
   result.sdkProbe = sdkProbe;
   result.rpcProbe = rpcProbe;
+  requireCheck("container-policy", sourceBundleReadOnly, "The probe source bundle must be mounted read-only.");
+  requireCheck("container-policy", hostWorkspaceMounted === false, "The host repository workspace must not be mounted.");
+  requireCheck("container-policy", containerRootFilesystemReadOnly, "The container root filesystem must be read-only.");
+  requireCheck("container-policy", containerCapabilitiesDropped, "All Linux capabilities must be dropped.");
+  requireCheck("container-policy", containerNoNewPrivileges, "no-new-privileges must be enabled.");
+  requireCheck("container-policy", typeof containerImage === "string" && /@sha256:[0-9a-f]{64}$/.test(containerImage), "The probe container image must be digest-pinned.");
+
   result.security = {
     workflowPermissions: "contents-read",
-    repositorySecretsInjected: false,
+    hostSecretsPassedToProbe: false,
     providerCredentialsInjected: false,
     promptsSent: 0,
     installScriptsExecuted: false,
-    repositoryMutationDetected: false,
+    sourceBundleReadOnly: true,
+    sourceBundleMutationDetected: false,
+    hostWorkspaceMounted: false,
+    containerRootFilesystemReadOnly: true,
+    containerCapabilitiesDropped: true,
+    containerNoNewPrivileges: true,
     packageExecutedFromVerifiedTarball: true,
   };
 
   const fingerprintPayload = canonicalize({
     sourceBaseline: result.sourceBaseline,
+    runtime: { containerImage: result.environment.containerImage },
     package: result.package,
     registry: {
       version: result.registry.version,
