@@ -8,6 +8,16 @@
 source-and-runtime-verified-normal-tool
 ```
 
+### 历史状态演化
+
+```text
+PR #6   source-verified / runtime-unverified
+PR #8   source-and-runtime-verified
+当前    source-and-runtime-verified-normal-tool
+```
+
+早期状态作为证据链保留，不代表当前能力回退。
+
 已经验证：
 
 - Pi Release Tag 源码契约；
