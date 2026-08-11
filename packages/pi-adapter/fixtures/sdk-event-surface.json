@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "origin": "source-derived-not-runtime-capture",
+  "upstreamCommit": "b647d187932c76d4003728010daeed9c1b496a6a",
+  "sources": [
+    {
+      "path": "packages/agent/src/types.ts",
+      "blobSha": "5b20b21f4ea0bc6e6d54fb2c27e57b87037e8c24"
+    },
+    {
+      "path": "packages/coding-agent/src/core/agent-session.ts",
+      "blobSha": "b210c5ace4fc77dc4a1fdd63264fd1697a203a57"
+    },
+    {
+      "path": "packages/coding-agent/test/suite/regressions/6363-agent-settled-event.test.ts",
+      "blobSha": "d31010478cbb5bdd468f05ffc83176ed3fcd43df"
+    }
+  ],
+  "coreAgentEvents": [
+    {
+      "type": "agent_start",
+      "fields": []
+    },
+    {
+      "type": "agent_end",
+      "fields": [
+        "messages"
+      ]
+    },
+    {
+      "type": "turn_start",
+      "fields": []
+    },
+    {
+      "type": "turn_end",
+      "fields": [
+        "message",
+        "toolResults"
+      ]
+    },
+    {
+      "type": "message_start",
+      "fields": [
+        "message"
+      ]
+    },
+    {
+      "type": "message_update",
+      "fields": [
+        "message",
+        "assistantMessageEvent"
+      ]
+    },
+    {
+      "type": "message_end",
+      "fields": [
+        "message"
+      ]
+    },
+    {
+      "type": "tool_execution_start",
+      "fields": [
+        "toolCallId",
+        "toolName",
+        "args"
+      ]
+    },
+    {
+      "type": "tool_execution_update",
+      "fields": [
+        "toolCallId",
+        "toolName",
+        "args",
+        "partialResult"
+      ]
+    },
+    {
+      "type": "tool_execution_end",
+      "fields": [
+        "toolCallId",
+        "toolName",
+        "result",
+        "isError"
+      ]
+    }
+  ],
+  "agentSessionExtensions": [
+    {
+      "type": "agent_end",
+      "fields": [
+        "messages",
+        "willRetry"
+      ],
+      "replacesCoreShape": true
+    },
+    {
+      "type": "agent_settled",
+      "fields": []
+    },
+    {
+      "type": "queue_update",
+      "fields": [
+        "steering",
+        "followUp"
+      ]
+    },
+    {
+      "type": "compaction_start",
+      "fields": [
+        "reason"
+      ]
+    },
+    {
+      "type": "entry_appended",
+      "fields": [
+        "entry"
+      ]
+    },
+    {
+      "type": "session_info_changed",
+      "fields": [
+        "name"
+      ]
+    },
+    {
+      "type": "thinking_level_changed",
+      "fields": [
+        "level"
+      ]
+    },
+    {
+      "type": "compaction_end",
+      "fields": [
+        "reason",
+        "result",
+        "aborted",
+        "willRetry",
+        "errorMessage"
+      ]
+    },
+    {
+      "type": "auto_retry_start",
+      "fields": [
+        "attempt",
+        "maxAttempts",
+        "delayMs",
+        "errorMessage"
+      ]
+    },
+    {
+      "type": "auto_retry_end",
+      "fields": [
+        "success",
+        "attempt",
+        "finalError"
+      ]
+    },
+    {
+      "type": "summarization_retry_scheduled",
+      "fields": [
+        "attempt",
+        "maxAttempts",
+        "delayMs",
+        "errorMessage"
+      ]
+    },
+    {
+      "type": "summarization_retry_attempt_start",
+      "fields": [
+        "source",
+        "reason"
+      ]
+    },
+    {
+      "type": "summarization_retry_finished",
+      "fields": []
+    },
+    {
+      "type": "bash_execution_update",
+      "fields": [
+        "id",
+        "delta"
+      ]
+    }
+  ],
+  "correlation": {
+    "toolExecution": {
+      "stableField": "toolCallId",
+      "events": [
+        "tool_execution_start",
+        "tool_execution_update",
+        "tool_execution_end"
+      ],
+      "sourceVerified": true,
+      "parallelCompletionOrderWarning": "tool_execution_end may be emitted in tool completion order while result message artifacts are appended later in assistant source order"
+    },
+    "turn": {
+      "endFields": [
+        "message",
+        "toolResults"
+      ],
+      "syntheticTurnIdProvided": false
+    },
+    "session": {
+      "field": "AgentSession.sessionId",
+      "runtimeReplacementChangesSessionObject": true,
+      "requiresResubscribeAfterReplacement": true
+    }
+  },
+  "settlement": {
+    "agentEnd": {
+      "meaning": "one low-level run ended",
+      "mayRepeatBeforeFinalSettlement": true,
+      "retrySignalField": "willRetry"
+    },
+    "agentSettled": {
+      "meaning": "session is idle after automatic retries and queued follow-ups finish",
+      "expectedCountPerSettledPrompt": 1,
+      "verifiedByUpstreamRegressionTest": true,
+      "payloadFields": []
+    },
+    "sessionShutdown": {
+      "partOfAgentSessionEventUnion": false,
+      "surface": "extension lifecycle",
+      "mustNotBeCollapsedIntoAgentSettled": true
+    }
+  },
+  "openQuestions": [
+    "Observed ordering for normal, cancelled, parallel-tool and compaction sessions",
+    "Whether a provider-free AgentSession can be constructed from the published package",
+    "How Extension lifecycle events align with public AgentSession events and RPC output",
+    "Which raw payload fields are safe and necessary for the Observation Ledger"
+  ]
+}
