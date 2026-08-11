@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 
-const root = process.cwd();
 const violations = [];
 
 async function read(path) {
@@ -64,7 +63,8 @@ if (baseline) {
     "Pi baseline status must distinguish source-only from dynamic verification.",
   );
   requireValue(baseline.upstream?.repository === "earendil-works/pi", "Unexpected Pi upstream repository.");
-  requireValue(isSha(baseline.upstream?.commit), "Pi upstream must use a full immutable commit SHA.");
+  requireValue(baseline.upstream?.releaseTag === "v0.84.1", "Pi baseline must record release tag v0.84.1.");
+  requireValue(isSha(baseline.upstream?.commit), "Pi upstream must use a full immutable tag commit SHA.");
   requireValue(
     baseline.upstream?.historicalRedirectFrom === "badlogic/pi-mono",
     "Pi baseline must record the historical repository redirect.",
@@ -72,6 +72,10 @@ if (baseline) {
   requireValue(
     baseline.package?.name === "@earendil-works/pi-coding-agent",
     "Unexpected Pi coding-agent package name.",
+  );
+  requireValue(
+    baseline.package?.registryArtifactVerified === false || baseline.status === "source-and-runtime-verified",
+    "Source-only baseline must not claim registry artifact verification.",
   );
   requireValue(
     typeof baseline.package?.version === "string" &&
@@ -131,9 +135,12 @@ if (baseline) {
     );
     requireValue(
       Array.isArray(baseline.dynamicProbe?.recheckCommands) &&
+        baseline.dynamicProbe.recheckCommands.includes(
+          "npm install --no-save --package-lock=false @earendil-works/pi-coding-agent@0.84.1",
+        ) &&
         baseline.dynamicProbe.recheckCommands.includes("npm run probe:pi:sdk") &&
         baseline.dynamicProbe.recheckCommands.includes("npm run probe:pi:rpc"),
-      "A blocked dynamic probe must provide both recheck commands.",
+      "A blocked dynamic probe must provide the non-saving install and both recheck commands.",
     );
   }
 }
