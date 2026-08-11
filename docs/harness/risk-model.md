@@ -61,7 +61,7 @@
 - 用户遗忘、物理删除或不可逆迁移；
 - 自动外部行动和权限默认值；
 - 自动合并、CI 信任边界、发布和签名；
-- 修改 `autonomous-merge.yml`、安全红线或质量门；
+- 修改任意 GitHub Actions 工作流、安全红线或质量门；
 - 生产发布和破坏性恢复。
 
 额外门禁：
@@ -80,7 +80,7 @@ PR 可以声明更高风险，不能低于以下推断：
 - 仅 `docs/**`、Markdown、注释和模板：通常 R0；
 - 普通应用或包实现：至少 R1；
 - `packages/domain/**`、`packages/protocol/**`、`packages/memory-store/**`、`package.json`、架构 ADR、`AGENTS.md`、`docs/harness/**`：至少 R2；
-- `SECURITY.md`、信任与安全文档、自动合并和发布工作流、删除/隐私/凭证相关文件：至少 R3。
+- `SECURITY.md`、信任与安全文档、任意 `.github/workflows/**`、删除/隐私/凭证相关文件：至少 R3。
 
 机器推断只是下限。实际行为更高风险时，作者必须主动上调。
 
