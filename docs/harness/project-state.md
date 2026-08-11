@@ -3,7 +3,7 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-11
+updated: 2026-08-12
 -->
 
 ## 当前定位
@@ -28,6 +28,11 @@ best-effort-private-free
 - 确认 Extension没有 `auto_retry_start/end`或 `willRetry`增强，且最终 `session.messages`不能重建被替代失败 Run；
 - Follow-up队列 Fixture：公共队列先非空后清空，一个公共 Agent Run包含两个 Turn，最终仍只有一次 `agent_end`和一次 `agent_settled`；
 - 确认 Extension没有 `queue_update`，且队列清空早于 Follow-up用户消息进入事件流，不能把空队列当作 Prompt完成；
+- 取消、abortRetry与 Retry exhaustion Fixture：用户取消、`abortRetry()`和 retry exhaustion三条路径均由固定 Pi Artifact动态验证；
+- 部分 Assistant消息以 `stopReason=aborted`保留，`session.abort()`与原始 Prompt都 resolve，最终仍有单次 `agent_settled`；
+- `agent_end(willRetry=true)`可在 Backoff期间被 `abortRetry()`终止，形成 **willRetry=true 但没有后续 Agent Run** 的真实边界；
+- Retry exhaustion最终保留最后一次失败 Assistant，前两次失败只存在于事件流，Prompt Promise仍 resolve；
+- 再次确认 Extension没有 `auto_retry_start/end`或 `willRetry`增强，不能独立重建 Session层 Cancel / Retry语义；
 - Branch Cleanup Harness已通过 PR #19进入默认分支并持续回收关闭 PR工作分支；
 - Issue #9完整记录两次 direct-main误写和恢复；PR #10–#14建立并验证 Main Provenance、风险接受、事故停机与恢复链；
 - `developmentPause.active=false`，Issue #9 已关闭；事故、风险接受和两条 provenance proof永久保留。
@@ -121,12 +126,15 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 - Public SDK与 Extension在 Queue事件上的差异，Extension不能重建 Follow-up排队/清空时序；
 - 初始 `session.prompt()`会等到 Follow-up完成、队列排空并进入 idle后才返回；
 - Prompt、Agent Run和 Turn不能一一对应，队列为空也不能替代最终稳定边界；
+- 流式取消路径：部分 Assistant以 `aborted`保留，取消后仍有 `agent_end`与单次 `agent_settled`；
+- Retry Backoff取消路径：`willRetry=true`是当时计划，不保证后续 Run，`abortRetry()`产生终止 Retry事件；
+- Retry exhaustion路径：`agent_end.willRetry=[true,true,false]`，最终保留最后一次失败 Assistant，Prompt Promise正常返回；
+- Public SDK与 Extension在取消、Retry终止和 `willRetry`上的来源差异；
 - 宿主 Session创建和 Shutdown边界；
 - Runtime Fixture、隔离 Probe、Harness、架构边界与基础测试由 CI持续检查。
 
 尚未冻结：
 
-- 用户取消、`abortRetry()`和 retry exhaustion；
 - 并行 Tool完成顺序与消息顺序；
 - Compaction前后状态；
 - Session Replacement重新订阅；
@@ -137,12 +145,11 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 按真实 Runtime风险排序：
 
-1. 录制用户取消、`abortRetry()`和 retry exhaustion边界；
-2. 录制并行 Tool执行完成顺序与 Tool Result消息顺序；
-3. 验证 Compaction与 Session Replacement；
-4. 比较 SDK与 RPC对同一任务的事件差异；
-5. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
-6. 冻结 Observation Ledger Schema并进入 SQLite实现。
+1. 录制并行 Tool执行完成顺序与 Tool Result消息顺序；
+2. 验证 Compaction与 Session Replacement；
+3. 比较 SDK与 RPC对同一任务的事件差异；
+4. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
+5. 冻结 Observation Ledger Schema并进入 SQLite实现。
 
 ## 已知风险
 
@@ -158,6 +165,6 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 ## 产品能力状态
 
-- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复和 Follow-up队列路径；
+- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复、Follow-up队列、流式取消、Retry Backoff取消和 Retry exhaustion路径；
 - 真实 Observation持久化、记忆、Context、Attention和桌面端尚未进入实现阶段；
-- M0继续以 Runtime边界证据为先，未完成取消、并发、压缩和替换 Fixture前不提前冻结 Ledger。
+- M0继续以 Runtime边界证据为先，未完成并发、压缩和替换 Fixture前不提前冻结 Ledger。

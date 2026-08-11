@@ -1,11 +1,11 @@
 # Pi Runtime 契约 Spike
 
-关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22。
+关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22、Issue #24。
 
 ## 状态
 
 ```text
-source-and-runtime-verified-follow-up-queue
+source-and-runtime-verified-cancel-retry-exhaustion
 ```
 
 ### 历史状态演化
@@ -15,7 +15,8 @@ PR #6   source-verified / runtime-unverified
 PR #8   source-and-runtime-verified
 PR #17  source-and-runtime-verified-normal-tool
 PR #21  source-and-runtime-verified-retry-success
-当前    source-and-runtime-verified-follow-up-queue
+PR #23  source-and-runtime-verified-follow-up-queue
+当前    source-and-runtime-verified-cancel-retry-exhaustion
 ```
 
 早期状态作为证据链保留，不代表当前能力回退。
@@ -30,9 +31,12 @@ PR #21  source-and-runtime-verified-retry-success
 - 一次 retryable Provider错误后自动重试并恢复成功；
 - 公共 `AgentSession` Retry事件与 Extension生命周期表面的差异；
 - Follow-up队列填充/清空、同一 Run内的双 Turn和最终单次 `agent_settled`；
-- 公共 `queue_update`与 Extension无队列事件的表面差异。
+- 公共 `queue_update`与 Extension无队列事件的表面差异；
+- 流式输出期间主动取消后，部分 Assistant以 `stopReason=aborted`保留；
+- Retry Backoff取消后，`willRetry=true`但没有后续 Run；
+- Retry exhaustion的三次 Run、`[true,true,false]`序列、终止 Retry事件和最终错误消息。
 
-尚未验证取消、重试耗尽、并行 Tool、Compaction、Session Replacement和 RPC真实 Prompt。
+尚未验证并行 Tool、Compaction、Session Replacement和 RPC真实 Prompt。
 
 ## 固定上游基线
 
@@ -62,11 +66,13 @@ packages/pi-adapter/fixtures/pi-artifact-runtime.json
 packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
+packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 scripts/check-pi-spike.mjs
 scripts/check-pi-artifact-result.mjs
 scripts/check-pi-lifecycle-result.mjs
 scripts/check-pi-retry-lifecycle-result.mjs
 scripts/check-pi-follow-up-lifecycle-result.mjs
+scripts/check-pi-cancel-retry-exhaustion-result.mjs
 ```
 
 其中：
@@ -75,7 +81,8 @@ scripts/check-pi-follow-up-lifecycle-result.mjs
 - `pi-artifact-runtime.json`是 Registry Artifact空会话动态结果；
 - `pi-lifecycle-normal-tool.json`是真实 SDK + Extension Prompt/Tool生命周期动态结果；
 - `pi-lifecycle-retry-success.json`是真实自动重试恢复成功动态结果；
-- `pi-lifecycle-follow-up-queue.json`是真实 Follow-up队列与最终稳定边界动态结果。
+- `pi-lifecycle-follow-up-queue.json`是真实 Follow-up队列与最终稳定边界动态结果；
+- `pi-lifecycle-cancel-retry-exhaustion.json`是真实主动取消、Backoff取消和 Retry exhaustion动态结果。
 
 ## 一、源码契约
 
@@ -113,10 +120,10 @@ toolCallId
 两者不能混用：
 
 - `agent_end`：一次底层 Agent Run结束；
-- `willRetry=true`时，随后可能自动重试；
+- `willRetry=true`表示当时计划自动重试，但宿主随后取消时可能没有后续 Run；
 - Follow-up在已验证场景中追加了同一 Run内的新 Turn；
 - 其他输入模式不能仅凭名称推断是否创建新 Run，必须以事件为准；
-- `agent_settled`：Retry和 Follow-up均处理完、Session真正 idle后只发一次。
+- `agent_settled`：Retry、Follow-up、取消或耗尽路径处理完、Session真正 idle后只发一次。
 
 ### Session Replacement
 
@@ -427,6 +434,59 @@ queue filled(sequence=6)
 5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386
 ```
 
+## 六、取消、abortRetry与 Retry exhaustion验证
+
+详细文档：[`cancel-retry-exhaustion-lifecycle.md`](cancel-retry-exhaustion-lifecycle.md)。
+
+三个固定子场景：
+
+```text
+active-stream-abort
+  → 第一个含文本的 message_update(length=128)
+  → session.abort()
+  → 部分 Assistant(stopReason=aborted)
+  → agent_end(willRetry=false)
+  → agent_settled
+
+retry-backoff-abort
+  → agent_end(willRetry=true)
+  → auto_retry_start(attempt=1, delayMs=10000)
+  → session.abortRetry()
+  → auto_retry_end(success=false, finalError=Retry cancelled)
+  → agent_settled
+
+retry-exhaustion
+  → 三个失败 Agent Run
+  → agent_end.willRetry=[true,true,false]
+  → auto_retry_end(success=false, finalError=overloaded_error)
+  → agent_settled
+```
+
+关键证据：
+
+- 主动取消在第一个真正含文本的 Public `message_update`上触发，部分 Assistant以 `stopReason=aborted`、`Request was aborted`和长度 `128`保留；
+- `session.abort()`与原始 `session.prompt()`都正常 resolve，最终 idle且不在 Retry；
+- Backoff取消只调用 Provider一次，预留的第二条响应保持未使用；
+- Backoff路径保留 `agent_end(willRetry=true)`，但 `abortRetry()`之后不会出现第二个 `agent_start`，即 `willRetry=true 但没有后续 Run`；
+- Backoff取消的公共终止事件为 `auto_retry_end(success=false, finalError=Retry cancelled)`；
+- `maxRetries=2`产生初始调用加两次重试，共三个 Agent Run和两次 `auto_retry_start`；
+- Retry exhaustion只有一个终止 `auto_retry_end`，发生在第三次 `agent_end(willRetry=false)`之后；
+- 最终 `session.messages`只保留最终一次失败的 Assistant，前两次失败仍必须从事件流持久化；
+- Retry exhaustion时 `session.prompt()`仍正常 resolve，成功与失败不能由 Promise是否 reject判断；
+- Extension仍没有 `auto_retry_start/end`或 `agent_end.willRetry`增强。
+
+外层契约指纹：
+
+```text
+b866798d18569c78d5c712254c3ecdecd7a3e02c0ef11458e6b97b0863b1f6e0
+```
+
+内层 Capture指纹：
+
+```text
+b544631413935d2b3f55f9f9f8bcf15a06944bba682cf48471902e4726f79609
+```
+
 ## 隔离与信任模型
 
 Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
@@ -475,6 +535,13 @@ Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
 3. 首轮结果下载后原样固化为 committed Fixture；Checker收紧到完整事件类型顺序、精确计数、队列序列、最终消息、Extension负证据和双层指纹。
 4. committed Fixture建立后，隔离 Job必须重新捕获并做完整对象比较，任何上游行为漂移都会保持失败可见。
 
+### Cancellation / Retry exhaustion阶段
+
+1. 初始 Capture在首个 Public `message_update`上立即取消，但该事件只有流式起始边界、尚无部分文本；断言正确拒绝了空 Assistant结果。
+2. 没有放宽“取消必须保留部分文本”的不变量，而是把触发条件修正为第一个真正含文本且尚未完整消费响应的 `message_update`，并将固定流速降到可重复的 `128`。
+3. 修正后真实 Actions Artifact证明三个子场景全部稳定；结果原样固化为 committed Fixture，Checker收紧到动作触发点、完整事件类型序列、精确计数/字段、消息保留和双层指纹。
+4. committed Fixture建立后，隔离 Job必须重新捕获并做完整对象比较；上游取消或 Retry语义漂移不会被静默接受。
+
 ## CI入口
 
 静态/Committed检查：
@@ -485,6 +552,7 @@ npm run check:pi-artifact
 npm run check:pi-lifecycle
 npm run check:pi-retry-lifecycle
 npm run check:pi-follow-up-lifecycle
+npm run check:pi-cancel-retry-exhaustion
 ```
 
 动态 Probe：
@@ -496,6 +564,7 @@ npm run probe:pi:artifact
 npm run probe:pi:lifecycle
 npm run probe:pi:retry-lifecycle
 npm run probe:pi:follow-up-lifecycle
+npm run probe:pi:cancel-retry-exhaustion
 ```
 
 Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行；普通功能 PR不依赖 npm网络。
@@ -510,10 +579,12 @@ Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行
 - 保存被 Retry替代但未进入最终 `session.messages`的失败运行证据；
 - 保存 Follow-up队列填充/清空事件，并避免把队列清空误判为 Prompt完成；
 - 把一个 Agent Run建模为可能包含多个 Turn；
-- 把最终单次 `agent_settled`作为 Retry和 Follow-up处理完成后的稳定边界；
+- 把最终单次 `agent_settled`作为 Retry、Follow-up、取消和耗尽处理完成后的稳定边界；
+- 保留被取消的部分 Assistant、`willRetry=true`但没有后续 Run、Backoff取消和最终 Retry exhaustion；
+- 把 Prompt Promise正常 resolve与任务成功分开建模；
 - 把 Session创建映射放在宿主 SDK边界；
 - 把 `session_shutdown`作为宿主显式事件；
-- 为取消、重试耗尽、并行 Tool、Compaction和 Session Replacement建立下一批独立 Fixtures；
+- 为并行 Tool、Compaction和 Session Replacement建立下一批独立 Fixtures；
 - 在这些场景完成后修订 `NormalizedRuntimeEvent`。
 
-当前仍不能直接实现 SQLite Observation Ledger，因为取消、并发、压缩和替换边界尚未冻结。
+当前仍不能直接实现 SQLite Observation Ledger，因为并发、压缩和替换边界尚未冻结。

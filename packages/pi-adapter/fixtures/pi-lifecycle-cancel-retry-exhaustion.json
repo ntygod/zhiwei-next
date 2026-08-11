@@ -1,0 +1,1387 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scenario": "cancel-retry-exhaustion",
+  "upstream": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "artifact": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "installScriptsExecuted": false
+  },
+  "environment": {
+    "node": "22.23.1",
+    "npm": "10.9.8",
+    "platform": "linux-x64",
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+  },
+  "isolation": {
+    "hostSecretsPassedToProbe": false,
+    "hostWorkspaceMounted": false,
+    "sourceBundleReadOnly": true,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true
+  },
+  "capture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scenario": "cancel-retry-exhaustion",
+    "package": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1"
+    },
+    "cases": {
+      "activeStreamAbort": {
+        "prompt": {
+          "source": "interactive",
+          "text": "Stream a long response so the host can cancel after the first assistant update.",
+          "responseTextLength": 10240,
+          "responseTextSha256": "ef6245444e0ce6f9da76bdde762850873c29004674a4498240034516c4fd2563"
+        },
+        "retry": {
+          "settings": {
+            "enabled": true,
+            "maxRetries": 3,
+            "baseDelayMs": 1
+          },
+          "public": {
+            "startEvents": [],
+            "endEvents": [],
+            "agentEndWillRetry": [
+              false
+            ]
+          },
+          "extension": {
+            "startEvents": [],
+            "endEvents": [],
+            "agentEndWillRetry": [
+              null
+            ]
+          }
+        },
+        "actions": [
+          {
+            "type": "session.abort",
+            "triggerEvent": "message_update",
+            "triggerSequence": 7,
+            "triggerMessageTextLength": 128,
+            "triggerMessageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade",
+            "outcome": {
+              "status": "resolved"
+            }
+          }
+        ],
+        "provider": {
+          "id": "zhiwei-active-abort-faux",
+          "api": "zhiwei-active-abort-faux-api",
+          "callCount": 1,
+          "pendingResponses": 0,
+          "promptsSentToExternalProvider": 0
+        },
+        "outcome": {
+          "prompt": {
+            "status": "resolved"
+          },
+          "abort": {
+            "status": "resolved"
+          },
+          "sessionWasIdleBeforeShutdown": true,
+          "sessionWasRetryingBeforeShutdown": false,
+          "pendingMessageCountBeforeShutdown": 0,
+          "messageRoles": [
+            "user",
+            "assistant"
+          ],
+          "finalMessages": [
+            {
+              "index": 0,
+              "role": "user",
+              "contentKinds": [
+                "text"
+              ],
+              "textLength": 79,
+              "textSha256": "18a8270d0b70640f05182e57cb26dc556481fadfa8243e707cf10b5ac0578b8d"
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "contentKinds": [
+                "text"
+              ],
+              "stopReason": "aborted",
+              "errorMessage": "Request was aborted",
+              "textLength": 128,
+              "textSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+            }
+          ],
+          "finalAssistant": {
+            "stopReason": "aborted",
+            "errorMessage": "Request was aborted",
+            "contentKinds": [
+              "text"
+            ],
+            "textLength": 128,
+            "textSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          }
+        },
+        "counts": {
+          "sessionEvents": 11,
+          "extensionEvents": 14,
+          "public": {
+            "agent_end": 1,
+            "agent_settled": 1,
+            "agent_start": 1,
+            "message_end": 2,
+            "message_start": 2,
+            "message_update": 2,
+            "turn_end": 1,
+            "turn_start": 1
+          },
+          "extension": {
+            "agent_end": 1,
+            "agent_settled": 1,
+            "agent_start": 1,
+            "before_agent_start": 1,
+            "input": 1,
+            "message_end": 2,
+            "message_start": 2,
+            "message_update": 2,
+            "session_shutdown": 1,
+            "turn_end": 1,
+            "turn_start": 1
+          }
+        },
+        "ordering": {
+          "publicFirstAgentEndIndex": 9,
+          "publicLastAgentEndIndex": 9,
+          "publicFirstRetryStartIndex": -1,
+          "publicLastRetryStartIndex": -1,
+          "publicRetryEndIndex": -1,
+          "publicSettledIndex": 10,
+          "extensionSettledIndex": 12,
+          "extensionShutdownIndex": 13
+        },
+        "sessionEvents": [
+          {
+            "sequence": 1,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 2,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 3,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 79,
+            "messageTextSha256": "18a8270d0b70640f05182e57cb26dc556481fadfa8243e707cf10b5ac0578b8d"
+          },
+          {
+            "sequence": 4,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 79,
+            "messageTextSha256": "18a8270d0b70640f05182e57cb26dc556481fadfa8243e707cf10b5ac0578b8d"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending"
+          },
+          {
+            "sequence": 6,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 7,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 8,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "aborted",
+            "messageError": "Request was aborted",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 9,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "aborted",
+            "messageError": "Request was aborted",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 10,
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 11,
+            "type": "agent_settled"
+          }
+        ],
+        "extensionEvents": [
+          {
+            "sequence": 1,
+            "type": "input",
+            "source": "interactive"
+          },
+          {
+            "sequence": 2,
+            "type": "before_agent_start"
+          },
+          {
+            "sequence": 3,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 4,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 79,
+            "messageTextSha256": "18a8270d0b70640f05182e57cb26dc556481fadfa8243e707cf10b5ac0578b8d"
+          },
+          {
+            "sequence": 6,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 79,
+            "messageTextSha256": "18a8270d0b70640f05182e57cb26dc556481fadfa8243e707cf10b5ac0578b8d"
+          },
+          {
+            "sequence": 7,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending"
+          },
+          {
+            "sequence": 8,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 9,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 10,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "aborted",
+            "messageError": "Request was aborted",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 11,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "aborted",
+            "messageError": "Request was aborted",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 128,
+            "messageTextSha256": "2b17e35a5f170b2a63aa9a1ce3ce8ca82c338b034c6dc1ebc7c2fe5326eadade"
+          },
+          {
+            "sequence": 12,
+            "type": "agent_end"
+          },
+          {
+            "sequence": 13,
+            "type": "agent_settled"
+          },
+          {
+            "sequence": 14,
+            "type": "session_shutdown",
+            "reason": "exit"
+          }
+        ],
+        "lifecycleNotes": [
+          {
+            "type": "shutdown-host-boundary",
+            "mechanism": "session.extensionRunner.emit",
+            "reason": "exit"
+          }
+        ]
+      },
+      "retryBackoffAbort": {
+        "prompt": {
+          "source": "interactive",
+          "text": "Enter automatic retry backoff, then let the host cancel the pending retry.",
+          "retryableError": "overloaded_error"
+        },
+        "retry": {
+          "settings": {
+            "enabled": true,
+            "maxRetries": 3,
+            "baseDelayMs": 10000
+          },
+          "public": {
+            "startEvents": [
+              {
+                "sequence": 12,
+                "type": "auto_retry_start",
+                "attempt": 1,
+                "maxAttempts": 3,
+                "delayMs": 10000,
+                "errorMessage": "overloaded_error"
+              }
+            ],
+            "endEvents": [
+              {
+                "sequence": 13,
+                "type": "auto_retry_end",
+                "attempt": 1,
+                "success": false,
+                "finalError": "Retry cancelled"
+              }
+            ],
+            "agentEndWillRetry": [
+              true
+            ]
+          },
+          "extension": {
+            "startEvents": [],
+            "endEvents": [],
+            "agentEndWillRetry": [
+              null
+            ]
+          }
+        },
+        "actions": [
+          {
+            "type": "session.abortRetry",
+            "triggerEvent": "auto_retry_start",
+            "triggerSequence": 12,
+            "outcome": "returned"
+          }
+        ],
+        "provider": {
+          "id": "zhiwei-retry-abort-faux",
+          "api": "zhiwei-retry-abort-faux-api",
+          "callCount": 1,
+          "pendingResponses": 1,
+          "promptsSentToExternalProvider": 0
+        },
+        "outcome": {
+          "prompt": {
+            "status": "resolved"
+          },
+          "sessionWasIdleBeforeShutdown": true,
+          "sessionWasRetryingBeforeShutdown": false,
+          "pendingMessageCountBeforeShutdown": 0,
+          "messageRoles": [
+            "user"
+          ],
+          "finalMessages": [
+            {
+              "index": 0,
+              "role": "user",
+              "contentKinds": [
+                "text"
+              ],
+              "textLength": 74,
+              "textSha256": "88711f7c8e5401eb1cca306ff06eb7cf53c9716224eabf7f3abe4ae9026b7efc"
+            }
+          ],
+          "finalAssistant": null
+        },
+        "counts": {
+          "sessionEvents": 14,
+          "extensionEvents": 15,
+          "public": {
+            "agent_end": 1,
+            "agent_settled": 1,
+            "agent_start": 1,
+            "auto_retry_end": 1,
+            "auto_retry_start": 1,
+            "message_end": 2,
+            "message_start": 2,
+            "message_update": 3,
+            "turn_end": 1,
+            "turn_start": 1
+          },
+          "extension": {
+            "agent_end": 1,
+            "agent_settled": 1,
+            "agent_start": 1,
+            "before_agent_start": 1,
+            "input": 1,
+            "message_end": 2,
+            "message_start": 2,
+            "message_update": 3,
+            "session_shutdown": 1,
+            "turn_end": 1,
+            "turn_start": 1
+          }
+        },
+        "ordering": {
+          "publicFirstAgentEndIndex": 10,
+          "publicLastAgentEndIndex": 10,
+          "publicFirstRetryStartIndex": 11,
+          "publicLastRetryStartIndex": 11,
+          "publicRetryEndIndex": 12,
+          "publicSettledIndex": 13,
+          "extensionSettledIndex": 13,
+          "extensionShutdownIndex": 14
+        },
+        "sessionEvents": [
+          {
+            "sequence": 1,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 2,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 3,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 74,
+            "messageTextSha256": "88711f7c8e5401eb1cca306ff06eb7cf53c9716224eabf7f3abe4ae9026b7efc"
+          },
+          {
+            "sequence": 4,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 74,
+            "messageTextSha256": "88711f7c8e5401eb1cca306ff06eb7cf53c9716224eabf7f3abe4ae9026b7efc"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 6,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 7,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 8,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 9,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 10,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 11,
+            "type": "agent_end",
+            "willRetry": true
+          },
+          {
+            "sequence": 12,
+            "type": "auto_retry_start",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "delayMs": 10000,
+            "errorMessage": "overloaded_error"
+          },
+          {
+            "sequence": 13,
+            "type": "auto_retry_end",
+            "attempt": 1,
+            "success": false,
+            "finalError": "Retry cancelled"
+          },
+          {
+            "sequence": 14,
+            "type": "agent_settled"
+          }
+        ],
+        "extensionEvents": [
+          {
+            "sequence": 1,
+            "type": "input",
+            "source": "interactive"
+          },
+          {
+            "sequence": 2,
+            "type": "before_agent_start"
+          },
+          {
+            "sequence": 3,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 4,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 74,
+            "messageTextSha256": "88711f7c8e5401eb1cca306ff06eb7cf53c9716224eabf7f3abe4ae9026b7efc"
+          },
+          {
+            "sequence": 6,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 74,
+            "messageTextSha256": "88711f7c8e5401eb1cca306ff06eb7cf53c9716224eabf7f3abe4ae9026b7efc"
+          },
+          {
+            "sequence": 7,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 8,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 9,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 10,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 11,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 12,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 13,
+            "type": "agent_end"
+          },
+          {
+            "sequence": 14,
+            "type": "agent_settled"
+          },
+          {
+            "sequence": 15,
+            "type": "session_shutdown",
+            "reason": "exit"
+          }
+        ],
+        "lifecycleNotes": [
+          {
+            "type": "shutdown-host-boundary",
+            "mechanism": "session.extensionRunner.emit",
+            "reason": "exit"
+          }
+        ]
+      },
+      "retryExhaustion": {
+        "prompt": {
+          "source": "interactive",
+          "text": "Exhaust the configured automatic retry budget.",
+          "retryableError": "overloaded_error"
+        },
+        "retry": {
+          "settings": {
+            "enabled": true,
+            "maxRetries": 2,
+            "baseDelayMs": 1
+          },
+          "public": {
+            "startEvents": [
+              {
+                "sequence": 12,
+                "type": "auto_retry_start",
+                "attempt": 1,
+                "maxAttempts": 2,
+                "delayMs": 1,
+                "errorMessage": "overloaded_error"
+              },
+              {
+                "sequence": 22,
+                "type": "auto_retry_start",
+                "attempt": 2,
+                "maxAttempts": 2,
+                "delayMs": 2,
+                "errorMessage": "overloaded_error"
+              }
+            ],
+            "endEvents": [
+              {
+                "sequence": 32,
+                "type": "auto_retry_end",
+                "attempt": 2,
+                "success": false,
+                "finalError": "overloaded_error"
+              }
+            ],
+            "agentEndWillRetry": [
+              true,
+              true,
+              false
+            ]
+          },
+          "extension": {
+            "startEvents": [],
+            "endEvents": [],
+            "agentEndWillRetry": [
+              null,
+              null,
+              null
+            ]
+          }
+        },
+        "actions": [],
+        "provider": {
+          "id": "zhiwei-retry-exhaustion-faux",
+          "api": "zhiwei-retry-exhaustion-faux-api",
+          "callCount": 3,
+          "pendingResponses": 1,
+          "promptsSentToExternalProvider": 0
+        },
+        "outcome": {
+          "prompt": {
+            "status": "resolved"
+          },
+          "sessionWasIdleBeforeShutdown": true,
+          "sessionWasRetryingBeforeShutdown": false,
+          "pendingMessageCountBeforeShutdown": 0,
+          "messageRoles": [
+            "user",
+            "assistant"
+          ],
+          "finalMessages": [
+            {
+              "index": 0,
+              "role": "user",
+              "contentKinds": [
+                "text"
+              ],
+              "textLength": 46,
+              "textSha256": "483bbe164ad3ab4ca65c8119f87db90e8e36bd91ada2c677601e91fe7d38b142"
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "contentKinds": [
+                "text"
+              ],
+              "stopReason": "error",
+              "errorMessage": "overloaded_error"
+            }
+          ],
+          "finalAssistant": {
+            "stopReason": "error",
+            "errorMessage": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ],
+            "textLength": 0
+          }
+        },
+        "counts": {
+          "sessionEvents": 33,
+          "extensionEvents": 33,
+          "public": {
+            "agent_end": 3,
+            "agent_settled": 1,
+            "agent_start": 3,
+            "auto_retry_end": 1,
+            "auto_retry_start": 2,
+            "message_end": 4,
+            "message_start": 4,
+            "message_update": 9,
+            "turn_end": 3,
+            "turn_start": 3
+          },
+          "extension": {
+            "agent_end": 3,
+            "agent_settled": 1,
+            "agent_start": 3,
+            "before_agent_start": 1,
+            "input": 1,
+            "message_end": 4,
+            "message_start": 4,
+            "message_update": 9,
+            "session_shutdown": 1,
+            "turn_end": 3,
+            "turn_start": 3
+          }
+        },
+        "ordering": {
+          "publicFirstAgentEndIndex": 10,
+          "publicLastAgentEndIndex": 30,
+          "publicFirstRetryStartIndex": 11,
+          "publicLastRetryStartIndex": 21,
+          "publicRetryEndIndex": 31,
+          "publicSettledIndex": 32,
+          "extensionSettledIndex": 31,
+          "extensionShutdownIndex": 32
+        },
+        "sessionEvents": [
+          {
+            "sequence": 1,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 2,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 3,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 46,
+            "messageTextSha256": "483bbe164ad3ab4ca65c8119f87db90e8e36bd91ada2c677601e91fe7d38b142"
+          },
+          {
+            "sequence": 4,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 46,
+            "messageTextSha256": "483bbe164ad3ab4ca65c8119f87db90e8e36bd91ada2c677601e91fe7d38b142"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 6,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 7,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 8,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 9,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 10,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 11,
+            "type": "agent_end",
+            "willRetry": true
+          },
+          {
+            "sequence": 12,
+            "type": "auto_retry_start",
+            "attempt": 1,
+            "maxAttempts": 2,
+            "delayMs": 1,
+            "errorMessage": "overloaded_error"
+          },
+          {
+            "sequence": 13,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 14,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 15,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 16,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 17,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 18,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 19,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 20,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 21,
+            "type": "agent_end",
+            "willRetry": true
+          },
+          {
+            "sequence": 22,
+            "type": "auto_retry_start",
+            "attempt": 2,
+            "maxAttempts": 2,
+            "delayMs": 2,
+            "errorMessage": "overloaded_error"
+          },
+          {
+            "sequence": 23,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 24,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 25,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 26,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 27,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 28,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 29,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 30,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 31,
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 32,
+            "type": "auto_retry_end",
+            "attempt": 2,
+            "success": false,
+            "finalError": "overloaded_error"
+          },
+          {
+            "sequence": 33,
+            "type": "agent_settled"
+          }
+        ],
+        "extensionEvents": [
+          {
+            "sequence": 1,
+            "type": "input",
+            "source": "interactive"
+          },
+          {
+            "sequence": 2,
+            "type": "before_agent_start"
+          },
+          {
+            "sequence": 3,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 4,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 5,
+            "type": "message_start",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 46,
+            "messageTextSha256": "483bbe164ad3ab4ca65c8119f87db90e8e36bd91ada2c677601e91fe7d38b142"
+          },
+          {
+            "sequence": 6,
+            "type": "message_end",
+            "messageRole": "user",
+            "contentKinds": [
+              "text"
+            ],
+            "messageTextLength": 46,
+            "messageTextSha256": "483bbe164ad3ab4ca65c8119f87db90e8e36bd91ada2c677601e91fe7d38b142"
+          },
+          {
+            "sequence": 7,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 8,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 9,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 10,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 11,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 12,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 13,
+            "type": "agent_end"
+          },
+          {
+            "sequence": 14,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 15,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 16,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 17,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 18,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 19,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 20,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 21,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 22,
+            "type": "agent_end"
+          },
+          {
+            "sequence": 23,
+            "type": "agent_start"
+          },
+          {
+            "sequence": 24,
+            "type": "turn_start"
+          },
+          {
+            "sequence": 25,
+            "type": "message_start",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error"
+          },
+          {
+            "sequence": 26,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 27,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 28,
+            "type": "message_update",
+            "messageRole": "assistant",
+            "stopReason": "pending",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 29,
+            "type": "message_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 30,
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "stopReason": "error",
+            "messageError": "overloaded_error",
+            "contentKinds": [
+              "text"
+            ]
+          },
+          {
+            "sequence": 31,
+            "type": "agent_end"
+          },
+          {
+            "sequence": 32,
+            "type": "agent_settled"
+          },
+          {
+            "sequence": 33,
+            "type": "session_shutdown",
+            "reason": "exit"
+          }
+        ],
+        "lifecycleNotes": [
+          {
+            "type": "shutdown-host-boundary",
+            "mechanism": "session.extensionRunner.emit",
+            "reason": "exit"
+          }
+        ]
+      }
+    },
+    "sanitization": {
+      "absolutePathsIncluded": false,
+      "rawSessionIdIncluded": false,
+      "environmentDumpIncluded": false,
+      "credentialsIncluded": false,
+      "rawChainOfThoughtIncluded": false,
+      "fullActiveResponseIncluded": false
+    },
+    "contractFingerprint": "b544631413935d2b3f55f9f9f8bcf15a06944bba682cf48471902e4726f79609"
+  },
+  "contractFingerprint": "b866798d18569c78d5c712254c3ecdecd7a3e02c0ef11458e6b97b0863b1f6e0"
+}
