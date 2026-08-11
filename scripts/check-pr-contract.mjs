@@ -26,8 +26,7 @@ function inferMinimumRisk(files) {
     if (
       path === "SECURITY.md" ||
       path === "docs/architecture/trust-and-safety.md" ||
-      path === ".github/workflows/autonomous-merge.yml" ||
-      /^\.github\/workflows\/(?:release|publish|deploy)/.test(path) ||
+      path.startsWith(".github/workflows/") ||
       /(?:secret|credential|privacy|deletion|forget)/i.test(path)
     ) {
       risk = maxRisk(risk, "R3");
@@ -43,7 +42,6 @@ function inferMinimumRisk(files) {
       path.startsWith("packages/protocol/") ||
       path.startsWith("packages/memory-store/") ||
       path === "package.json" ||
-      path === ".github/workflows/ci.yml" ||
       path === ".github/pull_request_template.md" ||
       path.startsWith("scripts/check-")
     ) {
@@ -73,6 +71,17 @@ function isGovernanceChange(files) {
     path === "scripts/check-harness.mjs" ||
     path === "scripts/check-pr-contract.mjs"
   );
+}
+
+const requiredHeadings = [
+  "## 目标与结果",
+  "## 范围与非目标",
+  "## 风险与回滚",
+  "## 验证证据",
+  "## 自主交付记录",
+];
+for (const heading of requiredHeadings) {
+  if (!body.includes(heading)) violations.push(`PR body is missing required heading: ${heading}`);
 }
 
 const metadata = parseMetadata(body);
