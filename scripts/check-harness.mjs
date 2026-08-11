@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -79,8 +79,30 @@ for (const required of ["pull_request:", "edited", "npm run check", "npm run che
 }
 
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");
-for (const required of ["workflow_run:", "pull-requests: write", "contents: write", "zhiwei-independent-review", "merge_method: \"squash\""]) {
+for (const required of [
+  "workflow_run:",
+  "pull-requests: write",
+  "contents: write",
+  "zhiwei-independent-review",
+  "merge_method: \"squash\"",
+  "context.payload.repository.default_branch",
+  "pr.mergeable !== true",
+  "metadata[\"independent-review\"] !== \"complete\"",
+]) {
   if (!autoMerge.includes(required)) violations.push(`Autonomous merge workflow is missing required token: ${required}`);
+}
+
+const workflowDirectory = join(root, ".github", "workflows");
+for (const entry of await readdir(workflowDirectory, { withFileTypes: true })) {
+  if (!entry.isFile() || !/\.ya?ml$/.test(entry.name)) continue;
+  const workflow = await read(join(".github", "workflows", entry.name));
+  for (const match of workflow.matchAll(/uses:\s*([^@\s]+)@([^\s#]+)/g)) {
+    const action = match[1];
+    const ref = match[2];
+    if (!/^[0-9a-f]{40}$/.test(ref)) {
+      violations.push(`Workflow ${entry.name} must pin ${action} to an immutable 40-character commit SHA, found ${ref}.`);
+    }
+  }
 }
 
 const rootAgents = await read("AGENTS.md");
