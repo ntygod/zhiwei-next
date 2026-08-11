@@ -1,20 +1,37 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "project": "zhiwei-next",
   "mode": "ai-primary",
   "currentMilestone": "M0",
+  "defaultBranch": "main",
   "humanReviewRequired": false,
   "pullRequestRequired": true,
   "directMainWritesAllowed": false,
   "defaultMergeMethod": "squash",
   "defaultAutonomousMerge": true,
+  "developmentPause": {
+    "active": true,
+    "reason": "main-protection-unconfirmed",
+    "incidentIssue": 9,
+    "allowedPullRequestMetadata": {
+      "main-incident-recovery": "yes"
+    }
+  },
+  "mainProtection": {
+    "serverEnforced": false,
+    "ownerActionRequired": true,
+    "instructions": "docs/harness/main-protection.md",
+    "provenanceWorkflow": ".github/workflows/main-provenance.yml",
+    "incidentFixture": "docs/harness/incidents/2026-08-11-direct-main.json"
+  },
   "branchPrefixes": [
     "ai/",
     "feat/",
     "fix/",
     "docs/",
     "chore/",
-    "spike/"
+    "spike/",
+    "recovery/"
   ],
   "requiredCommands": [
     "npm run check"
@@ -36,7 +53,7 @@
       "rollbackPlanRequired": true
     },
     "R3": {
-      "description": "安全、隐私、删除、自动合并、发布、凭证或不可逆外部副作用",
+      "description": "安全、隐私、默认分支、自动合并、发布、凭证或不可逆外部副作用",
       "independentReviewRequired": true,
       "rollbackPlanRequired": true
     }
@@ -52,11 +69,15 @@
     "docs/harness/risk-model.md",
     "docs/harness/self-maintenance.md",
     "docs/harness/project-state.md",
+    "docs/harness/main-protection.md",
+    "docs/harness/incidents/2026-08-11-direct-main.json",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
     ".github/workflows/autonomous-merge.yml",
+    ".github/workflows/main-provenance.yml",
     "scripts/check-agents.mjs",
     "scripts/check-harness.mjs",
-    "scripts/check-pr-contract.mjs"
+    "scripts/check-pr-contract.mjs",
+    "scripts/check-main-provenance.mjs"
   ]
 }

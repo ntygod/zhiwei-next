@@ -21,12 +21,38 @@ const config = JSON.parse(await read("harness.config.json"));
 const packageJson = JSON.parse(await read("package.json"));
 const scripts = packageJson.scripts ?? {};
 
-if (config.schemaVersion !== 1) violations.push("harness.config.json schemaVersion must be 1.");
+if (config.schemaVersion !== 2) violations.push("harness.config.json schemaVersion must be 2.");
 if (config.mode !== "ai-primary") violations.push("Harness mode must remain ai-primary unless changed by an R3 governance decision.");
+if (config.defaultBranch !== "main") violations.push("Harness defaultBranch must be main.");
 if (config.humanReviewRequired !== false) violations.push("humanReviewRequired must be false for the chosen AI-primary operating model.");
 if (config.pullRequestRequired !== true) violations.push("Normal autonomous work must require pull requests.");
 if (config.directMainWritesAllowed !== false) violations.push("Direct main writes must remain disabled in the Harness contract.");
 if (config.defaultMergeMethod !== "squash") violations.push("Default merge method must be squash.");
+if (!config.branchPrefixes?.includes("recovery/")) violations.push("Harness branch prefixes must include recovery/.");
+
+if (config.developmentPause?.active !== true) violations.push("Development must remain paused while main protection is unconfirmed.");
+if (config.developmentPause?.reason !== "main-protection-unconfirmed") {
+  violations.push("Development pause reason must be main-protection-unconfirmed.");
+}
+if (config.developmentPause?.incidentIssue !== 9) violations.push("Development pause must point to Incident #9.");
+if (config.developmentPause?.allowedPullRequestMetadata?.["main-incident-recovery"] !== "yes") {
+  violations.push("Development pause must only allow main-incident-recovery: yes PRs.");
+}
+if (config.mainProtection?.serverEnforced !== false) {
+  violations.push("mainProtection.serverEnforced cannot be true before owner confirmation.");
+}
+if (config.mainProtection?.ownerActionRequired !== true) {
+  violations.push("mainProtection.ownerActionRequired must remain true.");
+}
+for (const [field, expected] of Object.entries({
+  instructions: "docs/harness/main-protection.md",
+  provenanceWorkflow: ".github/workflows/main-provenance.yml",
+  incidentFixture: "docs/harness/incidents/2026-08-11-direct-main.json",
+})) {
+  if (config.mainProtection?.[field] !== expected) {
+    violations.push(`mainProtection.${field} must be ${expected}.`);
+  }
+}
 
 for (const risk of ["R0", "R1", "R2", "R3"]) {
   if (!config.riskLevels?.[risk]) violations.push(`Missing risk level in harness.config.json: ${risk}`);
@@ -34,6 +60,16 @@ for (const risk of ["R0", "R1", "R2", "R3"]) {
 
 for (const path of config.governanceFiles ?? []) {
   if (!(await exists(path))) violations.push(`Missing governance file declared by harness.config.json: ${path}`);
+}
+for (const required of [
+  "docs/harness/main-protection.md",
+  "docs/harness/incidents/2026-08-11-direct-main.json",
+  ".github/workflows/main-provenance.yml",
+  "scripts/check-main-provenance.mjs",
+]) {
+  if (!config.governanceFiles?.includes(required)) {
+    violations.push(`Harness governanceFiles must include ${required}.`);
+  }
 }
 
 for (const command of config.requiredCommands ?? []) {
@@ -46,7 +82,7 @@ for (const command of config.requiredCommands ?? []) {
 }
 
 const checkScript = scripts.check ?? "";
-for (const required of ["check:architecture", "check:agents", "check:harness", "check:pi-artifact", "test"]) {
+for (const required of ["check:architecture", "check:agents", "check:main-provenance", "check:harness", "check:pi-artifact", "test"]) {
   if (!checkScript.includes(`npm run ${required}`)) {
     violations.push(`package.json scripts.check must invoke npm run ${required}.`);
   }
@@ -60,7 +96,10 @@ if (!milestone) violations.push("project-state.md is missing milestone metadata.
 if (milestone && milestone !== config.currentMilestone) {
   violations.push(`Project state milestone (${milestone}) differs from harness.config.json (${config.currentMilestone}).`);
 }
-if (!status) violations.push("project-state.md is missing status metadata.");
+if (status !== "paused-main-protection") {
+  violations.push("project-state.md status must be paused-main-protection while Incident #9 is open.");
+}
+if (!state.includes("Issue #9")) violations.push("project-state.md must disclose Incident #9.");
 
 const prTemplate = await read(".github/pull_request_template.md");
 for (const heading of ["## 目标与结果", "## 范围与非目标", "## 风险与回滚", "## 验证证据", "## 自主交付记录"]) {
@@ -69,7 +108,15 @@ for (const heading of ["## 目标与结果", "## 范围与非目标", "## 风险
 if (!/<!--\s*zhiwei-harness[\s\S]*?-->/.test(prTemplate)) {
   violations.push("Pull request template is missing the zhiwei-harness metadata block.");
 }
-for (const field of ["risk:", "autonomous-merge:", "independent-review:", "governance-change:", "project-state:", "rollback:"]) {
+for (const field of [
+  "risk:",
+  "autonomous-merge:",
+  "independent-review:",
+  "governance-change:",
+  "project-state:",
+  "rollback:",
+  "main-incident-recovery:",
+]) {
   if (!prTemplate.includes(field)) violations.push(`Pull request template metadata is missing field: ${field}`);
 }
 
@@ -77,6 +124,7 @@ const ci = await read(".github/workflows/ci.yml");
 for (const required of [
   "pull_request:",
   "edited",
+  "fetch-depth: 0",
   "npm run check",
   "npm run check:pr",
   "run_pi_artifact_probe:",
@@ -127,7 +175,18 @@ for (const required of [
   "workflow_run:",
   "pull-requests: write",
   "contents: write",
+  "issues: read",
   "zhiwei-independent-review",
+  "readTrustedJson(\"harness.config.json\")",
+  "developmentPause?.active",
+  "configuredIncidentIssue",
+  "requiredIncidentNumbers",
+  "trusted config pause",
+  "zhiwei-main-incident",
+  "main-incident-recovery",
+  "Active main safety halt",
+  "Recovery PR must reference every required main incident",
+  "cannot be used when no trusted pause or active main incident exists",
   "merge_method: \"squash\"",
   "context.payload.repository.default_branch",
   "testedBaseSha",
@@ -138,6 +197,49 @@ for (const required of [
   "metadata[\"independent-review\"] !== \"complete\"",
 ]) {
   if (!autoMerge.includes(required)) violations.push(`Autonomous merge workflow is missing required token: ${required}`);
+}
+
+const mainProvenance = await read(".github/workflows/main-provenance.yml");
+for (const required of [
+  "name: Main Provenance",
+  "branches: [main]",
+  "contents: write",
+  "issues: write",
+  "pull-requests: write",
+  "listPullRequestsAssociatedWithCommit",
+  "attempt < 15",
+  "merge_commit_sha === after",
+  "zhiwei-main-incident",
+  "github.rest.pulls.list",
+  "state: \"all\"",
+  "github.rest.git.getRef",
+  "Existing recovery branch",
+  "github.rest.git.createCommit",
+  "github.rest.git.createRef",
+  "github.rest.pulls.create",
+  "draft: true",
+  "main-incident-recovery: yes",
+  "core.setFailed",
+]) {
+  if (!mainProvenance.includes(required)) violations.push(`Main Provenance workflow is missing required token: ${required}`);
+}
+if (mainProvenance.includes("pull_request_target:")) {
+  violations.push("Main Provenance workflow must not use pull_request_target.");
+}
+if (/\$\{\{\s*secrets\./.test(mainProvenance)) {
+  violations.push("Main Provenance workflow must not inject repository secrets.");
+}
+
+const protection = await read("docs/harness/main-protection.md");
+for (const required of [
+  "Require a pull request before merging",
+  "Require status checks",
+  "Require linear history",
+  "Block force pushes",
+  "ChatGPT Codex Connector",
+  "direct-push bypass",
+]) {
+  if (!protection.includes(required)) violations.push(`Main protection instructions are missing: ${required}`);
 }
 
 const workflowDirectory = join(root, ".github", "workflows");
@@ -156,6 +258,15 @@ for (const entry of await readdir(workflowDirectory, { withFileTypes: true })) {
 const rootAgents = await read("AGENTS.md");
 for (const required of ["docs/harness/README.md", "docs/harness/autonomy-policy.md", "docs/harness/AGENTS.md"]) {
   if (!rootAgents.includes(required)) violations.push(`Root AGENTS.md does not disclose Harness source: ${required}`);
+}
+const harnessAgents = await read("docs/harness/AGENTS.md");
+for (const required of [
+  "禁止把 `branch: main`",
+  "Main Incident 安全停机",
+  "main-protection.md",
+  "npm run check:main-provenance",
+]) {
+  if (!harnessAgents.includes(required)) violations.push(`Harness AGENTS.md is missing incident rule: ${required}`);
 }
 
 if (violations.length > 0) {

@@ -16,7 +16,7 @@
 - `npm run check`；
 - 作者 AI 自审；
 - 无需独立审查；
-- 可自主合并。
+- 无开放安全停机时可自主合并。
 
 ## R1：局部可逆实现
 
@@ -32,7 +32,7 @@
 - 完整自动化检查；
 - 用户场景或不变量测试；
 - 作者 AI 自审；
-- 可自主合并。
+- 无开放安全停机时可自主合并。
 
 ## R2：结构性变化
 
@@ -51,7 +51,7 @@
 - 回滚/恢复方案；
 - 兼容或迁移说明；
 - 新的独立 AI 上下文审查当前 HEAD；
-- 可自主合并。
+- 无开放安全停机时可自主合并。
 
 ## R3：高影响与治理根
 
@@ -60,8 +60,10 @@
 - 安全、隐私、凭证、远程数据发送；
 - 用户遗忘、物理删除或不可逆迁移；
 - 自动外部行动和权限默认值；
-- 自动合并、CI 信任边界、发布和签名；
+- 自动合并、默认分支 provenance、CI 信任边界、发布和签名；
 - 修改任意 GitHub Actions 工作流、安全红线或质量门；
+- 服务端 Ruleset / Branch Protection 状态；
+- 未经 PR 的默认分支更新及其恢复；
 - 生产发布和破坏性恢复。
 
 额外门禁：
@@ -73,6 +75,22 @@
 - 变更后可观察性；
 - 可自主合并，但不得静默发布不可逆行为。
 
+## Main Incident Recovery
+
+开放的 `zhiwei-main-incident` 是全仓安全停机信号。
+
+恢复 PR 必须：
+
+- 声明 `risk: R3`；
+- 声明 `governance-change: yes`；
+- 声明 `main-incident-recovery: yes`；
+- 使用 `Addresses`、`Closes` 或 `Fixes` 引用所有开放 Main Incident；
+- 提供恢复目标 tree、来源 Commit 和回滚说明；
+- 保持 Draft 直到当前 HEAD 独立 AI 审查完成；
+- 通过完整 CI 后才可由自动合并工作流处理。
+
+普通 PR 即使全部测试通过，也会在 Main Incident 开放期间被自动合并停机门拒绝。
+
 ## 机器推断的最低等级
 
 PR 可以声明更高风险，不能低于以下推断：
@@ -80,10 +98,10 @@ PR 可以声明更高风险，不能低于以下推断：
 - 仅 `docs/**`、Markdown、注释和模板：通常 R0；
 - 普通应用或包实现：至少 R1；
 - `packages/domain/**`、`packages/protocol/**`、`packages/memory-store/**`、`package.json`、架构 ADR、`AGENTS.md`、`docs/harness/**`：至少 R2；
-- `SECURITY.md`、信任与安全文档、任意 `.github/workflows/**`、删除/隐私/凭证相关文件：至少 R3。
+- `SECURITY.md`、信任与安全文档、任意 `.github/workflows/**`、默认分支保护、删除/隐私/凭证相关文件：至少 R3。
 
 机器推断只是下限。实际行为更高风险时，作者必须主动上调。
 
 ## 治理变更
 
-任何影响未来 Agent 行为、验证门禁或合并权限的变更都标记 `governance-change: yes`。治理变更不能依赖同一 PR 新增或放宽的规则获得通过。
+任何影响未来 Agent 行为、验证门禁、默认分支 provenance 或合并权限的变更都标记 `governance-change: yes`。治理变更不能依赖同一 PR 新增或放宽的规则获得通过。

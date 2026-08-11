@@ -24,6 +24,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const run = context.payload.workflow_run;
+            const defaultBranch = context.payload.repository.default_branch;
             let candidates = run.pull_requests ?? [];
 
             if (candidates.length === 0) {
@@ -60,7 +61,7 @@ jobs:
               core.info("Pull request is closed or still draft; autonomous merge is skipped.");
               return;
             }
-            if (pr.base.ref !== context.payload.repository.default_branch) {
+            if (pr.base.ref !== defaultBranch) {
               core.info(`Pull request targets ${pr.base.ref}, not the default branch.`);
               return;
             }
@@ -96,6 +97,19 @@ jobs:
               return result;
             }
 
+            async function readTrustedJson(path) {
+              const { data } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path,
+                ref: defaultBranch,
+              });
+              if (Array.isArray(data) || data.type !== "file" || typeof data.content !== "string") {
+                throw new Error(`Trusted config path is not a file: ${path}`);
+              }
+              return JSON.parse(Buffer.from(data.content, data.encoding ?? "base64").toString("utf8"));
+            }
+
             const body = pr.body ?? "";
             const requiredHeadings = [
               "## 目标与结果",
@@ -111,7 +125,7 @@ jobs:
             }
 
             const metadata = parseBlock(body, "zhiwei-harness");
-            core.info(`Harness metadata for PR #${pullNumber}: autonomous-merge=${metadata?.["autonomous-merge"] ?? "<missing>"}, risk=${metadata?.risk ?? "<missing>"}, independent-review=${metadata?.["independent-review"] ?? "<missing>"}.`);
+            core.info(`Harness metadata for PR #${pullNumber}: autonomous-merge=${metadata?.["autonomous-merge"] ?? "<missing>"}, risk=${metadata?.risk ?? "<missing>"}, independent-review=${metadata?.["independent-review"] ?? "<missing>"}, main-incident-recovery=${metadata?.["main-incident-recovery"] ?? "<missing>"}.`);
             if (!metadata || metadata["autonomous-merge"] !== "yes") {
               core.info("Autonomous merge is not enabled in the PR contract.");
               return;
@@ -165,7 +179,8 @@ jobs:
                 path.startsWith(".github/workflows/") ||
                 path === "scripts/check-agents.mjs" ||
                 path === "scripts/check-harness.mjs" ||
-                path === "scripts/check-pr-contract.mjs"
+                path === "scripts/check-pr-contract.mjs" ||
+                path === "scripts/check-main-provenance.mjs"
               );
             }
 
@@ -195,6 +210,10 @@ jobs:
               core.warning("rollback must be provided or not-required.");
               return;
             }
+            if (!new Set(["yes", "no"]).has(metadata["main-incident-recovery"])) {
+              core.warning("main-incident-recovery must be yes or no.");
+              return;
+            }
             if (governanceChange(filenames) && metadata["governance-change"] !== "yes") {
               core.warning("Governance files changed without governance-change: yes.");
               return;
@@ -215,6 +234,65 @@ jobs:
               !new Set(["not-required", "complete"]).has(metadata["independent-review"])
             ) {
               core.warning("Low-risk independent-review must be not-required or complete.");
+              return;
+            }
+
+            let harnessConfig;
+            try {
+              harnessConfig = await readTrustedJson("harness.config.json");
+            } catch (error) {
+              core.warning(`Unable to read trusted default-branch Harness config: ${error.message}`);
+              return;
+            }
+
+            const configuredPause = harnessConfig.developmentPause?.active === true;
+            const configuredIncidentIssue = Number.isInteger(harnessConfig.developmentPause?.incidentIssue)
+              ? harnessConfig.developmentPause.incidentIssue
+              : undefined;
+            const configuredRecoveryValue = harnessConfig.developmentPause?.allowedPullRequestMetadata?.["main-incident-recovery"];
+            if (configuredPause && configuredRecoveryValue !== "yes") {
+              core.warning("Trusted Harness config has an unsupported development-pause recovery contract.");
+              return;
+            }
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            const activeMainIncidents = openIssues.filter((issue) => {
+              const record = parseBlock(issue.body, "zhiwei-main-incident");
+              return record?.status === "open" && record?.kind === "unauthorized-main-write";
+            });
+            const requiredIncidentNumbers = new Set(activeMainIncidents.map((issue) => issue.number));
+            if (configuredPause && configuredIncidentIssue) {
+              requiredIncidentNumbers.add(configuredIncidentIssue);
+            }
+
+            const recoveryRequired = configuredPause || activeMainIncidents.length > 0;
+            if (recoveryRequired) {
+              if (metadata["main-incident-recovery"] !== "yes") {
+                const sources = [
+                  configuredPause ? `trusted config pause (${harnessConfig.developmentPause.reason ?? "unspecified"})` : undefined,
+                  ...activeMainIncidents.map((issue) => `incident #${issue.number}`),
+                ].filter(Boolean);
+                core.info(`Active main safety halt blocks autonomous merge: ${sources.join(", ")}.`);
+                return;
+              }
+              if (declaredRisk !== "R3" || metadata["governance-change"] !== "yes") {
+                core.warning("A main incident recovery PR must declare R3 and governance-change: yes.");
+                return;
+              }
+              const missingIncidentReferences = [...requiredIncidentNumbers].filter((issueNumber) =>
+                !new RegExp(`(?:Addresses|Closes|Fixes)\\s+#${issueNumber}\\b`, "i").test(body)
+              );
+              if (missingIncidentReferences.length > 0) {
+                core.warning(`Recovery PR must reference every required main incident: ${missingIncidentReferences.map((issueNumber) => `#${issueNumber}`).join(", ")}.`);
+                return;
+              }
+            } else if (metadata["main-incident-recovery"] === "yes") {
+              core.warning("main-incident-recovery: yes cannot be used when no trusted pause or active main incident exists.");
               return;
             }
 
