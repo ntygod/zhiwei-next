@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "incidentId": "MAIN-2026-08-11-001",
-  "status": "open-human-action-required",
+  "status": "mitigated-live-proof-pending",
   "issue": 9,
   "occurredAt": "2026-08-11T10:41:17Z",
   "detectedBy": "ai-self-report",
@@ -64,32 +64,43 @@
   "rootCause": {
     "direct": "GitHub Contents API was called with branch=main.",
     "systemic": [
-      "The repository had no server-side branch ruleset.",
-      "The connected GitHub App has contents write but no administration permission to install a ruleset.",
-      "AGENTS and CI were advisory or post-push controls, not a pre-receive barrier.",
-      "The connector write action allowed the default branch to be selected explicitly."
+      "The repository had no server-side branch protection available on the current private GitHub Free plan.",
+      "AGENTS and CI were behavioral or post-push controls, not a pre-receive barrier.",
+      "The connector write action allowed the default branch to be selected explicitly.",
+      "The original provenance design did not account for GITHUB_TOKEN workflow-recursion suppression."
     ]
   },
-  "technicalRecovery": {
-    "branch": "fix/r3-main-provenance-guard",
-    "required": [
-      "main push provenance workflow",
+  "technicalMitigation": {
+    "status": "implemented",
+    "pullRequests": [10, 11],
+    "mergedCommits": [
+      "852fd1e483bc07b8736e5da08b2f70e66544e4cf",
+      "70224f51d37cce3427dc6480c2039bc98bf1ba53"
+    ],
+    "controls": [
+      "non-default-branch write preflight",
+      "push-path main provenance validation",
+      "token-driven merge provenance dispatch",
       "incident-aware autonomous merge halt",
       "machine-checked incident fixture",
-      "automatic draft recovery PR for a live unauthorized tree",
-      "one-time owner branch ruleset instructions"
-    ]
+      "Draft recovery PR for a live unauthorized push tree"
+    ],
+    "liveProof": {
+      "status": "pending",
+      "expectedFirstProofPullRequest": 12,
+      "requiredWorkflows": [
+        "Autonomous Merge",
+        "Main Provenance Dispatch",
+        "Main Provenance"
+      ]
+    }
   },
   "serverProtection": {
-    "status": "required-owner-action",
-    "reason": "The ChatGPT Codex Connector installation does not expose repository administration or ruleset mutation permission.",
+    "status": "unavailable-risk-accepted",
     "target": "main",
-    "requiredRules": [
-      "require pull request before merging",
-      "block force pushes",
-      "block branch deletion",
-      "require CI check job",
-      "do not grant the ChatGPT Connector a direct-push bypass"
-    ]
+    "availability": "unavailable-current-plan",
+    "operatingMode": "best-effort-private-free",
+    "riskAcceptanceRecord": "docs/harness/risk-acceptance/2026-08-11-private-free.json",
+    "residualRiskAcceptedByOwner": true
   }
 }
