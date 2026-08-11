@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run test",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
@@ -19,11 +19,13 @@
     "check:pi-spike": "node scripts/check-pi-spike.mjs",
     "check:pi-artifact": "node scripts/check-pi-artifact-result.mjs",
     "check:pi-lifecycle": "node scripts/check-pi-lifecycle-result.mjs",
+    "check:pi-retry-lifecycle": "node scripts/check-pi-retry-lifecycle-result.mjs",
     "check:pr": "node scripts/check-pr-contract.mjs",
     "probe:pi:sdk": "node scripts/probes/pi-sdk-surface.mjs",
     "probe:pi:rpc": "node scripts/probes/pi-rpc-state.mjs",
     "probe:pi:artifact": "node scripts/probes/pi-artifact-ci.mjs",
     "probe:pi:lifecycle": "node scripts/probes/pi-lifecycle-ci.mjs",
+    "probe:pi:retry-lifecycle": "PI_LIFECYCLE_SCENARIO=retry-success PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-retry-lifecycle-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
   }
