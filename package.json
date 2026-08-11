@@ -1,0 +1,17 @@
+{
+  "name": "zhiwei-next",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "check": "node scripts/check-architecture.mjs && node scripts/test.mjs",
+    "test": "node scripts/test.mjs",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
+    "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
+  }
+}
