@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Merge eligible pull request
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -33,13 +33,13 @@ jobs:
               );
             }
 
-            const openCandidates = candidates.filter((candidate) => candidate.number);
-            if (openCandidates.length !== 1) {
-              core.info(`Expected one pull request for CI run, found ${openCandidates.length}.`);
+            const numberedCandidates = candidates.filter((candidate) => candidate.number);
+            if (numberedCandidates.length !== 1) {
+              core.info(`Expected one pull request for CI run, found ${numberedCandidates.length}.`);
               return;
             }
 
-            const pullNumber = openCandidates[0].number;
+            const pullNumber = numberedCandidates[0].number;
             let pr;
             for (let attempt = 0; attempt < 5; attempt += 1) {
               ({ data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber }));
@@ -51,8 +51,16 @@ jobs:
               core.info("Pull request is closed or still draft; autonomous merge is skipped.");
               return;
             }
+            if (pr.base.ref !== context.payload.repository.default_branch) {
+              core.info(`Pull request targets ${pr.base.ref}, not the default branch.`);
+              return;
+            }
             if (pr.head.sha !== run.head_sha) {
               core.info("Pull request HEAD moved after the successful CI run; waiting for the new run.");
+              return;
+            }
+            if (pr.mergeable !== true) {
+              core.info(`Pull request is not currently mergeable: ${pr.mergeable_state ?? "unknown"}.`);
               return;
             }
 
@@ -69,7 +77,21 @@ jobs:
               return result;
             }
 
-            const metadata = parseBlock(pr.body, "zhiwei-harness");
+            const body = pr.body ?? "";
+            const requiredHeadings = [
+              "## 目标与结果",
+              "## 范围与非目标",
+              "## 风险与回滚",
+              "## 验证证据",
+              "## 自主交付记录",
+            ];
+            const missingHeadings = requiredHeadings.filter((heading) => !body.includes(heading));
+            if (missingHeadings.length > 0) {
+              core.warning(`PR contract is missing headings: ${missingHeadings.join(", ")}`);
+              return;
+            }
+
+            const metadata = parseBlock(body, "zhiwei-harness");
             if (!metadata || metadata["autonomous-merge"] !== "yes") {
               core.info("Autonomous merge is not enabled in the PR contract.");
               return;
@@ -85,8 +107,7 @@ jobs:
                 if (
                   path === "SECURITY.md" ||
                   path === "docs/architecture/trust-and-safety.md" ||
-                  path === ".github/workflows/autonomous-merge.yml" ||
-                  /^\\.github\\/workflows\\/(?:release|publish|deploy)/.test(path) ||
+                  path.startsWith(".github/workflows/") ||
                   /(?:secret|credential|privacy|deletion|forget)/i.test(path)
                 ) {
                   risk = maxRisk(risk, "R3");
@@ -100,7 +121,6 @@ jobs:
                   path.startsWith("packages/protocol/") ||
                   path.startsWith("packages/memory-store/") ||
                   path === "package.json" ||
-                  path === ".github/workflows/ci.yml" ||
                   path === ".github/pull_request_template.md" ||
                   path.startsWith("scripts/check-")
                 ) {
@@ -138,8 +158,21 @@ jobs:
             const filenames = files.map((file) => file.filename);
             const minimumRisk = inferMinimumRisk(filenames);
             const declaredRisk = metadata.risk;
+
             if (!(declaredRisk in ranks) || ranks[declaredRisk] < ranks[minimumRisk]) {
               core.warning(`Risk declaration ${declaredRisk} is below minimum ${minimumRisk}.`);
+              return;
+            }
+            if (!new Set(["yes", "no"]).has(metadata["governance-change"])) {
+              core.warning("governance-change must be yes or no.");
+              return;
+            }
+            if (!new Set(["updated", "not-needed"]).has(metadata["project-state"])) {
+              core.warning("project-state must be updated or not-needed.");
+              return;
+            }
+            if (!new Set(["provided", "not-required"]).has(metadata.rollback)) {
+              core.warning("rollback must be provided or not-required.");
               return;
             }
             if (governanceChange(filenames) && metadata["governance-change"] !== "yes") {
@@ -150,6 +183,20 @@ jobs:
               core.warning(`${declaredRisk} requires rollback: provided.`);
               return;
             }
+            if (
+              ranks[declaredRisk] >= ranks.R2 &&
+              metadata["independent-review"] !== "complete"
+            ) {
+              core.info(`${declaredRisk} requires independent-review: complete.`);
+              return;
+            }
+            if (
+              ranks[declaredRisk] < ranks.R2 &&
+              !new Set(["not-required", "complete"]).has(metadata["independent-review"])
+            ) {
+              core.warning("Low-risk independent-review must be not-required or complete.");
+              return;
+            }
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -157,20 +204,29 @@ jobs:
               issue_number: pullNumber,
               per_page: 100,
             });
+            const trustedAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
             const reviewRecords = comments
-              .map((comment) => parseBlock(comment.body, "zhiwei-independent-review"))
-              .filter(Boolean)
-              .filter((record) => record.head === pr.head.sha);
+              .map((comment) => ({
+                comment,
+                record: parseBlock(comment.body, "zhiwei-independent-review"),
+              }))
+              .filter(({ record }) => Boolean(record))
+              .filter(({ comment }) =>
+                trustedAssociations.has(comment.author_association) || comment.user?.type === "Bot"
+              )
+              .filter(({ record }) => record.head === pr.head.sha);
 
-            if (reviewRecords.some((record) => record.verdict === "blocked")) {
-              core.info("A current-head independent review blocks this PR.");
+            if (reviewRecords.some(({ record }) => record.verdict === "blocked")) {
+              core.info("A trusted current-head independent review blocks this PR.");
               return;
             }
             if (
               ranks[declaredRisk] >= ranks.R2 &&
-              !reviewRecords.some((record) => record.verdict === "approved")
+              !reviewRecords.some(({ record }) =>
+                record.verdict === "approved" && Boolean(record.reviewer)
+              )
             ) {
-              core.info(`${declaredRisk} requires an approved independent AI review for the current HEAD.`);
+              core.info(`${declaredRisk} requires a trusted approved independent AI review for the current HEAD.`);
               return;
             }
 
