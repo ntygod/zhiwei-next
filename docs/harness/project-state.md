@@ -17,14 +17,14 @@ updated: 2026-08-11
 - PR #1 建立 AI-primary Harness、R0–R3 风险模型、机器门禁和自动合并合同；
 - PR #3 修复自动合并 metadata 解析并增加安全诊断；
 - PR #4 完成自动 squash merge 的端到端验收；
-- Issue #5 固定 `earendil-works/pi` 上游 Commit 与 `@earendil-works/pi-coding-agent@0.84.1` source contract，建立 SDK/RPC Fixture 和复验探针。
+- Issue #5 固定 `earendil-works/pi` 的 `v0.84.1` Tag Commit 与 `@earendil-works/pi-coding-agent@0.84.1` source contract，建立 SDK/RPC Fixture 和复验探针。
 
 ## 当前能力
 
 - Bootstrap TypeScript 代码可通过 Node.js 22 运行；
 - 架构、AGENTS、Harness、PR 合同和基础测试均由 CI 检查；
 - AI 可以按 Issue → Draft PR → 风险门禁 → 独立审查 → Ready CI → squash merge 自主推进；
-- Pi SDK/RPC 的权威仓库、精确包版本、Node 要求和固定源码来源已经机器化记录；
+- Pi SDK/RPC 的权威仓库、Release Tag、精确包版本、Node 要求和固定源码来源已经机器化记录；
 - `toolCallId` 已确认为 Tool Start/Update/End 的真实关联字段；
 - `agent_end`、`agent_settled` 与 Shutdown 已明确为不同生命周期边界；
 - RPC LF-only JSONL、请求响应 `id` 和 Bash Update 关联规则已有 source-derived Fixture；
