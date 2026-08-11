@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "proofId": "MAIN-PROVENANCE-PR12-2026-08-11",
+  "status": "verified",
+  "repository": "ntygod/zhiwei-next",
+  "pullRequest": 12,
+  "headCommit": "e1c281615c3daf8ef7116d2c57aa2ae929af08f6",
+  "baseCommit": "70224f51d37cce3427dc6480c2039bc98bf1ba53",
+  "mergeCommit": "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  "canonicalChain": {
+    "ci": {
+      "runId": 31498003965,
+      "conclusion": "success"
+    },
+    "autonomousMerge": {
+      "runId": 31498045898,
+      "conclusion": "success"
+    },
+    "provenanceDispatch": {
+      "runId": 31498045864,
+      "conclusion": "success",
+      "notice": "Dispatched Main Provenance for PR #12 at c05eba9f840c82d7b61494ae6bb06833d140d6c0."
+    },
+    "provenanceReceiver": {
+      "runId": 31498068302,
+      "conclusion": "success",
+      "event": "repository_dispatch",
+      "notice": "Authorized main update c05eba9f840c82d7b61494ae6bb06833d140d6c0 from merged PR #12 via autonomous-merge."
+    }
+  },
+  "verifiedContracts": [
+    "The successful CI was bound to the final PR head and base.",
+    "Autonomous Merge produced a squash commit with the expected parent.",
+    "Main Provenance Dispatch emitted a repository_dispatch event after the merge.",
+    "Main Provenance re-read the real merged PR, base SHA, merge SHA, default branch and Git parent.",
+    "The receiver authorized the main update without creating an incident or recovery PR."
+  ],
+  "additionalObservations": {
+    "duplicateSafeDispatchesObserved": true,
+    "reason": "More than one successful CI run for the same final PR head can independently observe the later merge and emit the same idempotent authorization event.",
+    "nonCanonicalRuns": {
+      "provenanceDispatch": [31498006790],
+      "provenanceReceiver": [31498033152]
+    },
+    "impact": "No incident, recovery, data change or duplicate merge occurred; deduplication can be handled as a later Harness efficiency improvement."
+  }
+}

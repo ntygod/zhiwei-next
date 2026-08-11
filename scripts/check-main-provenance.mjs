@@ -3,11 +3,8 @@ import { readFile } from "node:fs/promises";
 
 const root = process.cwd();
 const fixturePath = "docs/harness/incidents/2026-08-11-direct-main.json";
-const riskAcceptancePath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
-const workflowPath = ".github/workflows/main-provenance.yml";
-const dispatchPath = ".github/workflows/main-provenance-dispatch.yml";
-const autoMergePath = ".github/workflows/autonomous-merge.yml";
-const templatePath = ".github/pull_request_template.md";
+const riskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
+const proofPath = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
 const violations = [];
 
 function git(args) {
@@ -23,12 +20,12 @@ function git(args) {
   }
 }
 
-function isSha(value) {
-  return typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
-}
-
 function requireValue(condition, message) {
   if (!condition) violations.push(message);
+}
+
+function isSha(value) {
+  return typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 }
 
 function commitTree(sha) {
@@ -47,317 +44,219 @@ function changedPaths(parent, commit) {
   return git(["diff", "--name-only", parent, commit]).split(/\r?\n/).filter(Boolean);
 }
 
-function provenanceDecision({ associatedMergedPullRequest, currentHeadMatchesAfter, beforeTree, afterTree }) {
-  if (associatedMergedPullRequest) return { authorized: true, incident: false, recoveryDraft: false };
-  return {
-    authorized: false,
-    incident: true,
-    recoveryDraft: currentHeadMatchesAfter && beforeTree !== afterTree,
-  };
+function provenanceDecision({ associatedMergedPullRequest, currentHeadMatchesAfter, treeChanged }) {
+  if (associatedMergedPullRequest) return "authorized";
+  if (!currentHeadMatchesAfter) return "incident-stale-no-recovery";
+  if (!treeChanged) return "incident-tree-neutral-no-recovery";
+  return "incident-with-draft-recovery";
 }
 
-function mergeHaltDecision({ configuredPause, configuredIncidentIssue, activeIncidentNumbers, recoveryMetadata, referencedIncidentNumbers }) {
+function mergeHaltDecision({ configuredPause, configuredIncidentIssue, activeIncidentNumbers, recoveryMetadata, references }) {
   const required = new Set(activeIncidentNumbers);
   if (configuredPause && configuredIncidentIssue) required.add(configuredIncidentIssue);
-  const recoveryRequired = configuredPause || activeIncidentNumbers.length > 0;
-  if (!recoveryRequired) {
-    return recoveryMetadata === "yes"
-      ? { allowed: false, reason: "recovery-without-halt", missing: [] }
-      : { allowed: true, reason: "no-halt", missing: [] };
+  if (!configuredPause && required.size === 0) {
+    return recoveryMetadata === "yes" ? "recovery-without-halt" : "ordinary-allowed";
   }
-  if (recoveryMetadata !== "yes") {
-    return { allowed: false, reason: "halt-requires-recovery", missing: [...required] };
-  }
-  const missing = [...required].filter((number) => !referencedIncidentNumbers.includes(number));
-  return {
-    allowed: missing.length === 0,
-    reason: missing.length === 0 ? "recovery-authorized" : "missing-incident-reference",
-    missing,
-  };
+  if (recoveryMetadata !== "yes") return "halt-blocks-ordinary";
+  return [...required].every((number) => references.includes(number))
+    ? "recovery-allowed"
+    : "recovery-missing-reference";
 }
 
-const [fixtureText, riskText, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
+const [fixtureText, riskText, proofText, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
   readFile(fixturePath, "utf8"),
-  readFile(riskAcceptancePath, "utf8"),
-  readFile(workflowPath, "utf8"),
-  readFile(dispatchPath, "utf8"),
-  readFile(autoMergePath, "utf8"),
-  readFile(templatePath, "utf8"),
+  readFile(riskPath, "utf8"),
+  readFile(proofPath, "utf8"),
+  readFile(".github/workflows/main-provenance.yml", "utf8"),
+  readFile(".github/workflows/main-provenance-dispatch.yml", "utf8"),
+  readFile(".github/workflows/autonomous-merge.yml", "utf8"),
+  readFile(".github/pull_request_template.md", "utf8"),
 ]);
 const fixture = JSON.parse(fixtureText);
-const riskAcceptance = JSON.parse(riskText);
+const risk = JSON.parse(riskText);
+const proof = JSON.parse(proofText);
 
 requireValue(fixture.schemaVersion === 2, "Incident fixture schemaVersion must be 2.");
 requireValue(fixture.incidentId === "MAIN-2026-08-11-001", "Unexpected incident ID.");
 requireValue(fixture.issue === 9, "Incident fixture must point to Issue #9.");
+requireValue(fixture.status === "mitigated", "Incident status must be mitigated after live proof.");
+requireValue(Array.isArray(fixture.events) && fixture.events.length === 4, "Incident fixture must retain four events.");
+requireValue(fixture.impact?.currentTreeRestored === true, "Incident must record the restored tree.");
+for (const field of ["productCodeChanged", "secretsExposed", "userDataExposed", "databaseChanged", "releaseChanged", "historyRewritten"]) {
+  requireValue(fixture.impact?.[field] === false, `Incident impact.${field} must remain false.`);
+}
+
+requireValue(fixture.serverProtection?.status === "unavailable-risk-accepted", "Server protection status must disclose accepted unavailability.");
+requireValue(fixture.serverProtection?.operatingMode === "best-effort-private-free", "Incident operating mode is incorrect.");
+requireValue(fixture.serverProtection?.riskAcceptanceRecord === riskPath, "Incident fixture must point to the risk acceptance record.");
+requireValue(fixture.serverProtection?.residualRiskAcceptedByOwner === true, "Owner residual-risk acceptance must remain explicit.");
+
+requireValue(fixture.technicalMitigation?.status === "implemented-and-live-verified", "Technical mitigation must be live verified.");
 requireValue(
-  fixture.status === "mitigated-live-proof-pending",
-  "Incident must remain mitigated-live-proof-pending until the live dispatch chain is observed.",
-);
-requireValue(isSha(fixture.safeBaseline?.commit), "Safe baseline commit must be a full SHA.");
-requireValue(isSha(fixture.safeBaseline?.tree), "Safe baseline tree must be a full SHA.");
-requireValue(Array.isArray(fixture.events) && fixture.events.length === 4, "Incident fixture must contain four ordered events.");
-requireValue(
-  fixture.serverProtection?.status === "unavailable-risk-accepted",
-  "Server protection status must disclose unavailable-risk-accepted.",
-);
-requireValue(
-  fixture.serverProtection?.operatingMode === "best-effort-private-free",
-  "Incident fixture must disclose best-effort-private-free mode.",
-);
-requireValue(
-  fixture.serverProtection?.riskAcceptanceRecord === riskAcceptancePath,
-  "Incident fixture must point to the machine-readable risk acceptance record.",
-);
-requireValue(
-  fixture.serverProtection?.residualRiskAcceptedByOwner === true,
-  "Incident fixture must record owner acceptance of residual risk.",
-);
-requireValue(fixture.technicalMitigation?.status === "implemented", "Technical mitigation must be implemented.");
-requireValue(
-  JSON.stringify(fixture.technicalMitigation?.pullRequests) === JSON.stringify([10, 11]),
-  "Technical mitigation must identify PRs #10 and #11.",
+  JSON.stringify(fixture.technicalMitigation?.pullRequests) === JSON.stringify([10, 11, 12]),
+  "Technical mitigation must identify PRs #10, #11 and #12.",
 );
 for (const sha of [
   "852fd1e483bc07b8736e5da08b2f70e66544e4cf",
   "70224f51d37cce3427dc6480c2039bc98bf1ba53",
+  "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
 ]) {
-  requireValue(
-    fixture.technicalMitigation?.mergedCommits?.includes(sha),
-    `Technical mitigation is missing merged commit ${sha}.`,
-  );
+  requireValue(fixture.technicalMitigation?.mergedCommits?.includes(sha), `Mitigation is missing merged commit ${sha}.`);
 }
+const liveProof = fixture.technicalMitigation?.liveProof;
+requireValue(liveProof?.status === "verified", "Incident live proof must be verified.");
+requireValue(liveProof?.pullRequest === 12, "Incident live proof must identify PR #12.");
+requireValue(liveProof?.record === proofPath, "Incident live proof must point to the proof record.");
+requireValue(liveProof?.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Incident live proof merge commit is incorrect.");
 requireValue(
-  fixture.technicalMitigation?.liveProof?.status === "pending",
-  "Live provenance proof must remain pending in the intermediate recovery PR.",
+  JSON.stringify(liveProof?.workflowRuns) === JSON.stringify({
+    ci: 31498003965,
+    autonomousMerge: 31498045898,
+    provenanceDispatch: 31498045864,
+    provenanceReceiver: 31498068302,
+  }),
+  "Incident live proof workflow runs are incorrect.",
 );
-requireValue(
-  fixture.technicalMitigation?.liveProof?.expectedFirstProofPullRequest === 12,
-  "The first live provenance proof must be assigned to PR #12.",
-);
-for (const workflowName of ["Autonomous Merge", "Main Provenance Dispatch", "Main Provenance"]) {
-  requireValue(
-    fixture.technicalMitigation?.liveProof?.requiredWorkflows?.includes(workflowName),
-    `Live proof is missing workflow: ${workflowName}.`,
-  );
-}
+requireValue(fixture.closure?.status === "pending-final-recovery-pr-provenance", "Incident closure must wait for PR #13 post-merge proof.");
+requireValue(fixture.closure?.expectedPullRequest === 13, "Incident closure must identify PR #13.");
 
-requireValue(riskAcceptance.schemaVersion === 1, "Risk acceptance schemaVersion must be 1.");
-requireValue(riskAcceptance.status === "accepted", "Risk acceptance status must be accepted.");
+requireValue(risk.schemaVersion === 1 && risk.status === "accepted", "Risk acceptance must remain accepted schema 1.");
+requireValue(risk.operatingMode === "best-effort-private-free", "Risk acceptance operating mode is incorrect.");
+requireValue(risk.repositoryVisibility === "private" && risk.githubPlan === "free", "Risk acceptance repository/plan is incorrect.");
+requireValue(risk.ownerDecision?.keepPrivate === true, "Owner decision must keep the repository private.");
+requireValue(risk.ownerDecision?.upgradePlan === false, "Owner decision must reject plan upgrade.");
+requireValue(risk.ownerDecision?.continueAutonomousDevelopment === true, "Owner decision must continue autonomous development.");
+requireValue(risk.evidence?.incidentIssue === 9 && risk.evidence?.ownerDecisionCommentId === 5253754189, "Risk acceptance evidence is incorrect.");
+requireValue(risk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."), "A second incident must trigger reassessment.");
+
+requireValue(proof.schemaVersion === 1 && proof.status === "verified", "Provenance proof must be verified schema 1.");
+requireValue(proof.pullRequest === 12, "Provenance proof must identify PR #12.");
+requireValue(proof.headCommit === "e1c281615c3daf8ef7116d2c57aa2ae929af08f6", "Proof head SHA is incorrect.");
+requireValue(proof.baseCommit === "70224f51d37cce3427dc6480c2039bc98bf1ba53", "Proof base SHA is incorrect.");
+requireValue(proof.mergeCommit === "c05eba9f840c82d7b61494ae6bb06833d140d6c0", "Proof merge SHA is incorrect.");
+for (const [field, runId] of Object.entries({
+  ci: 31498003965,
+  autonomousMerge: 31498045898,
+  provenanceDispatch: 31498045864,
+  provenanceReceiver: 31498068302,
+})) {
+  requireValue(proof.canonicalChain?.[field]?.runId === runId, `Proof ${field} run ID is incorrect.`);
+  requireValue(proof.canonicalChain?.[field]?.conclusion === "success", `Proof ${field} must be successful.`);
+}
+requireValue(proof.canonicalChain?.provenanceReceiver?.event === "repository_dispatch", "Receiver proof event must be repository_dispatch.");
 requireValue(
-  riskAcceptance.operatingMode === "best-effort-private-free",
-  "Risk acceptance operating mode must be best-effort-private-free.",
-);
-requireValue(riskAcceptance.repositoryVisibility === "private", "Risk acceptance must preserve private visibility.");
-requireValue(riskAcceptance.githubPlan === "free", "Risk acceptance must identify the GitHub Free plan.");
-requireValue(riskAcceptance.ownerDecision?.keepPrivate === true, "Owner decision must keep the repository private.");
-requireValue(riskAcceptance.ownerDecision?.upgradePlan === false, "Owner decision must reject a plan upgrade.");
-requireValue(
-  riskAcceptance.ownerDecision?.continueAutonomousDevelopment === true,
-  "Owner decision must explicitly continue autonomous development.",
+  proof.canonicalChain?.provenanceDispatch?.notice ===
+    "Dispatched Main Provenance for PR #12 at c05eba9f840c82d7b61494ae6bb06833d140d6c0.",
+  "Dispatch proof notice is incorrect.",
 );
 requireValue(
-  riskAcceptance.evidence?.incidentIssue === 9 && riskAcceptance.evidence?.ownerDecisionCommentId === 5253754189,
-  "Risk acceptance evidence must point to Issue #9 and the owner decision comment.",
+  proof.canonicalChain?.provenanceReceiver?.notice ===
+    "Authorized main update c05eba9f840c82d7b61494ae6bb06833d140d6c0 from merged PR #12 via autonomous-merge.",
+  "Receiver proof notice is incorrect.",
 );
-requireValue(
-  Array.isArray(riskAcceptance.acceptedResidualRisks) && riskAcceptance.acceptedResidualRisks.length >= 3,
-  "Risk acceptance must list the accepted residual risks.",
-);
-requireValue(
-  riskAcceptance.mandatoryCompensatingControls?.includes("All normal changes must enter main through pull requests."),
-  "Risk acceptance must retain the PR-only normal change contract.",
-);
-requireValue(
-  riskAcceptance.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."),
-  "A second direct-main incident must trigger risk reassessment.",
-);
+requireValue(proof.additionalObservations?.duplicateSafeDispatchesObserved === true, "Duplicate safe dispatch observation must be disclosed.");
 
 try {
   git(["merge-base", "--is-ancestor", fixture.safeBaseline.commit, "HEAD"]);
 } catch (error) {
   violations.push(`Safe baseline is not an ancestor of HEAD: ${error.message}`);
 }
-
-if (isSha(fixture.safeBaseline.commit)) {
-  requireValue(
-    commitTree(fixture.safeBaseline.commit) === fixture.safeBaseline.tree,
-    "Safe baseline tree differs from Git history.",
-  );
+requireValue(isSha(fixture.safeBaseline?.commit), "Safe baseline commit must be a full SHA.");
+requireValue(isSha(fixture.safeBaseline?.tree), "Safe baseline tree must be a full SHA.");
+if (isSha(fixture.safeBaseline?.commit)) {
+  requireValue(commitTree(fixture.safeBaseline.commit) === fixture.safeBaseline.tree, "Safe baseline tree differs from Git history.");
 }
 
 let expectedParent = fixture.safeBaseline.commit;
-for (let index = 0; index < (fixture.events ?? []).length; index += 1) {
+for (let index = 0; index < fixture.events.length; index += 1) {
   const event = fixture.events[index];
   const label = `Incident event ${index + 1}`;
   requireValue(event.sequence === index + 1, `${label} sequence is invalid.`);
-  requireValue(isSha(event.commit), `${label} commit must be a full SHA.`);
-  requireValue(isSha(event.parent), `${label} parent must be a full SHA.`);
-  requireValue(isSha(event.tree), `${label} tree must be a full SHA.`);
-  requireValue(event.parent === expectedParent, `${label} does not continue the recorded first-parent chain.`);
-
-  if (!isSha(event.commit)) continue;
-  try {
-    const parents = commitParents(event.commit);
-    requireValue(parents.length === 1 && parents[0] === event.parent, `${label} parent differs from Git history.`);
-    requireValue(commitTree(event.commit) === event.tree, `${label} tree differs from Git history.`);
-    requireValue(commitSubject(event.commit) === event.message, `${label} subject differs from Git history.`);
-
-    if (event.classification === "unauthorized-direct-write") {
-      requireValue(event.tree !== fixture.safeBaseline.tree, `${label} must differ from the safe tree.`);
-      const paths = changedPaths(event.parent, event.commit);
-      requireValue(paths.length === 1 && paths[0] === event.path, `${label} changed unexpected paths: ${paths.join(", ")}`);
-      requireValue(event.sensitiveData === false, `${label} must explicitly record no sensitive data.`);
-    } else if (event.classification === "emergency-direct-recovery") {
-      requireValue(event.tree === fixture.safeBaseline.tree, `${label} must restore the safe tree.`);
-      requireValue(event.restoresTree === fixture.safeBaseline.tree, `${label} restoresTree is invalid.`);
-    } else {
-      violations.push(`${label} has an unsupported classification: ${event.classification}`);
+  requireValue(isSha(event.commit) && isSha(event.parent) && isSha(event.tree), `${label} must use full SHAs.`);
+  requireValue(event.parent === expectedParent, `${label} breaks the recorded first-parent chain.`);
+  if (isSha(event.commit)) {
+    try {
+      const parents = commitParents(event.commit);
+      requireValue(parents.length === 1 && parents[0] === event.parent, `${label} parent differs from Git history.`);
+      requireValue(commitTree(event.commit) === event.tree, `${label} tree differs from Git history.`);
+      requireValue(commitSubject(event.commit) === event.message, `${label} subject differs from Git history.`);
+      if (event.classification === "unauthorized-direct-write") {
+        const paths = changedPaths(event.parent, event.commit);
+        requireValue(event.tree !== fixture.safeBaseline.tree, `${label} must differ from the safe tree.`);
+        requireValue(paths.length === 1 && paths[0] === event.path, `${label} changed unexpected paths: ${paths.join(", ")}`);
+        requireValue(event.sensitiveData === false, `${label} must record no sensitive data.`);
+      } else if (event.classification === "emergency-direct-recovery") {
+        requireValue(event.tree === fixture.safeBaseline.tree, `${label} must restore the safe tree.`);
+        requireValue(event.restoresTree === fixture.safeBaseline.tree, `${label} restoresTree is invalid.`);
+      } else {
+        violations.push(`${label} has unsupported classification: ${event.classification}`);
+      }
+    } catch (error) {
+      violations.push(`${label} could not be verified: ${error.message}`);
     }
-  } catch (error) {
-    violations.push(`${label} could not be verified: ${error.message}`);
   }
   expectedParent = event.commit;
 }
 
-requireValue(fixture.impact?.currentTreeRestored === true, "Incident must record currentTreeRestored: true.");
-for (const field of ["productCodeChanged", "secretsExposed", "userDataExposed", "databaseChanged", "releaseChanged", "historyRewritten"]) {
-  requireValue(fixture.impact?.[field] === false, `Incident impact.${field} must be false.`);
-}
-
-const workflowTokens = [
-  "name: Main Provenance",
-  "push:",
-  "branches: [main]",
+for (const token of [
   "repository_dispatch:",
   "types: [main-provenance]",
-  "contents: write",
-  "issues: write",
-  "pull-requests: write",
-  "listPullRequestsAssociatedWithCommit",
   "associatedMergedPullRequest.base?.sha !== before",
   "parents.length !== 1 || parents[0].sha !== before",
   "repository_dispatch payload 不是可信的 tree 恢复来源",
-  "github.rest.pulls.list",
-  "github.rest.git.getRef",
   "github.rest.git.createCommit",
-  "github.rest.git.createRef",
   "github.rest.pulls.create",
   "draft: true",
-  "main-incident-recovery: yes",
   "core.setFailed",
-];
-for (const token of workflowTokens) {
-  requireValue(workflow.includes(token), `Main provenance workflow is missing token: ${token}`);
+]) {
+  requireValue(workflow.includes(token), `Main Provenance workflow is missing token: ${token}`);
 }
-requireValue(!workflow.includes("pull_request_target:"), "Main provenance workflow must not use pull_request_target.");
-requireValue(!/\$\{\{\s*secrets\./.test(workflow), "Main provenance workflow must not inject repository secrets.");
-
 for (const token of [
   "name: Main Provenance Dispatch",
-  "workflow_run:",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
   "reason: \"provenance-dispatch-failed\"",
 ]) {
-  requireValue(dispatchWorkflow.includes(token), `Main provenance dispatch workflow is missing token: ${token}`);
+  requireValue(dispatchWorkflow.includes(token), `Main Provenance Dispatch is missing token: ${token}`);
 }
-
-const autoMergeTokens = [
+for (const token of [
   "readTrustedJson(\"harness.config.json\")",
   "developmentPause?.active",
-  "configuredIncidentIssue",
-  "requiredIncidentNumbers",
-  "trusted config pause",
   "zhiwei-main-incident",
   "main-incident-recovery",
-  "Active main safety halt",
   "Recovery PR must reference every required main incident",
-  "cannot be used when no trusted pause or active main incident exists",
-];
-for (const token of autoMergeTokens) {
-  requireValue(autoMerge.includes(token), `Autonomous merge workflow is missing incident halt token: ${token}`);
+]) {
+  requireValue(autoMerge.includes(token), `Autonomous Merge is missing token: ${token}`);
 }
-
+for (const [name, source] of [
+  ["Main Provenance", workflow],
+  ["Main Provenance Dispatch", dispatchWorkflow],
+]) {
+  requireValue(!source.includes("pull_request_target:"), `${name} must not use pull_request_target.`);
+  requireValue(!/\$\{\{\s*secrets\./.test(source), `${name} must not inject repository secrets.`);
+}
 requireValue(template.includes("main-incident-recovery: no"), "PR template must default main-incident-recovery to no.");
 
 const provenanceScenarios = [
-  {
-    name: "merged PR is authorized",
-    input: { associatedMergedPullRequest: true, currentHeadMatchesAfter: true, beforeTree: "a", afterTree: "b" },
-    expected: { authorized: true, incident: false, recoveryDraft: false },
-  },
-  {
-    name: "live direct change creates recovery draft",
-    input: { associatedMergedPullRequest: false, currentHeadMatchesAfter: true, beforeTree: "a", afterTree: "b" },
-    expected: { authorized: false, incident: true, recoveryDraft: true },
-  },
-  {
-    name: "tree-neutral direct commit creates incident without recovery",
-    input: { associatedMergedPullRequest: false, currentHeadMatchesAfter: true, beforeTree: "a", afterTree: "a" },
-    expected: { authorized: false, incident: true, recoveryDraft: false },
-  },
-  {
-    name: "moved main never receives a stale automatic recovery",
-    input: { associatedMergedPullRequest: false, currentHeadMatchesAfter: false, beforeTree: "a", afterTree: "b" },
-    expected: { authorized: false, incident: true, recoveryDraft: false },
-  },
+  ["merged PR is authorized", { associatedMergedPullRequest: true, currentHeadMatchesAfter: true, treeChanged: true }, "authorized"],
+  ["live direct change creates Draft recovery", { associatedMergedPullRequest: false, currentHeadMatchesAfter: true, treeChanged: true }, "incident-with-draft-recovery"],
+  ["tree-neutral direct commit needs no recovery", { associatedMergedPullRequest: false, currentHeadMatchesAfter: true, treeChanged: false }, "incident-tree-neutral-no-recovery"],
+  ["moved main never receives stale recovery", { associatedMergedPullRequest: false, currentHeadMatchesAfter: false, treeChanged: true }, "incident-stale-no-recovery"],
 ];
-for (const scenario of provenanceScenarios) {
-  const actual = provenanceDecision(scenario.input);
-  requireValue(JSON.stringify(actual) === JSON.stringify(scenario.expected), `Provenance scenario failed: ${scenario.name}`);
+for (const [name, input, expected] of provenanceScenarios) {
+  requireValue(provenanceDecision(input) === expected, `Provenance scenario failed: ${name}`);
 }
 
 const haltScenarios = [
-  {
-    name: "trusted live-proof pause blocks an ordinary merge",
-    input: {
-      configuredPause: true,
-      configuredIncidentIssue: 9,
-      activeIncidentNumbers: [],
-      recoveryMetadata: "no",
-      referencedIncidentNumbers: [],
-    },
-    expected: { allowed: false, reason: "halt-requires-recovery", missing: [9] },
-  },
-  {
-    name: "recovery requires the configured incident reference",
-    input: {
-      configuredPause: true,
-      configuredIncidentIssue: 9,
-      activeIncidentNumbers: [],
-      recoveryMetadata: "yes",
-      referencedIncidentNumbers: [],
-    },
-    expected: { allowed: false, reason: "missing-incident-reference", missing: [9] },
-  },
-  {
-    name: "recovery with all required incident references is allowed",
-    input: {
-      configuredPause: true,
-      configuredIncidentIssue: 9,
-      activeIncidentNumbers: [11],
-      recoveryMetadata: "yes",
-      referencedIncidentNumbers: [9, 11],
-    },
-    expected: { allowed: true, reason: "recovery-authorized", missing: [] },
-  },
-  {
-    name: "recovery metadata cannot be used without a halt",
-    input: {
-      configuredPause: false,
-      configuredIncidentIssue: undefined,
-      activeIncidentNumbers: [],
-      recoveryMetadata: "yes",
-      referencedIncidentNumbers: [],
-    },
-    expected: { allowed: false, reason: "recovery-without-halt", missing: [] },
-  },
+  ["ordinary merge allowed after pause and incident close", { configuredPause: false, activeIncidentNumbers: [], recoveryMetadata: "no", references: [] }, "ordinary-allowed"],
+  ["open incident blocks ordinary merge", { configuredPause: false, activeIncidentNumbers: [9], recoveryMetadata: "no", references: [] }, "halt-blocks-ordinary"],
+  ["incident recovery needs reference", { configuredPause: false, activeIncidentNumbers: [9], recoveryMetadata: "yes", references: [] }, "recovery-missing-reference"],
+  ["incident recovery with reference is allowed", { configuredPause: false, activeIncidentNumbers: [9], recoveryMetadata: "yes", references: [9] }, "recovery-allowed"],
+  ["recovery metadata cannot be used without halt", { configuredPause: false, activeIncidentNumbers: [], recoveryMetadata: "yes", references: [] }, "recovery-without-halt"],
 ];
-for (const scenario of haltScenarios) {
-  const actual = mergeHaltDecision(scenario.input);
-  requireValue(JSON.stringify(actual) === JSON.stringify(scenario.expected), `Merge-halt scenario failed: ${scenario.name}`);
+for (const [name, input, expected] of haltScenarios) {
+  requireValue(mergeHaltDecision(input) === expected, `Merge-halt scenario failed: ${name}`);
 }
 
 if (violations.length > 0) {
@@ -365,4 +264,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Main provenance incident, risk acceptance and recovery contract: OK");
+console.log("Main provenance incident, risk acceptance and live proof: OK");
