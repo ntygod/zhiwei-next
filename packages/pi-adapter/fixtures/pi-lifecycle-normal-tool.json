@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scenario": "normal-tool",
+  "upstream": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "artifact": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "installScriptsExecuted": false
+  },
+  "environment": {
+    "node": "22.23.1",
+    "npm": "10.9.8",
+    "platform": "linux-x64",
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+  },
+  "isolation": {
+    "hostSecretsPassedToProbe": false,
+    "hostWorkspaceMounted": false,
+    "sourceBundleReadOnly": true,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true
+  },
+  "capture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scenario": "normal-tool",
+    "package": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1"
+    },
+    "provider": {
+      "id": "zhiwei-faux",
+      "api": "zhiwei-faux-api",
+      "callCount": 2,
+      "pendingResponses": 0,
+      "promptsSentToExternalProvider": 0
+    },
+    "prompt": {
+      "source": "interactive",
+      "text": "Use the echo tool exactly once with value lifecycle-input, then finish."
+    },
+    "tool": {
+      "name": "echo",
+      "expectedToolCallId": "zhiwei-tool-call-1",
+      "expectedValue": "lifecycle-input",
+      "activeBeforePrompt": [
+        "echo"
+      ],
+      "activeAfterPrompt": [
+        "echo"
+      ],
+      "executions": [
+        {
+          "sequence": 1,
+          "phase": "start",
+          "toolCallId": "zhiwei-tool-call-1",
+          "toolName": "echo",
+          "value": "lifecycle-input"
+        },
+        {
+          "sequence": 2,
+          "phase": "end",
+          "toolCallId": "zhiwei-tool-call-1",
+          "toolName": "echo",
+          "value": "lifecycle-input"
+        }
+      ]
+    },
+    "outcome": {
+      "finalText": "Lifecycle capture complete.",
+      "expectedFinalText": "Lifecycle capture complete.",
+      "messageRoles": [
+        "user",
+        "assistant",
+        "toolResult",
+        "assistant"
+      ],
+      "sessionWasIdleBeforeShutdown": true
+    },
+    "counts": {
+      "sessionEvents": 24,
+      "extensionEvents": 26,
+      "sessionToolStarts": 1,
+      "sessionToolUpdates": 1,
+      "sessionToolEnds": 1,
+      "extensionToolCalls": 1,
+      "extensionToolResults": 1,
+      "extensionAgentEnds": 1,
+      "extensionAgentSettled": 1,
+      "extensionSessionShutdowns": 1
+    },
+    "correlations": {
+      "observedToolCallIds": [
+        "zhiwei-tool-call-1"
+      ],
+      "allToolSurfacesUseExpectedId": true
+    },
+    "ordering": {
+      "agentEndBeforeSettled": true,
+      "settledBeforeShutdown": true
+    },
+    "sessionEvents": [
+      {
+        "sequence": 1,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 2,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 3,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 4,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 6,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 7,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 9,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 10,
+        "type": "tool_execution_start",
+        "toolCallId": "zhiwei-tool-call-1",
+        "toolName": "echo"
+      },
+      {
+        "sequence": 11,
+        "type": "tool_execution_update",
+        "toolCallId": "zhiwei-tool-call-1",
+        "toolName": "echo"
+      },
+      {
+        "sequence": 12,
+        "type": "tool_execution_end",
+        "toolCallId": "zhiwei-tool-call-1",
+        "toolName": "echo",
+        "isError": false,
+        "resultKinds": [
+          "text"
+        ],
+        "resultText": "echo result: lifecycle-input"
+      },
+      {
+        "sequence": 13,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 14,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 15,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 16,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 17,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 18,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 19,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 20,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 21,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 22,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 23,
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "sequence": 24,
+        "type": "agent_settled"
+      }
+    ],
+    "extensionEvents": [
+      {
+        "sequence": 1,
+        "type": "input",
+        "source": "interactive"
+      },
+      {
+        "sequence": 2,
+        "type": "before_agent_start"
+      },
+      {
+        "sequence": 3,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 4,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 6,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 7,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 9,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 10,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 11,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 12,
+        "type": "tool_call",
+        "toolCallId": "zhiwei-tool-call-1",
+        "toolName": "echo",
+        "input": {
+          "value": "lifecycle-input"
+        }
+      },
+      {
+        "sequence": 13,
+        "type": "tool_result",
+        "toolCallId": "zhiwei-tool-call-1",
+        "toolName": "echo",
+        "isError": false,
+        "input": {
+          "value": "lifecycle-input"
+        },
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 14,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 15,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 16,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall"
+        ]
+      },
+      {
+        "sequence": 17,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 18,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 19,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 20,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 21,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 22,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 23,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ]
+      },
+      {
+        "sequence": 24,
+        "type": "agent_end"
+      },
+      {
+        "sequence": 25,
+        "type": "agent_settled"
+      },
+      {
+        "sequence": 26,
+        "type": "session_shutdown",
+        "reason": "exit"
+      }
+    ],
+    "lifecycleNotes": [
+      {
+        "type": "shutdown-host-boundary",
+        "mechanism": "session.extensionRunner.emit",
+        "reason": "exit"
+      }
+    ],
+    "sanitization": {
+      "absolutePathsIncluded": false,
+      "rawSessionIdIncluded": false,
+      "environmentDumpIncluded": false,
+      "credentialsIncluded": false,
+      "rawChainOfThoughtIncluded": false
+    },
+    "contractFingerprint": "77d726e9e571f0c61eb8e79b63dbdd11f22498576889851c3650fecf597974d6"
+  },
+  "contractFingerprint": "75b0c9fe4d146df046d9657653673be4e7ed21069cae2319a809dcc2da1313e7"
+}
