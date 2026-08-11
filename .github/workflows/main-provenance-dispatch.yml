@@ -44,6 +44,45 @@ jobs:
               return result;
             }
 
+            async function failClosed({ pullNumber, before, after, reason, detail }) {
+              const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+              });
+              let incident = openIssues.find((issue) => {
+                const record = parseBlock(issue.body, "zhiwei-main-incident");
+                return record?.status === "open" && record?.after === after;
+              });
+              const body = `## 自动合并后的 provenance 审计链失败\n\n` +
+                `PR #${pullNumber} 已合并，但无法建立可信的 Main Provenance 审计事件。\n\n` +
+                `- before: \`${before}\`\n` +
+                `- after: \`${after}\`\n` +
+                `- reason: \`${reason}\`\n` +
+                `- detail: \`${String(detail ?? "").slice(0, 500)}\`\n` +
+                `- CI workflow run: ${run.html_url}\n` +
+                `- dispatch workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
+                `该更新来自已合并 PR，但 provenance 链不完整，因此按 fail-closed 方式进入 Main Incident 安全停机。\n\n` +
+                `<!--\nzhiwei-main-incident\nstatus: open\nkind: unauthorized-main-write\nreason: ${reason}\nbefore: ${before}\nafter: ${after}\n-->`;
+              if (!incident) {
+                ({ data: incident } = await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title: `incident(r3): provenance chain failed for ${after.slice(0, 12)}`,
+                  body,
+                }));
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: incident.number,
+                  body: `Main Provenance dispatch retry failed again.\n\n- reason: \`${reason}\`\n- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                });
+              }
+              core.setFailed(`Merged PR #${pullNumber}, but Main Provenance failed closed. Incident #${incident.number}: ${reason}.`);
+            }
+
             if (candidates.length === 0) {
               candidates = await github.paginate(
                 github.rest.repos.listPullRequestsAssociatedWithCommit,
@@ -83,12 +122,43 @@ jobs:
               core.info(`PR #${pullNumber} targets ${pr.base.ref}, not ${defaultBranch}; no provenance dispatch.`);
               return;
             }
+
+            const after = pr.merge_commit_sha;
             if (pr.head.sha !== run.head_sha) {
-              core.setFailed(`Merged PR #${pullNumber} HEAD differs from the successful CI HEAD.`);
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "successful-ci-head-mismatch",
+                detail: `merged head ${pr.head.sha} differs from CI head ${run.head_sha}`,
+              });
               return;
             }
             if (pr.base.sha !== testedBaseSha) {
-              core.setFailed(`Merged PR #${pullNumber} base differs from the successful CI base.`);
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "successful-ci-base-mismatch",
+                detail: `merged base ${pr.base.sha} differs from CI base ${testedBaseSha}`,
+              });
+              return;
+            }
+
+            const { data: mergeCommit } = await github.rest.git.getCommit({
+              owner,
+              repo,
+              commit_sha: after,
+            });
+            const parents = mergeCommit.parents ?? [];
+            if (parents.length !== 1 || parents[0].sha !== testedBaseSha) {
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "squash-parent-contract-mismatch",
+                detail: `parents=${parents.map((parent) => parent.sha).join(",") || "<none>"}`,
+              });
               return;
             }
 
@@ -98,48 +168,20 @@ jobs:
                 repo,
                 event_type: "main-provenance",
                 client_payload: {
-                  before: pr.base.sha,
-                  after: pr.merge_commit_sha,
+                  before: testedBaseSha,
+                  after,
                   default_branch: defaultBranch,
                   pull_number: pullNumber,
                   source: "autonomous-merge",
                 },
               });
-              core.notice(`Dispatched Main Provenance for PR #${pullNumber} at ${pr.merge_commit_sha}.`);
+              core.notice(`Dispatched Main Provenance for PR #${pullNumber} at ${after}.`);
             } catch (error) {
-              const openIssues = await github.paginate(github.rest.issues.listForRepo, {
-                owner,
-                repo,
-                state: "open",
-                per_page: 100,
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "provenance-dispatch-failed",
+                detail: error.message ?? error,
               });
-              let incident = openIssues.find((issue) => {
-                const record = parseBlock(issue.body, "zhiwei-main-incident");
-                return record?.status === "open" && record?.after === pr.merge_commit_sha;
-              });
-              const body = `## 自动合并后的 provenance dispatch 失败\n\n` +
-                `PR #${pullNumber} 已合并，但无法创建 repository_dispatch 审计事件。\n\n` +
-                `- before: \`${pr.base.sha}\`\n` +
-                `- after: \`${pr.merge_commit_sha}\`\n` +
-                `- CI workflow run: ${run.html_url}\n` +
-                `- dispatch workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n` +
-                `- error: \`${String(error.message ?? error).slice(0, 500)}\`\n\n` +
-                `该更新来自已合并 PR，但 provenance 链不完整，因此按 fail-closed 方式进入 Main Incident 安全停机。\n\n` +
-                `<!--\nzhiwei-main-incident\nstatus: open\nkind: unauthorized-main-write\nreason: provenance-dispatch-failed\nbefore: ${pr.base.sha}\nafter: ${pr.merge_commit_sha}\n-->`;
-              if (!incident) {
-                ({ data: incident } = await github.rest.issues.create({
-                  owner,
-                  repo,
-                  title: `incident(r3): provenance dispatch failed for ${pr.merge_commit_sha.slice(0, 12)}`,
-                  body,
-                }));
-              } else {
-                await github.rest.issues.createComment({
-                  owner,
-                  repo,
-                  issue_number: incident.number,
-                  body: `Main Provenance dispatch retry failed again. Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
-                });
-              }
-              core.setFailed(`Merged PR #${pullNumber}, but Main Provenance dispatch failed. Incident #${incident.number}.`);
             }
