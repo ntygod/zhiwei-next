@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "proofId": "MAIN-PROVENANCE-PR13-2026-08-11",
+  "status": "verified",
+  "repository": "ntygod/zhiwei-next",
+  "pullRequest": 13,
+  "headCommit": "e4861248628d7e42e7397ac63aa542dfe1773c3a",
+  "baseCommit": "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+  "mergeCommit": "10c963ef8bee978543dccf73047d3bd2d18baae5",
+  "canonicalChain": {
+    "ci": {
+      "runId": 31499190699,
+      "conclusion": "success"
+    },
+    "autonomousMerge": {
+      "runId": 31499233718,
+      "conclusion": "success"
+    },
+    "provenanceDispatch": {
+      "runId": 31499233680,
+      "conclusion": "success",
+      "notice": "Dispatched Main Provenance for PR #13 at 10c963ef8bee978543dccf73047d3bd2d18baae5."
+    },
+    "provenanceReceiver": {
+      "runId": 31499253092,
+      "conclusion": "success",
+      "event": "repository_dispatch",
+      "notice": "Authorized main update 10c963ef8bee978543dccf73047d3bd2d18baae5 from merged PR #13 via autonomous-merge."
+    }
+  },
+  "verifiedContracts": [
+    "The final ready CI was bound to PR #13 head e4861248628d7e42e7397ac63aa542dfe1773c3a and base c05eba9f840c82d7b61494ae6bb06833d140d6c0.",
+    "Autonomous Merge produced the expected squash commit and single parent.",
+    "Main Provenance Dispatch emitted a repository_dispatch event after the merge.",
+    "Main Provenance re-read the real merged PR, default branch, base SHA, merge SHA and Git parent.",
+    "The receiver authorized the update without creating an incident or recovery pull request."
+  ],
+  "incidentClosure": {
+    "issue": 9,
+    "state": "closed",
+    "stateReason": "completed",
+    "closedAt": "2026-08-11T14:03:22Z"
+  }
+}
