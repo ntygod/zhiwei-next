@@ -136,6 +136,8 @@ Public queue_update       2
 Extension queue_update    0
 ```
 
+捕获脚本已在 Inline Extension 中显式注册 `queue_update` Listener；注册成功但运行期间没有收到该事件，因此零计数是 Runtime 负证据，而不是未订阅造成的结果。
+
 因此：
 
 > Follow-up队列状态是公共 Session表面的语义，不能依赖 Extension事件重建。知微 Adapter必须保留事件来源，并从 Public SDK或等价 Session接口读取队列变化。
