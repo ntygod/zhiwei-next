@@ -79,10 +79,11 @@ jobs:
       - name: Resolve Pi Artifact probe gate
         id: probe-gate
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PR_GATE: ${{ steps.changed-files.outputs.pi-artifact-probe || 'false' }}
           MANUAL_GATE: ${{ steps.manual-probe.outputs.pi-artifact-probe || 'false' }}
         run: |
-          if [[ "$PR_GATE" == "true" || "$MANUAL_GATE" == "true" ]]; then
+          if [[ "$EVENT_NAME" == "schedule" || "$PR_GATE" == "true" || "$MANUAL_GATE" == "true" ]]; then
             echo "required=true" >> "$GITHUB_OUTPUT"
           else
             echo "required=false" >> "$GITHUB_OUTPUT"
