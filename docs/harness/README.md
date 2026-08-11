@@ -118,11 +118,12 @@ Branch Cleanup 只删除同时满足以下条件的分支：
 
 - 位于当前仓库；
 - 关联至少一个已关闭 PR；
+- 当前分支 HEAD 与该关闭 PR记录的 `head.sha` 完全一致；
 - 没有开放 PR继续使用；
 - 不是默认分支；
 - 不是 protected 分支。
 
-Fork、无 PR 历史分支和开放 PR 分支都保留。Workflow 不 checkout 或执行 PR代码，策略自检失败时不会执行真实删除。完整选择规则、幂等语义与恢复路径见 `branch-lifecycle.md`。
+Fork、无 PR 历史分支、开放 PR 分支，以及在 PR关闭后继续推进或复用的同名分支都保留。Workflow 不 checkout 或执行 PR代码，策略自检失败时不会执行真实删除。完整选择规则、幂等语义与恢复路径见 `branch-lifecycle.md`。
 
 ## 机器门禁
 
