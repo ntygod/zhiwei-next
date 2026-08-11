@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const baselineUrl = new URL("../../packages/pi-adapter/fixtures/pi-upstream-baseline.json", import.meta.url);
 const baseline = JSON.parse(await readFile(baselineUrl, "utf8"));
@@ -26,20 +26,22 @@ if (!atLeast(versionTuple(process.versions.node), [22, 19, 0])) {
   );
 }
 
-const executable = join(
+const defaultExecutable = join(
   process.cwd(),
   "node_modules",
   ".bin",
   process.platform === "win32" ? "pi.cmd" : "pi",
 );
+const executable = resolve(process.env.PI_EXECUTABLE ?? defaultExecutable);
 if (!existsSync(executable)) {
   throw new Error(
-    `Pi binary not found at ${executable}. Install ${baseline.package.name}@${baseline.package.version} first.`,
+    `Pi binary not found at the configured isolated executable. Install ${baseline.package.name}@${baseline.package.version} first.`,
   );
 }
 
+const probeCwd = resolve(process.env.PI_PROBE_CWD ?? process.cwd());
 const child = spawn(executable, ["--mode", "rpc", "--no-session"], {
-  cwd: process.cwd(),
+  cwd: probeCwd,
   env: { ...process.env, AI_AGENT: "zhiwei-pi-rpc-probe" },
   stdio: ["pipe", "pipe", "pipe"],
 });
@@ -52,7 +54,7 @@ function stopChild() {
   if (!child.killed) child.kill();
 }
 
-const completion = new Promise((resolve, reject) => {
+const completion = new Promise((resolvePromise, reject) => {
   const timer = setTimeout(() => {
     stopChild();
     reject(
@@ -65,7 +67,7 @@ const completion = new Promise((resolve, reject) => {
   function maybeResolve() {
     if (!responses.has("state-1") || !responses.has("messages-1")) return;
     clearTimeout(timer);
-    resolve();
+    resolvePromise();
   }
 
   child.on("error", (error) => {
@@ -135,6 +137,7 @@ console.log(
       isStreaming: state.data.isStreaming,
       messageCount: messages.data.messages.length,
       credentialsUsed: false,
+      promptsSent: 0,
       stderrPresent: stderr.length > 0,
     },
     null,
