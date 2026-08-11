@@ -22,7 +22,9 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Retry公共/Extension表面差异 | 已验证，Extension无 Retry专有事件和 `willRetry`增强 |
 | Follow-up队列 | 已验证，同一公共 Run内两个 Turn、队列先非空后清空、最终单次 `agent_settled` |
 | Queue公共/Extension表面差异 | 已验证，公共 Session有 `queue_update`，Extension无队列事件 |
-| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` |
+| 取消与 Retry终止边界 | 已验证：流式 `session.abort()`、Backoff期间 `abortRetry()`与 Retry exhaustion |
+| Cancel / Retry公共与 Extension差异 | 已验证，Extension仍不提供 `auto_retry_start/end`或 `willRetry`增强 |
+| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -31,6 +33,7 @@ packages/pi-adapter/fixtures/pi-artifact-runtime.json
 packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
+packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 ```
 
 当前固定的是 **M0契约基线**，不是生产依赖承诺。仓库仍未将 Pi加入正式依赖，也未冻结 `NormalizedRuntimeEvent`。
@@ -41,8 +44,8 @@ Pi至少暴露三类不能混为一谈的表面：
 
 | 表面 | 用途 | 当前确认程度 |
 |---|---|---|
-| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry恢复和 Follow-up队列均已动态验证 |
-| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry和 Follow-up底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
+| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消和 exhaustion均已动态验证 |
+| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消和 exhaustion底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
 | RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型及无凭证空 Session启动已验证；真实任务时序待录制 |
 
 `pi-adapter`必须显式标记事件来自哪个表面，不能仅凭同名事件假设载荷和时序相同。
@@ -62,7 +65,7 @@ Pi至少暴露三类不能混为一谈的表面：
 - 不挂载宿主仓库，只挂载只读 curated probe bundle；
 - 不传 GitHub Secret、真实 Provider Credential、用户数据或完整环境变量；
 - Runtime场景只使用 Pi发布包自带内存 Faux Provider；
-- Normal Tool的 `echo`、Retry和 Follow-up场景都没有外部副作用；
+- Normal Tool的 `echo`、Retry、Follow-up与取消/耗尽场景都没有外部副作用；
 - 只输出脱敏、可机器复验结果。
 
 这些验证证明发布 Artifact的公开 manifest与目标运行表面符合当前基线。它们不是完整供应链审计，也不证明 Tarball每个源码字节都可由 Git Tag可重现构建得到。
@@ -222,6 +225,81 @@ Ledger需要分别记录：
 
 不能仅凭 `queue_update(followUp=[])`关闭 Prompt，也不能把 Follow-up固定映射成新 Agent Run。
 
+## 已验证的取消、abortRetry与 Retry exhaustion生命周期
+
+详细事件表见 [`cancel-retry-exhaustion-lifecycle.md`](../spikes/pi-runtime-contract/cancel-retry-exhaustion-lifecycle.md)。
+
+该复合 Fixture固定三种不能被统一成一个 `failed`状态的终止路径。
+
+### 流式 `session.abort()`
+
+公共 Session在 Assistant已经产生 `128`字符部分文本的 `message_update`上触发 `session.abort()`。真实边界为：
+
+```text
+partial message_update
+  → session.abort()
+  → message_end(stopReason=aborted, error=Request was aborted)
+  → turn_end(stopReason=aborted)
+  → agent_end(willRetry=false)
+  → agent_settled
+```
+
+关键事实：
+
+- 被取消的部分 Assistant仍保留在最终 `session.messages`；
+- 最终 Assistant为 `stopReason=aborted`，错误为 `Request was aborted`，文本长度小于完整响应；
+- `session.abort()`与原始 `session.prompt()`都 resolve；
+- 取消不是 Retry，Provider只调用一次，最终 Session idle且非 retrying。
+
+因此 Observation Ledger不能把用户取消归一化成“没有 Assistant消息”，也不能只记录最终布尔失败。
+
+### Backoff期间 `abortRetry()`
+
+首次 `overloaded_error`产生：
+
+```text
+agent_end(willRetry=true)
+  → auto_retry_start(attempt=1, delayMs=10000)
+  → session.abortRetry()
+  → auto_retry_end(success=false, finalError=Retry cancelled)
+  → agent_settled
+```
+
+Faux Provider只调用一次，预留给第二个 Run的响应保持未消费。由此得到必须写入协议的边界：
+
+> `willRetry=true 不保证后续 Agent Run`。它只表达 `agent_end`发生时 Runtime已有重试计划；宿主可以在 Backoff期间取消该计划。
+
+最终 `session.messages`只有用户消息，但失败 Assistant、`willRetry=true`、Backoff开始与 `Retry cancelled`仍完整存在于事件流。Ledger不得根据最终消息列表丢弃这些事实，也不得补造未发生的 Run。
+
+### Retry exhaustion
+
+固定 `maxRetries=2`时，初始调用加两次重试共调用 Provider三次。公共 `agent_end.willRetry`精确为：
+
+```json
+[true, true, false]
+```
+
+两次 `auto_retry_start`之后只有一个终止 `auto_retry_end(success=false, finalError=overloaded_error)`，发生在第三次 `agent_end(willRetry=false)`之后、最终 `agent_settled`之前。
+
+前两次失败 Assistant只保留在事件流；最终 `session.messages`保留最后一次失败 Assistant，状态为 `stopReason=error`。**Prompt Promise仍正常 resolve**，所以 Promise完成不能被解释为任务成功；最终错误必须从 Runtime事件与消息读取。
+
+### Public SDK与 Extension差异
+
+这三个路径再次确认：Public Session提供 `willRetry`和 Retry专有事件，**Extension仍不提供 `auto_retry_start/end`**，Extension同名 `agent_end`也不携带 `willRetry`。Extension能够观察每个 Run的 Message、Turn、Agent和 Settled生命周期，但不能独立恢复 Session层重试计划、取消或耗尽语义。
+
+Adapter必须保留事件来源，不能把 Public与 Extension事件无损合并，也不能为 Extension补造不存在的字段或事件。
+
+### 对 Observation Ledger的直接约束
+
+Ledger至少需要分别保存：
+
+- 宿主取消动作及触发它的真实 Runtime事件；
+- 部分 Assistant的 `aborted`状态、错误与文本摘要；
+- `agent_end.willRetry`作为“当时计划”，而不是后续 Run存在证明；
+- `abortRetry()`、被取消的 attempt、Backoff delay和 `Retry cancelled`；
+- Retry exhaustion的 attempt、最终失败 Assistant和终止 Retry事件；
+- Prompt Promise返回、`agent_settled`、宿主 `session_shutdown`三个独立边界。
+
 ## Extension生命周期映射
 
 | Pi生命周期 / Session事件 | 知微动作 | 当前证据 |
@@ -233,9 +311,9 @@ Ledger需要分别记录：
 | tool_call | Policy评估（M5） | Normal Tool已观察，携带真实 `toolCallId`和结构化 input |
 | tool_result | 写入证据和 Outcome线索 | Normal Tool已观察，与 `tool_call`使用同一 ID |
 | queue_update | 记录 Steering / Follow-up队列状态 | Public Session已观察；Extension未观察，必须保留来源差异 |
-| agent_end | 一次底层 Agent Run结束 | Normal、Retry和 Follow-up均已观察；Extension不携带 Session层 `willRetry` |
-| auto_retry_start/end | Session自动重试状态 | Extension未观察；必须从 Public SDK或等价 Session表面获得 |
-| agent_settled | 形成 Session本轮稳定边界 | Normal、Retry和 Follow-up均已观察，发生在最终 `agent_end`之后 |
+| agent_end | 一次底层 Agent Run结束 | Normal、Retry、Follow-up、Cancel和 exhaustion均已观察；Extension不携带 Session层 `willRetry` |
+| auto_retry_start/end | Session自动重试状态 | Retry恢复、取消和 exhaustion均只在 Public Session观察；Extension未观察 |
+| agent_settled | 形成 Session本轮稳定边界 | Normal、Retry、Follow-up、Cancel和 exhaustion均已观察，发生在最终 `agent_end`之后 |
 | session_before_compact | 固化工作状态（M2） | 待 Compaction Fixture |
 | session_shutdown | 完成会话/Worker收尾 | 已观察；由宿主通过 ExtensionRunner明确发出 |
 
@@ -278,6 +356,10 @@ session.extensionRunner.emit({ type: session_shutdown, reason: exit })
 - `auto_retry_start/end`属于 Session表面，不是 Extension生命周期；
 - Public `queue_update`属于 Session表面，Extension不提供等价队列事件；
 - Queue清空表示消息离开待处理队列，不表示 Prompt完成；
+- 流式取消会保留已经产生的部分 Assistant，并以 `stopReason=aborted`结束；
+- `willRetry=true`只表示当时计划重试，不保证后续 Agent Run实际发生；
+- `abortRetry()`可在 Backoff期间终止计划并产生 `auto_retry_end(success=false)`；
+- Retry exhaustion的 `session.prompt()`仍可能 resolve，最后一次失败 Assistant才保留在最终消息列表；
 - Session最终 idle后才发出一次 `agent_settled`；
 - 被 Retry替代的失败消息可能不在最终 `session.messages`；
 - Follow-up最终消息会保留在 `session.messages`，但排队时序仍只能从事件流获得；
@@ -307,6 +389,8 @@ defineTool
 
 - 自行编造 Tool Call关联键；
 - 把第一次 `agent_end`当成 Prompt最终结果；
+- 把 `willRetry=true`当成后续 Run一定发生；
+- 把 Promise resolve当成任务成功；
 - 从 Extension `agent_end`推断 `willRetry`；
 - 从 Extension事件补造不存在的 `queue_update`；
 - 把 Follow-up固定建模成新 Agent Run；
@@ -355,12 +439,15 @@ get_messages
 14. 被 Retry替代且未进入最终 Session消息列表的失败证据仍必须持久化。
 15. Follow-up入队、公共 `queue_update`、后续 Turn与最终 Settled必须分别记录；队列为空不能替代稳定边界。
 16. Extension缺少 Session层 Retry或 Queue事件时必须保留负证据，不能补造为等价事件。
+17. 用户取消、Retry Backoff取消与 Retry exhaustion必须作为不同终止原因记录。
+18. 部分 Assistant被取消后仍是持久化证据；不得因 `stopReason=aborted`丢弃文本摘要。
+19. `willRetry=true`记录当时计划，必须允许后续由 `abortRetry()`终止且没有新 Run。
+20. Prompt Promise返回只记录调用边界；任务成败由消息、Retry终止事件和最终 Settled共同决定。
 
 ## M0后续技术验证
 
 下一步继续验证：
 
-- 用户取消、`abortRetry()`和 retry exhaustion边界；
 - 并行 Tool Call / Tool Result完整序列；
 - Compaction前后可回放信息；
 - Session Replacement后的重新订阅；
