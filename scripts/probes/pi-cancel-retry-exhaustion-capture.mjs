@@ -9,7 +9,7 @@ const RETRYABLE_ERROR = "overloaded_error";
 const EXTERNAL_PROVIDER_PROMPTS = 0;
 
 const ACTIVE_ABORT_PROMPT = "Stream a long response so the host can cancel after the first assistant update.";
-const ACTIVE_ABORT_RESPONSE = "cancel-me-".repeat(4096);
+const ACTIVE_ABORT_RESPONSE = "cancel-me-".repeat(1024);
 const RETRY_ABORT_PROMPT = "Enter automatic retry backoff, then let the host cancel the pending retry.";
 const RETRY_EXHAUSTION_PROMPT = "Exhaust the configured automatic retry budget.";
 const UNUSED_SUCCESS = "This response must remain unused.";
@@ -133,11 +133,7 @@ function sanitizeEvent(event, sequence) {
 
 function sanitizeMessages(messages) {
   return messages.map((message, index) => {
-    const record = {
-      index,
-      role: message.role,
-      contentKinds: contentKinds(message.content),
-    };
+    const record = { index, role: message.role, contentKinds: contentKinds(message.content) };
     if (message.stopReason !== undefined) record.stopReason = message.stopReason;
     if (message.errorMessage !== undefined) record.errorMessage = message.errorMessage;
     addTextDigest(record, textFromContent(message.content));
@@ -243,7 +239,6 @@ async function createRuntime({
     ModelRuntime,
   } = coding;
   const { fauxProvider } = faux;
-
   for (const [name, value] of Object.entries({
     createAgentSession,
     DefaultResourceLoader,
@@ -261,12 +256,7 @@ async function createRuntime({
   const sessionEvents = [];
   const extensionEvents = [];
   const lifecycleNotes = [];
-  const fauxHandle = fauxProvider({
-    api: providerApi,
-    provider: providerId,
-    tokensPerSecond,
-    tokenSize,
-  });
+  const fauxHandle = fauxProvider({ api: providerApi, provider: providerId, tokensPerSecond, tokenSize });
   fauxHandle.setResponses(responses);
 
   const extensionEventTypes = [
@@ -341,7 +331,6 @@ async function createRuntime({
 
   return {
     session,
-    unsubscribe,
     fauxHandle,
     sessionEvents,
     extensionEvents,
@@ -361,28 +350,46 @@ async function createRuntime({
   };
 }
 
-function summarizeRuntime(runtime, prompt, promptOutcome, actions) {
-  const { session, fauxHandle, sessionEvents, extensionEvents, retrySettings, lifecycleNotes } = runtime;
-  const publicAgentEnds = sessionEvents.filter((event) => event.type === "agent_end");
-  const extensionAgentEnds = extensionEvents.filter((event) => event.type === "agent_end");
-  const publicRetryStarts = sessionEvents.filter((event) => event.type === "auto_retry_start");
-  const publicRetryEnds = sessionEvents.filter((event) => event.type === "auto_retry_end");
+function captureOutcome(session, promptOutcome, extra = {}) {
   const finalAssistant = session.messages.findLast((message) => message.role === "assistant");
   const finalText = finalAssistant ? textFromContent(finalAssistant.content) : undefined;
+  return {
+    prompt: promptOutcome,
+    ...extra,
+    sessionWasIdleBeforeShutdown: session.isIdle,
+    sessionWasRetryingBeforeShutdown: session.isRetrying,
+    pendingMessageCountBeforeShutdown: session.pendingMessageCount,
+    messageRoles: session.messages.map((message) => message.role),
+    finalMessages: sanitizeMessages(session.messages),
+    finalAssistant: finalAssistant
+      ? {
+          stopReason: finalAssistant.stopReason,
+          errorMessage: finalAssistant.errorMessage,
+          contentKinds: contentKinds(finalAssistant.content),
+          textLength: finalText?.length ?? 0,
+          textSha256: finalText === undefined ? undefined : sha256(finalText),
+        }
+      : null,
+  };
+}
 
+function summarizeRuntime(runtime, prompt, outcome, actions) {
+  const { fauxHandle, sessionEvents, extensionEvents, retrySettings, lifecycleNotes } = runtime;
+  const publicAgentEnds = sessionEvents.filter((event) => event.type === "agent_end");
+  const extensionAgentEnds = extensionEvents.filter((event) => event.type === "agent_end");
   return {
     prompt,
     retry: {
       settings: retrySettings,
       public: {
-        startEvents: publicRetryStarts,
-        endEvents: publicRetryEnds,
-        agentEndWillRetry: publicAgentEnds.map((event) => event.willRetry),
+        startEvents: sessionEvents.filter((event) => event.type === "auto_retry_start"),
+        endEvents: sessionEvents.filter((event) => event.type === "auto_retry_end"),
+        agentEndWillRetry: publicAgentEnds.map((event) => event.willRetry ?? null),
       },
       extension: {
         startEvents: extensionEvents.filter((event) => event.type === "auto_retry_start"),
         endEvents: extensionEvents.filter((event) => event.type === "auto_retry_end"),
-        agentEndWillRetry: extensionAgentEnds.map((event) => event.willRetry),
+        agentEndWillRetry: extensionAgentEnds.map((event) => event.willRetry ?? null),
       },
     },
     actions,
@@ -393,23 +400,7 @@ function summarizeRuntime(runtime, prompt, promptOutcome, actions) {
       pendingResponses: fauxHandle.getPendingResponseCount(),
       promptsSentToExternalProvider: EXTERNAL_PROVIDER_PROMPTS,
     },
-    outcome: {
-      prompt: promptOutcome,
-      sessionWasIdleBeforeShutdown: session.isIdle,
-      sessionWasRetryingBeforeShutdown: session.isRetrying,
-      pendingMessageCountBeforeShutdown: session.pendingMessageCount,
-      messageRoles: session.messages.map((message) => message.role),
-      finalMessages: sanitizeMessages(session.messages),
-      finalAssistant: finalAssistant
-        ? {
-            stopReason: finalAssistant.stopReason,
-            errorMessage: finalAssistant.errorMessage,
-            contentKinds: contentKinds(finalAssistant.content),
-            textLength: finalText?.length ?? 0,
-            textSha256: finalText === undefined ? undefined : sha256(finalText),
-          }
-        : null,
-    },
+    outcome,
     counts: {
       sessionEvents: sessionEvents.length,
       extensionEvents: extensionEvents.length,
@@ -434,15 +425,11 @@ function summarizeRuntime(runtime, prompt, promptOutcome, actions) {
 
 async function runActiveStreamAbort(coding, faux) {
   stage = "active-stream-abort:configure";
-  const actions = [];
-  let abortPromise = Promise.resolve();
-  let abortTriggered = false;
-  const response = faux.fauxAssistantMessage(ACTIVE_ABORT_RESPONSE, {
-    stopReason: "stop",
-    responseId: "zhiwei-faux-active-abort",
-    timestamp: 1000,
+  let resolveUpdate;
+  let updateSeen = false;
+  const sawUpdate = new Promise((resolve) => {
+    resolveUpdate = resolve;
   });
-
   const runtime = await createRuntime({
     caseId: "active-stream-abort",
     coding,
@@ -450,80 +437,71 @@ async function runActiveStreamAbort(coding, faux) {
     retrySettings: ACTIVE_ABORT_RETRY_SETTINGS,
     providerId: "zhiwei-active-abort-faux",
     providerApi: "zhiwei-active-abort-faux-api",
-    responses: [response],
-    tokensPerSecond: 0,
+    responses: [
+      faux.fauxAssistantMessage(ACTIVE_ABORT_RESPONSE, {
+        stopReason: "stop",
+        responseId: "zhiwei-faux-active-abort",
+        timestamp: 1000,
+      }),
+    ],
+    tokensPerSecond: 10_000,
     tokenSize: { min: 32, max: 32 },
-    onPublicEvent: ({ event, record, session }) => {
-      if (
-        !abortTriggered &&
-        event.type === "message_update" &&
-        event.message?.role === "assistant"
-      ) {
-        abortTriggered = true;
-        const action = {
-          type: "session.abort",
-          triggerEvent: "message_update",
-          triggerSequence: record.sequence,
-          invoked: true,
-          settled: false,
-        };
-        actions.push(action);
-        abortPromise = session.abort().then(
-          () => {
-            action.settled = true;
-            action.outcome = "resolved";
-          },
-          (error) => {
-            action.settled = true;
-            action.outcome = "rejected";
-            action.error = normalizeError(error, "active-stream-abort:abort");
-          },
-        );
+    onPublicEvent: ({ event, record }) => {
+      if (!updateSeen && event.type === "message_update" && event.message?.role === "assistant") {
+        updateSeen = true;
+        resolveUpdate(record.sequence);
       }
     },
   });
 
   stage = "active-stream-abort:prompt";
-  const promptOutcome = await settle(
+  const promptPromise = settle(
     runtime.session.prompt(ACTIVE_ABORT_PROMPT, { source: "interactive" }),
     "active-stream-abort:prompt",
   );
-  await withTimeout(abortPromise, 5_000, "active-stream-abort session.abort");
+  const triggerSequence = await withTimeout(sawUpdate, 5_000, "active-stream-abort message_update");
+  const abortOutcome = await withTimeout(
+    settle(runtime.session.abort(), "active-stream-abort:abort"),
+    5_000,
+    "active-stream-abort session.abort",
+  );
+  const promptOutcome = await withTimeout(promptPromise, 5_000, "active-stream-abort prompt settlement");
+  const actions = [{
+    type: "session.abort",
+    triggerEvent: "message_update",
+    triggerSequence,
+    outcome: abortOutcome,
+  }];
+  const outcome = captureOutcome(runtime.session, promptOutcome, { abort: abortOutcome });
 
-  const result = summarizeRuntime(runtime, {
-    source: "interactive",
-    text: ACTIVE_ABORT_PROMPT,
-    responseTextLength: ACTIVE_ABORT_RESPONSE.length,
-    responseTextSha256: sha256(ACTIVE_ABORT_RESPONSE),
-  }, promptOutcome, actions);
-
-  assertCase(abortTriggered, "Active-stream abort was never triggered.");
   assertCase(promptOutcome.status === "resolved", "Active-stream prompt did not resolve after abort.");
-  assertCase(actions.length === 1 && actions[0].outcome === "resolved", "session.abort() did not resolve.");
-  assertCase(result.provider.callCount === 1, `Active-stream abort expected one Faux call, got ${result.provider.callCount}.`);
-  assertCase(result.outcome.sessionWasIdleBeforeShutdown === true, "Active-stream abort did not leave Session idle.");
-  assertCase(result.outcome.sessionWasRetryingBeforeShutdown === false, "Active-stream abort left Session retrying.");
-  assertCase(result.outcome.finalAssistant?.stopReason === "aborted", "Aborted Assistant message was not persisted with stopReason=aborted.");
-  assertCase(result.outcome.finalAssistant.textLength > 0, "Aborted Assistant message did not preserve partial text.");
-  assertCase(result.outcome.finalAssistant.textLength < ACTIVE_ABORT_RESPONSE.length, "Active-stream abort consumed the complete response.");
+  assertCase(abortOutcome.status === "resolved", "session.abort() did not resolve.");
+  assertCase(runtime.fauxHandle.state.callCount === 1, "Active-stream abort must consume one Faux response.");
+  assertCase(outcome.sessionWasIdleBeforeShutdown === true, "Active-stream abort did not leave Session idle.");
+  assertCase(outcome.sessionWasRetryingBeforeShutdown === false, "Active-stream abort left Session retrying.");
+  assertCase(outcome.finalAssistant?.stopReason === "aborted", "Aborted Assistant message was not persisted with stopReason=aborted.");
+  assertCase(outcome.finalAssistant.textLength > 0, "Aborted Assistant message did not preserve partial text.");
+  assertCase(outcome.finalAssistant.textLength < ACTIVE_ABORT_RESPONSE.length, "Active-stream abort consumed the complete response.");
   assertCase(count(runtime.sessionEvents, "agent_end") === 1, "Active-stream abort must emit one public agent_end.");
   assertCase(count(runtime.sessionEvents, "agent_settled") === 1, "Active-stream abort must emit one public agent_settled.");
 
   stage = "active-stream-abort:shutdown";
   await runtime.shutdown();
-  result.lifecycleNotes = runtime.lifecycleNotes;
-  return result;
+  return summarizeRuntime(runtime, {
+    source: "interactive",
+    text: ACTIVE_ABORT_PROMPT,
+    responseTextLength: ACTIVE_ABORT_RESPONSE.length,
+    responseTextSha256: sha256(ACTIVE_ABORT_RESPONSE),
+  }, outcome, actions);
 }
 
 async function runRetryBackoffAbort(coding, faux) {
   stage = "retry-backoff-abort:configure";
-  const actions = [];
   let resolveRetryStart;
-  const retryStarted = new Promise((resolve) => {
+  let retryStartSeen = false;
+  const sawRetryStart = new Promise((resolve) => {
     resolveRetryStart = resolve;
   });
-  let retryStartSeen = false;
-
   const runtime = await createRuntime({
     caseId: "retry-backoff-abort",
     coding,
@@ -557,47 +535,42 @@ async function runRetryBackoffAbort(coding, faux) {
     runtime.session.prompt(RETRY_ABORT_PROMPT, { source: "interactive" }),
     "retry-backoff-abort:prompt",
   );
-  const triggerSequence = await withTimeout(retryStarted, 5_000, "retry-backoff-abort auto_retry_start");
-  const action = {
+  const triggerSequence = await withTimeout(sawRetryStart, 5_000, "retry-backoff-abort auto_retry_start");
+  runtime.session.abortRetry();
+  const promptOutcome = await withTimeout(promptPromise, 5_000, "retry-backoff-abort prompt settlement");
+  const actions = [{
     type: "session.abortRetry",
     triggerEvent: "auto_retry_start",
     triggerSequence,
-    invoked: true,
-  };
-  actions.push(action);
-  runtime.session.abortRetry();
-  action.outcome = "returned";
-  const promptOutcome = await withTimeout(promptPromise, 5_000, "retry-backoff-abort prompt settlement");
-
-  const result = summarizeRuntime(runtime, {
-    source: "interactive",
-    text: RETRY_ABORT_PROMPT,
-    retryableError: RETRYABLE_ERROR,
-  }, promptOutcome, actions);
-
+    outcome: "returned",
+  }];
+  const outcome = captureOutcome(runtime.session, promptOutcome);
   const retryEnds = runtime.sessionEvents.filter((event) => event.type === "auto_retry_end");
-  assertCase(retryStartSeen, "Retry backoff never emitted auto_retry_start.");
+  const publicAgentEnds = runtime.sessionEvents.filter((event) => event.type === "agent_end");
+
   assertCase(promptOutcome.status === "resolved", "Retry-backoff prompt did not resolve after abortRetry().");
-  assertCase(result.provider.callCount === 1, `Retry abort expected one Faux call, got ${result.provider.callCount}.`);
-  assertCase(result.provider.pendingResponses === 1, "Retry abort consumed the response reserved to prove no second run occurred.");
+  assertCase(runtime.fauxHandle.state.callCount === 1, "Retry abort must stop before a second Faux call.");
+  assertCase(runtime.fauxHandle.getPendingResponseCount() === 1, "Retry abort consumed the response reserved to prove no second run occurred.");
   assertCase(count(runtime.sessionEvents, "auto_retry_start") === 1, "Retry abort must emit one public auto_retry_start.");
   assertCase(count(runtime.sessionEvents, "auto_retry_end") === 1, "Retry abort must emit one public auto_retry_end.");
   assertCase(retryEnds[0]?.success === false, "Retry abort auto_retry_end must report success=false.");
   assertCase(retryEnds[0]?.finalError === "Retry cancelled", "Retry abort finalError must be Retry cancelled.");
-  assertCase(result.retry.public.agentEndWillRetry.length === 1 && result.retry.public.agentEndWillRetry[0] === true, "Retry abort must preserve the preceding agent_end(willRetry=true).");
+  assertCase(publicAgentEnds.length === 1 && publicAgentEnds[0]?.willRetry === true, "Retry abort must preserve the preceding agent_end(willRetry=true).");
   assertCase(count(runtime.sessionEvents, "agent_settled") === 1, "Retry abort must emit one public agent_settled.");
-  assertCase(result.outcome.sessionWasIdleBeforeShutdown === true, "Retry abort did not leave Session idle.");
-  assertCase(result.outcome.sessionWasRetryingBeforeShutdown === false, "Retry abort left Session retrying.");
+  assertCase(outcome.sessionWasIdleBeforeShutdown === true, "Retry abort did not leave Session idle.");
+  assertCase(outcome.sessionWasRetryingBeforeShutdown === false, "Retry abort left Session retrying.");
 
   stage = "retry-backoff-abort:shutdown";
   await runtime.shutdown();
-  result.lifecycleNotes = runtime.lifecycleNotes;
-  return result;
+  return summarizeRuntime(runtime, {
+    source: "interactive",
+    text: RETRY_ABORT_PROMPT,
+    retryableError: RETRYABLE_ERROR,
+  }, outcome, actions);
 }
 
 async function runRetryExhaustion(coding, faux) {
   stage = "retry-exhaustion:configure";
-  const actions = [];
   const errorResponses = [4000, 5000, 6000].map((timestamp, index) =>
     faux.fauxAssistantMessage("", {
       stopReason: "error",
@@ -628,39 +601,38 @@ async function runRetryExhaustion(coding, faux) {
     runtime.session.prompt(RETRY_EXHAUSTION_PROMPT, { source: "interactive" }),
     "retry-exhaustion:prompt",
   );
-  const result = summarizeRuntime(runtime, {
-    source: "interactive",
-    text: RETRY_EXHAUSTION_PROMPT,
-    retryableError: RETRYABLE_ERROR,
-  }, promptOutcome, actions);
-
+  const outcome = captureOutcome(runtime.session, promptOutcome);
   const retryEnds = runtime.sessionEvents.filter((event) => event.type === "auto_retry_end");
+  const publicAgentEnds = runtime.sessionEvents.filter((event) => event.type === "agent_end");
+
   assertCase(promptOutcome.status === "resolved", "Retry-exhaustion prompt did not resolve.");
-  assertCase(result.provider.callCount === 3, `Retry exhaustion expected three Faux calls, got ${result.provider.callCount}.`);
-  assertCase(result.provider.pendingResponses === 1, "Retry exhaustion consumed the response beyond maxRetries.");
+  assertCase(runtime.fauxHandle.state.callCount === 3, "Retry exhaustion must consume initial call plus two retries.");
+  assertCase(runtime.fauxHandle.getPendingResponseCount() === 1, "Retry exhaustion consumed the response beyond maxRetries.");
   assertCase(count(runtime.sessionEvents, "auto_retry_start") === 2, "Retry exhaustion must emit two public auto_retry_start events.");
   assertCase(count(runtime.sessionEvents, "auto_retry_end") === 1, "Retry exhaustion must emit one terminal public auto_retry_end.");
   assertCase(retryEnds[0]?.success === false, "Retry exhaustion auto_retry_end must report success=false.");
   assertCase(retryEnds[0]?.finalError === RETRYABLE_ERROR, "Retry exhaustion finalError must preserve the provider error.");
   assertCase(
-    JSON.stringify(result.retry.public.agentEndWillRetry) === JSON.stringify([true, true, false]),
-    `Retry exhaustion agent_end.willRetry sequence drifted: ${JSON.stringify(result.retry.public.agentEndWillRetry)}.`,
+    JSON.stringify(publicAgentEnds.map((event) => event.willRetry)) === JSON.stringify([true, true, false]),
+    `Retry exhaustion agent_end.willRetry sequence drifted: ${JSON.stringify(publicAgentEnds.map((event) => event.willRetry))}.`,
   );
   assertCase(count(runtime.sessionEvents, "agent_settled") === 1, "Retry exhaustion must emit one public agent_settled.");
-  assertCase(result.outcome.sessionWasIdleBeforeShutdown === true, "Retry exhaustion did not leave Session idle.");
-  assertCase(result.outcome.sessionWasRetryingBeforeShutdown === false, "Retry exhaustion left Session retrying.");
+  assertCase(outcome.sessionWasIdleBeforeShutdown === true, "Retry exhaustion did not leave Session idle.");
+  assertCase(outcome.sessionWasRetryingBeforeShutdown === false, "Retry exhaustion left Session retrying.");
 
   stage = "retry-exhaustion:shutdown";
   await runtime.shutdown();
-  result.lifecycleNotes = runtime.lifecycleNotes;
-  return result;
+  return summarizeRuntime(runtime, {
+    source: "interactive",
+    text: RETRY_EXHAUSTION_PROMPT,
+    retryableError: RETRYABLE_ERROR,
+  }, outcome, []);
 }
 
 async function run() {
   if ((process.env.PI_LIFECYCLE_SCENARIO ?? SCENARIO) !== SCENARIO) {
     throw new Error(`Unexpected lifecycle scenario: ${process.env.PI_LIFECYCLE_SCENARIO ?? "<missing>"}`);
   }
-
   await Promise.all([
     mkdir(workspaceDir, { recursive: true }),
     mkdir(agentDir, { recursive: true }),
@@ -668,7 +640,6 @@ async function run() {
 
   stage = "load-installed-modules";
   const { coding, faux } = await loadInstalledModules();
-
   completedCases.activeStreamAbort = await runActiveStreamAbort(coding, faux);
   completedCases.retryBackoffAbort = await runRetryBackoffAbort(coding, faux);
   completedCases.retryExhaustion = await runRetryExhaustion(coding, faux);
@@ -691,7 +662,6 @@ async function run() {
       fullActiveResponseIncluded: false,
     },
   };
-
   await writeResult(result);
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
