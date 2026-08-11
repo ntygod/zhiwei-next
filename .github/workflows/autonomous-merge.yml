@@ -54,6 +54,8 @@ jobs:
               await new Promise((resolve) => setTimeout(resolve, 2000));
             }
 
+            core.info(`Evaluating PR #${pullNumber}: head=${pr.head.sha}, base=${pr.base.sha}, bodyLength=${(pr.body ?? "").length}.`);
+
             if (pr.state !== "open" || pr.draft) {
               core.info("Pull request is closed or still draft; autonomous merge is skipped.");
               return;
@@ -76,10 +78,16 @@ jobs:
             }
 
             function parseBlock(text, marker) {
-              const match = new RegExp(`<!--\\s*${marker}([\\s\\S]*?)-->`, "i").exec(text ?? "");
-              if (!match) return undefined;
+              const source = text ?? "";
+              const markerIndex = source.lastIndexOf(marker);
+              if (markerIndex < 0) return undefined;
+              const commentStart = source.lastIndexOf("<!--", markerIndex);
+              const commentEnd = source.indexOf("-->", markerIndex + marker.length);
+              if (commentStart < 0 || commentEnd < 0 || commentStart > markerIndex) return undefined;
+
               const result = {};
-              for (const rawLine of match[1].split(/\\r?\\n/)) {
+              const block = source.slice(markerIndex + marker.length, commentEnd);
+              for (const rawLine of block.split(/\r?\n/)) {
                 const line = rawLine.trim();
                 const separator = line.indexOf(":");
                 if (separator <= 0) continue;
@@ -103,6 +111,7 @@ jobs:
             }
 
             const metadata = parseBlock(body, "zhiwei-harness");
+            core.info(`Harness metadata for PR #${pullNumber}: autonomous-merge=${metadata?.["autonomous-merge"] ?? "<missing>"}, risk=${metadata?.risk ?? "<missing>"}, independent-review=${metadata?.["independent-review"] ?? "<missing>"}.`);
             if (!metadata || metadata["autonomous-merge"] !== "yes") {
               core.info("Autonomous merge is not enabled in the PR contract.");
               return;
@@ -139,7 +148,7 @@ jobs:
                 } else if (
                   path.startsWith("apps/") ||
                   path.startsWith("packages/") ||
-                  /\\.(?:ts|tsx|js|jsx|mjs|cjs|json|yml|yaml)$/.test(path)
+                  /\.(?:ts|tsx|js|jsx|mjs|cjs|json|yml|yaml)$/.test(path)
                 ) {
                   risk = maxRisk(risk, "R1");
                 }
