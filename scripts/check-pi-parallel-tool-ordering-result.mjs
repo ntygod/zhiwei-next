@@ -54,7 +54,7 @@ function checkContiguousSequence(events, label) {
 
 const [packageText, ci, captureSource] = await Promise.all([
   readFile("package.json", "utf8"),
-  readFile(".github/workflows/ci.yml", "utf8"),
+  readFile(".github/workflows/pi-parallel-tool-ordering.yml", "utf8"),
   readFile("scripts/probes/pi-parallel-tool-ordering-capture.mjs", "utf8"),
 ]);
 const packageJson = JSON.parse(packageText);
@@ -75,9 +75,9 @@ requireValue(
 );
 
 for (const required of [
-  "pi-parallel-tool-ordering-probe:",
+  "name: Pi parallel Tool ordering contract",
+  "probe:",
   "name: Pi parallel Tool ordering lifecycle probe",
-  "needs.check.outputs.pi-lifecycle-probe == 'true'",
   DEFAULT_FIXTURE,
   "scripts/check-pi-parallel-tool-ordering-result.mjs",
   "scripts/probes/pi-parallel-tool-ordering-capture.mjs",
