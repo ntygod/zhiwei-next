@@ -72,11 +72,12 @@
   },
   "technicalMitigation": {
     "status": "implemented-and-live-verified",
-    "pullRequests": [10, 11, 12],
+    "pullRequests": [10, 11, 12, 13],
     "mergedCommits": [
       "852fd1e483bc07b8736e5da08b2f70e66544e4cf",
       "70224f51d37cce3427dc6480c2039bc98bf1ba53",
-      "c05eba9f840c82d7b61494ae6bb06833d140d6c0"
+      "c05eba9f840c82d7b61494ae6bb06833d140d6c0",
+      "10c963ef8bee978543dccf73047d3bd2d18baae5"
     ],
     "controls": [
       "non-default-branch write preflight",
@@ -108,8 +109,18 @@
     "residualRiskAcceptedByOwner": true
   },
   "closure": {
-    "status": "pending-final-recovery-pr-provenance",
-    "expectedPullRequest": 13,
-    "condition": "Close Issue #9 only after PR #13 merges and its own token-driven provenance chain succeeds."
+    "status": "completed",
+    "pullRequest": 13,
+    "mergeCommit": "10c963ef8bee978543dccf73047d3bd2d18baae5",
+    "proofRecord": "docs/harness/provenance-proofs/2026-08-11-pr-13.json",
+    "workflowRuns": {
+      "ci": 31499190699,
+      "autonomousMerge": 31499233718,
+      "provenanceDispatch": 31499233680,
+      "provenanceReceiver": 31499253092
+    },
+    "issueState": "closed",
+    "stateReason": "completed",
+    "closedAt": "2026-08-11T14:03:22Z"
   }
 }
