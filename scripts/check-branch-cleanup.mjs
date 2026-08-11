@@ -23,10 +23,21 @@ requireValue(
 );
 
 const config = JSON.parse(await read("harness.config.json"));
+const packageJson = JSON.parse(await read("package.json"));
 const workflow = await read(".github/workflows/branch-cleanup.yml");
 const policy = await read("scripts/branch-cleanup-policy.mjs");
 const lifecycle = await read("docs/harness/branch-lifecycle.md");
 const harnessReadme = await read("docs/harness/README.md");
+const scripts = packageJson.scripts ?? {};
+
+requireValue(
+  scripts["check:branch-cleanup"] === "node scripts/check-branch-cleanup.mjs",
+  "package.json must expose the canonical check:branch-cleanup command.",
+);
+requireValue(
+  scripts.check?.includes("npm run check:branch-cleanup"),
+  "package.json scripts.check must invoke npm run check:branch-cleanup.",
+);
 
 for (const [field, expected] of Object.entries({
   cleanupWorkflow: ".github/workflows/branch-cleanup.yml",
@@ -130,6 +141,7 @@ for (const required of [
   "重新读取",
   "404",
   "不 checkout 或执行 PR 分支代码",
+  "`${{ github.sha }}`",
   "不得通过 force-push",
 ]) {
   requireValue(lifecycle.includes(required), `Branch lifecycle document is missing: ${required}`);
@@ -141,6 +153,7 @@ for (const required of [
   "head.sha",
   "开放 PR",
   "复用",
+  "check:branch-cleanup",
 ]) {
   requireValue(harnessReadme.includes(required), `Harness README is missing branch cleanup disclosure: ${required}`);
 }
