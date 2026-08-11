@@ -9,14 +9,15 @@ Pi 是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ex
 | 项目 | 当前值 |
 |---|---|
 | 权威上游 | `earendil-works/pi` |
-| 固定 Commit | `b647d187932c76d4003728010daeed9c1b496a6a` |
+| Release Tag | `v0.84.1` |
+| Tag Commit | `53fa77ccd8a279eb87e92294ef3687b03ff80112` |
 | Coding Agent 包 | `@earendil-works/pi-coding-agent@0.84.1` |
 | Node 要求 | `>=22.19.0` |
 | 验证状态 | source-verified / runtime-unverified |
 
 详细证据、Blob SHA、事件 Fixture 和动态复验命令见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。
 
-当前固定的是 **Spike 证据基线**，不是生产依赖承诺。在 SDK/RPC 动态探针和 Extension 真实事件序列完成前，不修改正式 `NormalizedRuntimeEvent`。
+当前固定的是 **Release Tag 源码证据基线**，不是 npm Tarball 或生产依赖承诺。在 SDK/RPC 动态探针和 Extension 真实事件序列完成前，不修改正式 `NormalizedRuntimeEvent`。
 
 ## 三个不同的集成表面
 
