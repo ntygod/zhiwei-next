@@ -84,7 +84,7 @@ for (const required of [
   "needs.check.outputs.pi-artifact-probe == 'true'",
   "persist-credentials: false",
   "node-version: 22.23.1",
-  "npm run probe:pi:artifact",
+  "node scripts/probes/pi-artifact-ci.mjs",
   "scripts/check-pi-artifact-result.mjs",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
   "if: always()",
