@@ -123,7 +123,7 @@ Branch Cleanup 只删除同时满足以下条件的分支：
 - 不是默认分支；
 - 不是 protected 分支。
 
-Fork、无 PR 历史分支、开放 PR 分支，以及在 PR关闭后继续推进或复用的同名分支都保留。Workflow 不 checkout 或执行 PR代码，策略自检失败时不会执行真实删除。完整选择规则、幂等语义与恢复路径见 `branch-lifecycle.md`。
+Fork、无 PR 历史分支、开放 PR 分支，以及在 PR关闭后继续推进或复用的同名分支都保留。Workflow 不 checkout 或执行 PR 分支代码，只 checkout 该次默认分支 Workflow绑定的 `${{ github.sha }}`，且不持久化凭证。完整选择规则、幂等语义与恢复路径见 `branch-lifecycle.md`。
 
 ## 机器门禁
 
@@ -133,13 +133,14 @@ Fork、无 PR 历史分支、开放 PR 分支，以及在 PR关闭后继续推�
 - `AGENTS.md` 层级与引用检查；
 - main provenance 事故与恢复链检查；
 - token-driven provenance dispatch 合同检查；
+- Branch Cleanup 策略、可信 checkout、删除前复核与恢复合同检查（`check:branch-cleanup`）；
 - Harness 配置、风险接受记录和必需文件检查；
 - Pi source/runtime 契约检查；
 - 自动化测试。
 
 PR 还会执行 `scripts/check-pr-contract.mjs`，核对风险、治理变更、独立审查和 Main Incident Recovery 声明。CI 成功后，默认分支上的 `autonomous-merge.yml` 只会合并满足当前安全状态的非 Draft PR。
 
-所有 Workflow Action 必须固定完整 Commit SHA。Branch Cleanup 作为治理文件被 `harness.config.json` 注册，并由通用 Harness 检查验证存在性与 Action 固定要求；真实运行前还会执行内置策略场景。
+所有 Workflow Action 必须固定完整 Commit SHA。Branch Cleanup 的候选策略位于 `scripts/branch-cleanup-policy.mjs`；普通 CI和真实清理 Workflow运行同一组确定性场景。Workflow、策略、Checker和文档都被 `harness.config.json` 注册为治理事实源。
 
 ## 连续性
 
