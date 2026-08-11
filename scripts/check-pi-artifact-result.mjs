@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 
 const repoRoot = process.cwd();
 const baselinePath = resolve(repoRoot, "packages/pi-adapter/fixtures/pi-upstream-baseline.json");
-const committedPath = resolve(repoRoot, "packages/pi-adapter/fixtures/pi-artifact-runtime.json");
+const committedRelativePath = "packages/pi-adapter/fixtures/pi-artifact-runtime.json";
+const committedPath = resolve(repoRoot, committedRelativePath);
 const requestedPath = process.argv[2] ? resolve(process.argv[2]) : committedPath;
 const baseline = JSON.parse(await readFile(baselinePath, "utf8"));
 const violations = [];
@@ -141,11 +142,12 @@ function validate(result, rawText, label) {
   }
   if (
     result.rpcProbe?.status !== "ok" ||
+    result.rpcProbe?.executionMode !== "node-cli-entry" ||
     result.rpcProbe?.sessionIdPresent !== true ||
     result.rpcProbe?.credentialsUsed !== false ||
     result.rpcProbe?.promptsSent !== 0
   ) {
-    violations.push(`${prefix}RPC probe did not satisfy the credential-free state contract.`);
+    violations.push(`${prefix}RPC probe did not satisfy the noexec-safe credential-free state contract.`);
   }
   if (!/^node:22\.23\.1-bookworm-slim@sha256:[0-9a-f]{64}$/.test(result.environment?.containerImage ?? "")) {
     violations.push(`${prefix}container image must be the digest-pinned Node 22.23.1 slim image.`);
@@ -200,18 +202,74 @@ if (!requestedExists) {
 }
 
 let requestedFingerprint;
+let requestedResult;
 if (requestedExists) {
   const requestedText = await readFile(requestedPath, "utf8");
-  const requested = JSON.parse(requestedText);
-  requestedFingerprint = validate(requested, requestedText, "requested result");
+  requestedResult = JSON.parse(requestedText);
+  requestedFingerprint = validate(requestedResult, requestedText, "requested result");
 }
 
-if (committedExists && requestedPath !== committedPath) {
+let committedFingerprint;
+let committedResult;
+if (committedExists) {
   const committedText = await readFile(committedPath, "utf8");
-  const committed = JSON.parse(committedText);
-  const committedFingerprint = validate(committed, committedText, "committed result");
-  if (requestedFingerprint !== committedFingerprint) {
-    violations.push("Fresh dynamic result differs from the committed contract fingerprint.");
+  committedResult = JSON.parse(committedText);
+  committedFingerprint =
+    requestedPath === committedPath
+      ? requestedFingerprint
+      : validate(committedResult, committedText, "committed result");
+}
+
+if (committedFingerprint && requestedPath !== committedPath && requestedFingerprint !== committedFingerprint) {
+  violations.push("Fresh dynamic result differs from the committed contract fingerprint.");
+}
+
+if (baselineRequiresResult) {
+  if (baseline.status !== "source-and-runtime-verified") {
+    violations.push("A passed dynamic probe requires source-and-runtime-verified baseline status.");
+  }
+  if (baseline.package?.registryArtifactVerified !== true) {
+    violations.push("A passed dynamic probe requires registryArtifactVerified: true.");
+  }
+  if (baseline.dynamicProbe?.resultPath !== committedRelativePath) {
+    violations.push("The passed dynamic probe must point to the committed runtime result path.");
+  }
+  if (!committedFingerprint || baseline.dynamicProbe?.contractFingerprint !== committedFingerprint) {
+    violations.push("The baseline dynamic-probe fingerprint differs from the committed runtime result.");
+  }
+  if (!committedResult) {
+    violations.push("The passed dynamic probe requires committed runtime evidence.");
+  } else {
+    if (baseline.dynamicProbe?.verifiedAt !== committedResult.capturedAt) {
+      violations.push("The baseline verifiedAt timestamp differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.registryArtifact?.integrity !== committedResult.registry?.integrity) {
+      violations.push("The baseline registry integrity differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.registryArtifact?.shasum !== committedResult.registry?.shasum) {
+      violations.push("The baseline registry shasum differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.registryArtifact?.manifestSha256 !== committedResult.tarball?.manifestSha256) {
+      violations.push("The baseline manifest digest differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.environment?.containerImage !== committedResult.environment?.containerImage) {
+      violations.push("The baseline container image differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.rpc?.executionMode !== committedResult.rpcProbe?.executionMode) {
+      violations.push("The baseline RPC execution mode differs from the committed runtime result.");
+    }
+    if (baseline.dynamicProbe?.workflow?.runId !== committedResult.evidence?.workflowRunId) {
+      violations.push("The baseline workflow run differs from the committed runtime evidence.");
+    }
+    if (baseline.dynamicProbe?.workflow?.artifactId !== committedResult.evidence?.artifactId) {
+      violations.push("The baseline Artifact ID differs from the committed runtime evidence.");
+    }
+    if (baseline.dynamicProbe?.workflow?.artifactDigest !== committedResult.evidence?.artifactDigest) {
+      violations.push("The baseline Artifact digest differs from the committed runtime evidence.");
+    }
+  }
+  if (!Array.isArray(baseline.dynamicProbe?.recoveryEvidence) || baseline.dynamicProbe.recoveryEvidence.length < 2) {
+    violations.push("The passed dynamic probe must preserve the rejected-host and noexec recovery evidence.");
   }
 }
 
