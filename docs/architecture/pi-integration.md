@@ -22,7 +22,7 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Retry公共/Extension表面差异 | 已验证，Extension无 Retry专有事件和 `willRetry`增强 |
 | Follow-up队列 | 已验证，同一公共 Run内两个 Turn、队列先非空后清空、最终单次 `agent_settled` |
 | Queue公共/Extension表面差异 | 已验证，公共 Session有 `queue_update`，Extension无队列事件 |
-| 验证状态 | `source-and-runtime-verified-follow-up-queue` |
+| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -131,7 +131,7 @@ Run 2 → Retry recovered.
 - `session.prompt()`返回时 `isIdle=true`且 `isRetrying=false`；
 - Session最终消息角色只有 `user → assistant`；
 - 第一次失败 Assistant消息虽未保留在最终 `session.messages`，但仍完整存在于 Runtime事件流；
-- fresh CI Capture与 committed Fixture完整指纹一致。
+- fresh CI Capture与 committed Fixture完整契约指纹一致。
 
 ### Public SDK与 Extension差异
 
@@ -188,7 +188,7 @@ Initial prompt
 - 队列清空后仍有完整的用户消息、Assistant响应、`turn_end`、`agent_end`和 `agent_settled`，所以队列为空不等于 Prompt完成；
 - `session.messages`最终角色为 `user → assistant → user → assistant`；
 - `session.prompt()`返回时 `isIdle=true`、Pending Message为零、Pending Follow-up为空；
-- fresh CI Capture与 committed Fixture完整指纹一致。
+- fresh CI Capture与 committed Fixture完整契约指纹一致。
 
 ### Public SDK与 Extension差异
 
@@ -203,6 +203,8 @@ Extension事件中：
 ```text
 queue_update count = 0
 ```
+
+捕获脚本已在 Inline Extension 中显式注册 `queue_update` Listener；注册成功但运行期间没有收到该事件，因此这里的零计数是 Runtime 负证据，而不是未订阅造成的结果。
 
 因此：
 
@@ -267,7 +269,7 @@ session.extensionRunner.emit({ type: session_shutdown, reason: exit })
 固定源码与动态 Fixture已经确认：
 
 - `AgentSession.subscribe()`提供 Agent、Turn、Message、Tool、Retry、Queue和最终 Settled生命周期；
-- 一个 Prompt可能包含多个底层 Agent Run，例如自动重试；
+- 一个 Prompt可包含多个 Agent Run，例如自动重试；
 - 一个 Agent Run也可能包含多个 Turn，已验证 Follow-up场景即为一个 Run、两个 Turn；
 - Tool Start/Update/End都携带真实 `toolCallId`；
 - Tool Result Message在 Tool Execution End之后进入消息流；
