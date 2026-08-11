@@ -444,12 +444,23 @@ async function runActiveStreamAbort(coding, faux) {
         timestamp: 1000,
       }),
     ],
-    tokensPerSecond: 10_000,
+    tokensPerSecond: 128,
     tokenSize: { min: 32, max: 32 },
     onPublicEvent: ({ event, record }) => {
-      if (!updateSeen && event.type === "message_update" && event.message?.role === "assistant") {
+      const partialText = textFromContent(event.message?.content);
+      if (
+        !updateSeen &&
+        event.type === "message_update" &&
+        event.message?.role === "assistant" &&
+        partialText !== undefined &&
+        partialText.length < ACTIVE_ABORT_RESPONSE.length
+      ) {
         updateSeen = true;
-        resolveUpdate(record.sequence);
+        resolveUpdate({
+          sequence: record.sequence,
+          messageTextLength: partialText.length,
+          messageTextSha256: sha256(partialText),
+        });
       }
     },
   });
@@ -459,7 +470,7 @@ async function runActiveStreamAbort(coding, faux) {
     runtime.session.prompt(ACTIVE_ABORT_PROMPT, { source: "interactive" }),
     "active-stream-abort:prompt",
   );
-  const triggerSequence = await withTimeout(sawUpdate, 5_000, "active-stream-abort message_update");
+  const trigger = await withTimeout(sawUpdate, 5_000, "active-stream-abort partial message_update");
   const abortOutcome = await withTimeout(
     settle(runtime.session.abort(), "active-stream-abort:abort"),
     5_000,
@@ -469,7 +480,9 @@ async function runActiveStreamAbort(coding, faux) {
   const actions = [{
     type: "session.abort",
     triggerEvent: "message_update",
-    triggerSequence,
+    triggerSequence: trigger.sequence,
+    triggerMessageTextLength: trigger.messageTextLength,
+    triggerMessageTextSha256: trigger.messageTextSha256,
     outcome: abortOutcome,
   }];
   const outcome = captureOutcome(runtime.session, promptOutcome, { abort: abortOutcome });
