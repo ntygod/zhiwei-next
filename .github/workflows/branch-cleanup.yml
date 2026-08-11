@@ -28,9 +28,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const repositoryFullName = `${owner}/${repo}`;
-            const repository = context.payload.repository ?? (
-              await github.rest.repos.get({ owner, repo })
-            ).data;
+            const { data: repository } = await github.rest.repos.get({ owner, repo });
             const defaultBranch = repository.default_branch;
 
             function selectClosedPullRequestBranches({
@@ -208,7 +206,12 @@ jobs:
             const failures = [];
             for (const candidate of candidates) {
               try {
-                const [{ data: latestBranch }, currentlyOpenPullRequests] = await Promise.all([
+                const [
+                  { data: latestRepository },
+                  { data: latestBranch },
+                  currentlyOpenPullRequests,
+                ] = await Promise.all([
+                  github.rest.repos.get({ owner, repo }),
                   github.rest.repos.getBranch({
                     owner,
                     repo,
@@ -223,6 +226,12 @@ jobs:
                   }),
                 ]);
 
+                if (candidate.name === latestRepository.default_branch) {
+                  core.warning(
+                    `Preserving ${candidate.name}: it became the default branch after candidate selection.`,
+                  );
+                  continue;
+                }
                 if (currentlyOpenPullRequests.length > 0) {
                   core.warning(
                     `Preserving ${candidate.name}: an open PR appeared after candidate selection.`,
