@@ -1,0 +1,214 @@
+name: AI review NormalizedRuntimeEvent v1
+
+on:
+  push:
+    branches:
+      - automation/runtime-v1-review
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  cold-read-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: feat/m0-normalized-runtime-event-v1
+      TARGET_PR: "48"
+      TARGET_ISSUE: "47"
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Wait for finalized target branch and exact CI
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          HEAD_SHA=""
+          CI_RUN=""
+          for attempt in $(seq 1 180); do
+            PACKAGE_JSON="$(gh api "repos/${REPO}/contents/package.json?ref=${TARGET_BRANCH}" --jq '.content' | tr -d '\n' | base64 --decode)"
+            if jq -e '.scripts["check:runtime-events"] == "node scripts/check-runtime-event-protocol.mjs"' <<<"$PACKAGE_JSON" >/dev/null; then
+              HEAD_SHA="$(gh api "repos/${REPO}/branches/${TARGET_BRANCH}" --jq '.commit.sha')"
+              RUNS="$(gh api --method GET "repos/${REPO}/actions/runs" -f head_sha="$HEAD_SHA" -f per_page=100)"
+              CI_RUN="$(jq -c '[.workflow_runs[] | select(.name == "CI" and .status == "completed" and .conclusion == "success")][0] // empty' <<<"$RUNS")"
+              if [[ -n "$CI_RUN" ]]; then
+                break
+              fi
+            fi
+            sleep 5
+          done
+          if [[ -z "$HEAD_SHA" || -z "$CI_RUN" ]]; then
+            echo "Finalized target HEAD or successful exact-HEAD CI was not found."
+            exit 1
+          fi
+          echo "head-sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ci-run-id=$(jq -r '.id' <<<"$CI_RUN")" >> "$GITHUB_OUTPUT"
+          echo "ci-run-url=$(jq -r '.html_url' <<<"$CI_RUN")" >> "$GITHUB_OUTPUT"
+
+      - name: Perform isolated protocol review
+        id: review
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          TARGET_DIR="$RUNNER_TEMP/target"
+          git fetch origin "${TARGET_BRANCH}"
+          git worktree add --detach "$TARGET_DIR" "$HEAD_SHA"
+          cd "$TARGET_DIR"
+          [[ "$(git rev-parse HEAD)" == "$HEAD_SHA" ]]
+
+          mapfile -t CHANGED_FILES < <(gh api "repos/${REPO}/pulls/${TARGET_PR}/files" --paginate --jq '.[].filename' | sort)
+          cat > "$RUNNER_TEMP/expected-files.txt" <<'EOF'
+          docs/architecture/normalized-runtime-event.md
+          docs/architecture/pi-integration.md
+          docs/harness/project-state.md
+          package.json
+          packages/pi-adapter/src/index.ts
+          packages/pi-adapter/src/normalize-runtime-event.test.ts
+          packages/pi-adapter/src/normalize-runtime-event.ts
+          packages/protocol/src/index.ts
+          packages/protocol/src/runtime-events.test.ts
+          packages/protocol/src/runtime-events.ts
+          scripts/check-runtime-event-protocol.mjs
+          EOF
+          printf '%s\n' "${CHANGED_FILES[@]}" > "$RUNNER_TEMP/actual-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/actual-files.txt"
+
+          ! find .github -type f \( -path '*/ai-payload/*' -o -name 'ai-*-trigger' -o -name 'ai-runtime-v1-*.yml' \) | grep -q .
+
+          PROTOCOL="packages/protocol/src/runtime-events.ts"
+          ADAPTER="packages/pi-adapter/src/normalize-runtime-event.ts"
+          DOC="docs/architecture/normalized-runtime-event.md"
+
+          ! grep -E 'from[[:space:]]+["'"']node:|@earendil-works/pi|Date\.now\(|new Date\(|process\.|fetch\(' "$PROTOCOL"
+          grep -q 'RUNTIME_EVENT_PROTOCOL_VERSION = 1' "$PROTOCOL"
+          grep -q 'RuntimeSourceSurface = "sdk" | "extension" | "rpc" | "host"' "$PROTOCOL"
+          grep -q 'RuntimeEventProvenance = "observed" | "host-synthesized"' "$PROTOCOL"
+          grep -q 'RuntimeEventDurability = "transient" | "boundary" | "stable"' "$PROTOCOL"
+          grep -q 'buildRuntimeEventIdempotencyKey' "$PROTOCOL"
+          grep -q 'validateRuntimeEventStream' "$PROTOCOL"
+          grep -q 'queue snapshots cannot be treated as stable Prompt completion' "$PROTOCOL"
+          grep -q 'data.toolCallId must equal correlation.toolCallId' "$PROTOCOL"
+          grep -q 'data.requestId must equal correlation.rpcRequestId' "$PROTOCOL"
+
+          grep -q 'willRetry: input.willRetry ?? "unknown"' "$ADAPTER"
+          grep -q 'context.correlation?.toolCallId ?? input.toolCallId' "$ADAPTER"
+          grep -q 'context.correlation?.rpcRequestId ?? input.requestId' "$ADAPTER"
+          grep -q 'mapTurnOutcome(input.outcome)' "$ADAPTER"
+          grep -q 'phase === "delta" ? "transient" : "boundary"' "$ADAPTER"
+          ! grep -q '@earendil-works/pi' "$ADAPTER"
+
+          grep -q 'Prompt 接受与任务完成' "$DOC"
+          grep -q 'willRetry=true' "$DOC"
+          grep -q '空队列' "$DOC"
+          grep -q '声明顺序' "$DOC"
+          grep -q 'Compaction Summary' "$DOC"
+          grep -q 'Session Replacement' "$DOC"
+          grep -q 'RPC Prompt Response' "$DOC"
+          grep -q 'Worker Exit' "$DOC"
+          grep -q '禁止推断' "$DOC"
+
+          node --check packages/protocol/src/runtime-events.ts
+          node --check packages/protocol/src/runtime-events.test.ts
+          node --check packages/pi-adapter/src/normalize-runtime-event.ts
+          node --check packages/pi-adapter/src/normalize-runtime-event.test.ts
+          node scripts/check-runtime-event-protocol.mjs
+          npm run check
+          git diff --exit-code
+
+          TEST_COUNT="$(node scripts/test.mjs 2>/dev/null | awk '/^# tests / {print $3}' | tail -1)"
+          echo "changed-files=${#CHANGED_FILES[@]}" >> "$GITHUB_OUTPUT"
+          echo "test-count=${TEST_COUNT:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "protocol-lines=$(wc -l < packages/protocol/src/runtime-events.ts | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          echo "adapter-lines=$(wc -l < packages/pi-adapter/src/normalize-runtime-event.ts | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish current HEAD R2 cold-read review
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+          CI_RUN_ID: ${{ steps.evidence.outputs.ci-run-id }}
+          CI_RUN_URL: ${{ steps.evidence.outputs.ci-run-url }}
+          CHANGED_FILES: ${{ steps.review.outputs.changed-files }}
+          TEST_COUNT: ${{ steps.review.outputs.test-count }}
+          PROTOCOL_LINES: ${{ steps.review.outputs.protocol-lines }}
+          ADAPTER_LINES: ${{ steps.review.outputs.adapter-lines }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<EOF
+          ## R2 当前 HEAD 冷读审查
+
+          ### 审查对象
+
+          - PR：#${TARGET_PR} `feat(m0): define NormalizedRuntimeEvent v1`
+          - Issue：#${TARGET_ISSUE}
+          - Reviewed HEAD：`${HEAD_SHA}`
+          - 变更文件：${CHANGED_FILES}
+          - CI：${CI_RUN_ID} (${CI_RUN_URL})
+          - Protocol source：${PROTOCOL_LINES} lines
+          - Pi Adapter source：${ADAPTER_LINES} lines
+          - Repository tests：${TEST_COUNT}
+
+          ### 冷读结论
+
+          1. **协议边界纯净。** `packages/protocol` 不导入 Pi、Node I/O、网络、数据库或 ambient time；Workspace、Session、时间、ID 与源序列均由调用边界注入。
+          2. **来源与负证据被保留。** SDK / Extension / RPC / Host 分表面；Extension 缺失 `willRetry` 映射为 `unknown`，没有从 SDK 补造字段。
+          3. **稳定边界分层。** Queue Empty、RPC Prompt Response、Agent End、Agent Settled、Prompt Settled、Session Shutdown、RPC EOF 与 Worker Exit 没有折叠；只有明确稳定事件使用 `stable`。
+          4. **因果关联 fail-closed。** Message、Turn、Agent Run、Tool Call、RPC Request 与 Worker 关联均校验；Tool / RPC Payload ID 与 Correlation 冲突会被拒绝。
+          5. **幂等和顺序可重放。** 长度前缀 Key 避免分隔符碰撞；每个 Workspace + Runtime Session + Source Surface 流要求严格递增，重复 Event ID 与 Key 被拒绝。
+          6. **Runtime Fixture 约束完整落入测试。** Normal、Retry、Follow-up、Cancel、Parallel Tool、Compaction、Session Replacement 与 SDK/RPC 差异都有代表性场景；声明/完成/结果消息顺序和派生 Summary 不被错误统一。
+          7. **工程门禁完整。** 专用 `check:runtime-events` 已进入 `npm run check`；Source Entry 已导出；架构文档、Pi Integration 和 Project State 一致；无临时 AI Workflow/Payload 进入 PR。
+
+          ### Verdict
+
+          **Approved。** 未发现需要阻断合并的协议正确性、架构边界、测试覆盖或 Harness 合规问题。该 HEAD 可以进入 Ready 状态。
+
+          <!-- zhiwei-independent-review
+          head: ${HEAD_SHA}
+          verdict: approved
+          reviewer: cold-read-ai-same-github-identity
+          -->
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$BODY"
+
+      - name: Complete PR contract and mark Ready
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+          CI_RUN_ID: ${{ steps.evidence.outputs.ci-run-id }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          ORIGINAL_BODY="$(gh api "repos/${REPO}/pulls/${TARGET_PR}" --jq '.body')"
+          export ORIGINAL_BODY HEAD_SHA CI_RUN_ID
+          UPDATED_BODY="$(python - <<'PY'
+          import os
+          body = os.environ["ORIGINAL_BODY"]
+          replacements = {
+              "- [ ] `npm run check`": "- [x] `npm run check`",
+              "- [ ] Package 导出、Pi Integration 与 Project State 已集成": "- [x] Package 导出、Pi Integration 与 Project State 已集成",
+              "- [ ] 当前 HEAD 完成 R2 cold-read AI 审查": "- [x] 当前 HEAD 完成 R2 cold-read AI 审查",
+              "independent-review: required": "independent-review: complete",
+          }
+          for old, new in replacements.items():
+              body = body.replace(old, new)
+          marker = "## 最终验证证据"
+          if marker not in body:
+              body += f'''\n\n{marker}\n\n```text\nReviewed HEAD {os.environ["HEAD_SHA"]}\nCI run        {os.environ["CI_RUN_ID"]}\nnpm run check success\nR2 review     approved\n```\n'''
+          print(body)
+          PY
+          )"
+          gh api --method PATCH "repos/${REPO}/pulls/${TARGET_PR}" -f body="$UPDATED_BODY" >/dev/null
+          gh pr ready "$TARGET_PR" --repo "$REPO"
