@@ -4,8 +4,8 @@ export const SDK_RPC_PARITY_SCENARIO = "sdk-rpc-parity";
 export const PI_PACKAGE_NAME = "@earendil-works/pi-coding-agent";
 export const PI_PACKAGE_VERSION = "0.84.1";
 export const PI_PACKAGE_INTEGRITY =
-  "sha512-XG+bBciNgppI8cRLGPM7EIUm/tE8la/H3zAnyXKB4nyOIced0o005uqTzCF6eX2W/bEyiMh8rt0GVSCf4rtSNQ==";
-export const PI_PACKAGE_SHASUM = "0fb7c632055a9797053ef5712a469d7a2e4b2cfb";
+  "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==";
+export const PI_PACKAGE_SHASUM = "e098cada629fdeeb9df6e77c6d480d43e1b2c553";
 export const PI_RELEASE_TAG = "v0.84.1";
 export const PI_RELEASE_COMMIT = "53fa77ccd8a279eb87e92294ef3687b03ff80112";
 
