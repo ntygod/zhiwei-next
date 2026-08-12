@@ -9,6 +9,7 @@ on:
       - packages/pi-adapter/fixtures/pi-upstream-baseline.json
       - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**
       - scripts/check-pi-sdk-rpc-parity-result.mjs
+      - scripts/check-pi-sdk-rpc-client-messages-result.mjs
       - scripts/pi-sdk-rpc-parity-fixture.mjs
       - scripts/probes/pi-lifecycle-ci.mjs
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
@@ -55,6 +56,7 @@ jobs:
           node --check scripts/probes/pi-sdk-rpc-parity-capture.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
+          node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
           node --check scripts/pi-sdk-rpc-parity-fixture.mjs
           node scripts/pi-sdk-rpc-parity-fixture.mjs --check
 
@@ -66,7 +68,7 @@ jobs:
           set -euo pipefail
           BUNDLE="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-bundle"
           RESULT_DIR="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-result"
-          mkdir -p "$BUNDLE" "$RESULT_DIR"
+          mkdir -p "$BUNDLE/packages/pi-adapter/fixtures" "$RESULT_DIR"
           tar -cf - \
             packages/pi-adapter/fixtures/pi-upstream-baseline.json \
             scripts/probes/pi-lifecycle-ci.mjs \
@@ -75,6 +77,9 @@ jobs:
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             | tar -xf - -C "$BUNDLE"
+          node scripts/pi-sdk-rpc-parity-fixture.mjs \
+            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
+            --output "$BUNDLE/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
 
@@ -95,6 +100,7 @@ jobs:
             --env CI=true \
             --env GITHUB_ACTIONS=true \
             --env PI_LIFECYCLE_OUTPUT=/output/result.json \
+            --env PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json \
             --env PI_LIFECYCLE_SCENARIO=sdk-rpc-parity \
             --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             --env PI_PROBE_SOURCE_READ_ONLY=true \
@@ -109,7 +115,11 @@ jobs:
       - name: Validate sanitized SDK and RPC parity evidence
         env:
           PI_SDK_RPC_PARITY_OUTPUT: ${{ runner.temp }}/zhiwei-pi-sdk-rpc-parity-result/result.json
-        run: node scripts/check-pi-sdk-rpc-parity-result.mjs "$PI_SDK_RPC_PARITY_OUTPUT"
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-pi-sdk-rpc-parity-result.mjs "$PI_SDK_RPC_PARITY_OUTPUT"
+          node scripts/check-pi-sdk-rpc-client-messages-result.mjs "$PI_SDK_RPC_PARITY_OUTPUT"
 
       - name: Upload sanitized SDK and RPC parity evidence
         if: always()
