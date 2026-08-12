@@ -137,6 +137,7 @@
     "scripts/check-main-provenance.mjs",
     "scripts/check-main-provenance-dispatch.mjs",
     "scripts/check-pi-sdk-rpc-parity-result.mjs",
+    "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
     "scripts/pi-sdk-rpc-parity-fixture.mjs"
   ]
 }
