@@ -21,7 +21,7 @@ best-effort-private-free
 ### Runtime 证据
 
 - Pi `v0.84.1` Release Tag、npm Artifact identity、SDK动态导入和无凭证 RPC空 Session；
-- SDK / Extension正常单 Tool生命周期与真实 `toolCallId`关联；
+- Pi SDK / Extension正常单 Tool生命周期与真实 `toolCallId`关联；
 - 自动 Retry恢复、Follow-up队列、流式取消、`abortRetry()`、Retry exhaustion；
 - 并行 Tool声明、真实完成顺序和 Tool Result消息顺序分离；
 - Manual Compaction：原始 Entry树、派生 Summary和当前模型上下文分层；
@@ -34,7 +34,31 @@ best-effort-private-free
 - Main Provenance、token-driven dispatch、Incident停机与恢复提案；
 - `best-effort-private-free` 风险接受和两条 live provenance proof；
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
-- `developmentPause.active=false`，Main Incident #9 已关闭且审计历史保留。
+- `developmentPause.active=false`，Issue #9 已关闭且审计历史保留。
+
+### 历史连续性锚点
+
+这些值是已经验证的自主交付链，不因后续项目状态压缩而删除：
+
+```text
+PR #12 final CI                 31498003965
+PR #12 Autonomous Merge         31498045898
+PR #12 Provenance Dispatch      31498045864
+PR #12 Provenance Receiver      31498068302
+
+PR #13 final CI                 31499190699
+PR #13 Autonomous Merge         31499233718
+PR #13 Provenance Dispatch      31499233680
+PR #13 Provenance Receiver      31499253092
+PR #13 merge commit             10c963ef8bee978543dccf73047d3bd2d18baae5
+```
+
+机器证明：
+
+```text
+docs/harness/provenance-proofs/2026-08-11-pr-12.json
+docs/harness/provenance-proofs/2026-08-11-pr-13.json
+```
 
 ### Work Item 生命周期治理
 
