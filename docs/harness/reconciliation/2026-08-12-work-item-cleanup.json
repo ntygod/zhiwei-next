@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "status": "active",
+  "repository": "ntygod/zhiwei-next",
+  "governanceIssue": 57,
+  "ownerInputIssue": 44,
+  "recordedAt": "2026-08-12",
+  "canonicalWorkItems": {
+    "sdkRpcParity": 45,
+    "rpcWorkerLifecycle": 32,
+    "normalizedRuntimeEvent": 49,
+    "sqliteObservationLedger": 56
+  },
+  "closedPullRequests": [
+    {
+      "number": 33,
+      "reason": "superseded unfinished SDK/RPC draft",
+      "delivered": false
+    },
+    {
+      "number": 34,
+      "reason": "paused unfinished RPC Worker draft",
+      "delivered": false
+    },
+    {
+      "number": 48,
+      "reason": "retirement PR",
+      "delivered": false
+    },
+    {
+      "number": 54,
+      "reason": "retirement PR",
+      "delivered": false
+    },
+    {
+      "number": 55,
+      "reason": "retirement PR",
+      "delivered": false
+    }
+  ],
+  "duplicateIssues": [
+    {
+      "number": 31,
+      "canonical": 45
+    },
+    {
+      "number": 37,
+      "canonical": 45
+    }
+  ],
+  "legacyBranches": [
+    {
+      "branch": "automation/finalize-cleanup-pr32",
+      "expectedHead": "524792b7182775ac0f30b48c0d2b8265c887b942",
+      "action": "delete-branch",
+      "reason": "identical to main; orphan cleanup helper"
+    },
+    {
+      "branch": "automation/ledger-source-export",
+      "expectedHead": "a0b274a8684e104a70b90b49be9adb2b25889041",
+      "action": "delete-branch",
+      "reason": "contains only one-time ledger source export workflow"
+    },
+    {
+      "branch": "spike/m0-pi-sdk-rpc-lifecycle",
+      "expectedHead": "d91d5f4ce27e17f867c6fb0f2f61c1e8c89ed204",
+      "action": "delete-branch",
+      "reason": "contains only temporary SDK/RPC source export workflow and trigger"
+    },
+    {
+      "branch": "feat/m0-sqlite-observation-ledger-v1",
+      "expectedHead": "0da4e97e5cac42add96a55285976a93afd992495",
+      "action": "preserve-snapshot",
+      "reason": "substantive pre-governance code for Issue #56; frozen and blocked until #49"
+    }
+  ],
+  "safety": {
+    "deleteOnlyExactExpectedHead": true,
+    "preserveDefaultBranch": true,
+    "preserveProtectedBranches": true,
+    "preserveOpenPullRequestBranches": true,
+    "revalidateImmediatelyBeforeDelete": true,
+    "logDeletedHeadForRecovery": true,
+    "forcePushAllowed": false
+  }
+}
