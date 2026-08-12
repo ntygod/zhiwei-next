@@ -11,16 +11,16 @@
   ],
   "partLength": 2400,
   "base64Length": 12980,
-  "compressedBytes": 9735,
-  "compressedSha256": "471c41f24b07fcbdbb9d3204cd25aa4658969f81405d33d1cf8dc5446760e4cf",
-  "jsonBytes": 120977,
-  "jsonSha256": "b06d551498489adde06c3e54ff01f7e15e56f34be6cf961b5fac891040ddf940",
-  "outerContractFingerprint": "938fc175e10a2f0fdea2f387111874fe053b51614c25073ec350936ea22478d4",
-  "captureContractFingerprint": "3b30dfb46bd6e9ffc67646349249b866ecffc076275c0883190ac45274fa4514",
+  "compressedBytes": 9734,
+  "compressedSha256": "08bc2aee20f7009e54867f46bfb4e12caec6a5a5013baf2e119e931d51e7fac4",
+  "jsonBytes": 120957,
+  "jsonSha256": "0470186fb4af6348805cd1f96a6b538e1e8eb8c02c58dca5747d135693927a0e",
+  "outerContractFingerprint": "7ea076b4ce562ed7c2cab17fbaa13c95e5922f5698e46145697047ed98486ba0",
+  "captureContractFingerprint": "8c271d0cc1acb3eab5f10559b2a0c18370e076420a7155445d81bace11c624fc",
   "source": {
-    "head": "e37f50329f813e4a380b8d4492ab03ca34378dc7",
-    "workflowRun": 31608272319,
-    "artifactId": 9146088659,
-    "artifactDigest": "sha256:fdd1baa922dcb4bff6378298bd594973c1488271ccce589ad26beece0e254639"
+    "head": "a0103496161db3a1cc57e0d9a385dab2f5524cc0",
+    "workflowRun": null,
+    "artifactId": null,
+    "artifactDigest": null
   }
 }
