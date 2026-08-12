@@ -1,1 +1,1 @@
-apply verified SDK-RPC finalization after YAML block repair
+apply verified SDK-RPC finalization with sanitized base64 whitespace
