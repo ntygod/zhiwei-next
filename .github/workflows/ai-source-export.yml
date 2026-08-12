@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - spike/m0-pi-parallel-tool-ordering
+    paths:
+      - .github/ai-finalize-trigger
 
 permissions:
   contents: write
@@ -41,6 +43,7 @@ jobs:
           diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/archive-files.txt"
           tar -xzf "$PAYLOAD"
           rm -rf .github/ai-payload
+          rm -f .github/ai-finalize-trigger
 
           echo "0e490594e62886c707274359edd47675b00eba582408fe5fc68ac557f5c1bed2  packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json" | sha256sum --check --strict
           node --check scripts/check-pi-parallel-tool-ordering-result.mjs
@@ -63,7 +66,7 @@ jobs:
             docs/spikes/pi-runtime-contract/README.md \
             docs/architecture/pi-integration.md \
             docs/harness/project-state.md
-          git add -u .github/ai-payload
+          git add -u .github/ai-payload .github/ai-finalize-trigger
           git diff --cached --check
           if git diff --cached --quiet; then
             echo "Verified payload produced no changes."
