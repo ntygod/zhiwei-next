@@ -159,10 +159,24 @@ for (const token of [
 ]) {
   requireValue(prChecker.includes(token), `PR contract checker is missing token: ${token}`);
 }
-for (const token of ["pull_request:", "npm run check:pr", "PR_BODY:", "CHANGED_FILES_JSON:"]) {
-  requireValue(ci.includes(token), `CI workflow is missing work item contract token: ${token}`);
+for (const token of [
+  "pull_request:",
+  "issues: read",
+  "Validate work item GitHub objects",
+  "github.rest.issues.get",
+  "github.rest.pulls.get",
+  "workItemData.pull_request",
+  "workItemData.state !== \"open\"",
+  "ownerInputData.user?.login !== owner",
+  "supersedesPr === currentPullRequest",
+  "npm run check:pr",
+  "PR_BODY:",
+  "CHANGED_FILES_JSON:",
+]) {
+  requireValue(ci.includes(token), `CI workflow is missing pre-merge work item validation token: ${token}`);
 }
 requireValue(!ci.includes("pull_request_target:"), "CI must not use pull_request_target.");
+requireValue(!/\$\{\{\s*secrets\./.test(ci), "CI object validation must not inject repository secrets.");
 
 for (const token of [
   "workflow_run:",
@@ -221,10 +235,10 @@ for (const [branch, expectedHead, action] of [
 
 for (const [name, document, tokens] of [
   ["root AGENTS", rootAgents, [policyPath, "owner-input", "一个 active branch", "retire branch"]],
-  ["Harness README", harnessReadme, ["Work Item 生命周期", policyPath, "Repository Hygiene", "owner-input"]],
-  ["development loop", developmentLoop, ["Repository Reconciliation", "work-item 编号", "一个 primary PR", "owner-input"]],
+  ["Harness README", harnessReadme, ["Work Item 生命周期", policyPath, "Repository Hygiene", "pre-merge", "owner-input"]],
+  ["development loop", developmentLoop, ["Repository Reconciliation", "pre-merge", "work-item 编号", "一个 primary PR", "owner-input"]],
   ["branch lifecycle", branchLifecycle, ["retirement PR", "Repository Hygiene", "helper/", reconciliationPath]],
-  ["project state", projectState, ["Issue #57", "Issue #44", "Issue #45", "Issue #56", "work-item lifecycle"]],
+  ["project state", projectState, ["Issue #57", "Issue #44", "Issue #45", "Issue #56", "pre-merge", "work-item lifecycle"]],
 ]) {
   for (const token of tokens) requireValue(document.includes(token), `${name} is missing token: ${token}`);
 }
