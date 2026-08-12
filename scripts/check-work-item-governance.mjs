@@ -120,7 +120,7 @@ for (const token of [
   "一个 execution Issue 最多一个 active branch",
   "一个 execution Issue 最多一个开放 primary PR",
   "禁止为以下目的创建额外 PR",
-  "不再创建“retire branch” PR",
+  "不得使用“retire branch” PR",
   "WIP 上限",
   "Repository Reconciliation",
   "helper/<work-item>/<purpose>/<expires-epoch>",
@@ -148,7 +148,7 @@ requireValue(checker.includes("runWorkItemPolicySelfTests"), "Work item checker 
 
 for (const field of ["work-item:", "pr-role:", "owner-input:", "supersedes-pr:"]) {
   requireValue(prTemplate.includes(field), `Pull request template is missing work item field: ${field}`);
-  requireValue(prChecker.includes(field.replace(":", "")), `PR checker is missing work item field: ${field}`);
+  requireValue(policyModule.includes(field.replace(":", "")), `Work item policy is missing metadata field: ${field}`);
 }
 for (const token of [
   "GITHUB_EVENT_PATH",
