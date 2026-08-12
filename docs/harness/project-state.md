@@ -157,10 +157,9 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 按真实 Runtime风险排序：
 
-1. 录制 RPC真实 Prompt、Worker退出、重启和错误边界；
-2. 比较 SDK与 RPC对同一任务的事件差异；
-3. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
-4. 冻结 Observation Ledger Schema并进入 SQLite实现。
+1. 冻结 Observation Ledger Schema、Migration 与事务边界；
+2. 实现 SQLite append-only Ledger、幂等写入与按 Session 回放；
+3. 接入 Daemon / Pi Worker 并运行崩溃恢复场景。
 
 ## 已知风险
 
