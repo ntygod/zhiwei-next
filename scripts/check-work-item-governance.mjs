@@ -13,10 +13,7 @@ const checkerPath = "scripts/check-work-item-governance.mjs";
 const workflowPath = ".github/workflows/repository-hygiene.yml";
 const reconciliationPath = "docs/harness/reconciliation/2026-08-12-work-item-cleanup.json";
 
-async function read(path) {
-  return readFile(join(root, path), "utf8");
-}
-
+const read = (path) => readFile(join(root, path), "utf8");
 async function exists(path) {
   try {
     await stat(join(root, path));
@@ -25,7 +22,6 @@ async function exists(path) {
     return false;
   }
 }
-
 function requireValue(condition, message) {
   if (!condition) violations.push(message);
 }
@@ -107,20 +103,11 @@ requireValue(
     JSON.stringify(["ai/", "automation/"]),
   "forbiddenHelperPrefixes must remain ai/ and automation/.",
 );
-requireValue(
-  config.workItemLifecycle?.helperBranchPrefix === "helper/",
-  "helperBranchPrefix must be helper/.",
-);
-requireValue(
-  config.workItemLifecycle?.helperLeaseRequired === true,
-  "helper branches must require a lease.",
-);
+requireValue(config.workItemLifecycle?.helperBranchPrefix === "helper/", "helperBranchPrefix must be helper/.");
+requireValue(config.workItemLifecycle?.helperLeaseRequired === true, "helper branches must require a lease.");
 
 for (const required of [policyPath, modulePath, checkerPath, workflowPath, reconciliationPath]) {
-  requireValue(
-    config.governanceFiles?.includes(required),
-    `Harness governanceFiles must include ${required}.`,
-  );
+  requireValue(config.governanceFiles?.includes(required), `Harness governanceFiles must include ${required}.`);
   requireValue(await exists(required), `Required work item governance file is missing: ${required}.`);
 }
 
@@ -157,34 +144,25 @@ for (const token of [
 ]) {
   requireValue(policyModule.includes(token), `Work item policy module is missing token: ${token}`);
 }
-requireValue(
-  checker.includes("runWorkItemPolicySelfTests"),
-  "Work item checker must execute deterministic policy self-tests.",
-);
+requireValue(checker.includes("runWorkItemPolicySelfTests"), "Work item checker must execute policy self-tests.");
 
 for (const field of ["work-item:", "pr-role:", "owner-input:", "supersedes-pr:"]) {
   requireValue(prTemplate.includes(field), `Pull request template is missing work item field: ${field}`);
-  requireValue(prChecker.includes(field.replace(":", "")), `PR checker is missing work item field handling: ${field}`);
+  requireValue(prChecker.includes(field.replace(":", "")), `PR checker is missing work item field: ${field}`);
 }
-for (const token of ["PR_TITLE", "PR_HEAD_REF", "PR_NUMBER", "validatePullRequestWorkItemContract"]) {
+for (const token of [
+  "GITHUB_EVENT_PATH",
+  "PR_TITLE",
+  "PR_HEAD_REF",
+  "PR_NUMBER",
+  "validatePullRequestWorkItemContract",
+]) {
   requireValue(prChecker.includes(token), `PR contract checker is missing token: ${token}`);
 }
-
-for (const token of [
-  "PR_TITLE: ${{ github.event.pull_request.title || '' }}",
-  "PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}",
-  "PR_NUMBER: ${{ github.event.pull_request.number || '' }}",
-  "Validate work item GitHub objects",
-  "github.rest.issues.get",
-  "github.rest.pulls.get",
-  "data.pull_request",
-  "work-item",
-  "owner-input",
-  "supersedes-pr",
-]) {
-  requireValue(ci.includes(token), `CI workflow is missing work item validation token: ${token}`);
+for (const token of ["pull_request:", "npm run check:pr", "PR_BODY:", "CHANGED_FILES_JSON:"]) {
+  requireValue(ci.includes(token), `CI workflow is missing work item contract token: ${token}`);
 }
-requireValue(!ci.includes("pull_request_target:"), "CI must not use pull_request_target for object validation.");
+requireValue(!ci.includes("pull_request_target:"), "CI must not use pull_request_target.");
 
 for (const token of [
   "workflow_run:",
@@ -200,6 +178,8 @@ for (const token of [
   "selectAllowlistedLegacyHelperBranches",
   "runWorkItemPolicySelfTests",
   reconciliationPath,
+  "github.rest.issues.get",
+  "github.rest.pulls.get",
   "github.rest.git.deleteRef",
   "latestBranch.commit.sha !== candidate.headSha",
   "currentlyOpenPullRequests.length > 0",
@@ -207,29 +187,24 @@ for (const token of [
 ]) {
   requireValue(hygiene.includes(token), `Repository Hygiene workflow is missing token: ${token}`);
 }
-for (const forbidden of [
-  "pull_request_target:",
-  "persist-credentials: true",
-  "force: true",
-  "github.rest.pulls.create",
-]) {
+for (const forbidden of ["pull_request_target:", "persist-credentials: true", "force: true", "github.rest.pulls.create"]) {
   requireValue(!hygiene.includes(forbidden), `Repository Hygiene workflow contains forbidden token: ${forbidden}`);
 }
-requireValue(
-  !/\$\{\{\s*secrets\./.test(hygiene),
-  "Repository Hygiene workflow must not inject repository secrets.",
-);
+requireValue(!/\$\{\{\s*secrets\./.test(hygiene), "Repository Hygiene must not inject secrets.");
 
 requireValue(reconciliation.schemaVersion === 1, "Reconciliation record schemaVersion must be 1.");
-requireValue(reconciliation.status === "active", "Reconciliation record must remain active until live cleanup is verified.");
+requireValue(reconciliation.status === "active", "Reconciliation record must remain active until cleanup is verified.");
 requireValue(reconciliation.repository === "ntygod/zhiwei-next", "Reconciliation repository is incorrect.");
-requireValue(reconciliation.governanceIssue === 57, "Reconciliation must identify governance Issue #57.");
-requireValue(reconciliation.ownerInputIssue === 44, "Reconciliation must preserve owner-input Issue #44.");
-requireValue(reconciliation.canonicalWorkItems?.sdkRpcParity === 45, "SDK/RPC canonical issue must be #45.");
-requireValue(reconciliation.canonicalWorkItems?.rpcWorkerLifecycle === 32, "RPC Worker canonical issue must be #32.");
-requireValue(reconciliation.canonicalWorkItems?.normalizedRuntimeEvent === 49, "NormalizedRuntimeEvent issue must be #49.");
-requireValue(reconciliation.canonicalWorkItems?.sqliteObservationLedger === 56, "SQLite Ledger issue must be #56.");
-
+requireValue(reconciliation.governanceIssue === 57, "Reconciliation must identify Issue #57.");
+requireValue(reconciliation.ownerInputIssue === 44, "Reconciliation must preserve owner-input #44.");
+for (const [field, expected] of Object.entries({
+  sdkRpcParity: 45,
+  rpcWorkerLifecycle: 32,
+  normalizedRuntimeEvent: 49,
+  sqliteObservationLedger: 56,
+})) {
+  requireValue(reconciliation.canonicalWorkItems?.[field] === expected, `Canonical work item ${field} must be #${expected}.`);
+}
 for (const [branch, expectedHead, action] of [
   ["automation/finalize-cleanup-pr32", "524792b7182775ac0f30b48c0d2b8265c887b942", "delete-branch"],
   ["automation/ledger-source-export", "a0b274a8684e104a70b90b49be9adb2b25889041", "delete-branch"],
@@ -251,18 +226,13 @@ for (const [name, document, tokens] of [
   ["branch lifecycle", branchLifecycle, ["retirement PR", "Repository Hygiene", "helper/", reconciliationPath]],
   ["project state", projectState, ["Issue #57", "Issue #44", "Issue #45", "Issue #56", "work-item lifecycle"]],
 ]) {
-  for (const token of tokens) {
-    requireValue(document.includes(token), `${name} is missing token: ${token}`);
-  }
+  for (const token of tokens) requireValue(document.includes(token), `${name} is missing token: ${token}`);
 }
 
 const workflowDirectory = join(root, ".github", "workflows");
 for (const entry of await readdir(workflowDirectory, { withFileTypes: true })) {
   if (!entry.isFile()) continue;
-  requireValue(
-    !/^ai[-_].*\.ya?ml$/i.test(entry.name),
-    `Temporary AI workflow must not remain in the repository: ${entry.name}.`,
-  );
+  requireValue(!/^ai[-_].*\.ya?ml$/i.test(entry.name), `Temporary AI workflow remains: ${entry.name}.`);
 }
 requireValue(!(await exists(".github/ai-payload")), "Temporary .github/ai-payload must not exist.");
 
