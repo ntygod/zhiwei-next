@@ -35,7 +35,7 @@ jobs:
             echo "Expected six SDK-RPC finalization chunks, found ${#CHUNKS[@]}." >&2
             exit 1
           fi
-          cat "${CHUNKS[@]}" | base64 --decode > "$PAYLOAD"
+          cat "${CHUNKS[@]}" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$PAYLOAD"
           echo "b0d5e869ee83b8d51d08af68eb5f0e308837835e207d2446a0789dd3c5323b35  $PAYLOAD" | sha256sum --check --strict
           tar -tzf "$PAYLOAD" > "$LIST"
           cat "$LIST"
