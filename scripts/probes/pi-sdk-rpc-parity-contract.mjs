@@ -47,10 +47,12 @@ export const SDK_RPC_PARITY_SURFACE_FILES = Object.freeze([
 
 export const SDK_RPC_PARITY_REQUIRED_RPC_CLIENT_METHODS = Object.freeze([
   "abort",
+  "collectEvents",
   "getAvailableModels",
   "getLastAssistantText",
   "getMessages",
   "getState",
+  "getStderr",
   "prompt",
   "setModel",
   "setThinkingLevel",
