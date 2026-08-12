@@ -1,0 +1,88 @@
+name: AI apply SDK-RPC finalization
+
+on:
+  push:
+    branches:
+      - spike/m0-pi-sdk-rpc-prompt
+    paths:
+      - .github/ai-sdk-rpc-finalize-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  apply-finalization:
+    if: github.event.head_commit.message == 'chore(ai): trigger SDK-RPC finalization'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout work branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: spike/m0-pi-sdk-rpc-prompt
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Apply and validate verified payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAYLOAD="$RUNNER_TEMP/sdk-rpc-final.tgz"
+          LIST="$RUNNER_TEMP/sdk-rpc-final-files.txt"
+          mapfile -t CHUNKS < <(find .github/ai-payload -maxdepth 1 -type f -name 'sdk-rpc-final-*.b64' -print | sort)
+          if (( ${#CHUNKS[@]} != 6 )); then
+            echo "Expected six SDK-RPC finalization chunks, found ${#CHUNKS[@]}." >&2
+            exit 1
+          fi
+          cat "${CHUNKS[@]}" | base64 --decode > "$PAYLOAD"
+          echo "b0d5e869ee83b8d51d08af68eb5f0e308837835e207d2446a0789dd3c5323b35  $PAYLOAD" | sha256sum --check --strict
+          tar -tzf "$PAYLOAD" > "$LIST"
+          cat "$LIST"
+          if grep -Eq '(^/|(^|/)\.\.(/|$)|^\.github/workflows/)' "$LIST"; then
+            echo "Payload contains an unsafe or workflow path." >&2
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/expected-sdk-rpc-files.txt" <<'EOF'
+package.json
+scripts/check-pi-sdk-rpc-prompt-result.mjs
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-prompt.json
+docs/spikes/pi-runtime-contract/sdk-rpc-prompt-lifecycle.md
+docs/spikes/pi-runtime-contract/README.md
+docs/architecture/pi-integration.md
+docs/harness/project-state.md
+EOF
+          diff -u "$RUNNER_TEMP/expected-sdk-rpc-files.txt" "$LIST"
+          tar -xzf "$PAYLOAD"
+          rm -rf .github/ai-payload
+          rm -f .github/ai-sdk-rpc-finalize-trigger
+          rm -f .github/ai-sdk-rpc-source-export-trigger .github/ai-sdk-rpc-rerun-2
+          node --check scripts/probes/pi-sdk-rpc-prompt-contract.mjs
+          node --check scripts/probes/pi-sdk-rpc-prompt-faux-extension.mjs
+          node --check scripts/probes/pi-sdk-rpc-prompt-capture.mjs
+          node --check scripts/check-pi-sdk-rpc-prompt-result.mjs
+          npm run check
+          git diff --check
+          git status --short
+
+      - name: Commit verified finalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add \
+            package.json \
+            scripts/check-pi-sdk-rpc-prompt-result.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-prompt.json \
+            docs/spikes/pi-runtime-contract/sdk-rpc-prompt-lifecycle.md \
+            docs/spikes/pi-runtime-contract/README.md \
+            docs/architecture/pi-integration.md \
+            docs/harness/project-state.md
+          git add -u .github/ai-payload .github/ai-sdk-rpc-finalize-trigger .github/ai-sdk-rpc-source-export-trigger .github/ai-sdk-rpc-rerun-2 || true
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "Verified payload produced no changes." >&2
+            exit 1
+          fi
+          git commit -m "test(spike): freeze Pi SDK and RPC Prompt contract"
+          git push origin HEAD:spike/m0-pi-sdk-rpc-prompt
