@@ -37,7 +37,8 @@ best-effort-private-free
 - 下一层已验证用户取消、`abortRetry()`和 retry exhaustion。
 - 取消、abortRetry与 Retry exhaustion Fixture：部分 Assistant消息以 `stopReason=aborted`保留；存在 willRetry=true 但没有后续 Agent Run；Retry exhaustion最终保留最后一次失败 Assistant。
 - 并行 Tool ordering Fixture：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
-- 已验证 Compaction与 Session Replacement；下一层协议必须继续区分原始 Entry、派生 Summary、当前上下文和 Session identity。
+- Compaction 与 Session Replacement Fixture：模型上下文变为 `compactionSummary → assistant`；Session对象按 `session-object-1 → session-object-2 → session-object-3`替换；旧 Public Listener不会自动迁移。
+- 下一项 Runtime 证据为 SDK / RPC 同任务对照和 RPC真实 Prompt，然后验证 RPC Worker EOF、退出、重启和错误边界。
 
 ### Harness 与默认分支
 
