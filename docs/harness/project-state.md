@@ -26,6 +26,9 @@ best-effort-private-free
 - 并行 Tool声明、真实完成顺序和 Tool Result消息顺序分离；
 - Manual Compaction：原始 Entry树、派生 Summary和当前模型上下文分层；
 - Session Replacement：Shutdown、Invalidate、Rebind、Extension Start、Public Listener Attach和 `withSession()`边界；
+- SDK / RPC同任务对照：发布 Artifact根导出 `runRpcMode`和 `RpcClient`，同一无工具 Prompt的核心事件投影、最终消息与正文一致；
+- RPC Prompt success Response是接受边界：wire index `4`，先于 `agent_start=5`、运行中 State Response `11`和 `agent_settled=35`，其后仍有29条 Runtime Event；
+- RPC State真实变化为 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；stdin EOF后 Extension `session_shutdown(reason=quit)`，Worker `exit=0 → close=0`；
 - 以上 Fixture由固定 Artifact、隔离 Probe、精确 Checker和双层指纹持续验证。
 
 ### Runtime 合同连续性
@@ -38,7 +41,19 @@ best-effort-private-free
 - 取消、abortRetry与 Retry exhaustion Fixture：部分 Assistant消息以 `stopReason=aborted`保留；存在 willRetry=true 但没有后续 Agent Run；Retry exhaustion最终保留最后一次失败 Assistant。
 - 并行 Tool ordering Fixture：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
 - 验证 Compaction与 Session Replacement后形成 Compaction 与 Session Replacement Fixture：模型上下文变为 `compactionSummary → assistant`；Session对象按 `session-object-1 → session-object-2 → session-object-3`替换；旧 Public Listener不会自动迁移。
-- 下一项 Runtime 证据为 SDK / RPC 同任务对照和 RPC真实 Prompt，然后验证 RPC Worker EOF、退出、重启和错误边界。
+- SDK / RPC parity Fixture：SDK Public与 RPC Runtime的语义投影均为 `agent_start → turn_start → user message → assistant message → turn_end → agent_end(willRetry=false) → agent_settled`；Command Response、State Snapshot、Extension和 Process Boundary仍分别保留来源。
+- RPC JSONL `message_update`只保留 delta、不含累计 `partial`；SDK / Extension内部事件仍可能携带 `partial`，不能跨 Surface机械统一。
+- 下一项 Runtime 证据为 Issue #32：RPC Worker EOF、退出、重启、Session恢复、非法 JSON、未知命令、Preflight拒绝和已接受后的 Provider Error。
+
+SDK / RPC parity committed Fixture：
+
+```text
+manifest                     packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
+outer fingerprint            6af9788dc9a2cf2326cbc6dbd9914d90b5ffb50687761fb652404631367f8e92
+capture fingerprint          d8b42a078a8655e840fc8ef5029ac0997f3f33f00168f84cb7a3cfcc92b1a0ac
+final Assistant sha256       5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
+external Provider prompts    0
+```
 
 ### Harness 与默认分支
 
@@ -89,10 +104,10 @@ Issue #57 和 PR #59 建立 work-item lifecycle：
 当前收敛结果：
 
 - Issue #44《后台任务进度获取》保留为所有者产品输入，并完成事件驱动进度订阅的 triage；
-- Issue #45 是 SDK / RPC同任务对照的 canonical execution work item；
+- Issue #45 由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
 - Issue #31、#37 已作为 #45 的 duplicate关闭；
-- Issue #32 保留为 #45 之后的 RPC Worker退出、重启和错误边界；
-- Issue #49 等待 #45 和 #32 后冻结 `NormalizedRuntimeEvent v1`；
+- Issue #32 是当前下一项 canonical execution work item；
+- Issue #49 等待 #32 后冻结 `NormalizedRuntimeEvent v1`；
 - Issue #56 等待 #49 后实现 SQLite Observation Ledger；
 - PR #33、#34 未完成 Draft已明确未交付并关闭；
 - PR #48、#54、#55 retirement PR已关闭；
@@ -128,9 +143,10 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 已验证：
 
 - Pi源码契约与发布 Artifact身份；
-- SDK Root Exports和无凭证 RPC空 Session；
+- SDK Root Exports、`runRpcMode`、`RpcClient`和无凭证 RPC空 Session；
 - Prompt、Agent Run、Turn、Tool、Retry、Queue、Cancel、Compaction和Session Replacement关键边界；
-- Public SDK、Extension和最终 Session消息在事件与字段上的来源差异；
+- SDK与 RPC对同一无工具任务的 Prompt接受、运行中、最终消息、稳定和关闭边界；
+- Public SDK、Extension、RPC Command Response、RPC Runtime Event、State Snapshot和 Process Boundary的来源差异；
 - Tool真实完成顺序与消息持久化顺序不能合并；
 - 被 Retry替代或取消的证据不能只从最终 `session.messages`重建；
 - Compaction Summary不能覆盖原始 Session Entry或未来 Observation；
@@ -139,8 +155,7 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 尚未冻结：
 
-- SDK与 RPC对同一真实任务的完整事件差异；
-- RPC Worker EOF、退出、重启和错误边界；
+- RPC Worker重启、Session恢复和协议 / Provider错误边界；
 - 正式 `NormalizedRuntimeEvent v1`；
 - SQLite Observation Ledger Schema与实现。
 
@@ -148,10 +163,9 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 严格按依赖推进：
 
-1. **Issue #45**：从最新 `main` 创建 `spike/45-sdk-rpc-parity`，一个 primary PR完成同任务SDK/RPC对照；
-2. **Issue #32**：创建 `spike/32-rpc-worker-lifecycle`，验证EOF、退出、重启和错误边界；
-3. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
-4. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
+1. **Issue #32**：创建 `spike/32-rpc-worker-lifecycle`，验证EOF、退出、重启、Session恢复和错误边界；
+2. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
+3. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
 
 Issue #56已有 pre-governance snapshot：
 
@@ -160,9 +174,9 @@ branch feat/m0-sqlite-observation-ledger-v1
 head   0da4e97e5cac42add96a55285976a93afd992495
 ```
 
-该分支是冻结、未审查、未交付的代码快照，不是完成结果。解锁后从最新 main 创建符合新规则的 #56分支，逐项审查是否复用，不直接合并旧快照。
+该分支是冻结、未审查、未交付的代码快照，不是完成结果。解锁后从最新 main创建符合新规则的 #56分支，逐项审查是否复用，不直接合并旧快照。
 
-Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；#45只提供底层证据，不代表后台任务进度体验已经交付。
+Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；#45只提供底层事件驱动证据，不代表后台任务进度体验已经交付。
 
 ## 已知风险
 
@@ -174,11 +188,12 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - 独立 AI审查仍使用同一仓库身份下的 cold-read评论协议，尚无独立Reviewer Bot；
 - 同一最终 HEAD多次成功 CI可能产生重复但幂等 provenance dispatch，Issue #15跟踪；
 - Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
+- RPC成功路径已经验证，但 Restart / Resume / Error仍必须由 #32独立冻结，不能从当前 Fixture外推；
 - 在真实用户记忆、生产凭证、多人写入、生产发布或第二次 direct-main Incident出现时，必须重新评估风险接受。
 
 ## 产品能力状态
 
-- Pi source-and-runtime baseline已验证到正常Tool、Retry、Follow-up、Cancel、并行Tool、Compaction和Session Replacement；
+- Pi source-and-runtime baseline已验证到正常Tool、Retry、Follow-up、Cancel、并行Tool、Compaction、Session Replacement和 SDK / RPC同任务对照；
 - owner-input与自主开发Work Item治理已建立；
 - 真实Observation持久化、记忆、Context、Attention、后台委托和桌面端尚未进入产品实现；
-- M0继续以 #45 → #32 → #49 → #56 的依赖链推进，不提前把旧分支或未审查代码声明为完成。
+- M0继续以 #32 → #49 → #56 的依赖链推进，不提前把旧分支或未审查代码声明为完成。
