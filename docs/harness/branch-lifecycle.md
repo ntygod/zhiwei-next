@@ -100,7 +100,7 @@ helper/<work-item>/<purpose>/<expires-epoch>
 - 任一开放 PR 使用的同仓库分支；
 - Fork 分支；
 - protected 分支；
-- 没有关闭 PR历史且不在 reconciliation allowlist 的分支；
+- 没有任何关闭 PR历史且不在 reconciliation allowlist 的分支；
 - HEAD 已超过、偏离或复用关闭 PR记录的分支；
 - reconciliation 中以 `preserve-snapshot` 且 HEAD 精确匹配的分支。
 
