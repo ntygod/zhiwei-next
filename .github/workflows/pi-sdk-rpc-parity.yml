@@ -7,8 +7,9 @@ on:
       - .github/workflows/pi-sdk-rpc-parity.yml
       - package.json
       - packages/pi-adapter/fixtures/pi-upstream-baseline.json
-      - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json
+      - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**
       - scripts/check-pi-sdk-rpc-parity-result.mjs
+      - scripts/pi-sdk-rpc-parity-fixture.mjs
       - scripts/probes/pi-lifecycle-ci.mjs
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
       - scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
@@ -44,7 +45,7 @@ jobs:
         with:
           node-version: 22.23.1
 
-      - name: Validate committed SDK and RPC parity contract when present
+      - name: Validate committed SDK and RPC parity contract
         shell: bash
         run: |
           set -euo pipefail
@@ -52,10 +53,8 @@ jobs:
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
-          if [[ -f packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json ]]; then
-            node scripts/check-pi-sdk-rpc-parity-result.mjs \
-              packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json
-          fi
+          node --check scripts/pi-sdk-rpc-parity-fixture.mjs
+          node scripts/pi-sdk-rpc-parity-fixture.mjs --check
 
       - name: Capture Pi SDK and RPC parity lifecycle in sandbox
         env:
@@ -65,7 +64,7 @@ jobs:
           set -euo pipefail
           BUNDLE="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-bundle"
           RESULT_DIR="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-result"
-          mkdir -p "$BUNDLE" "$RESULT_DIR"
+          mkdir -p "$BUNDLE/packages/pi-adapter/fixtures" "$RESULT_DIR"
           tar -cf - \
             packages/pi-adapter/fixtures/pi-upstream-baseline.json \
             scripts/probes/pi-lifecycle-ci.mjs \
@@ -73,18 +72,11 @@ jobs:
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             | tar -xf - -C "$BUNDLE"
-          if [[ -f packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json ]]; then
-            tar -cf - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json | tar -xf - -C "$BUNDLE"
-          fi
+          node scripts/pi-sdk-rpc-parity-fixture.mjs \
+            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
+            --output "$BUNDLE/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
-
-          COMMITTED_ARGS=()
-          if [[ -f "$BUNDLE/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json" ]]; then
-            COMMITTED_ARGS+=(
-              --env PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json
-            )
-          fi
 
           docker run --rm \
             --network=bridge \
@@ -103,6 +95,7 @@ jobs:
             --env CI=true \
             --env GITHUB_ACTIONS=true \
             --env PI_LIFECYCLE_OUTPUT=/output/result.json \
+            --env PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json \
             --env PI_LIFECYCLE_SCENARIO=sdk-rpc-parity \
             --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             --env PI_PROBE_SOURCE_READ_ONLY=true \
@@ -111,7 +104,6 @@ jobs:
             --env PI_PROBE_CAPABILITIES_DROPPED=true \
             --env PI_PROBE_NO_NEW_PRIVILEGES=true \
             --env PI_PROBE_CONTAINER_IMAGE="$PI_PROBE_IMAGE" \
-            "${COMMITTED_ARGS[@]}" \
             "$PI_PROBE_IMAGE" \
             node scripts/probes/pi-lifecycle-ci.mjs
 
