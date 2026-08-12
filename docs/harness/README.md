@@ -126,9 +126,11 @@ Branch Cleanup + Repository Hygiene 收敛分支和 Work Item
 
 若未来仓库套餐或可见性改变，应加入服务端 Ruleset，但不得删除上述控制。
 
-## 分支管理
+## 工作分支生命周期
 
-Branch Cleanup 负责关闭 PR 的 exact-head 分支；Repository Hygiene 负责：
+Branch Cleanup 负责关闭 PR 的 exact-head 工作分支：候选必须保持当前 HEAD 与关闭 PR 的 `head.sha` 完全一致，且没有开放 PR 使用；分支在关闭后继续推进或复用时会被保留。该策略由 `npm run check:branch-cleanup` 在普通 CI 中验证。
+
+Repository Hygiene 负责：
 
 - WIP 和多个 primary PR；
 - retirement / no-op PR；
@@ -147,7 +149,7 @@ Branch Cleanup 负责关闭 PR 的 exact-head 分支；Repository Hygiene 负责
 - `AGENTS.md` 层级与引用；
 - `check:work-items` Work Item Policy 和治理一致性；
 - Main Provenance 和 dispatch；
-- Branch Cleanup；
+- Branch Cleanup（`check:branch-cleanup`）；
 - Harness 配置与风险接受；
 - Pi source/runtime 契约；
 - 自动化测试。
