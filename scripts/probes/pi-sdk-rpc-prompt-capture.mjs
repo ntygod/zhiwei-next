@@ -766,7 +766,7 @@ async function run() {
       workerShutdownAfterSettled:
         completed.rpc.ordering.settledWireIndex >= 0 &&
         completed.rpc.worker.exitCode === 0 &&
-        completed.rpc.extensionEvidence.shutdown?.reason === "exit",
+        completed.rpc.extensionEvidence.shutdown?.reason === "quit",
     },
     sanitization: {
       absolutePathsIncluded: false,
@@ -795,7 +795,7 @@ async function run() {
     [completed.rpc.ordering.eventCountAfterPromptResponseBeforeSettled > 0, "RPC Prompt response did not precede continuing Runtime events."],
     [completed.rpc.wireSemantics.messageUpdatesContainPartial === false, "RPC message_update leaked cumulative partial snapshots."],
     [completed.rpc.worker.exitCode === 0 && completed.rpc.worker.signal === null, "RPC Worker did not exit cleanly after stdin EOF."],
-    [completed.rpc.extensionEvidence.shutdown?.reason === "exit", "RPC Extension did not observe shutdown(reason=exit)."],
+    [completed.rpc.extensionEvidence.shutdown?.reason === "quit", "RPC Extension did not observe shutdown(reason=quit)."],
     [completed.rpc.extensionEvidence.provider?.callCount === 1, "RPC Faux provider must consume exactly one response."],
     [result.comparison.projectionsEqual === true, "SDK and RPC semantic event projections differ."],
     [result.comparison.finalTextEqual === true, "SDK and RPC final text differs."],

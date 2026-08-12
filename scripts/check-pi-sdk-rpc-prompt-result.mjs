@@ -175,8 +175,8 @@ requireValue(
 );
 requireValue(rpc?.extensionEvidence?.status === "passed", "RPC Extension shutdown evidence must pass.");
 requireValue(
-  rpc?.extensionEvidence?.shutdown?.reason === "exit",
-  "RPC Extension must observe shutdown(reason=exit).",
+  rpc?.extensionEvidence?.shutdown?.reason === "quit",
+  "RPC Extension must observe shutdown(reason=quit).",
 );
 requireValue(
   rpc?.extensionEvidence?.provider?.id === SDK_RPC_PROVIDER_ID,
