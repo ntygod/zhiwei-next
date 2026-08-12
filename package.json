@@ -8,10 +8,11 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run test",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
+    "check:work-items": "node scripts/check-work-item-governance.mjs",
     "check:main-provenance": "node scripts/check-main-provenance.mjs",
     "check:main-provenance-dispatch": "node scripts/check-main-provenance-dispatch.mjs",
     "check:branch-cleanup": "node scripts/check-branch-cleanup.mjs",
