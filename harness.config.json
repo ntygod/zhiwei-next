@@ -42,8 +42,32 @@
     "requireClosedPullRequestHeadMatch": true,
     "revalidateBeforeDelete": true
   },
+  "workItemLifecycle": {
+    "policy": "docs/harness/work-item-lifecycle.md",
+    "policyModule": "scripts/work-item-policy.mjs",
+    "checker": "scripts/check-work-item-governance.mjs",
+    "repositoryHygieneWorkflow": ".github/workflows/repository-hygiene.yml",
+    "reconciliationRecord": "docs/harness/reconciliation/2026-08-12-work-item-cleanup.json",
+    "verifyObjectTypeBeforeWrite": true,
+    "preserveOwnerInputBody": true,
+    "requireIssueNumberInPrimaryBranch": true,
+    "retirementPullRequestsAllowed": false,
+    "maxOpenPrimaryPullRequests": 2,
+    "allowedPrimaryBranchPrefixes": [
+      "feat/",
+      "fix/",
+      "docs/",
+      "chore/",
+      "spike/"
+    ],
+    "forbiddenHelperPrefixes": [
+      "ai/",
+      "automation/"
+    ],
+    "helperBranchPrefix": "helper/",
+    "helperLeaseRequired": true
+  },
   "branchPrefixes": [
-    "ai/",
     "feat/",
     "fix/",
     "docs/",
@@ -85,6 +109,8 @@
     "docs/harness/autonomy-policy.md",
     "docs/harness/development-loop.md",
     "docs/harness/branch-lifecycle.md",
+    "docs/harness/work-item-lifecycle.md",
+    "docs/harness/reconciliation/2026-08-12-work-item-cleanup.json",
     "docs/harness/risk-model.md",
     "docs/harness/self-maintenance.md",
     "docs/harness/project-state.md",
@@ -97,11 +123,14 @@
     ".github/workflows/ci.yml",
     ".github/workflows/autonomous-merge.yml",
     ".github/workflows/branch-cleanup.yml",
+    ".github/workflows/repository-hygiene.yml",
     ".github/workflows/main-provenance.yml",
     ".github/workflows/main-provenance-dispatch.yml",
     "scripts/branch-cleanup-policy.mjs",
+    "scripts/work-item-policy.mjs",
     "scripts/check-agents.mjs",
     "scripts/check-branch-cleanup.mjs",
+    "scripts/check-work-item-governance.mjs",
     "scripts/check-harness.mjs",
     "scripts/check-pr-contract.mjs",
     "scripts/check-main-provenance.mjs",
