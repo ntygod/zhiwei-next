@@ -1,11 +1,11 @@
 # Pi Runtime 契约 Spike
 
-关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22、Issue #24、Issue #26。
+关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22、Issue #24、Issue #26、Issue #28。
 
 ## 状态
 
 ```text
-source-and-runtime-verified-parallel-tool-ordering
+source-and-runtime-verified-compaction-session-replacement
 ```
 
 ### 历史状态演化
@@ -17,7 +17,8 @@ PR #17  source-and-runtime-verified-normal-tool
 PR #21  source-and-runtime-verified-retry-success
 PR #23  source-and-runtime-verified-follow-up-queue
 PR #25  source-and-runtime-verified-cancel-retry-exhaustion
-当前    source-and-runtime-verified-parallel-tool-ordering
+PR #27  source-and-runtime-verified-parallel-tool-ordering
+当前    source-and-runtime-verified-compaction-session-replacement
 ```
 
 早期状态作为证据链保留，不代表当前能力回退。
@@ -36,9 +37,12 @@ PR #25  source-and-runtime-verified-cancel-retry-exhaustion
 - 流式输出期间主动取消后，部分 Assistant以 `stopReason=aborted`保留；
 - Retry Backoff取消后，`willRetry=true`但没有后续 Run；
 - Retry exhaustion的三次 Run、`[true,true,false]`序列、终止 Retry事件和最终错误消息；
-- 并行 Tool完成事件与 Tool Result消息顺序分离：完成为 `beta → gamma → alpha`，消息恢复为 `alpha → beta → gamma`。
+- 并行 Tool完成事件与 Tool Result消息顺序分离：完成为 `beta → gamma → alpha`，消息恢复为 `alpha → beta → gamma`；
+- Manual Compaction把当前模型上下文重建为 `compactionSummary → assistant`，但原始 Session Entry仍完整保留；
+- `AgentSessionRuntime`新建/恢复 Session时的 Shutdown、Invalidate、Rebind、Extension Start和 `withSession()`真实顺序；
+- 旧 Public Listener不会自动迁移，必须在 Replacement后显式重新订阅。
 
-尚未验证 Compaction、Session Replacement和 RPC真实 Prompt。
+尚未验证 RPC真实 Prompt、Worker退出、重启和错误边界。
 
 ## 固定上游基线
 
@@ -70,6 +74,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
+packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
 scripts/check-pi-spike.mjs
 scripts/check-pi-artifact-result.mjs
 scripts/check-pi-lifecycle-result.mjs
@@ -77,6 +82,7 @@ scripts/check-pi-retry-lifecycle-result.mjs
 scripts/check-pi-follow-up-lifecycle-result.mjs
 scripts/check-pi-cancel-retry-exhaustion-result.mjs
 scripts/check-pi-parallel-tool-ordering-result.mjs
+scripts/check-pi-compaction-session-replacement-result.mjs
 ```
 
 其中：
@@ -87,7 +93,8 @@ scripts/check-pi-parallel-tool-ordering-result.mjs
 - `pi-lifecycle-retry-success.json`是真实自动重试恢复成功动态结果；
 - `pi-lifecycle-follow-up-queue.json`是真实 Follow-up队列与最终稳定边界动态结果；
 - `pi-lifecycle-cancel-retry-exhaustion.json`是真实主动取消、Backoff取消和 Retry exhaustion动态结果；
-- `pi-lifecycle-parallel-tool-ordering.json`是真实并行 Tool完成顺序与 Tool Result消息顺序动态结果。
+- `pi-lifecycle-parallel-tool-ordering.json`是真实并行 Tool完成顺序与 Tool Result消息顺序动态结果；
+- `pi-lifecycle-compaction-session-replacement.json`是真实 Manual Compaction与 Session Replacement动态结果。
 
 ## 一、源码契约
 
@@ -132,7 +139,7 @@ toolCallId
 
 ### Session Replacement
 
-`AgentSessionRuntime`替换 Session后，旧订阅不会自动迁移。Worker或 Adapter必须把重新订阅作为显式状态转换。
+动态 Fixture已经确认：`AgentSessionRuntime`替换 Session后，旧 Public Listener不会自动迁移。Worker或 Adapter必须把重新订阅作为显式状态转换，并分别保存 Session File Identity、内存 Session Object Identity与 Replacement Generation。
 
 ### RPC JSONL
 
@@ -538,6 +545,72 @@ fd372a8e73f4545bd7a34c6ac3e82cfc2d044dca473ae374627b847864389b02
 164f0e95e7f617c7aa69d1a1b34a5ae7935673c1ee852fa452541d15c1551376
 ```
 
+## 八、Compaction 与 Session Replacement验证
+
+详细文档：[`compaction-session-replacement-lifecycle.md`](compaction-session-replacement-lifecycle.md)。
+
+### Manual Compaction
+
+固定两个 Seed Turn后，Inline Extension在 `session_before_compact`中返回确定性 Summary。Faux Provider调用数保持 `2 → 2`，预留的第三条响应没有被消费，证明该路径没有模型摘要调用。
+
+Public事件：
+
+```text
+compaction_start → compaction_end
+Public entry_appended   = 0
+```
+
+捕获脚本显式订阅了 `entry_appended`，但 Public `entry_appended`没有出现。Compaction Entry必须从 Session Manager / Entry树读取。
+
+压缩前后：
+
+```text
+模型上下文 before  user → assistant → user → assistant
+模型上下文 after   compactionSummary → assistant
+Session Entry after model_change → thinking_level_change → message × 4 → compaction
+```
+
+原始四条 Message Entry仍在 Entry树中；当前模型上下文只保留 Compaction Summary和最近 Assistant。Compaction Summary是派生上下文，不是原始 Observation。
+
+### Session Replacement
+
+稳定身份转换：
+
+```text
+Session Object  session-object-1 → session-object-2 → session-object-3
+Session File    session-file-1 → session-file-2 → session-file-1
+```
+
+真实 Replacement顺序为旧 Extension Shutdown、旧 Session Invalidate、新 Session Rebind、Extension Start、Public Listener Attach、Rebind完成，再进入 `withSession()`。恢复原 Session File仍会创建新的内存 Session Object。
+
+旧 Public Listener不会自动迁移：原 Listener在 Original Prompt后计数为 `7`，New和 Resume Prompt后仍为 `7`；显式 Rebind Listener分别绑定三次并累计收到 `21`个事件。
+
+因此 Adapter必须明确记录：
+
+- Session File Identity与内存 Session Object Identity；
+- Replacement Generation；
+- `session_before_switch`、Shutdown、Invalidate、Rebind、`withSession()`和新 `session_start`；
+- Legacy Listener未迁移的负证据；
+- New Session空上下文与 Resume原消息上下文。
+
+Fixture文件 SHA-256：
+
+```text
+b5d4f92399531ad7eedfebfe2b6f7fa80fe0dfdface6b0a886bd4cbef29d3b03
+```
+
+外层契约指纹：
+
+```text
+9ebe87b12f0670214fa1244239d21d7a517b2332da2f3f85b3372b8b6895ab75
+```
+
+内层 Capture指纹：
+
+```text
+f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee
+```
+
 ## 隔离与信任模型
 
 Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
@@ -600,6 +673,13 @@ Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
 3. 真实结果原样固化为 committed Fixture，Checker收紧到完整事件类型、精确计数、顺序矩阵、消息状态、文档事实源和双层指纹。
 4. committed Fixture建立后，独立 Workflow必须 fresh Capture并做完整对象比较；任何并发语义漂移都保持失败可见。
 
+### Compaction / Session Replacement阶段
+
+1. 首轮隔离 Artifact证明 Extension Summary路径没有额外 Provider调用，Public只有 `compaction_start → compaction_end`，显式订阅的 `entry_appended`计数仍为零。
+2. 真实结果显示当前模型上下文变为 `compactionSummary → assistant`，但原始四条 Message Entry仍保留，并新增一个 Compaction Entry；没有把派生 Summary写成原始历史替代物。
+3. Replacement真实序列证明旧 Public Listener不会自动迁移，Session File恢复也会创建新的内存 Session Object；所有动态身份先转换为稳定 Alias。
+4. 结果原样固化为 committed Fixture，Checker收紧到精确事件、Entry树、上下文、统计、Rebind阶段、负证据、文档事实源和双层指纹。
+
 ## CI入口
 
 静态/Committed检查：
@@ -612,6 +692,7 @@ npm run check:pi-retry-lifecycle
 npm run check:pi-follow-up-lifecycle
 npm run check:pi-cancel-retry-exhaustion
 npm run check:pi-parallel-tool-ordering
+npm run check:pi-compaction-session-replacement
 ```
 
 动态 Probe：
@@ -625,6 +706,7 @@ npm run probe:pi:retry-lifecycle
 npm run probe:pi:follow-up-lifecycle
 npm run probe:pi:cancel-retry-exhaustion
 npm run probe:pi:parallel-tool-ordering
+npm run probe:pi:compaction-session-replacement
 ```
 
 Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行；普通功能 PR不依赖 npm网络。
@@ -646,7 +728,10 @@ Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行
 - 把 `session_shutdown`作为宿主显式事件；
 - 分别保存并行 Tool的声明顺序、完成顺序和 Tool Result消息顺序；
 - 通过 `toolCallId`关联并发执行的所有表面，不能用完成事件顺序替代消息顺序；
-- 为 Compaction和 Session Replacement建立下一批独立 Fixtures；
-- 在这些场景完成后修订 `NormalizedRuntimeEvent`。
+- 把 Compaction前原始 Entry、派生 Summary和压缩后当前模型上下文分别建模；
+- 把 Session File Identity、内存 Session Object Identity和 Replacement Generation分别建模；
+- 在每次 Session Replacement后显式 Rebind Public Listener；
+- 为 RPC真实 Prompt、Worker退出、重启和错误边界建立最后一批 Runtime Fixture；
+- 在 RPC边界完成后修订 `NormalizedRuntimeEvent`。
 
-当前仍不能直接实现 SQLite Observation Ledger，因为压缩和替换边界尚未冻结。
+当前仍不能直接实现 SQLite Observation Ledger，因为 RPC真实 Prompt与 Worker错误/重启边界尚未冻结。
