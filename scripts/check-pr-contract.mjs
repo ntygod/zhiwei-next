@@ -1,13 +1,26 @@
+import { readFileSync } from "node:fs";
 import {
   parseHarnessMetadata,
   validatePullRequestWorkItemContract,
 } from "./work-item-policy.mjs";
 
+function readPullRequestEvent() {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+  try {
+    return JSON.parse(readFileSync(eventPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+const event = readPullRequestEvent();
+const pullRequest = event?.pull_request;
 const ranks = { R0: 0, R1: 1, R2: 2, R3: 3 };
-const body = process.env.PR_BODY ?? "";
-const title = process.env.PR_TITLE ?? "";
-const headRef = process.env.PR_HEAD_REF ?? "";
-const prNumberValue = process.env.PR_NUMBER ?? "";
+const body = process.env.PR_BODY ?? pullRequest?.body ?? "";
+const title = process.env.PR_TITLE ?? pullRequest?.title ?? "";
+const headRef = process.env.PR_HEAD_REF ?? pullRequest?.head?.ref ?? "";
+const prNumberValue = process.env.PR_NUMBER ?? String(pullRequest?.number ?? "");
 const prNumber = /^\d+$/.test(prNumberValue) ? Number(prNumberValue) : undefined;
 const changedFiles = JSON.parse(process.env.CHANGED_FILES_JSON ?? "[]");
 const violations = [];
