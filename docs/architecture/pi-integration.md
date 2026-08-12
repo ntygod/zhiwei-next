@@ -705,7 +705,7 @@ Process exit(code=143, signal=null)
 Process close(code=143, signal=null)
 ```
 
-请求记录中没有 `SIGKILL`，证明这些诊断运行的成功路径未触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。正式 committed / fixed-container Evidence等待 fresh-first recovery run，当前旧 Fixture身份不能证明这些新增字段。架构上必须同时保留“源码存在 fallback”和“本次运行未触发”两个不同事实，不能把 `stop()`简化成 Host自报的 `transport=SIGTERM`，也不能用这一成功路径推断异常关闭语义。
+请求记录中没有 `SIGKILL`，证明这些运行的成功路径未触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。Fresh-first固定容器 Recovery Run已经产出与隔离诊断逐字节一致的 candidate Evidence，但其 Run整体因旧 Fixture比较而失败，live verified provenance仍待后续成功 Run绑定。架构上必须同时保留“源码存在 fallback”和“本次运行未触发”两个不同事实，不能把 `stop()`简化成 Host自报的 `transport=SIGTERM`，也不能用这一成功路径推断异常关闭语义。
 
 ### 当前限制
 

@@ -178,7 +178,7 @@ capture f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee
 
 ## SDK / RPC 同任务成功路径
 
-阶段：`source-and-runtime-verified-sdk-rpc-parity`。该标签描述当前正式基线；新的 `stop()` instrumentation provenance仍在 Draft中等待固定容器 GitHub Artifact，不能借用旧身份值声明已完成刷新。详细文档：[`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md)。
+阶段：`source-and-runtime-verified-sdk-rpc-parity`。该标签描述此前正式基线；包含新 `stop()` instrumentation的固定容器 Evidence已经在 Draft Recovery Run中产出并收敛为 `candidate`，仍需后续成功 Run绑定 live provenance后才能恢复为 verified。详细文档：[`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md)。
 
 发布 Artifact 根导出 `runRpcMode`和 `RpcClient`。本场景冻结的是公开 Client 的必需方法子集，而不是全部公开 Surface：
 
@@ -241,7 +241,7 @@ RpcClient:  stop()
   → close(code=143, signal=null)
 ```
 
-对固定 npm Artifact的重复诊断 Capture中，`requestedSignals`只有一次被接受的 `SIGTERM`，没有 `SIGKILL`，所以对应成功路径没有触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。该结论的正式 committed / fixed-container Evidence等待 recovery run，当前旧 Fixture身份不能证明这些新增字段。stdin EOF与 `RpcClient.stop()`的实现层 SIGTERM请求必须分开记录，也不能外推 Worker Restart、Resume或异常退出语义。
+固定容器 candidate Capture中，`requestedSignals`只有一次被接受的 `SIGTERM`，没有 `SIGKILL`，所以对应成功路径没有触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。Recovery Artifact与隔离诊断结果逐字节一致，但 live verified provenance仍待下一次成功 Run绑定。stdin EOF与 `RpcClient.stop()`的实现层 SIGTERM请求必须分开记录，也不能外推 Worker Restart、Resume或异常退出语义。
 
 ### 来源边界
 
@@ -255,24 +255,25 @@ Workflow 使用 fresh-first recovery：固定容器先生成 Fresh Capture并通
 
 `jsonSha256`绑定解压后的规范 JSON字节，`compressedSha256`绑定仓库中的 gzip字节，`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive；三者作用域不同，不能互相替代。最终合并还要求 Fresh / committed完整相等、两个结果 Checker、live Run / Artifact provenance、当前 HEAD CI和 R3独立 AI审查全部通过。
 
-以下数字是当前 Manifest已记录的正式身份；等待实现层 instrumentation取得新的固定容器 Artifact后再整组更新，本轮不把旧身份数字改写成候选值：
+以下数字是当前 `candidate` Manifest记录的内容身份与来源状态：
 
 ```text
 parts                        6
-compressedBytes              9734
-compressedSha256             08bc2aee20f7009e54867f46bfb4e12caec6a5a5013baf2e119e931d51e7fac4
-jsonBytes                    120957
-jsonSha256                   0470186fb4af6348805cd1f96a6b538e1e8eb8c02c58dca5747d135693927a0e
-outer contract fingerprint   7ea076b4ce562ed7c2cab17fbaa13c95e5922f5698e46145697047ed98486ba0
-capture contract fingerprint 8c271d0cc1acb3eab5f10559b2a0c18370e076420a7155445d81bace11c624fc
-capture head                 d4d9a6f175fb0c5575743e3cad562d4e967c46e2
-capture workflow             31614817292
-capture artifact             9148765803
-capture artifact digest      sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d19081a373017e59a62894eb4
+compressedBytes              9861
+compressedSha256             44d95e16d8078413c1afe94dd3c7a19bbcdbfad06d82a51a491d0ce8e4b3fbbb
+jsonBytes                    122178
+jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda252779603bc9e470034d
+outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
+capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
+source state                 candidate
+capture head                 f0447d35028498e0f02edde98dfbb420ca2dc614
+capture workflow             null
+capture artifact             null
+capture artifact digest      null
 external Provider prompts    0
 ```
 
-Manifest 是 provenance 的机器事实源；文档不能用旧 `artifactDigest`证明新的 `jsonSha256`。
+固定容器 Recovery Run `31638606535`的 Fresh Capture和两个 Checker成功，上传 Artifact `9157972212`（ZIP Digest `sha256:05ed950a16ef2b412daeaebf496f35ca49d79ca5421c977d60c23402ac353c8c`），其 `result.json`与上面的 candidate逐字节相同。该 Run随后因旧 committed Fixture漂移而整体失败，所以它是可审计的 recovery input，不是可写入 Manifest的 verified provenance。Manifest 是 provenance 的机器事实源。
 
 ## 隔离与验证
 

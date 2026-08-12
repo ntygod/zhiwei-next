@@ -3,7 +3,7 @@
 ## 状态
 
 ```text
-status: verified
+status: candidate
 work-item: #45
 primary PR: #60
 Pi package: @earendil-works/pi-coding-agent@0.84.1
@@ -11,24 +11,19 @@ release tag: v0.84.1
 release commit: 53fa77ccd8a279eb87e92294ef3687b03ff80112
 Node: 22.23.1
 scenario: sdk-rpc-parity
-instrumentation provenance refresh: pending fixed-container GitHub Artifact
+instrumentation provenance refresh: fixed-container candidate; live verified provenance pending
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。当前 committed Fixture仍是下方旧 Schema的正式固定容器证据；新增 `stop()` instrumentation的 `exit(143) → close(143)`来自对同一固定 npm Artifact的重复诊断 Capture，正式 committed / fixed-container Evidence要等 fresh-first recovery run后才落位。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Recovery Run `31638606535`已经生成并通过两个 Fresh Checker，所得 `result.json`与此前隔离诊断结果逐字节一致；由于该 Run随后按预期拒绝旧 committed Fixture，Run整体结论不是 success，因此它只可用于在 Draft PR中重建 `candidate`，不能冒充 live verified provenance。当前 Manifest正处于该 `candidate`状态。
 
 Committed Fixture：
 
 ```text
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-00.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-01.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-02.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-03.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-04.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-05.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-<index>-<sha256>.b64
 ```
 
-`gzip + base64 parts` Loader 校验分片、压缩体、解压 JSON、双层指纹，并运行主 Checker 与 `RpcClient get_messages` Checker。Fresh Capture 与 committed Fixture 比较完整对象。
+`gzip + base64 parts` Loader 校验 Manifest引用的内容寻址分片、压缩体、解压 JSON、双层指纹，并运行主 Checker 与 `RpcClient get_messages` Checker。Fresh Capture 与 committed Fixture 比较完整对象。旧的非活动分片暂时保留，以免已经读取旧 Manifest的并发 Reader失去引用。
 
 ## 固定场景
 
@@ -305,31 +300,32 @@ Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生�
 
 Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker，核对 Workflow、事件类型、成功结论、Run HEAD、PR关联、Artifact所属 Run、按 `run_attempt`派生的 Artifact名称、未过期状态与 ZIP Digest，并要求 `source.head`是当前 PR HEAD的真实 Git祖先；Checker还下载对应 ZIP，严格要求其中唯一条目为 `result.json`，把下载 ZIP摘要、`result.json`字节摘要与 committed Fixture完整字节同时绑定。无法用真实 Compare或内容绑定证明时 fail closed，不使用 synthetic merge parent fallback。只有 Fresh Capture 与 committed Fixture完整相等、两个结果 Checker、Manifest / Artifact live provenance、当前 HEAD CI与独立审查全部通过，PR才满足合并条件。
 
-下面保留的是当前 Manifest 已记录的正式身份。实现层 instrumentation 刷新尚未取得新的固定容器 GitHub Artifact 前，不改写这些数字；新 Artifact 固定后必须把整组身份与 provenance 一次性同步，不能把旧数字冒充新 Capture：
+下面是当前 `candidate` Manifest已记录的内容身份：
 
 ```text
 format                       gzip+base64-parts
 parts                        6
 partLength                   2400
-base64Length                 12980
-compressedBytes              9734
-compressedSha256             08bc2aee20f7009e54867f46bfb4e12caec6a5a5013baf2e119e931d51e7fac4
-jsonBytes                    120957
-jsonSha256                   0470186fb4af6348805cd1f96a6b538e1e8eb8c02c58dca5747d135693927a0e
-outer contract fingerprint   7ea076b4ce562ed7c2cab17fbaa13c95e5922f5698e46145697047ed98486ba0
-capture contract fingerprint 8c271d0cc1acb3eab5f10559b2a0c18370e076420a7155445d81bace11c624fc
+base64Length                 13148
+compressedBytes              9861
+compressedSha256             44d95e16d8078413c1afe94dd3c7a19bbcdbfad06d82a51a491d0ce8e4b3fbbb
+jsonBytes                    122178
+jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda252779603bc9e470034d
+outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
+capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 ```
 
-当前已记录的 Fresh Capture provenance：
+当前 Manifest来源状态：
 
 ```text
-capture head     d4d9a6f175fb0c5575743e3cad562d4e967c46e2
-workflow run     31614817292
-artifact id      9148765803
-artifact digest  sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d19081a373017e59a62894eb4
+state            candidate
+capture head     f0447d35028498e0f02edde98dfbb420ca2dc614
+workflow run     null
+artifact id      null
+artifact digest  null
 ```
 
-Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态，也不能用旧 Artifact 身份证明新的 JSON 内容。
+用于重建该 candidate的合格 Fresh Recovery Artifact是 Run `31638606535`、Artifact `9157972212`、ZIP Digest `sha256:05ed950a16ef2b412daeaebf496f35ca49d79ca5421c977d60c23402ac353c8c`；其中唯一 `result.json`的 SHA-256为上面的 `a3f47e34…`。该 Run整体失败于旧 Fixture比较，所以这些值不会写进 `source`。下一次 candidate commit上的成功 Run必须产生完全相同的 JSON，之后才能把其真实 Run / Artifact身份整组写入并晋升为 `verified`。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
 
 ## 安全与脱敏
 
