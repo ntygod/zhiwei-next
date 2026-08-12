@@ -83,6 +83,7 @@ Issue #57 和 PR #59 建立 work-item lifecycle：
 - 分支必须包含 Issue编号；
 - Review、Finalize和Integrate在同一 primary PR完成；
 - 禁止 retirement、no-op、capability-test、integrator、finalizer和reviewer PR；
+- PR CI 在 **pre-merge** 阶段实时验证 `work-item`、`owner-input` 和 `supersedes-pr` 的 GitHub对象类型；
 - Repository Hygiene审计 WIP、对象类型和孤立 helper，并只按 exact-head reconciliation allowlist删除 legacy helper branch。
 
 当前收敛结果：
@@ -114,7 +115,8 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
 - PR Checker从 GitHub Event Payload读取 title、branch和PR number；
-- Repository Hygiene在可信默认分支上下文中验证 Issue / PR对象类型；
+- pre-merge PR CI通过只读 GitHub API确认 work-item是开放Issue、owner-input由仓库所有者创建、supersedes-pr是真实PR；
+- Repository Hygiene在可信默认分支上下文中再次验证 Issue / PR对象类型；
 - 外部 direct push由 Main Provenance的 `push`路径审计；
 - `GITHUB_TOKEN`自动合并由 Dispatch / Receiver路径审计；
 - 未验证 main更新创建 R3 Incident并阻断普通自动合并；
