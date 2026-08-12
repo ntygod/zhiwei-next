@@ -1,0 +1,45 @@
+name: AI cleanup branch audit
+
+on:
+  push:
+    branches:
+      - chore/cleanup-compaction-ai-orchestration-v2
+    paths:
+      - .github/ai-cleanup-audit-trigger
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Export source and history
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf "$RUNNER_TEMP/cleanup-source.tgz" .
+          git bundle create "$RUNNER_TEMP/cleanup.bundle" --all
+          git diff --name-status origin/main...HEAD > "$RUNNER_TEMP/cleanup-diff.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/cleanup-head.txt"
+          git rev-parse origin/main > "$RUNNER_TEMP/cleanup-base.txt"
+
+      - name: Upload audit snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cleanup-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/cleanup-source.tgz
+            ${{ runner.temp }}/cleanup.bundle
+            ${{ runner.temp }}/cleanup-diff.txt
+            ${{ runner.temp }}/cleanup-head.txt
+            ${{ runner.temp }}/cleanup-base.txt
+          if-no-files-found: error
+          retention-days: 1
