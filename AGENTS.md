@@ -37,7 +37,7 @@
 
 | 任务类型 | 必读来源 |
 |---|---|
-| 自主开发流程、工作选择、PR 或规则维护 | `docs/harness/README.md`、`docs/harness/AGENTS.md` |
+| 自主开发流程、工作选择、Issue、Branch、PR 或规则维护 | `docs/harness/README.md`、`docs/harness/AGENTS.md`、`docs/harness/work-item-lifecycle.md` |
 | 产品行为、交互或 UI | `docs/product/`、`docs/AGENTS.md` |
 | 架构、模块边界或依赖方向 | `docs/architecture/system-architecture.md`、相关 `docs/adr/`、`packages/AGENTS.md` |
 | 领域对象、记忆、作用域或生命周期 | `docs/architecture/domain-model.md`、目标包的局部规则 |
@@ -88,10 +88,15 @@
 
 ### 选择工作
 
-- GitHub Issue 和当前里程碑是工作队列；没有合适 Issue 时，AI 可以先创建再领取。
-- 优先级：安全与数据完整性 > 主分支回归 > 当前里程碑阻塞 > 用户可感知纵向切片 > 维护性改进。
+- 先执行 Repository Reconciliation：检查 Incident、人类新评论、开放 primary PR、陈旧 Draft、孤立 Branch、重复 Issue 和 WIP。
+- GitHub Issue 和当前里程碑是工作队列；没有合适 Issue 时，搜索去重后才能创建。
+- 所有者直接创建的想法 Issue 是 `owner-input`：不改写正文、不因未排期关闭、不写入无关诊断。
+- 一个 execution Issue 最多一个 active branch 和一个开放 primary PR；分支名包含 Issue 编号。
+- Review、Finalize、Integrate 在同一 primary PR 完成；禁止 `retire branch`、no-op、integrator、finalizer 或 reviewer PR。
+- Issue 与 PR 共用编号；评论、关闭或 metadata 写入前验证对象类型、标题、关联 work item 和必要的 HEAD。
+- 优先级：安全与数据完整性 > 人类输入 > 主分支回归 > 当前里程碑阻塞 > 用户可感知纵向切片 > 维护性改进。
 - 同一 Agent 同时只推进一个主要目标。发现邻近问题时记录 Issue，不扩大当前 PR。
-- 详细选择算法和阻塞处理见 `docs/harness/development-loop.md`。
+- 详细规则见 `docs/harness/work-item-lifecycle.md` 和 `docs/harness/development-loop.md`。
 
 ### 开工
 
@@ -102,6 +107,8 @@
 - 明确不做；
 - 风险等级 `R0`–`R3`；
 - 验证方式和回滚路径。
+
+第一个实质性提交后创建 Draft primary PR。普通开发不得使用 `ai/`、`automation/`、无租约 `helper/` 或没有 work-item 编号的分支；不得在真实仓库创建 capability-test 对象。
 
 ### 实现
 
@@ -115,7 +122,7 @@
 ### 审查与合并
 
 - `R0/R1`：作者 AI 完成自审和全部自动化检查后可自主合并。
-- `R2/R3`：必须由新的独立 AI 上下文审查当前 HEAD，并在 PR 留下可机器识别的批准记录。
+- `R2/R3`：必须由新的独立 AI 上下文审查当前 HEAD，并在 primary PR 留下可机器识别的批准记录。
 - PR 只有在非 Draft、CI 成功、风险声明真实、回滚要求满足且不存在阻塞评论时才可合并。
 - 默认使用 squash merge；PR 历史是项目所有者的主要审计界面。
 - 自动合并协议见 `docs/harness/risk-model.md` 和 `.github/workflows/autonomous-merge.yml`。
@@ -125,7 +132,7 @@
 - 行为变化必须有不变量测试或用户场景测试。
 - 架构决策变化必须新增或 supersede ADR，不能只改代码或叙述性文档。
 - 文档只更新真正的事实源，避免在多个文件复制同一规则。
-- 更新受影响的 Issue、当前项目状态和已知限制。
+- 更新受影响的 execution Issue、owner-input 关联、当前项目状态和已知限制。
 - 汇报已验证内容、未验证内容、风险、回滚和后续项。
 
 ## AGENTS 与 Harness 自维护

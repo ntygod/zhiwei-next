@@ -1,27 +1,29 @@
+import { readFileSync } from "node:fs";
+import {
+  parseHarnessMetadata,
+  validatePullRequestWorkItemContract,
+} from "./work-item-policy.mjs";
+
+function readPullRequestEvent() {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+  try {
+    return JSON.parse(readFileSync(eventPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+const event = readPullRequestEvent();
+const pullRequest = event?.pull_request;
 const ranks = { R0: 0, R1: 1, R2: 2, R3: 3 };
-const body = process.env.PR_BODY ?? "";
+const body = process.env.PR_BODY ?? pullRequest?.body ?? "";
+const title = process.env.PR_TITLE ?? pullRequest?.title ?? "";
+const headRef = process.env.PR_HEAD_REF ?? pullRequest?.head?.ref ?? "";
+const prNumberValue = process.env.PR_NUMBER ?? String(pullRequest?.number ?? "");
+const prNumber = /^\d+$/.test(prNumberValue) ? Number(prNumberValue) : undefined;
 const changedFiles = JSON.parse(process.env.CHANGED_FILES_JSON ?? "[]");
 const violations = [];
-
-function parseMetadata(text) {
-  const source = text ?? "";
-  const marker = "zhiwei-harness";
-  const markerIndex = source.lastIndexOf(marker);
-  if (markerIndex < 0) return undefined;
-  const commentStart = source.lastIndexOf("<!--", markerIndex);
-  const commentEnd = source.indexOf("-->", markerIndex + marker.length);
-  if (commentStart < 0 || commentEnd < 0 || commentStart > markerIndex) return undefined;
-
-  const result = {};
-  const block = source.slice(markerIndex + marker.length, commentEnd);
-  for (const rawLine of block.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || !line.includes(":")) continue;
-    const separator = line.indexOf(":");
-    result[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
-  }
-  return result;
-}
 
 function maxRisk(left, right) {
   return ranks[left] >= ranks[right] ? left : right;
@@ -50,7 +52,8 @@ function inferMinimumRisk(files) {
       path.startsWith("packages/memory-store/") ||
       path === "package.json" ||
       path === ".github/pull_request_template.md" ||
-      path.startsWith("scripts/check-")
+      path.startsWith("scripts/check-") ||
+      path === "scripts/work-item-policy.mjs"
     ) {
       risk = maxRisk(risk, "R2");
       continue;
@@ -77,7 +80,9 @@ function isGovernanceChange(files) {
     path === "scripts/check-agents.mjs" ||
     path === "scripts/check-harness.mjs" ||
     path === "scripts/check-pr-contract.mjs" ||
-    path === "scripts/check-main-provenance.mjs"
+    path === "scripts/check-main-provenance.mjs" ||
+    path === "scripts/work-item-policy.mjs" ||
+    path === "scripts/check-work-item-governance.mjs"
   );
 }
 
@@ -92,7 +97,16 @@ for (const heading of requiredHeadings) {
   if (!body.includes(heading)) violations.push(`PR body is missing required heading: ${heading}`);
 }
 
-const metadata = parseMetadata(body);
+violations.push(
+  ...validatePullRequestWorkItemContract({
+    body,
+    title,
+    headRef,
+    prNumber,
+  }),
+);
+
+const metadata = parseHarnessMetadata(body);
 if (!metadata) {
   violations.push("PR body is missing the <!-- zhiwei-harness ... --> metadata block.");
 } else {
@@ -157,4 +171,6 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`PR contract: OK (${changedFiles.length} files, minimum risk ${inferMinimumRisk(changedFiles)})`);
+console.log(
+  `PR contract: OK (${changedFiles.length} files, minimum risk ${inferMinimumRisk(changedFiles)}, work item ${metadata?.["work-item"] ?? "<missing>"})`,
+);

@@ -1,0 +1,318 @@
+name: Repository Hygiene
+
+on:
+  workflow_run:
+    workflows: ["Autonomous Merge"]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: "19 5 * * 1"
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: repository-hygiene-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout trusted default-branch revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Reconcile work items and legacy helper branches
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const { readFile } = require("node:fs/promises");
+            const { join } = require("node:path");
+
+            const root = process.env.GITHUB_WORKSPACE;
+            const policyUrl = pathToFileURL(
+              join(root, "scripts/work-item-policy.mjs"),
+            ).href;
+            const {
+              auditRepositoryWorkItems,
+              parseHarnessMetadata,
+              parseNumberReference,
+              runWorkItemPolicySelfTests,
+              selectAllowlistedLegacyHelperBranches,
+              validatePullRequestWorkItemContract,
+            } = await import(policyUrl);
+
+            const config = JSON.parse(
+              await readFile(join(root, "harness.config.json"), "utf8"),
+            );
+            const reconciliation = JSON.parse(
+              await readFile(
+                join(
+                  root,
+                  "docs/harness/reconciliation/2026-08-12-work-item-cleanup.json",
+                ),
+                "utf8",
+              ),
+            );
+            const { owner, repo } = context.repo;
+            const repositoryFullName = `${owner}/${repo}`;
+
+            runWorkItemPolicySelfTests();
+
+            const readRepositoryState = async () => {
+              const [{ data: repository }, branches, openPullRequests] =
+                await Promise.all([
+                  github.rest.repos.get({ owner, repo }),
+                  github.paginate(github.rest.repos.listBranches, {
+                    owner,
+                    repo,
+                    per_page: 100,
+                  }),
+                  github.paginate(github.rest.pulls.list, {
+                    owner,
+                    repo,
+                    state: "open",
+                    per_page: 100,
+                  }),
+                ]);
+              return { repository, branches, openPullRequests };
+            };
+
+            let state = await readRepositoryState();
+            const cleanupCandidates = selectAllowlistedLegacyHelperBranches({
+              defaultBranch: state.repository.default_branch,
+              branches: state.branches,
+              openPullRequests: state.openPullRequests,
+              cleanupEntries: reconciliation.legacyBranches,
+            });
+
+            const cleanupFailures = [];
+            const deleted = [];
+            for (const candidate of cleanupCandidates) {
+              try {
+                const [
+                  { data: latestRepository },
+                  { data: latestBranch },
+                  currentlyOpenPullRequests,
+                ] = await Promise.all([
+                  github.rest.repos.get({ owner, repo }),
+                  github.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: candidate.name,
+                  }),
+                  github.paginate(github.rest.pulls.list, {
+                    owner,
+                    repo,
+                    state: "open",
+                    head: `${owner}:${candidate.name}`,
+                    per_page: 100,
+                  }),
+                ]);
+
+                if (candidate.name === latestRepository.default_branch) {
+                  cleanupFailures.push(`${candidate.name}: became default branch`);
+                  continue;
+                }
+                if (currentlyOpenPullRequests.length > 0) {
+                  cleanupFailures.push(`${candidate.name}: acquired an open PR`);
+                  continue;
+                }
+                if (latestBranch.protected === true) {
+                  cleanupFailures.push(`${candidate.name}: became protected`);
+                  continue;
+                }
+                if (latestBranch.commit.sha !== candidate.headSha) {
+                  cleanupFailures.push(
+                    `${candidate.name}: HEAD moved from ${candidate.headSha} ` +
+                      `to ${latestBranch.commit.sha}`,
+                  );
+                  continue;
+                }
+
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `heads/${candidate.name}`,
+                });
+                deleted.push(candidate);
+                core.notice(
+                  `Deleted allowlisted legacy helper branch ${candidate.name} ` +
+                    `at ${candidate.headSha}; recovery: recreate the ref at that SHA.`,
+                );
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(`Legacy helper branch ${candidate.name} is already absent.`);
+                  continue;
+                }
+                cleanupFailures.push(
+                  `${candidate.name}: ${error.message ?? String(error)}`,
+                );
+              }
+            }
+
+            state = await readRepositoryState();
+            const allowedOrphanBranches = [];
+            for (const entry of reconciliation.legacyBranches ?? []) {
+              if (entry.action !== "preserve-snapshot") continue;
+              const branch = state.branches.find(
+                (candidate) => candidate.name === entry.branch,
+              );
+              if (!branch) continue;
+              if (branch.commit.sha !== entry.expectedHead) {
+                cleanupFailures.push(
+                  `${entry.branch}: preserved snapshot HEAD moved from ` +
+                    `${entry.expectedHead} to ${branch.commit.sha}`,
+                );
+                continue;
+              }
+              allowedOrphanBranches.push(entry.branch);
+            }
+
+            const findings = auditRepositoryWorkItems({
+              defaultBranch: state.repository.default_branch,
+              branches: state.branches,
+              openPullRequests: state.openPullRequests,
+              allowedOrphanBranches,
+              maxOpenPrimaryPullRequests:
+                config.workItemLifecycle.maxOpenPrimaryPullRequests,
+            });
+
+            for (const pullRequest of state.openPullRequests) {
+              for (const violation of validatePullRequestWorkItemContract({
+                body: pullRequest.body ?? "",
+                title: pullRequest.title ?? "",
+                headRef: pullRequest.head.ref,
+                prNumber: pullRequest.number,
+              })) {
+                findings.push({
+                  kind: "open-pr-contract",
+                  severity: "error",
+                  pullRequest: pullRequest.number,
+                  message: `Open PR #${pullRequest.number}: ${violation}`,
+                });
+              }
+
+              const metadata = parseHarnessMetadata(pullRequest.body ?? "");
+              if (!metadata) continue;
+              const workItem = parseNumberReference(metadata["work-item"]);
+              const ownerInput = parseNumberReference(metadata["owner-input"], {
+                allowNone: true,
+              });
+              const supersedesPr = parseNumberReference(
+                metadata["supersedes-pr"],
+                { allowNone: true },
+              );
+
+              if (Number.isInteger(workItem)) {
+                try {
+                  const { data } = await github.rest.issues.get({
+                    owner,
+                    repo,
+                    issue_number: workItem,
+                  });
+                  if (data.pull_request) {
+                    findings.push({
+                      kind: "work-item-is-pr",
+                      severity: "error",
+                      message:
+                        `Open PR #${pullRequest.number} work-item #${workItem} ` +
+                        `resolves to a Pull Request, not an Issue.`,
+                    });
+                  }
+                } catch (error) {
+                  findings.push({
+                    kind: "work-item-unreadable",
+                    severity: "error",
+                    message:
+                      `Open PR #${pullRequest.number} work-item #${workItem} ` +
+                      `cannot be verified: ${error.message ?? String(error)}`,
+                  });
+                }
+              }
+
+              if (Number.isInteger(ownerInput)) {
+                try {
+                  const { data } = await github.rest.issues.get({
+                    owner,
+                    repo,
+                    issue_number: ownerInput,
+                  });
+                  if (data.pull_request) {
+                    findings.push({
+                      kind: "owner-input-is-pr",
+                      severity: "error",
+                      message:
+                        `Open PR #${pullRequest.number} owner-input #${ownerInput} ` +
+                        `resolves to a Pull Request.`,
+                    });
+                  } else if (data.user?.login !== owner) {
+                    findings.push({
+                      kind: "owner-input-author",
+                      severity: "error",
+                      message:
+                        `Open PR #${pullRequest.number} owner-input #${ownerInput} ` +
+                        `was not authored by repository owner ${owner}.`,
+                    });
+                  }
+                } catch (error) {
+                  findings.push({
+                    kind: "owner-input-unreadable",
+                    severity: "error",
+                    message:
+                      `Open PR #${pullRequest.number} owner-input #${ownerInput} ` +
+                      `cannot be verified: ${error.message ?? String(error)}`,
+                  });
+                }
+              }
+
+              if (Number.isInteger(supersedesPr)) {
+                try {
+                  await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: supersedesPr,
+                  });
+                } catch (error) {
+                  findings.push({
+                    kind: "supersedes-pr-unreadable",
+                    severity: "error",
+                    message:
+                      `Open PR #${pullRequest.number} supersedes-pr #${supersedesPr} ` +
+                      `cannot be verified as a Pull Request: ` +
+                      `${error.message ?? String(error)}`,
+                  });
+                }
+              }
+            }
+
+            await core.summary
+              .addHeading("Repository Hygiene")
+              .addRaw(`Deleted legacy helper branches: ${deleted.length}\n`)
+              .addRaw(
+                `Preserved registered snapshots: ` +
+                  `${allowedOrphanBranches.join(", ") || "none"}\n`,
+              )
+              .addRaw(`Policy findings: ${findings.length}\n`)
+              .write();
+
+            const failures = [
+              ...cleanupFailures,
+              ...findings
+                .filter((finding) => finding.severity === "error")
+                .map((finding) => finding.message),
+            ];
+            if (failures.length > 0) {
+              core.setFailed(
+                `Repository hygiene found ${failures.length} blocking condition(s): ` +
+                  failures.join("; "),
+              );
+            }
