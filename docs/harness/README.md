@@ -168,7 +168,9 @@ project-state
 rollback
 ```
 
-Repository Hygiene 在可信默认分支上下文中通过 GitHub API再次验证 work-item 和 owner-input 是 Issue、supersedes-pr 是 PR，并安全回收精确登记的 legacy helper branch。
+CI 在 **pre-merge** 阶段使用只读 GitHub API 实时验证：`work-item` 必须是开放 Issue、`owner-input` 必须是仓库所有者创建的 Issue、`supersedes-pr` 必须是真实 PR。验证失败时 CI 失败，旧 Autonomous Merge 不会运行；对象类型不能等到合并后才发现。
+
+Repository Hygiene 在可信默认分支上下文中再次查询真实 GitHub 对象，复核 work-item / owner-input / supersedes-pr，并安全回收精确登记的 legacy helper branch。它是 post-merge 审计与收敛层，不替代 pre-merge 门禁。
 
 所有 Workflow Action 固定完整 Commit SHA。机器配置、Policy、Checker、Workflow 和文档均注册在 `harness.config.json`。
 
