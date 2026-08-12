@@ -28,13 +28,25 @@ best-effort-private-free
 - Session Replacement：Shutdown、Invalidate、Rebind、Extension Start、Public Listener Attach和 `withSession()`边界；
 - 以上 Fixture由固定 Artifact、隔离 Probe、精确 Checker和双层指纹持续验证。
 
+### Runtime 合同连续性
+
+下面的精确结论继续作为 committed Fixture 与 Checker 的文档锚点：
+
+- 自动重试恢复成功 Fixture：公共 `agent_end.willRetry=[true,false]`；Extension没有 `auto_retry_start/end`，被替代失败消息仍须从事件流持久化。
+- Follow-up队列 Fixture：一个公共 Agent Run包含两个 Turn；Extension没有 `queue_update`；初始 `session.prompt()`会等到 Follow-up完成、队列排空和 Session idle 后返回。
+- 下一层已验证用户取消、`abortRetry()`和 retry exhaustion。
+- 取消、abortRetry与 Retry exhaustion Fixture：部分 Assistant消息以 `stopReason=aborted`保留；存在 willRetry=true 但没有后续 Agent Run；Retry exhaustion最终保留最后一次失败 Assistant。
+- 并行 Tool ordering Fixture：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
+- 已验证 Compaction与 Session Replacement；下一层协议必须继续区分原始 Entry、派生 Summary、当前上下文和 Session identity。
+
 ### Harness 与默认分支
 
 - 渐进式 `AGENTS.md` 与 AI-primary Harness；
 - Main Provenance、token-driven dispatch、Incident停机与恢复提案；
 - `best-effort-private-free` 风险接受和两条 live provenance proof；
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
-- `developmentPause.active=false`，Issue #9 已关闭且审计历史保留。
+- `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
+- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；失败必须可见并安全重跑，不能降低来源校验。
 
 ### 历史连续性锚点
 
