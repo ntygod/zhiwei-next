@@ -1,0 +1,33 @@
+name: AI source export
+
+on:
+  push:
+    branches:
+      - spike/m0-pi-parallel-tool-ordering
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Package source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf "$RUNNER_TEMP/zhiwei-next-source.tgz" .
+
+      - name: Upload short-lived source snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zhiwei-next-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zhiwei-next-source.tgz
+          if-no-files-found: error
+          retention-days: 1
