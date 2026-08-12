@@ -63,9 +63,13 @@ outer fingerprint            7ea076b4ce562ed7c2cab17fbaa13c95e5922f5698e46145697
 capture fingerprint          8c271d0cc1acb3eab5f10559b2a0c18370e076420a7155445d81bace11c624fc
 final Assistant sha256       5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
 external Provider prompts    0
-capture workflow             31611776749
-capture artifact             9147519162
+capture head                 d4d9a6f175fb0c5575743e3cad562d4e967c46e2
+capture workflow             31614817292
+capture artifact             9148765803
+capture artifact digest      sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d19081a373017e59a62894eb4
 ```
+
+Manifest 是最终 Capture provenance 的机器事实源。
 
 ### Harness 与默认分支
 
