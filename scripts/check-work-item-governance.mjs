@@ -120,7 +120,7 @@ for (const token of [
   "一个 execution Issue 最多一个 active branch",
   "一个 execution Issue 最多一个开放 primary PR",
   "禁止为以下目的创建额外 PR",
-  "不得使用“retire branch” PR",
+  "不得创建“retire branch” PR",
   "WIP 上限",
   "Repository Reconciliation",
   "helper/<work-item>/<purpose>/<expires-epoch>",
