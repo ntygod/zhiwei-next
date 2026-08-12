@@ -1,0 +1,334 @@
+name: AI finalize SDK RPC parity evidence
+
+on:
+  push:
+    branches:
+      - automation/sdk-rpc-parity-finalizer
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: spike/m0-pi-sdk-rpc-parity
+      TARGET_PR: "44"
+      TARGET_ISSUE: "43"
+      WORKFLOW_FILE: pi-sdk-rpc-parity.yml
+      ARTIFACT_PREFIX: pi-sdk-rpc-parity-probe-
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Locate completed Runtime probe
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          RUN_JSON=""
+          for attempt in $(seq 1 60); do
+            RUN_JSON="$(gh api --method GET \
+              "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs" \
+              -f branch="${TARGET_BRANCH}" \
+              -f per_page=10 \
+              --jq '.workflow_runs[0] | {id,status,conclusion,head_sha,html_url}')"
+            STATUS="$(jq -r '.status // empty' <<<"$RUN_JSON")"
+            if [[ "$STATUS" == "completed" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          STATUS="$(jq -r '.status // empty' <<<"$RUN_JSON")"
+          if [[ "$STATUS" != "completed" ]]; then
+            echo "No completed SDK/RPC parity probe was found for ${TARGET_BRANCH}."
+            exit 1
+          fi
+          echo "run-json=${RUN_JSON}" >> "$GITHUB_OUTPUT"
+          echo "run-id=$(jq -r '.id' <<<"$RUN_JSON")" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$(jq -r '.conclusion' <<<"$RUN_JSON")" >> "$GITHUB_OUTPUT"
+          echo "head-sha=$(jq -r '.head_sha' <<<"$RUN_JSON")" >> "$GITHUB_OUTPUT"
+          echo "run-url=$(jq -r '.html_url' <<<"$RUN_JSON")" >> "$GITHUB_OUTPUT"
+
+      - name: Download Runtime evidence
+        id: artifact
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.probe.outputs.run-id }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          ARTIFACT_JSON="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("'"${ARTIFACT_PREFIX}"'"))][0] | {id,name,digest}')"
+          ARTIFACT_ID="$(jq -r '.id // empty' <<<"$ARTIFACT_JSON")"
+          if [[ -z "$ARTIFACT_ID" ]]; then
+            echo "Runtime probe artifact not found."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/evidence"
+          gh api "repos/${REPO}/actions/artifacts/${ARTIFACT_ID}/zip" > "$RUNNER_TEMP/evidence.zip"
+          unzip -q "$RUNNER_TEMP/evidence.zip" -d "$RUNNER_TEMP/evidence"
+          RESULT_PATH="$(find "$RUNNER_TEMP/evidence" -type f -name result.json -print -quit)"
+          if [[ -z "$RESULT_PATH" ]]; then
+            echo "result.json not found in Runtime artifact."
+            exit 1
+          fi
+          echo "result-path=${RESULT_PATH}" >> "$GITHUB_OUTPUT"
+          echo "artifact-id=${ARTIFACT_ID}" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$(jq -r '.name' <<<"$ARTIFACT_JSON")" >> "$GITHUB_OUTPUT"
+          echo "artifact-digest=$(jq -r '.digest' <<<"$ARTIFACT_JSON")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish failure diagnostic when Runtime probe failed
+        if: steps.probe.outputs.conclusion != 'success'
+        shell: bash
+        env:
+          RESULT_PATH: ${{ steps.artifact.outputs.result-path }}
+          RUN_URL: ${{ steps.probe.outputs.run-url }}
+          RUN_ID: ${{ steps.probe.outputs.run-id }}
+        run: |
+          set -euo pipefail
+          ERROR_JSON="$(jq -c '.capture.error // .error // {message:"Unknown Runtime failure"}' "$RESULT_PATH")"
+          BODY=$(cat <<EOF
+          ## SDK/RPC parity 首轮 Runtime 诊断
+
+          - Workflow run: ${RUN_ID}
+          - Run URL: ${RUN_URL}
+          - Error: \`${ERROR_JSON}\`
+
+          首轮失败证据已保留；未创建 committed Fixture，也未降低任何断言。
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$BODY"
+          exit 1
+
+      - name: Finalize verified Runtime contract on target branch
+        if: steps.probe.outputs.conclusion == 'success'
+        shell: bash
+        env:
+          RESULT_PATH: ${{ steps.artifact.outputs.result-path }}
+          RUN_ID: ${{ steps.probe.outputs.run-id }}
+          RUN_URL: ${{ steps.probe.outputs.run-url }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_NAME: ${{ steps.artifact.outputs.artifact-name }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          PROBE_HEAD: ${{ steps.probe.outputs.head-sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${TARGET_BRANCH}"
+          TARGET_DIR="$RUNNER_TEMP/target"
+          git worktree add --detach "$TARGET_DIR" "origin/${TARGET_BRANCH}"
+          cd "$TARGET_DIR"
+          git switch -c ai/finalize-sdk-rpc-parity
+
+          FIXTURE="packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
+          mkdir -p "$(dirname "$FIXTURE")"
+          cp "$RESULT_PATH" "$FIXTURE"
+
+          OUTER_FP="$(jq -r '.contractFingerprint' "$FIXTURE")"
+          CAPTURE_FP="$(jq -r '.capture.contractFingerprint' "$FIXTURE")"
+          RUN_RPC_ARITY="$(jq -r '.capture.rpc.surface.runRpcModeArity' "$FIXTURE")"
+          RPC_METHODS="$(jq -r '.capture.rpc.surface.rpcClientPrototypeMethods | join(", ")' "$FIXTURE")"
+          SDK_EVENT_COUNT="$(jq -r '.capture.sdk.events | length' "$FIXTURE")"
+          RPC_RECORD_COUNT="$(jq -r '.capture.rpc.records | length' "$FIXTURE")"
+          PROMPT_RESPONSE_INDEX="$(jq -r '.capture.rpc.ordering.promptResponseIndex' "$FIXTURE")"
+          AGENT_END_INDEX="$(jq -r '.capture.rpc.ordering.agentEndIndex' "$FIXTURE")"
+
+          node - "$OUTER_FP" "$CAPTURE_FP" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const [outer, capture] = process.argv.slice(2);
+          const path = "scripts/check-pi-sdk-rpc-parity-result.mjs";
+          let source = readFileSync(path, "utf8");
+          if (!source.includes("EXPECTED_OUTER_FINGERPRINT")) {
+            source = source.replace(
+              'const RESPONSE = "Pi SDK and RPC parity complete.";\n',
+              'const RESPONSE = "Pi SDK and RPC parity complete.";\n' +
+                `const EXPECTED_OUTER_FINGERPRINT = "${outer}";\n` +
+                `const EXPECTED_CAPTURE_FINGERPRINT = "${capture}";\n`,
+            );
+            source = source.replace(
+              'if (violations.length > 0) {\n',
+              'requireValue(result.contractFingerprint === EXPECTED_OUTER_FINGERPRINT, "Outer SDK/RPC parity contract fingerprint drifted.");\n' +
+                'requireValue(capture.contractFingerprint === EXPECTED_CAPTURE_FINGERPRINT, "Nested SDK/RPC parity contract fingerprint drifted.");\n\n' +
+                'if (violations.length > 0) {\n',
+            );
+          }
+          writeFileSync(path, source);
+
+          const packagePath = "package.json";
+          const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+          pkg.scripts["check:pi-sdk-rpc-parity"] =
+            "node scripts/check-pi-sdk-rpc-parity-result.mjs";
+          pkg.scripts["probe:pi:sdk-rpc-parity"] =
+            "PI_LIFECYCLE_SCENARIO=sdk-rpc-parity PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-sdk-rpc-parity-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs";
+          if (!pkg.scripts.check.includes("check:pi-sdk-rpc-parity")) {
+            pkg.scripts.check = pkg.scripts.check.replace(
+              " && npm run test",
+              " && npm run check:pi-sdk-rpc-parity && npm run test",
+            );
+          }
+          writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+
+          cat > docs/spikes/pi-runtime-contract/sdk-rpc-parity.md <<EOF
+          # Pi SDK 与 RPC 同任务契约
+
+          状态：**runtime-verified**
+
+          关联：Issue #${TARGET_ISSUE}、PR #${TARGET_PR}。
+
+          ## 固定场景
+
+          同一固定 Prompt 和固定 Faux Assistant Response 分别经过：
+
+          1. 进程内 \`AgentSession.subscribe()\`；
+          2. 子进程 \`runRpcMode\` 的 LF-only JSONL stdin/stdout。
+
+          两条路径都使用 \`@earendil-works/pi-coding-agent@0.84.1\`，Provider Credential 为零，外部 Provider Prompt 数为零，Tool 数为零。
+
+          ## 运行结果
+
+          | 证据 | 值 |
+          |---|---:|
+          | SDK Public events | ${SDK_EVENT_COUNT} |
+          | RPC JSONL records | ${RPC_RECORD_COUNT} |
+          | \`runRpcMode.length\` | ${RUN_RPC_ARITY} |
+          | RPC Prompt Response index | ${PROMPT_RESPONSE_INDEX} |
+          | RPC \`agent_end\` index | ${AGENT_END_INDEX} |
+          | Prompt Response 早于 \`agent_end\` | true |
+          | SDK Provider calls | 1 |
+          | RPC Provider calls | 1 |
+
+          RPC Client prototype methods：\`${RPC_METHODS}\`。
+
+          ## 核心结论
+
+          - SDK 和 RPC 最终都得到同一个 \`user → assistant\` 消息状态与确定性 Assistant 文本；
+          - RPC \`prompt\` 的 ID 关联 Response 出现在最终 \`agent_end\` 之前，因此协议确认不能被建模为任务完成；
+          - RPC 的 Request/Response、Runtime Event、最终 Message State 和子进程 Exit 必须分别记录；
+          - SDK Public、Extension 和 RPC 是三个来源表面，同名事件不能在缺少来源字段时无损合并；
+          - SDK \`agent_settled\`、Extension Shutdown、RPC stdin EOF 和 Child Exit 是不同稳定/资源边界；
+          - JSONL Reader 只按 LF 分帧，尾部无 LF 被视为协议错误；
+          - 动态 Session ID、路径和时间字段在 Fixture 中使用别名或规范值，不进入长期证据。
+
+          ## Fixture
+
+          \`packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json\`
+
+          外层契约指纹：\`${OUTER_FP}\`
+
+          内层 Capture 指纹：\`${CAPTURE_FP}\`
+
+          Workflow run：${RUN_ID}；Artifact：${ARTIFACT_ID}；Artifact digest：\`${ARTIFACT_DIGEST}\`。
+
+          ## 对 M0 的约束
+
+          \`NormalizedRuntimeEvent\` 必须至少保留：
+
+          - \`sourceSurface = sdk | extension | rpc | host\`；
+          - RPC Request ID、Response ID 与命令类型；
+          - Prompt 接受与 Prompt 最终稳定分离；
+          - Runtime Event 序列与最终 Session Message State 分离；
+          - SDK settled、Extension shutdown、RPC EOF 和 Worker Exit 分离；
+          - 原始 JSONL framing 错误和子进程退出状态可审计。
+          EOF
+
+          node - "$OUTER_FP" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const [fingerprint] = process.argv.slice(2);
+          const appendOnce = (path, marker, section) => {
+            let text = readFileSync(path, "utf8");
+            if (!text.includes(marker)) {
+              text = `${text.trimEnd()}\n\n${section.trim()}\n`;
+              writeFileSync(path, text);
+            }
+          };
+
+          appendOnce(
+            "docs/spikes/pi-runtime-contract/README.md",
+            "## 六、SDK 与 RPC 同任务对照",
+            `## 六、SDK 与 RPC 同任务对照
+
+          详细证据见 [\`sdk-rpc-parity.md\`](sdk-rpc-parity.md)。固定 Pi Artifact 已验证同一无工具任务在 SDK 与 RPC 表面得到相同最终 Assistant 内容，但 RPC Prompt Response 早于最终 \`agent_end\`。Request/Response、Runtime Event、最终 Message State、EOF 和 Child Exit 必须分别建模。
+
+          Fixture：\`packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json\`；外层指纹：\`${fingerprint}\`。`,
+          );
+
+          appendOnce(
+            "docs/architecture/pi-integration.md",
+            "## 已验证的 SDK / RPC 同任务差异",
+            `## 已验证的 SDK / RPC 同任务差异
+
+          同一固定 Prompt 已通过进程内 \`AgentSession\` 和子进程 \`runRpcMode\` 动态验证。两者最终消息一致，但 RPC 的 ID 关联 Prompt Response 发生在最终 \`agent_end\` 之前。
+
+          Adapter 规则：
+
+          - Prompt 接受不是 Prompt 完成；
+          - \`sourceSurface\` 必须保留；
+          - RPC Request/Response、Runtime Event、最终 Message、EOF 和 Exit 分别记录；
+          - SDK \`agent_settled\` 不得与 RPC Child Exit 合并；
+          - JSONL framing 是协议证据，不由消息语义替代。`,
+          );
+
+          const statePath = "docs/harness/project-state.md";
+          let state = readFileSync(statePath, "utf8");
+          if (!state.includes("SDK / RPC 同任务对照 Fixture")) {
+            state = state.replace(
+              "- Branch Cleanup Harness已通过",
+              "- SDK / RPC 同任务对照 Fixture：同一无工具任务最终消息一致，但 RPC Prompt Response 早于最终 `agent_end`，Request/Response、事件、消息、EOF 与 Exit 必须分离；\n- Branch Cleanup Harness已通过",
+            );
+            state = state.replace(
+              "尚未冻结：\n\n- RPC真实 Prompt；",
+              "尚未冻结：\n",
+            );
+            state = state.replace(
+              /## 当前下一步\n\n按真实 Runtime风险排序：\n\n1\. 比较 SDK与 RPC[^\n]*\n2\. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；\n3\. 冻结 Observation Ledger Schema并进入 SQLite实现。/,
+              "## 当前下一步\n\n按真实 Runtime风险排序：\n\n1. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；\n2. 冻结 Observation Ledger Schema并进入 SQLite实现。",
+            );
+            state = state.replace(
+              "Pi source-and-runtime baseline已验证到",
+              "Pi source-and-runtime baseline已验证到 SDK / RPC 同任务对照、",
+            );
+            writeFileSync(statePath, state);
+          }
+          NODE
+
+          node scripts/check-pi-sdk-rpc-parity-result.mjs "$FIXTURE"
+          npm run check
+          git diff --check
+
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add \
+            "$FIXTURE" \
+            scripts/check-pi-sdk-rpc-parity-result.mjs \
+            package.json \
+            docs/spikes/pi-runtime-contract/sdk-rpc-parity.md \
+            docs/spikes/pi-runtime-contract/README.md \
+            docs/architecture/pi-integration.md \
+            docs/harness/project-state.md
+          git commit -m "test(spike): freeze Pi SDK and RPC parity contract"
+          git push origin HEAD:"${TARGET_BRANCH}"
+
+          BODY=$(cat <<EOF
+          ## SDK/RPC parity Runtime Fixture 已固化
+
+          - Probe run: ${RUN_ID}
+          - Probe HEAD: \`${PROBE_HEAD}\`
+          - Artifact: ${ARTIFACT_NAME} (${ARTIFACT_ID})
+          - Artifact digest: \`${ARTIFACT_DIGEST}\`
+          - Outer fingerprint: \`${OUTER_FP}\`
+          - Capture fingerprint: \`${CAPTURE_FP}\`
+
+          已提交 Fixture、精确指纹门禁、静态全量检查和三份事实源；等待 fresh Capture 与最终 HEAD 审查。
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$BODY"
