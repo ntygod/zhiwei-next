@@ -1,4 +1,4 @@
-name: AI source export
+name: AI apply parallel Tool finalization
 
 on:
   push:
@@ -6,28 +6,68 @@ on:
       - spike/m0-pi-parallel-tool-ordering
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export-source:
+  finalize-runtime-contract:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Checkout without persisted credentials
+      - name: Checkout finalization branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          persist-credentials: false
+          ref: spike/m0-pi-parallel-tool-ordering
+          persist-credentials: true
+          fetch-depth: 0
 
-      - name: Package source snapshot
+      - name: Apply verified Runtime payload
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude=.git -czf "$RUNNER_TEMP/zhiwei-next-source.tgz" .
+          PAYLOAD="$RUNNER_TEMP/parallel-finalize.tgz"
+          cat .github/ai-payload/parallel-finalize-*.b64 | base64 --decode > "$PAYLOAD"
+          echo "ec5e67c2cbbe959f17c42f05dd8635eaaaa627ae34e42b2d8b997d753723a341  $PAYLOAD" | sha256sum --check --strict
 
-      - name: Upload short-lived source snapshot
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: zhiwei-next-source-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/zhiwei-next-source.tgz
-          if-no-files-found: error
-          retention-days: 1
+          cat > "$RUNNER_TEMP/expected-files.txt" <<'EOF'
+          packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
+          scripts/check-pi-parallel-tool-ordering-result.mjs
+          scripts/check-pi-cancel-retry-exhaustion-result.mjs
+          docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md
+          docs/spikes/pi-runtime-contract/README.md
+          docs/architecture/pi-integration.md
+          docs/harness/project-state.md
+          EOF
+          tar -tzf "$PAYLOAD" > "$RUNNER_TEMP/archive-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/archive-files.txt"
+          tar -xzf "$PAYLOAD"
+          rm -rf .github/ai-payload
+
+          echo "0e490594e62886c707274359edd47675b00eba582408fe5fc68ac557f5c1bed2  packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json" | sha256sum --check --strict
+          node --check scripts/check-pi-parallel-tool-ordering-result.mjs
+          node --check scripts/check-pi-cancel-retry-exhaustion-result.mjs
+          npm run check
+          git diff --check
+          git status --short
+
+      - name: Commit verified finalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add \
+            packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json \
+            scripts/check-pi-parallel-tool-ordering-result.mjs \
+            scripts/check-pi-cancel-retry-exhaustion-result.mjs \
+            docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md \
+            docs/spikes/pi-runtime-contract/README.md \
+            docs/architecture/pi-integration.md \
+            docs/harness/project-state.md
+          git add -u .github/ai-payload
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "Verified payload produced no changes."
+            exit 1
+          fi
+          git commit -m "test(spike): freeze Pi parallel Tool ordering contract"
+          git push origin HEAD:spike/m0-pi-parallel-tool-ordering
