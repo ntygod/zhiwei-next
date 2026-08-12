@@ -1,0 +1,50 @@
+name: AI SDK RPC import patch
+
+on:
+  push:
+    branches:
+      - spike/m0-pi-sdk-rpc-prompt
+    paths:
+      - .github/ai-sdk-rpc-fix-trigger-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout work branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: spike/m0-pi-sdk-rpc-prompt
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Patch imports and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=scripts/probes/pi-sdk-rpc-prompt-capture.mjs
+          grep -Fx 'import { dirname, fileURLToPath, join, resolve } from "node:path";' "$FILE"
+          grep -Fx 'import { pathToFileURL } from "node:url";' "$FILE"
+          sed -i 's/import { dirname, fileURLToPath, join, resolve } from "node:path";/import { dirname, join, resolve } from "node:path";/' "$FILE"
+          sed -i 's/import { pathToFileURL } from "node:url";/import { fileURLToPath, pathToFileURL } from "node:url";/' "$FILE"
+          rm -f .github/ai-sdk-rpc-fix-trigger .github/ai-sdk-rpc-fix-trigger-v2
+          rm -f .github/workflows/ai-apply-sdk-rpc-fix.yml .github/workflows/ai-apply-sdk-rpc-fix-v2.yml
+          node --check "$FILE"
+          npm run check:architecture
+          npm run check:harness
+          git diff --check
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(spike): import fileURLToPath from node:url"
+          git push origin HEAD:spike/m0-pi-sdk-rpc-prompt
