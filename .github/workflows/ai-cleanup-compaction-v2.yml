@@ -1,0 +1,163 @@
+name: AI cleanup Compaction orchestration v2
+
+on:
+  push:
+    branches:
+      - chore/cleanup-compaction-ai-orchestration-v2
+    paths:
+      - .github/ai-cleanup-compaction-v2-trigger
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'chore(harness): trigger Compaction orchestration cleanup v2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact cleanup base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: chore/cleanup-compaction-ai-orchestration-v2
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate formal Runtime contract before cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/workflows/pi-compaction-session-replacement.yml
+          test -f packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
+          test -f scripts/check-pi-compaction-session-replacement-result.mjs
+          echo 'b5d4f92399531ad7eedfebfe2b6f7fa80fe0dfdface6b0a886bd4cbef29d3b03  packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json' | sha256sum --check --strict
+          npm run check
+
+      - name: Delete accidental scratch refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in tmp-do-not-create ignore-this-test ignore-this-test-2 ignore-this-test-3 ignore-this-test-4; do
+            encoded="${branch//\//%2F}"
+            status="$(curl -sS -o "$RUNNER_TEMP/ref-response.json" -w '%{http_code}' \
+              -X DELETE \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$REPOSITORY/git/refs/heads/$encoded")"
+            case "$status" in
+              204) echo "Deleted $branch" ;;
+              422) echo "$branch already absent" ;;
+              *) cat "$RUNNER_TEMP/ref-response.json" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Delete exact temporary files through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: chore/cleanup-compaction-ai-orchestration-v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          delete_path() {
+            local path="$1"
+            local encoded
+            encoded="$(python - "$path" <<'PY'
+          import sys, urllib.parse
+          print(urllib.parse.quote(sys.argv[1], safe='/'))
+          PY
+            )"
+            local meta status sha
+            status="$(curl -sS -o "$RUNNER_TEMP/content.json" -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$REPOSITORY/contents/$encoded?ref=$BRANCH")"
+            if [[ "$status" == "404" ]]; then
+              echo "$path already absent"
+              return 0
+            fi
+            if [[ "$status" != "200" ]]; then
+              cat "$RUNNER_TEMP/content.json" >&2
+              return 1
+            fi
+            sha="$(python - "$RUNNER_TEMP/content.json" <<'PY'
+          import json, sys
+          print(json.load(open(sys.argv[1]))['sha'])
+          PY
+            )"
+            status="$(curl -sS -o "$RUNNER_TEMP/delete.json" -w '%{http_code}' \
+              -X DELETE \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$REPOSITORY/contents/$encoded" \
+              -d "$(python - "$path" "$sha" "$BRANCH" <<'PY'
+          import json, sys
+          path, sha, branch = sys.argv[1:]
+          print(json.dumps({
+              'message': f'chore(harness): remove temporary {path}',
+              'sha': sha,
+              'branch': branch,
+          }))
+          PY
+              )")"
+            if [[ "$status" != "200" ]]; then
+              cat "$RUNNER_TEMP/delete.json" >&2
+              echo "Failed deleting $path with HTTP $status" >&2
+              return 1
+            fi
+            echo "Deleted $path"
+          }
+
+          # Non-workflow transport files first.
+          for path in \
+            .github/ai-source-export-trigger \
+            .github/ai-compaction-finalize-trigger \
+            .github/ai-compaction-review-trigger \
+            .github/ai-cleanup-compaction-trigger \
+            .github/ai-delete-accidental-branches-trigger \
+            .github/ai-cleanup-compaction-v2-trigger
+          do
+            delete_path "$path"
+          done
+
+          # Payload files are known numbered artifacts; enumerate only this exact directory.
+          status="$(curl -sS -o "$RUNNER_TEMP/payload.json" -w '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPOSITORY/contents/.github/ai-payload?ref=$BRANCH")"
+          if [[ "$status" == "200" ]]; then
+            python - "$RUNNER_TEMP/payload.json" <<'PY' > "$RUNNER_TEMP/payload-paths.txt"
+          import json, sys
+          for item in json.load(open(sys.argv[1])):
+              path = item['path']
+              if not path.startswith('.github/ai-payload/') or item['type'] != 'file':
+                  raise SystemExit(f'Unexpected payload entry: {item}')
+              print(path)
+          PY
+            while IFS= read -r path; do
+              delete_path "$path"
+            done < "$RUNNER_TEMP/payload-paths.txt"
+          elif [[ "$status" != "404" ]]; then
+            cat "$RUNNER_TEMP/payload.json" >&2
+            exit 1
+          fi
+
+          # One-shot workflows, including this runner, are deleted last.
+          for path in \
+            .github/workflows/ai-source-export.yml \
+            .github/workflows/ai-compaction-finalize.yml \
+            .github/workflows/ai-compaction-review.yml \
+            .github/workflows/ai-cleanup-compaction-orchestration.yml \
+            .github/workflows/ai-delete-accidental-branches.yml \
+            .github/workflows/ai-cleanup-compaction-v2.yml
+          do
+            delete_path "$path"
+          done
