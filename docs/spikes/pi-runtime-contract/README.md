@@ -1,11 +1,11 @@
 # Pi Runtime 契约 Spike
 
-关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22、Issue #24。
+关联工作：Issue #5、Issue #7、Issue #16、Issue #20、Issue #22、Issue #24、Issue #26。
 
 ## 状态
 
 ```text
-source-and-runtime-verified-cancel-retry-exhaustion
+source-and-runtime-verified-parallel-tool-ordering
 ```
 
 ### 历史状态演化
@@ -16,7 +16,8 @@ PR #8   source-and-runtime-verified
 PR #17  source-and-runtime-verified-normal-tool
 PR #21  source-and-runtime-verified-retry-success
 PR #23  source-and-runtime-verified-follow-up-queue
-当前    source-and-runtime-verified-cancel-retry-exhaustion
+PR #25  source-and-runtime-verified-cancel-retry-exhaustion
+当前    source-and-runtime-verified-parallel-tool-ordering
 ```
 
 早期状态作为证据链保留，不代表当前能力回退。
@@ -34,9 +35,10 @@ PR #23  source-and-runtime-verified-follow-up-queue
 - 公共 `queue_update`与 Extension无队列事件的表面差异；
 - 流式输出期间主动取消后，部分 Assistant以 `stopReason=aborted`保留；
 - Retry Backoff取消后，`willRetry=true`但没有后续 Run；
-- Retry exhaustion的三次 Run、`[true,true,false]`序列、终止 Retry事件和最终错误消息。
+- Retry exhaustion的三次 Run、`[true,true,false]`序列、终止 Retry事件和最终错误消息；
+- 并行 Tool完成事件与 Tool Result消息顺序分离：完成为 `beta → gamma → alpha`，消息恢复为 `alpha → beta → gamma`。
 
-尚未验证并行 Tool、Compaction、Session Replacement和 RPC真实 Prompt。
+尚未验证 Compaction、Session Replacement和 RPC真实 Prompt。
 
 ## 固定上游基线
 
@@ -67,12 +69,14 @@ packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
+packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
 scripts/check-pi-spike.mjs
 scripts/check-pi-artifact-result.mjs
 scripts/check-pi-lifecycle-result.mjs
 scripts/check-pi-retry-lifecycle-result.mjs
 scripts/check-pi-follow-up-lifecycle-result.mjs
 scripts/check-pi-cancel-retry-exhaustion-result.mjs
+scripts/check-pi-parallel-tool-ordering-result.mjs
 ```
 
 其中：
@@ -82,7 +86,8 @@ scripts/check-pi-cancel-retry-exhaustion-result.mjs
 - `pi-lifecycle-normal-tool.json`是真实 SDK + Extension Prompt/Tool生命周期动态结果；
 - `pi-lifecycle-retry-success.json`是真实自动重试恢复成功动态结果；
 - `pi-lifecycle-follow-up-queue.json`是真实 Follow-up队列与最终稳定边界动态结果；
-- `pi-lifecycle-cancel-retry-exhaustion.json`是真实主动取消、Backoff取消和 Retry exhaustion动态结果。
+- `pi-lifecycle-cancel-retry-exhaustion.json`是真实主动取消、Backoff取消和 Retry exhaustion动态结果；
+- `pi-lifecycle-parallel-tool-ordering.json`是真实并行 Tool完成顺序与 Tool Result消息顺序动态结果。
 
 ## 一、源码契约
 
@@ -487,6 +492,52 @@ b866798d18569c78d5c712254c3ecdecd7a3e02c0ef11458e6b97b0863b1f6e0
 b544631413935d2b3f55f9f9f8bcf15a06944bba682cf48471902e4726f79609
 ```
 
+## 七、并行 Tool 完成与消息顺序验证
+
+详细文档：[`parallel-tool-ordering-lifecycle.md`](parallel-tool-ordering-lifecycle.md)。
+
+固定场景在一个 Assistant `toolUse`消息中依次声明：
+
+```text
+alpha → beta → gamma
+```
+
+三个 `ordered_echo` Tool都进入 `execute()`后，内存 Barrier才开始释放，并由真实 Public `tool_execution_end`驱动后续释放。固定真实完成顺序为：
+
+```text
+beta → gamma → alpha
+```
+
+关键证据：
+
+- Tool `execute()`、Public `tool_execution_start/update`和 Extension `tool_call`都按声明顺序 `alpha → beta → gamma`开始；
+- Tool `execute()`结束、Public `tool_execution_end`和 Extension `tool_result`都按真实完成顺序 `beta → gamma → alpha`到达；
+- 所有 Tool Result `message_start/end`、Public/Extension `turn_end.toolResults`和最终 `session.messages`重新按声明顺序 `alpha → beta → gamma`排列；
+- 三个 `execute()`都在第一个完成事件前开始，成功路径没有用墙钟延时伪造并发；
+- 每个表面都通过真实 `toolCallId`关联，不能依赖数组位置或事件先后自行编造关联键；
+- 场景保持一个 Agent Run、两个 Turn、最终单次 `agent_settled`，宿主 `session_shutdown`继续独立发生；
+- Faux Provider调用两次，外部 Provider Prompt为零，Tool没有文件、Shell、网络或外部写副作用。
+
+该固定场景证明 **完成顺序与消息顺序分离**。Adapter必须分别记录 Tool声明顺序、执行完成顺序和规范消息顺序，不能仅凭 `tool_execution_end`或 Extension `tool_result`重建 Assistant原始 Tool Call顺序。
+
+Fixture文件 SHA-256：
+
+```text
+0e490594e62886c707274359edd47675b00eba582408fe5fc68ac557f5c1bed2
+```
+
+外层契约指纹：
+
+```text
+fd372a8e73f4545bd7a34c6ac3e82cfc2d044dca473ae374627b847864389b02
+```
+
+内层 Capture指纹：
+
+```text
+164f0e95e7f617c7aa69d1a1b34a5ae7935673c1ee852fa452541d15c1551376
+```
+
 ## 隔离与信任模型
 
 Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
@@ -542,6 +593,13 @@ Artifact和 Lifecycle Job都运行在独立 GitHub Actions Job：
 3. 修正后真实 Actions Artifact证明三个子场景全部稳定；结果原样固化为 committed Fixture，Checker收紧到动作触发点、完整事件类型序列、精确计数/字段、消息保留和双层指纹。
 4. committed Fixture建立后，隔离 Job必须重新捕获并做完整对象比较；上游取消或 Retry语义漂移不会被静默接受。
 
+### Parallel Tool ordering阶段
+
+1. 首轮 Source-derived Checker与独立 Runtime Workflow先验证显式 Barrier、三个 Tool同时进入 `execute()`和零外部副作用。
+2. 首轮真实 Artifact证明完成事件为 `beta → gamma → alpha`，但 Tool Result消息、`turn_end.toolResults`和最终 Session消息为 `alpha → beta → gamma`；没有把完成顺序误写成消息顺序。
+3. 真实结果原样固化为 committed Fixture，Checker收紧到完整事件类型、精确计数、顺序矩阵、消息状态、文档事实源和双层指纹。
+4. committed Fixture建立后，独立 Workflow必须 fresh Capture并做完整对象比较；任何并发语义漂移都保持失败可见。
+
 ## CI入口
 
 静态/Committed检查：
@@ -553,6 +611,7 @@ npm run check:pi-lifecycle
 npm run check:pi-retry-lifecycle
 npm run check:pi-follow-up-lifecycle
 npm run check:pi-cancel-retry-exhaustion
+npm run check:pi-parallel-tool-ordering
 ```
 
 动态 Probe：
@@ -565,6 +624,7 @@ npm run probe:pi:lifecycle
 npm run probe:pi:retry-lifecycle
 npm run probe:pi:follow-up-lifecycle
 npm run probe:pi:cancel-retry-exhaustion
+npm run probe:pi:parallel-tool-ordering
 ```
 
 Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行；普通功能 PR不依赖 npm网络。
@@ -584,7 +644,9 @@ Lifecycle动态 Job仅在相关路径、手工请求或 weekly schedule时运行
 - 把 Prompt Promise正常 resolve与任务成功分开建模；
 - 把 Session创建映射放在宿主 SDK边界；
 - 把 `session_shutdown`作为宿主显式事件；
-- 为并行 Tool、Compaction和 Session Replacement建立下一批独立 Fixtures；
+- 分别保存并行 Tool的声明顺序、完成顺序和 Tool Result消息顺序；
+- 通过 `toolCallId`关联并发执行的所有表面，不能用完成事件顺序替代消息顺序；
+- 为 Compaction和 Session Replacement建立下一批独立 Fixtures；
 - 在这些场景完成后修订 `NormalizedRuntimeEvent`。
 
-当前仍不能直接实现 SQLite Observation Ledger，因为并发、压缩和替换边界尚未冻结。
+当前仍不能直接实现 SQLite Observation Ledger，因为压缩和替换边界尚未冻结。

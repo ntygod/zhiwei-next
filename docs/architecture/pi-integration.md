@@ -24,7 +24,9 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Queue公共/Extension表面差异 | 已验证，公共 Session有 `queue_update`，Extension无队列事件 |
 | 取消与 Retry终止边界 | 已验证：流式 `session.abort()`、Backoff期间 `abortRetry()`与 Retry exhaustion |
 | Cancel / Retry公共与 Extension差异 | 已验证，Extension仍不提供 `auto_retry_start/end`或 `willRetry`增强 |
-| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` |
+| 并行 Tool ordering | 已验证，完成顺序 `beta → gamma → alpha`，Tool Result消息顺序 `alpha → beta → gamma` |
+| 并行 Tool公共/Extension表面 | 已验证，Public end与 Extension result跟随真实完成，消息与 `turn_end.toolResults`恢复声明顺序 |
+| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` → `source-and-runtime-verified-parallel-tool-ordering` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -34,6 +36,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json
 packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
+packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
 ```
 
 当前固定的是 **M0契约基线**，不是生产依赖承诺。仓库仍未将 Pi加入正式依赖，也未冻结 `NormalizedRuntimeEvent`。
@@ -44,8 +47,8 @@ Pi至少暴露三类不能混为一谈的表面：
 
 | 表面 | 用途 | 当前确认程度 |
 |---|---|---|
-| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消和 exhaustion均已动态验证 |
-| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消和 exhaustion底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
+| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消、exhaustion和并行 Tool顺序均已动态验证 |
+| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消、exhaustion和并行 Tool底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
 | RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型及无凭证空 Session启动已验证；真实任务时序待录制 |
 
 `pi-adapter`必须显式标记事件来自哪个表面，不能仅凭同名事件假设载荷和时序相同。
@@ -65,7 +68,7 @@ Pi至少暴露三类不能混为一谈的表面：
 - 不挂载宿主仓库，只挂载只读 curated probe bundle；
 - 不传 GitHub Secret、真实 Provider Credential、用户数据或完整环境变量；
 - Runtime场景只使用 Pi发布包自带内存 Faux Provider；
-- Normal Tool的 `echo`、Retry、Follow-up与取消/耗尽场景都没有外部副作用；
+- Normal Tool的 `echo`、Retry、Follow-up、取消/耗尽和并行 `ordered_echo`场景都没有外部副作用；
 - 只输出脱敏、可机器复验结果。
 
 这些验证证明发布 Artifact的公开 manifest与目标运行表面符合当前基线。它们不是完整供应链审计，也不证明 Tarball每个源码字节都可由 Git Tag可重现构建得到。
@@ -300,6 +303,58 @@ Ledger至少需要分别保存：
 - Retry exhaustion的 attempt、最终失败 Assistant和终止 Retry事件；
 - Prompt Promise返回、`agent_settled`、宿主 `session_shutdown`三个独立边界。
 
+## 已验证的并行 Tool 完成与消息顺序
+
+详细事件表见 [`parallel-tool-ordering-lifecycle.md`](../spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md)。
+
+固定 Assistant声明顺序：
+
+```text
+alpha → beta → gamma
+```
+
+显式内存 Barrier让三个 Tool全部进入 `execute()`后，按以下顺序真实完成：
+
+```text
+beta → gamma → alpha
+```
+
+Public SDK与 Extension的完成表面跟随真实完成顺序：
+
+```text
+Tool execute end            beta → gamma → alpha
+Public tool_execution_end   beta → gamma → alpha
+Extension tool_result       beta → gamma → alpha
+```
+
+但 Tool Result消息和持久化表面恢复 Assistant声明顺序：
+
+```text
+Public/Extension Tool Result message  alpha → beta → gamma
+Public/Extension turn_end.toolResults alpha → beta → gamma
+final session.messages               alpha → beta → gamma
+```
+
+因此：
+
+> 并行 Tool完成顺序与 Tool Result消息顺序是两个不同事实。不能仅凭 `tool_execution_end`或 Extension `tool_result`重建 Assistant原始声明，也不能从最终消息反推真实完成先后。
+
+三个调用在任何一个完成前都已开始，证明当前固定场景确实进入并行执行。所有关联都使用发布 Artifact提供的真实 `toolCallId`；一个 Agent Run内包含 Tool Use Turn和最终 Assistant Turn，最终仍只有一次 `agent_end`和一次 `agent_settled`。
+
+### 对 Observation Ledger的直接约束
+
+Ledger需要分别记录：
+
+- Assistant Tool Call声明顺序；
+- Tool执行开始、更新和真实完成顺序；
+- Public SDK与 Extension事件来源；
+- Tool Result消息与 `turn_end.toolResults`顺序；
+- 每个 `toolCallId`跨表面的关联；
+- 全部 Tool完成后进入消息阶段的边界；
+- 最终单次 `agent_settled`与独立宿主 shutdown。
+
+完成事件和消息不能覆盖彼此；两组顺序都属于可审计证据。
+
 ## Extension生命周期映射
 
 | Pi生命周期 / Session事件 | 知微动作 | 当前证据 |
@@ -308,8 +363,8 @@ Ledger至少需要分别保存：
 | input | 写入用户 Observation | 已观察，为 Inline Extension首事件 |
 | before_agent_start | 请求 Context Capsule（M2） | 已观察 |
 | context | 控制每次模型调用认知预算（M2） | 未纳入当前 Capture |
-| tool_call | Policy评估（M5） | Normal Tool已观察，携带真实 `toolCallId`和结构化 input |
-| tool_result | 写入证据和 Outcome线索 | Normal Tool已观察，与 `tool_call`使用同一 ID |
+| tool_call | Policy评估（M5） | Normal与并行 Tool已观察，携带真实 `toolCallId`和结构化 input；并行时按声明顺序到达 |
+| tool_result | 写入证据和 Outcome线索 | Normal与并行 Tool已观察；并行时按真实完成顺序到达，与后续消息顺序不同 |
 | queue_update | 记录 Steering / Follow-up队列状态 | Public Session已观察；Extension未观察，必须保留来源差异 |
 | agent_end | 一次底层 Agent Run结束 | Normal、Retry、Follow-up、Cancel和 exhaustion均已观察；Extension不携带 Session层 `willRetry` |
 | auto_retry_start/end | Session自动重试状态 | Retry恢复、取消和 exhaustion均只在 Public Session观察；Extension未观察 |
@@ -364,7 +419,7 @@ session.extensionRunner.emit({ type: session_shutdown, reason: exit })
 - 被 Retry替代的失败消息可能不在最终 `session.messages`；
 - Follow-up最终消息会保留在 `session.messages`，但排队时序仍只能从事件流获得；
 - `AgentSessionRuntime`替换 Session后，旧订阅不会自动迁移；
-- 并行工具完成事件顺序和 Tool Result消息顺序可能不同；
+- 并行 Tool完成事件顺序与 Tool Result消息顺序已验证不同：完成按 `beta → gamma → alpha`，消息按 `alpha → beta → gamma`；
 - Message Update是流式分块，不是持久化领域边界。
 
 发布 Artifact已确认 root exports：
@@ -397,7 +452,7 @@ defineTool
 - 把队列清空当成 Prompt完成；
 - 只从最终 `session.messages`重建失败、Retry或队列历史；
 - 把 `agent_settled`、Extension Shutdown和 Worker进程退出合并；
-- 仅凭事件到达顺序重建 Assistant原始并行工具顺序；
+- 仅凭 `tool_execution_end`或 Extension `tool_result`到达顺序重建 Assistant原始并行 Tool声明或 Tool Result消息顺序；
 - 把每一个流式 `message_update`直接写成长期 Observation；
 - 把 Extension `session_start`当作 SDK嵌入场景唯一建链事件。
 
@@ -443,12 +498,13 @@ get_messages
 18. 部分 Assistant被取消后仍是持久化证据；不得因 `stopReason=aborted`丢弃文本摘要。
 19. `willRetry=true`记录当时计划，必须允许后续由 `abortRetry()`终止且没有新 Run。
 20. Prompt Promise返回只记录调用边界；任务成败由消息、Retry终止事件和最终 Settled共同决定。
+21. 并行 Tool必须分别记录声明顺序、真实完成顺序和 Tool Result消息顺序；任一顺序都不能覆盖其他顺序。
+22. 所有并行表面必须通过真实 `toolCallId`关联；不能用数组位置或完成先后编造关联键。
 
 ## M0后续技术验证
 
 下一步继续验证：
 
-- 并行 Tool Call / Tool Result完整序列；
 - Compaction前后可回放信息；
 - Session Replacement后的重新订阅；
 - RPC真实 Prompt、Worker退出、重启和错误边界；
