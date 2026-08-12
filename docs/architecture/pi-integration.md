@@ -634,6 +634,8 @@ agent_settled
 - RPC success / error Response；
 - RPC `get_state`、`get_messages`和 `get_last_assistant_text` Snapshot；
 - Host关闭 stdin的 EOF动作；
+- Host调用公开 `RpcClient.stop()`的动作；
+- Probe在发布 JavaScript实现层观察到的 ChildProcess Signal请求与接受结果；
 - RPC Extension `session_shutdown(quit)`；
 - Process `exit`与 `close`。
 
@@ -683,7 +685,7 @@ RPC使用严格 LF-only JSONL。Command Response携带 Request ID，Runtime Even
 
 ### Worker关闭
 
-成功路径只在 `agent_settled`和最终查询后由 Host关闭 stdin。随后真实观察：
+原始 JSONL成功路径只在 `agent_settled`和最终查询后由 Host关闭 stdin。随后真实观察：
 
 ```text
 Extension session_shutdown(reason=quit)
@@ -692,6 +694,18 @@ Process close(code=0)
 ```
 
 EOF、Extension Shutdown、Exit和Close不能折叠成一个“Worker结束”事件。恢复和审计需要知道哪些边界已真正观察、哪些只是宿主动作。
+
+发布 `RpcClient`的成功关闭是另一个来源表面。Composite Probe调用公开 `stop()`，并只为收集证据而 instrumentation 发布 JavaScript中的 ChildProcess字段；发布 `.d.ts`把该 `process`字段声明为 `private`，所以它不是生产 Adapter可以依赖的公开 API。对固定 npm Artifact的重复诊断 Capture结果为：
+
+```text
+Host RpcClient.stop()
+ChildProcess kill request(SIGTERM, accepted=true)
+Extension session_shutdown(reason=quit), evidence durable
+Process exit(code=143, signal=null)
+Process close(code=143, signal=null)
+```
+
+请求记录中没有 `SIGKILL`，证明这些诊断运行的成功路径未触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。正式 committed / fixed-container Evidence等待 fresh-first recovery run，当前旧 Fixture身份不能证明这些新增字段。架构上必须同时保留“源码存在 fallback”和“本次运行未触发”两个不同事实，不能把 `stop()`简化成 Host自报的 `transport=SIGTERM`，也不能用这一成功路径推断异常关闭语义。
 
 ### 当前限制
 

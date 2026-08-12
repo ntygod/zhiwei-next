@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   SDK_RPC_PARITY_API_ID,
+  SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
+  SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT,
   SDK_RPC_PARITY_FINAL_TEXT,
   SDK_RPC_PARITY_MODEL_ID,
   SDK_RPC_PARITY_PROMPT,
   SDK_RPC_PARITY_PROVIDER_ID,
   SDK_RPC_PARITY_SCENARIO,
 } from "./probes/pi-sdk-rpc-parity-contract.mjs";
+import { SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES } from "./pi-sdk-rpc-parity-fixture.mjs";
 
 const inputPath = resolve(
   process.argv[2] ??
@@ -46,10 +49,72 @@ function expectedState(state, { streaming, messageCount }) {
   );
 }
 
-const rawText = await readFile(inputPath, "utf8");
+async function readBoundedRegularResult(path) {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new Error("RpcClient evidence must be a regular file.");
+  }
+  if (before.size > BigInt(SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES)) {
+    throw new Error("RpcClient evidence exceeds its byte limit.");
+  }
+  const handle = await open(path, "r");
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size > BigInt(SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES)
+    ) {
+      throw new Error("RpcClient evidence changed while it was opened.");
+    }
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(
+        Math.min(64 * 1024, SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES + 1 - total),
+      );
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES) {
+        throw new Error("RpcClient evidence exceeds its byte limit.");
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+    const bytes = Buffer.concat(chunks, total);
+    const after = await handle.stat({ bigint: true });
+    if (
+      after.dev !== opened.dev ||
+      after.ino !== opened.ino ||
+      after.size !== opened.size ||
+      bytes.length > SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES
+    ) {
+      throw new Error("RpcClient evidence changed while it was read.");
+    }
+    const text = bytes.toString("utf8");
+    if (!Buffer.from(text, "utf8").equals(bytes)) {
+      throw new Error("RpcClient evidence must be valid UTF-8.");
+    }
+    return text;
+  } finally {
+    await handle.close();
+  }
+}
+
+const rawText = await readBoundedRegularResult(inputPath);
 const result = JSON.parse(rawText);
 const capture = result.capture;
 const rpcClient = capture?.cases?.rpcClientMessages;
+
+requireValue(
+  result.contractFingerprint === SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT,
+  "Outer contract fingerprint differs from the frozen SDK/RPC parity contract.",
+);
+requireValue(
+  capture?.contractFingerprint === SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
+  "Nested contract fingerprint differs from the frozen SDK/RPC parity contract.",
+);
 
 requireValue(result.status === "passed", `Outer result must be passed, got ${result.status}.`);
 requireValue(result.scenario === SDK_RPC_PARITY_SCENARIO, "Outer scenario drifted.");
@@ -143,7 +208,27 @@ requireValue(
 
 requireValue(
   rpcClient?.shutdown?.mechanism === "RpcClient.stop" &&
-    rpcClient?.shutdown?.transport === "SIGTERM" &&
+    rpcClient?.shutdown?.instrumentationSurface ===
+      "published-js-private-process-field" &&
+    JSON.stringify(rpcClient?.shutdown?.requestedSignals) ===
+      JSON.stringify([{ signal: "SIGTERM", accepted: true }]) &&
+    JSON.stringify(rpcClient?.shutdown?.process?.processBoundaries) ===
+      JSON.stringify([
+        {
+          sequence: 1,
+          type: "exit",
+          code: 143,
+          signal: null,
+          extensionShutdownRunIdentityMatched: true,
+        },
+        {
+          sequence: 2,
+          type: "close",
+          code: 143,
+          signal: null,
+          extensionShutdownRunIdentityMatched: true,
+        },
+      ]) &&
     rpcClient?.shutdown?.stderrPresent === false &&
     rpcClient?.shutdown?.stderrLength === 0 &&
     rpcClient?.shutdown?.stderrSha256 === sha256(""),
@@ -151,6 +236,8 @@ requireValue(
 );
 requireValue(
   rpcClient?.extensionEvidence?.status === "passed" &&
+    rpcClient?.extensionEvidence?.runIdentityMatched === true &&
+    rpcClient?.extensionEvidence?.shutdown?.observed === true &&
     rpcClient?.extensionEvidence?.shutdown?.reason === "quit",
   "RpcClient Extension shutdown evidence drifted.",
 );
@@ -204,6 +291,10 @@ for (const pattern of [
 }
 requireValue(!rawText.includes('"sessionId"'), "RpcClient evidence must not contain a raw sessionId field.");
 requireValue(!rawText.includes('"sessionFile"'), "RpcClient evidence must not contain a raw sessionFile field.");
+requireValue(
+  !rawText.includes('"runIdentity"'),
+  "RpcClient evidence must not contain the per-run Extension nonce.",
+);
 
 if (violations.length > 0) {
   console.error(

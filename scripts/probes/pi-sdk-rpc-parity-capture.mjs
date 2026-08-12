@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -54,6 +54,19 @@ function resolveRequiredPath(name) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function hasMatchingDurableExtensionShutdownEvidence(path, runIdentity) {
+  try {
+    const evidence = JSON.parse(readFileSync(path, "utf8"));
+    return (
+      evidence?.runIdentity === runIdentity &&
+      evidence?.shutdown?.observed === true &&
+      evidence.shutdown.reason === "quit"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function stableResult(result) {
@@ -263,6 +276,15 @@ async function captureSurface() {
       rpcClientUsesStrictJsonlHelpers:
         sourceByPath["dist/modes/rpc/rpc-client.js"].includes("attachJsonlLineReader") &&
         sourceByPath["dist/modes/rpc/rpc-client.js"].includes("serializeJsonLine"),
+      rpcClientProcessFieldDeclaredPrivate: /private\s+process\s*;/.test(
+        sourceByPath["dist/modes/rpc/rpc-client.d.ts"],
+      ),
+      rpcClientStopRequestsSigterm: /\.kill\(["']SIGTERM["']\)/.test(
+        sourceByPath["dist/modes/rpc/rpc-client.js"],
+      ),
+      rpcClientStopHasSigkillFallback: /\.kill\(["']SIGKILL["']\)/.test(
+        sourceByPath["dist/modes/rpc/rpc-client.js"],
+      ),
       rpcModeEmitsPromptResponse: /success\((?:id|command\.id),\s*["']prompt["']\)/.test(
         sourceByPath["dist/modes/rpc/rpc-mode.js"],
       ),
@@ -567,6 +589,12 @@ async function captureRpc() {
   const rpcWorkspace = join(workspaceDir, "rpc");
   const rpcHome = join(agentDir, "rpc-home");
   const extensionEvidencePath = join(dirname(outputPath), "rpc-extension-evidence.json");
+  const runIdentity = randomBytes(32).toString("hex");
+  stage = "rpc:prepare-evidence";
+  await rm(extensionEvidencePath, { force: true });
+  if (existsSync(extensionEvidencePath)) {
+    throw new Error("RPC Extension evidence path could not be cleared before Worker start.");
+  }
   await Promise.all([
     mkdir(rpcWorkspace, { recursive: true }),
     mkdir(rpcHome, { recursive: true }),
@@ -602,6 +630,7 @@ async function captureRpc() {
       HOME: rpcHome,
       PI_INSTALL_DIR: installDir,
       PI_RPC_EXTENSION_EVIDENCE: extensionEvidencePath,
+      PI_RPC_EXTENSION_RUN_IDENTITY: runIdentity,
       AI_AGENT: "zhiwei-sdk-rpc-parity-probe",
     }),
     stdio: ["pipe", "pipe", "pipe"],
@@ -663,14 +692,18 @@ async function captureRpc() {
   }
 
   const exitPromise = new Promise((resolvePromise, reject) => {
-    child.once("error", reject);
+    child.once("error", (error) => {
+      rejectWaiters(error);
+      reject(error);
+    });
     child.once("exit", (code, signal) => {
       const boundary = {
         sequence: processBoundaries.length + 1,
         type: "exit",
         code,
         signal,
-        extensionEvidencePresent: existsSync(extensionEvidencePath),
+        extensionShutdownRunIdentityMatched:
+          hasMatchingDurableExtensionShutdownEvidence(extensionEvidencePath, runIdentity),
       };
       processBoundaries.push(boundary);
       if (waiters.size > 0) {
@@ -691,12 +724,16 @@ async function captureRpc() {
         type: "close",
         code,
         signal,
-        extensionEvidencePresent: existsSync(extensionEvidencePath),
+        extensionShutdownRunIdentityMatched:
+          hasMatchingDurableExtensionShutdownEvidence(extensionEvidencePath, runIdentity),
       };
       processBoundaries.push(boundary);
       resolvePromise(boundary);
     });
   });
+  // Attach rejection handlers before issuing any RPC commands. A spawn error
+  // can otherwise reject these long before the EOF shutdown phase awaits them.
+  const processBoundaryResults = Promise.allSettled([exitPromise, closePromise]);
 
   child.stderr.on("data", (chunk) => {
     stderr = (stderr + chunk.toString("utf8")).slice(-64 * 1024);
@@ -807,14 +844,37 @@ async function captureRpc() {
 
   stage = "rpc:eof-shutdown";
   child.stdin.end();
-  const [exit, close] = await Promise.race([
-    Promise.all([exitPromise, closePromise]),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("RPC Worker did not close after stdin EOF.")), 15_000),
-    ),
-  ]);
+  let shutdownTimeout;
+  let settledBoundaries;
+  try {
+    settledBoundaries = await Promise.race([
+      processBoundaryResults,
+      new Promise((_, reject) => {
+        shutdownTimeout = setTimeout(
+          () => reject(new Error("RPC Worker did not close after stdin EOF.")),
+          15_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(shutdownTimeout);
+  }
+  const rejectedBoundary = settledBoundaries.find(
+    (boundary) => boundary.status === "rejected",
+  );
+  if (rejectedBoundary) throw rejectedBoundary.reason;
+  const [exit, close] = settledBoundaries.map((boundary) => boundary.value);
   child = undefined;
-  const extensionEvidence = JSON.parse(await readFile(extensionEvidencePath, "utf8"));
+  const rawExtensionEvidence = JSON.parse(await readFile(extensionEvidencePath, "utf8"));
+  if (rawExtensionEvidence?.runIdentity !== runIdentity) {
+    throw new Error("RPC Extension evidence did not match the current run identity.");
+  }
+  const { runIdentity: observedRunIdentity, ...extensionEvidenceWithoutRunIdentity } =
+    rawExtensionEvidence;
+  const extensionEvidence = {
+    ...extensionEvidenceWithoutRunIdentity,
+    runIdentityMatched: observedRunIdentity === runIdentity,
+  };
 
   const responseRecords = rawRecords.filter((record) => record.type === "response");
   const responseIdCounts = new Map();
@@ -892,8 +952,10 @@ async function captureRpc() {
         processBoundaries.findIndex((boundary) => boundary.type === "exit") >= 0 &&
         processBoundaries.findIndex((boundary) => boundary.type === "close") >
           processBoundaries.findIndex((boundary) => boundary.type === "exit"),
-      extensionEvidencePresentAtExit: exit.extensionEvidencePresent,
-      extensionEvidencePresentAtClose: close.extensionEvidencePresent,
+      extensionShutdownRunIdentityMatchedAtExit:
+        exit.extensionShutdownRunIdentityMatched,
+      extensionShutdownRunIdentityMatchedAtClose:
+        close.extensionShutdownRunIdentityMatched,
       stdinClosedByHost: true,
       stdoutRemainderLength: stdoutBuffer.length,
       stderrPresent: stderr.length > 0,
@@ -995,7 +1057,8 @@ async function run() {
         completed.rpc.ordering.settledWireIndex >= 0 &&
         completed.rpc.worker.exit.code === 0 &&
         completed.rpc.worker.close.code === 0 &&
-        completed.rpc.worker.extensionEvidencePresentAtClose === true &&
+        completed.rpc.worker.extensionShutdownRunIdentityMatchedAtClose === true &&
+        completed.rpc.extensionEvidence.runIdentityMatched === true &&
         completed.rpc.extensionEvidence.shutdown?.reason === "quit",
       sourcesRemainDistinct: {
         sdkPublic: true,
@@ -1095,8 +1158,12 @@ async function run() {
     ],
     [completed.rpc.worker.exitBeforeClose === true, "RPC Worker exit/close ordering drifted."],
     [
-      completed.rpc.worker.extensionEvidencePresentAtClose === true,
-      "RPC Extension shutdown evidence was not durable by close.",
+      completed.rpc.worker.extensionShutdownRunIdentityMatchedAtClose === true,
+      "Current-run RPC Extension shutdown evidence was not durable by close.",
+    ],
+    [
+      completed.rpc.extensionEvidence.runIdentityMatched === true,
+      "RPC Extension evidence did not preserve its current-run identity match.",
     ],
     [
       completed.rpc.worker.stdoutRemainderLength === 0,

@@ -3,7 +3,7 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-12
+updated: 2026-08-13
 -->
 
 ## 当前定位
@@ -30,8 +30,8 @@ best-effort-private-free
 - RPC真实 Prompt success Response是接受边界：wire index `4`，先于 `agent_start=5`、运行中 State Response `11`和 `agent_settled=35`，其后仍有29条 Runtime Event；
 - 原始 RPC State变化为 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；stdin EOF后 Extension `session_shutdown(reason=quit)`，Worker `exit=0 → close=0`；
 - 发布 `RpcClient`在 Prompt前返回 `getMessages()=[]`，`prompt()`返回时可观察 `isStreaming=true / messageCount=1`，`agent_settled`后返回 `user → assistant`；
-- `RpcClient.stop()`使用 SIGTERM，和原始 JSONL宿主关闭 stdin EOF是两个不同关闭表面；
-- 以上 Fixture由固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹持续验证。
+- 对固定 npm Artifact的重复诊断 Capture中，`RpcClient.stop()`的实现层 instrumentation真实观察到一次被接受的 `SIGTERM`请求、Extension Evidence在 Process Boundary前已落盘，以及 `exit(code=143, signal=null) → close(code=143, signal=null)`；请求列表没有 `SIGKILL`，但发布源码保留超时后的 `SIGKILL` fallback；
+- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。新的 instrumentation尚待固定容器 GitHub Artifact封装，在此之前 PR #60保持 Draft并 fail closed，不能用下方旧身份值声明新 Fixture已验证。
 
 ### Runtime 合同连续性
 
@@ -47,10 +47,11 @@ best-effort-private-free
 - SDK / RPC parity Fixture：SDK Public与 RPC Runtime的语义投影均为 `agent_start → turn_start → user message → assistant message → turn_end → agent_end(willRetry=false) → agent_settled`；Command Response、State Snapshot、Extension和 Process Boundary仍分别保留来源。
 - RPC JSONL `message_update`只保留 delta、不含累计 `partial`；SDK / Extension内部事件仍可能携带 `partial`，不能跨 Surface机械统一。
 - 发布 `RpcClient`的 `prompt()` Promise和底层 Prompt Response同样只表达接受；Prompt前后 `get_messages`与运行中 State必须分别持久化。
-- 动态原型枚举可见 TypeScript私有实现方法 `send`，但知微只冻结公开 `RpcClient`方法，不把运行时可枚举等同支持合同。
+- 本场景冻结的只是公开 `RpcClient`必需方法子集，不是全部公开 Surface；子集包含 `collectEvents`与 `getStderr`。动态原型枚举可见 TypeScript私有实现方法 `send`，但运行时可枚举不等同支持合同。
+- 发布 `.d.ts`把 `process`声明为 `private`；Probe只用发布 JavaScript对应字段观测 `stop()`的 Signal请求与 Process Boundary，不把私有字段提升为公开 API或生产 Adapter依赖。
 - 下一项 Runtime 证据为 Issue #32：RPC Worker异常退出、重启、Session恢复、非法 JSON、未知命令、Preflight拒绝和已接受后的 Provider Error。
 
-SDK / RPC parity committed Fixture：
+SDK / RPC parity当前已记录的正式 Fixture身份（等待新的固定容器 instrumentation Artifact后整组刷新，本轮暂不改数字）：
 
 ```text
 manifest                     packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
@@ -69,7 +70,16 @@ capture artifact             9148765803
 capture artifact digest      sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d19081a373017e59a62894eb4
 ```
 
-Manifest 是最终 Capture provenance 的机器事实源。
+Manifest 是 Capture provenance 的机器事实源，并只允许两态：
+
+- `candidate`：`head`为完整 Commit SHA，`workflowRun`、`artifactId`、`artifactDigest`全部为 `null`；只允许 Draft PR恢复，不满足 Ready或合并条件；
+- `verified`：三项 provenance全部有效；非 Draft PR、`push main`、手动运行和定时 Gate强制 `--require-verified-source`，非 Draft PR再以 live provenance Checker绑定真实 Run / Artifact、证明来源 HEAD是当前 PR HEAD的真实祖先，并下载 ZIP确认其中唯一 `result.json`与 Manifest SHA及 committed Fixture完整字节相同。
+
+SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生 Fresh Capture并通过两个脱敏 Checker，再验证 committed Fixture和完整对象相等性；只有合格 Fresh Evidence会上传，且其上传不受随后旧 Fixture漂移失败影响。PR运行显式 checkout并核对事件中的 head SHA，不使用默认 synthetic merge ref作为 Capture来源。旧 Fixture漂移因此会安全失败，但不会阻止下载本次合格 Evidence重建 candidate；未通过 Fresh Checker的失败 JSON不会冒充脱敏 Artifact。`jsonSha256`绑定解压后的规范 JSON字节；`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive，二者不是同一摘要。
+
+恢复 Packer对 Fresh JSON与解压输出使用同一个 8 MiB有界读取上限，以仓库绝对位置运行 Checker，并用 Fixture父目录排他锁、父目录 / Fixture目录身份句柄、内容寻址不可变分片、完整 staging回读与单 Manifest原子切换避免失败时混写活动 Fixture；目录替换、符号链接、非普通文件和并发 Packer均 fail closed。旧分片保留给已读取旧 Manifest的并发 Reader，显式 GC需先增加 Reader lease或版本保留协议；崩溃或目录身份异常残留锁需要先确认没有运行中的 Packer并检查 Fixture树后人工清理。
+
+PR #60保持 Draft完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独立审查。标为 Ready后会重新运行要求 `verified`来源的 Capture与 live provenance Gate；只有 Fresh / committed完整相等、两个结果 Checker、当前 HEAD CI和独立审查全部为绿色，才允许合并。
 
 ### Harness 与默认分支
 
@@ -159,11 +169,11 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 已验证：
 
 - Pi源码契约与发布 Artifact身份；
-- SDK Root Exports、`runRpcMode`、公开 `RpcClient`和无凭证 RPC空 Session；
+- SDK Root Exports、`runRpcMode`、公开 `RpcClient`必需方法子集（包含 `collectEvents`、`getStderr`）和无凭证 RPC空 Session；
 - Prompt、Agent Run、Turn、Tool、Retry、Queue、Cancel、Compaction和Session Replacement关键边界；
 - SDK与 RPC对同一无工具任务的 Prompt接受、运行中、最终消息、稳定和关闭边界；
 - 发布 `RpcClient`的 Prompt前空消息、接受时运行中 State和完成后 `user → assistant`消息；
-- Public SDK、Extension、RPC Command Response、RPC Runtime Event、State Snapshot、stdin EOF、`RpcClient.stop(SIGTERM)`和 Process Boundary的来源差异；
+- Public SDK、Extension、RPC Command Response、RPC Runtime Event、State Snapshot、stdin EOF、Host `RpcClient.stop()`调用和 Process Boundary的来源差异；实际 ChildProcess Signal请求与 `exit(143) → close(143)`目前是重复诊断 Capture结论，正式 Fixture仍待 recovery run；
 - Tool真实完成顺序与消息持久化顺序不能合并；
 - 被 Retry替代或取消的证据不能只从最终 `session.messages`重建；
 - Compaction Summary不能覆盖原始 Session Entry或未来 Observation；
@@ -172,6 +182,7 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 尚未冻结：
 
+- 新 `RpcClient.stop()` instrumentation的 committed / fixed-container Fixture身份与 live provenance；
 - RPC Worker异常退出、重启、Session恢复和协议 / Provider错误边界；
 - 正式 `NormalizedRuntimeEvent v1`；
 - SQLite Observation Ledger Schema与实现。
@@ -205,7 +216,7 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - 独立 AI审查仍使用同一仓库身份下的 cold-read评论协议，尚无独立Reviewer Bot；
 - 同一最终 HEAD多次成功 CI可能产生重复但幂等 provenance dispatch，Issue #15跟踪；
 - Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
-- RPC成功路径、正常 EOF和 `RpcClient.stop()`已经验证，但 Restart / Resume / Error仍必须由 #32独立冻结，不能从当前 Fixture外推；
+- RPC成功路径与正常 EOF已有正式 Fixture；`RpcClient.stop()`的实现层 SIGTERM / `exit(143) → close(143)`目前只有对固定 npm Artifact的重复诊断 Capture，正式 committed / fixed-container身份等待 recovery run。发布源码中的 `SIGKILL` fallback、Restart / Resume / Error仍必须按各自场景保留来源，其中 Worker恢复与错误语义由 #32独立冻结，不能从当前成功 Fixture外推；
 - 在真实用户记忆、生产凭证、多人写入、生产发布或第二次 direct-main Incident出现时，必须重新评估风险接受。
 
 ## 产品能力状态

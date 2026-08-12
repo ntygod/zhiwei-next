@@ -10,6 +10,27 @@ on:
       - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**
       - scripts/check-pi-sdk-rpc-parity-result.mjs
       - scripts/check-pi-sdk-rpc-client-messages-result.mjs
+      - scripts/check-pi-sdk-rpc-parity-provenance.mjs
+      - scripts/pi-sdk-rpc-parity-fixture.mjs
+      - scripts/probes/pi-lifecycle-ci.mjs
+      - scripts/probes/pi-sdk-rpc-parity-contract.mjs
+      - scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
+      - scripts/probes/pi-sdk-rpc-parity-capture.mjs
+      - scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
+      - docs/spikes/pi-runtime-contract/README.md
+      - docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md
+      - docs/architecture/pi-integration.md
+      - docs/harness/project-state.md
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/pi-sdk-rpc-parity.yml
+      - package.json
+      - packages/pi-adapter/fixtures/pi-upstream-baseline.json
+      - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**
+      - scripts/check-pi-sdk-rpc-parity-result.mjs
+      - scripts/check-pi-sdk-rpc-client-messages-result.mjs
+      - scripts/check-pi-sdk-rpc-parity-provenance.mjs
       - scripts/pi-sdk-rpc-parity-fixture.mjs
       - scripts/probes/pi-lifecycle-ci.mjs
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
@@ -41,13 +62,26 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify checked-out source identity
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SOURCE_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SOURCE_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "::error::Checked-out source differs from the event source: expected=$EXPECTED_SOURCE_SHA actual=$ACTUAL_SOURCE_SHA."
+            exit 1
+          fi
 
       - name: Setup exact Node.js runtime for host validation
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22.23.1
 
-      - name: Validate committed SDK and RPC parity contract
+      - name: Validate SDK and RPC parity probe sources
         shell: bash
         run: |
           set -euo pipefail
@@ -57,10 +91,11 @@ jobs:
           node --check scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
+          node --check scripts/check-pi-sdk-rpc-parity-provenance.mjs
           node --check scripts/pi-sdk-rpc-parity-fixture.mjs
-          node scripts/pi-sdk-rpc-parity-fixture.mjs --check
 
-      - name: Capture Pi SDK and RPC parity lifecycle in sandbox
+      - name: Capture fresh Pi SDK and RPC parity lifecycle in sandbox
+        id: capture
         env:
           PI_PROBE_IMAGE: node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
         shell: bash
@@ -77,9 +112,6 @@ jobs:
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             | tar -xf - -C "$BUNDLE"
-          node scripts/pi-sdk-rpc-parity-fixture.mjs \
-            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
-            --output "$BUNDLE/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
 
@@ -100,7 +132,6 @@ jobs:
             --env CI=true \
             --env GITHUB_ACTIONS=true \
             --env PI_LIFECYCLE_OUTPUT=/output/result.json \
-            --env PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json \
             --env PI_LIFECYCLE_SCENARIO=sdk-rpc-parity \
             --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             --env PI_PROBE_SOURCE_READ_ONLY=true \
@@ -112,7 +143,8 @@ jobs:
             "$PI_PROBE_IMAGE" \
             node scripts/probes/pi-lifecycle-ci.mjs
 
-      - name: Validate sanitized SDK and RPC parity evidence
+      - name: Validate fresh sanitized SDK and RPC parity evidence
+        id: validate_fresh
         env:
           PI_SDK_RPC_PARITY_OUTPUT: ${{ runner.temp }}/zhiwei-pi-sdk-rpc-parity-result/result.json
         shell: bash
@@ -121,11 +153,108 @@ jobs:
           node scripts/check-pi-sdk-rpc-parity-result.mjs "$PI_SDK_RPC_PARITY_OUTPUT"
           node scripts/check-pi-sdk-rpc-client-messages-result.mjs "$PI_SDK_RPC_PARITY_OUTPUT"
 
-      - name: Upload sanitized SDK and RPC parity evidence
-        if: always()
+      - name: Materialize and validate committed SDK and RPC parity fixture
+        if: always() && !cancelled()
+        env:
+          ALLOW_CANDIDATE_SOURCE: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_GATE=()
+          if [[ "$ALLOW_CANDIDATE_SOURCE" != "true" ]]; then
+            SOURCE_GATE+=(--require-verified-source)
+          fi
+          node scripts/pi-sdk-rpc-parity-fixture.mjs \
+            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
+            --output "$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-committed.json" \
+            --check \
+            "${SOURCE_GATE[@]}"
+
+      - name: Compare committed SDK and RPC parity fixture with fresh evidence
+        if: always() && !cancelled()
+        env:
+          PI_SDK_RPC_PARITY_OUTPUT: ${{ runner.temp }}/zhiwei-pi-sdk-rpc-parity-result/result.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pi-sdk-rpc-parity-fixture.mjs \
+            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
+            --compare "$PI_SDK_RPC_PARITY_OUTPUT"
+
+      - name: Upload fresh sanitized SDK and RPC parity evidence
+        if: always() && steps.capture.outcome == 'success' && steps.validate_fresh.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-sdk-rpc-parity-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/zhiwei-pi-sdk-rpc-parity-result/result.json
           if-no-files-found: error
           retention-days: 14
+
+  pi-sdk-rpc-parity-provenance:
+    name: Pi SDK and RPC parity live provenance
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    needs: pi-sdk-rpc-parity-probe
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify checked-out pull request source identity
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SOURCE_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SOURCE_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "::error::Checked-out pull request source differs from the event source: expected=$EXPECTED_SOURCE_SHA actual=$ACTUAL_SOURCE_SHA."
+            exit 1
+          fi
+
+      - name: Setup exact Node.js runtime for provenance validation
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.1
+
+      - name: Validate live SDK and RPC parity fixture provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-pi-sdk-rpc-parity-provenance.mjs \
+            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
+
+  pi-sdk-rpc-parity-provenance-gate:
+    name: Pi SDK and RPC parity provenance gate
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    needs: pi-sdk-rpc-parity-provenance
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Reject fork pull requests before provenance validation
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          echo "::error::Live SDK/RPC provenance cannot validate a fork pull request without exposing a repository token."
+          exit 1
+
+      - name: Require successful live provenance validation
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          PROVENANCE_RESULT: ${{ needs.pi-sdk-rpc-parity-provenance.result }}
+        shell: bash
+        run: |
+          if [[ "$PROVENANCE_RESULT" != "success" ]]; then
+            echo "::error::Live SDK/RPC provenance validation did not succeed: $PROVENANCE_RESULT."
+            exit 1
+          fi

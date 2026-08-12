@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,6 +83,114 @@ async function persist(result) {
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function collectEventsWithoutKeepingProbeAlive(rpcClient, timeout) {
+  const originalSetTimeout = globalThis.setTimeout;
+  const collectionTimers = [];
+  // The public helper owns no cancellation handle. Instrument only the timer it
+  // creates so an earlier Prompt failure cannot keep a failed probe alive.
+  globalThis.setTimeout = function instrumentedSetTimeout(callback, delay, ...args) {
+    const timer = originalSetTimeout(callback, delay, ...args);
+    collectionTimers.push(timer);
+    timer.unref?.();
+    return timer;
+  };
+
+  let resultPromise;
+  let synchronousError;
+  try {
+    resultPromise = rpcClient.collectEvents(timeout).then(
+      (collectedEvents) => ({ collectedEvents }),
+      (error) => ({ error }),
+    );
+  } catch (error) {
+    synchronousError = error;
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+
+  if (synchronousError) {
+    for (const timer of collectionTimers) clearTimeout(timer);
+    throw synchronousError;
+  }
+  if (collectionTimers.length !== 1) {
+    for (const timer of collectionTimers) clearTimeout(timer);
+    throw new Error("Published RpcClient.collectEvents() timer shape drifted.");
+  }
+  return {
+    resultPromise,
+    dispose() {
+      for (const timer of collectionTimers) clearTimeout(timer);
+    },
+  };
+}
+
+function observeProcessTermination(childProcess) {
+  let disposed = false;
+  let resolveTermination;
+  const resultPromise = new Promise((resolve) => {
+    resolveTermination = resolve;
+  });
+  const settle = (termination) => {
+    if (disposed) return;
+    disposed = true;
+    childProcess.off("error", onError);
+    childProcess.off("exit", onExit);
+    resolveTermination(termination);
+  };
+  const onError = (error) => settle({ type: "error", error });
+  const onExit = (code, signal) => settle({ type: "exit", code, signal });
+  childProcess.once("error", onError);
+  childProcess.once("exit", onExit);
+
+  return {
+    resultPromise,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      childProcess.off("error", onError);
+      childProcess.off("exit", onExit);
+    },
+  };
+}
+
+async function waitForOperationOrProcessTermination(
+  operationPromise,
+  processTerminationPromise,
+  operationBoundary,
+) {
+  const outcome = await Promise.race([
+    Promise.resolve(operationPromise).then(
+      (value) => ({ type: "operation", value }),
+      (error) => ({ type: "operation-error", error }),
+    ),
+    processTerminationPromise.then((termination) => ({
+      type: "process-termination",
+      termination,
+    })),
+  ]);
+  if (outcome.type === "operation") return outcome.value;
+  if (outcome.type === "operation-error") throw outcome.error;
+  if (outcome.termination.type === "error") {
+    throw new Error(`RpcClient Worker emitted an error before ${operationBoundary}.`);
+  }
+  throw new Error(
+    `RpcClient Worker exited before ${operationBoundary} (code=${outcome.termination.code}, signal=${outcome.termination.signal ?? "null"}).`,
+  );
+}
+
+function hasMatchingDurableExtensionShutdownEvidence(path, runIdentity) {
+  try {
+    const evidence = JSON.parse(readFileSync(path, "utf8"));
+    return (
+      evidence?.runIdentity === runIdentity &&
+      evidence?.shutdown?.observed === true &&
+      evidence.shutdown.reason === "quit"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function contentKinds(content) {
@@ -197,6 +305,13 @@ async function captureRpcClientMessages() {
     dirname(outputPath),
     "rpc-client-messages-extension-evidence.json",
   );
+  const runIdentity = randomBytes(32).toString("hex");
+  stage = "rpc-client:prepare-evidence";
+  await rm(extensionEvidencePath, { force: true });
+  requireValue(
+    !existsSync(extensionEvidencePath),
+    "RpcClient Extension evidence path could not be cleared before start().",
+  );
   await Promise.all([
     mkdir(rpcWorkspace, { recursive: true }),
     mkdir(rpcHome, { recursive: true }),
@@ -209,6 +324,7 @@ async function captureRpcClientMessages() {
       HOME: rpcHome,
       PI_INSTALL_DIR: installDir,
       PI_RPC_EXTENSION_EVIDENCE: extensionEvidencePath,
+      PI_RPC_EXTENSION_RUN_IDENTITY: runIdentity,
       AI_AGENT: "zhiwei-sdk-rpc-client-messages-probe",
       CI: process.env.CI ?? "true",
       GITHUB_ACTIONS: process.env.GITHUB_ACTIONS ?? "true",
@@ -234,33 +350,152 @@ async function captureRpcClientMessages() {
 
   stage = "rpc-client:start";
   await client.start();
+  // The published declaration marks `process` private. The probe intentionally
+  // instruments the corresponding published JavaScript field so shutdown
+  // transport stays observed evidence instead of a host-authored literal.
+  const instrumentedProcess = client.process;
+  requireValue(
+    instrumentedProcess &&
+      typeof instrumentedProcess.once === "function" &&
+      typeof instrumentedProcess.kill === "function",
+    "Published RpcClient process field is unavailable for shutdown instrumentation.",
+  );
+  const processTermination = observeProcessTermination(instrumentedProcess);
+  const processBoundaries = [];
+  const processExit = new Promise((resolveBoundary, reject) => {
+    instrumentedProcess.once("error", reject);
+    instrumentedProcess.once("exit", (code, signal) => {
+      const boundary = {
+        sequence: processBoundaries.length + 1,
+        type: "exit",
+        code,
+        signal,
+        extensionShutdownRunIdentityMatched:
+          hasMatchingDurableExtensionShutdownEvidence(extensionEvidencePath, runIdentity),
+      };
+      processBoundaries.push(boundary);
+      resolveBoundary(boundary);
+    });
+  });
+  const processClose = new Promise((resolveBoundary, reject) => {
+    instrumentedProcess.once("error", reject);
+    instrumentedProcess.once("close", (code, signal) => {
+      const boundary = {
+        sequence: processBoundaries.length + 1,
+        type: "close",
+        code,
+        signal,
+        extensionShutdownRunIdentityMatched:
+          hasMatchingDurableExtensionShutdownEvidence(extensionEvidencePath, runIdentity),
+      };
+      processBoundaries.push(boundary);
+      resolveBoundary(boundary);
+    });
+  });
+  const processBoundaryResult = Promise.all([processExit, processClose]).then(
+    (boundaries) => ({ boundaries }),
+    (error) => ({ error }),
+  );
+  requireValue(
+    instrumentedProcess.exitCode === null && instrumentedProcess.signalCode === null,
+    "RpcClient Worker exited before shutdown instrumentation attached.",
+  );
+  const requestedSignals = [];
+  const hadOwnKill = Object.hasOwn(instrumentedProcess, "kill");
+  const originalKillDescriptor = Object.getOwnPropertyDescriptor(instrumentedProcess, "kill");
+  const originalKill = instrumentedProcess.kill;
+  instrumentedProcess.kill = function instrumentedKill(signal) {
+    const request = { signal: signal ?? "SIGTERM" };
+    requestedSignals.push(request);
+    try {
+      request.accepted = originalKill.call(this, signal);
+      return request.accepted;
+    } catch (error) {
+      request.threw = true;
+      throw error;
+    }
+  };
 
-  stage = "rpc-client:before";
-  const [stateBeforeRaw, messagesBeforeRaw] = await Promise.all([
-    client.getState(),
-    client.getMessages(),
-  ]);
-  const stateBefore = sanitizeState(stateBeforeRaw);
-  const messagesBefore = messagesBeforeRaw.map((message, index) => messageSummary(message, index));
+  let stateBefore;
+  let messagesBefore;
+  let stateAfterAcceptance;
+  let events;
+  let stateAfter;
+  let messagesAfter;
+  let lastTextAfter;
+  let eventsCollection;
+  try {
+    stage = "rpc-client:before";
+    const [stateBeforeRaw, messagesBeforeRaw] = await Promise.all([
+      client.getState(),
+      client.getMessages(),
+    ]);
+    stateBefore = sanitizeState(stateBeforeRaw);
+    messagesBefore = messagesBeforeRaw.map((message, index) => messageSummary(message, index));
 
-  stage = "rpc-client:prompt";
-  const eventsPromise = client.collectEvents(30_000);
-  await client.prompt(SDK_RPC_PARITY_PROMPT);
-  const stateAfterAcceptance = sanitizeState(await client.getState());
-  const events = (await eventsPromise).map((event, index) => sanitizeEvent(event, index + 1));
+    stage = "rpc-client:prompt";
+    eventsCollection = collectEventsWithoutKeepingProbeAlive(client, 30_000);
+    await client.prompt(SDK_RPC_PARITY_PROMPT);
+    stateAfterAcceptance = sanitizeState(await client.getState());
+    const eventsResult = await waitForOperationOrProcessTermination(
+      eventsCollection.resultPromise,
+      processTermination.resultPromise,
+      "agent_settled",
+    );
+    if (eventsResult.error) throw eventsResult.error;
+    events = eventsResult.collectedEvents.map((event, index) =>
+      sanitizeEvent(event, index + 1),
+    );
 
-  stage = "rpc-client:after";
-  const [stateAfterRaw, messagesAfterRaw, lastTextAfterRaw] = await Promise.all([
-    client.getState(),
-    client.getMessages(),
-    client.getLastAssistantText(),
-  ]);
-  const stateAfter = sanitizeState(stateAfterRaw);
-  const messagesAfter = messagesAfterRaw.map((message, index) => messageSummary(message, index));
-  const lastTextAfter = textSummary(lastTextAfterRaw);
+    stage = "rpc-client:after";
+    const [stateAfterRaw, messagesAfterRaw, lastTextAfterRaw] = await Promise.all([
+      client.getState(),
+      client.getMessages(),
+      client.getLastAssistantText(),
+    ]);
+    stateAfter = sanitizeState(stateAfterRaw);
+    messagesAfter = messagesAfterRaw.map((message, index) => messageSummary(message, index));
+    lastTextAfter = textSummary(lastTextAfterRaw);
 
-  stage = "rpc-client:stop";
-  await client.stop();
+    stage = "rpc-client:stop";
+    await client.stop();
+  } finally {
+    eventsCollection?.dispose();
+    processTermination.dispose();
+    if (hadOwnKill) {
+      Object.defineProperty(instrumentedProcess, "kill", originalKillDescriptor);
+    } else {
+      delete instrumentedProcess.kill;
+    }
+  }
+  let stopTimeout;
+  let boundaryResult;
+  try {
+    boundaryResult = await Promise.race([
+      processBoundaryResult,
+      new Promise((_, reject) => {
+        stopTimeout = setTimeout(
+          () => {
+            try {
+              instrumentedProcess.kill("SIGKILL");
+            } catch {
+              // Preserve the boundary timeout.
+            }
+            instrumentedProcess.stdin?.destroy();
+            instrumentedProcess.stdout?.destroy();
+            instrumentedProcess.stderr?.destroy();
+            instrumentedProcess.unref();
+            reject(new Error("RpcClient Worker did not close after stop()."));
+          },
+          15_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(stopTimeout);
+  }
+  if (boundaryResult.error) throw boundaryResult.error;
+  const [exit, close] = boundaryResult.boundaries;
   const stderr = client.getStderr();
   client = undefined;
 
@@ -268,7 +503,17 @@ async function captureRpcClientMessages() {
     existsSync(extensionEvidencePath),
     "RpcClient Extension evidence was not durable after stop().",
   );
-  const extensionEvidence = JSON.parse(await readFile(extensionEvidencePath, "utf8"));
+  const rawExtensionEvidence = JSON.parse(await readFile(extensionEvidencePath, "utf8"));
+  requireValue(
+    rawExtensionEvidence?.runIdentity === runIdentity,
+    "RpcClient Extension evidence did not match the current run identity.",
+  );
+  const { runIdentity: observedRunIdentity, ...extensionEvidenceWithoutRunIdentity } =
+    rawExtensionEvidence;
+  const extensionEvidence = {
+    ...extensionEvidenceWithoutRunIdentity,
+    runIdentityMatched: observedRunIdentity === runIdentity,
+  };
 
   const eventTypes = events.map((event) => event.type);
   requireValue(
@@ -296,7 +541,34 @@ async function captureRpcClientMessages() {
   requireValue(lastTextAfter?.matchesExpected === true, "RpcClient final Assistant text drifted.");
   requireValue(stderr.length === 0, "RpcClient wrote unexpected stderr.");
   requireValue(
-    extensionEvidence?.provider?.callCount === 1 &&
+    JSON.stringify(requestedSignals) ===
+      JSON.stringify([{ signal: "SIGTERM", accepted: true }]),
+    "RpcClient.stop() signal requests drifted or reached the SIGKILL fallback.",
+  );
+  requireValue(
+    exit.code === 143 && exit.signal === null,
+    "RpcClient Worker exit boundary must be the handled SIGTERM exit code 143.",
+  );
+  requireValue(
+    close.code === 143 && close.signal === null,
+    "RpcClient Worker close boundary must be the handled SIGTERM exit code 143.",
+  );
+  requireValue(
+    exit.extensionShutdownRunIdentityMatched === true &&
+      close.extensionShutdownRunIdentityMatched === true,
+    "Current-run RpcClient Extension shutdown evidence must be durable before exit and close.",
+  );
+  const exitBeforeClose =
+    processBoundaries.findIndex((boundary) => boundary.type === "exit") >= 0 &&
+    processBoundaries.findIndex((boundary) => boundary.type === "close") >
+      processBoundaries.findIndex((boundary) => boundary.type === "exit");
+  requireValue(
+    exitBeforeClose,
+    "RpcClient Worker exit/close ordering drifted.",
+  );
+  requireValue(
+    extensionEvidence?.runIdentityMatched === true &&
+      extensionEvidence?.provider?.callCount === 1 &&
       extensionEvidence?.provider?.pendingResponses === 0 &&
       extensionEvidence?.provider?.promptsSentToExternalProvider === 0,
     "RpcClient Faux Provider evidence drifted.",
@@ -321,10 +593,14 @@ async function captureRpcClientMessages() {
     extensionEvidence,
     shutdown: {
       mechanism: "RpcClient.stop",
-      transport: "SIGTERM",
-      stderrPresent: false,
-      stderrLength: 0,
-      stderrSha256: sha256(""),
+      instrumentationSurface: "published-js-private-process-field",
+      requestedSignals,
+      process: {
+        processBoundaries,
+      },
+      stderrPresent: stderr.length > 0,
+      stderrLength: stderr.length,
+      stderrSha256: sha256(stderr),
     },
     sanitization: {
       absolutePathsIncluded: false,

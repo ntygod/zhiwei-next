@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   PI_PACKAGE_INTEGRITY,
@@ -10,6 +10,8 @@ import {
   PI_RELEASE_TAG,
   SDK_RPC_PARITY_API_ID,
   SDK_RPC_PARITY_COMMAND_IDS,
+  SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
+  SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT,
   SDK_RPC_PARITY_FINAL_TEXT,
   SDK_RPC_PARITY_MODEL_ID,
   SDK_RPC_PARITY_PROMPT,
@@ -17,8 +19,10 @@ import {
   SDK_RPC_PARITY_REQUIRED_RPC_CLIENT_METHODS,
   SDK_RPC_PARITY_SCENARIO,
   SDK_RPC_PARITY_SCHEMA_VERSION,
+  SDK_RPC_PARITY_STRUCTURED_SIGNAL_KEYS,
   SDK_RPC_PARITY_SURFACE_FILES,
 } from "./probes/pi-sdk-rpc-parity-contract.mjs";
+import { SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES } from "./pi-sdk-rpc-parity-fixture.mjs";
 
 const inputPath = resolve(
   process.argv[2] ??
@@ -32,6 +36,7 @@ function requireValue(condition, message) {
 }
 
 function fingerprint(result) {
+  if (!result || typeof result !== "object") return undefined;
   const clone = structuredClone(result);
   delete clone.contractFingerprint;
   return createHash("sha256").update(JSON.stringify(clone)).digest("hex");
@@ -51,7 +56,60 @@ function contiguous(events, label) {
   }
 }
 
-const result = JSON.parse(await readFile(inputPath, "utf8"));
+async function readBoundedRegularResult(path) {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new Error("SDK/RPC parity result must be a regular file.");
+  }
+  if (before.size > BigInt(SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES)) {
+    throw new Error("SDK/RPC parity result exceeds its byte limit.");
+  }
+  const handle = await open(path, "r");
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size > BigInt(SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES)
+    ) {
+      throw new Error("SDK/RPC parity result changed while it was opened.");
+    }
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(
+        Math.min(64 * 1024, SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES + 1 - total),
+      );
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES) {
+        throw new Error("SDK/RPC parity result exceeds its byte limit.");
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+    const bytes = Buffer.concat(chunks, total);
+    const after = await handle.stat({ bigint: true });
+    if (
+      after.dev !== opened.dev ||
+      after.ino !== opened.ino ||
+      after.size !== opened.size ||
+      bytes.length > SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES
+    ) {
+      throw new Error("SDK/RPC parity result changed while it was read.");
+    }
+    const text = bytes.toString("utf8");
+    if (!Buffer.from(text, "utf8").equals(bytes)) {
+      throw new Error("SDK/RPC parity result must be valid UTF-8.");
+    }
+    return text;
+  } finally {
+    await handle.close();
+  }
+}
+
+const result = JSON.parse(await readBoundedRegularResult(inputPath));
 requireValue(result.schemaVersion === 1, "Outer SDK/RPC parity schemaVersion must be 1.");
 requireValue(
   result.status === "passed",
@@ -199,12 +257,19 @@ requireValue(
   new Set(surface?.files?.map((file) => file.sha256)).size === SDK_RPC_PARITY_SURFACE_FILES.length,
   "Published RPC surface files must retain distinct digests.",
 );
+requireValue(
+  JSON.stringify(Object.keys(surface?.structuredSignals ?? {})) ===
+    JSON.stringify(SDK_RPC_PARITY_STRUCTURED_SIGNAL_KEYS),
+  "Published RPC structured signal key set drifted.",
+);
 for (const [signal, observed] of Object.entries(surface?.structuredSignals ?? {})) {
   requireValue(observed === true, `Published RPC structured signal is false: ${signal}.`);
 }
 requireValue(
-  Object.keys(surface?.structuredSignals ?? {}).length >= 9,
-  "Published RPC structured signal set is incomplete.",
+  surface?.structuredSignals?.rpcClientProcessFieldDeclaredPrivate === true &&
+    surface?.structuredSignals?.rpcClientStopRequestsSigterm === true &&
+    surface?.structuredSignals?.rpcClientStopHasSigkillFallback === true,
+  "Published RpcClient shutdown source signals drifted.",
 );
 requireValue(
   surface?.sanitization?.sourceBodiesIncluded === false,
@@ -367,8 +432,9 @@ requireValue(
 );
 requireValue(rpc?.worker?.exitBeforeClose === true, "RPC Worker exit must precede close.");
 requireValue(
-  rpc?.worker?.extensionEvidencePresentAtClose === true,
-  "RPC Extension shutdown evidence must be durable by close.",
+  rpc?.worker?.extensionShutdownRunIdentityMatchedAtExit === true &&
+    rpc?.worker?.extensionShutdownRunIdentityMatchedAtClose === true,
+  "Current-run RPC Extension shutdown evidence must be durable by exit and close.",
 );
 requireValue(
   rpc?.worker?.stdinClosedByHost === true,
@@ -384,7 +450,8 @@ requireValue(
   "RPC Worker stderr summary drifted.",
 );
 requireValue(
-  rpc?.extensionEvidence?.status === "passed",
+  rpc?.extensionEvidence?.status === "passed" &&
+    rpc?.extensionEvidence?.runIdentityMatched === true,
   "RPC Extension shutdown evidence must pass.",
 );
 requireValue(
@@ -495,12 +562,26 @@ requireValue(
   "SDK/RPC parity result must not contain a raw sessionFile field.",
 );
 requireValue(
+  !serialized.includes('"runIdentity"'),
+  "SDK/RPC parity result must not contain a per-run Extension nonce.",
+);
+requireValue(
   result.contractFingerprint === fingerprint(result),
   "Outer SDK/RPC parity contract fingerprint is invalid.",
 );
 requireValue(
-  capture.contractFingerprint === fingerprint(capture),
+  result.contractFingerprint === SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT,
+  "Outer SDK/RPC parity contract fingerprint differs from the frozen contract.",
+);
+requireValue(
+  capture &&
+    typeof capture === "object" &&
+    capture.contractFingerprint === fingerprint(capture),
   "Nested SDK/RPC parity contract fingerprint is invalid.",
+);
+requireValue(
+  capture?.contractFingerprint === SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
+  "Nested SDK/RPC parity contract fingerprint differs from the frozen contract.",
 );
 
 if (violations.length > 0) {

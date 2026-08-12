@@ -1,5 +1,9 @@
 export const SDK_RPC_PARITY_SCHEMA_VERSION = 1;
 export const SDK_RPC_PARITY_SCENARIO = "sdk-rpc-parity";
+export const SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT =
+  "c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf";
+export const SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT =
+  "70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7";
 
 export const PI_PACKAGE_NAME = "@earendil-works/pi-coding-agent";
 export const PI_PACKAGE_VERSION = "0.84.1";
@@ -40,9 +44,25 @@ export const SDK_RPC_PARITY_SURFACE_FILES = Object.freeze([
   "dist/rpc-entry.js",
   "dist/modes/index.js",
   "dist/modes/rpc/jsonl.js",
+  "dist/modes/rpc/rpc-client.d.ts",
   "dist/modes/rpc/rpc-client.js",
   "dist/modes/rpc/rpc-mode.js",
   "dist/modes/rpc/rpc-types.js",
+]);
+
+export const SDK_RPC_PARITY_STRUCTURED_SIGNAL_KEYS = Object.freeze([
+  "rootIndexReexportsModes",
+  "rpcEntryForcesRpcMode",
+  "modesIndexExportsRunRpcMode",
+  "modesIndexExportsRpcClient",
+  "rpcClientUsesStrictJsonlHelpers",
+  "rpcClientProcessFieldDeclaredPrivate",
+  "rpcClientStopRequestsSigterm",
+  "rpcClientStopHasSigkillFallback",
+  "rpcModeEmitsPromptResponse",
+  "rpcModeExposesSettledEvent",
+  "rpcModeExposesStateAndMessages",
+  "jsonlUsesLfOnlyBuffering",
 ]);
 
 export const SDK_RPC_PARITY_REQUIRED_RPC_CLIENT_METHODS = Object.freeze([

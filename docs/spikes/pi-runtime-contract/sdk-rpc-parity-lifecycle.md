@@ -11,9 +11,10 @@ release tag: v0.84.1
 release commit: 53fa77ccd8a279eb87e92294ef3687b03ff80112
 Node: 22.23.1
 scenario: sdk-rpc-parity
+instrumentation provenance refresh: pending fixed-container GitHub Artifact
 ```
 
-本记录来自固定发布 Artifact 的真实动态 Capture。它比较进程内 `AgentSession` SDK、原始 JSONL RPC Worker 与发布包 `RpcClient` 执行同一个无工具任务时的接受、运行中、稳定和关闭边界。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。当前 committed Fixture仍是下方旧 Schema的正式固定容器证据；新增 `stop()` instrumentation的 `exit(143) → close(143)`来自对同一固定 npm Artifact的重复诊断 Capture，正式 committed / fixed-container Evidence要等 fresh-first recovery run后才落位。
 
 Committed Fixture：
 
@@ -60,14 +61,16 @@ runRpcMode: function
 RpcClient: function
 ```
 
-知微冻结的公开 `RpcClient` 方法：
+知微为本场景冻结的公开 `RpcClient` **必需方法子集**如下；它不是发布类全部公开 Surface 的枚举：
 
 ```text
 abort
+collectEvents
 getAvailableModels
 getLastAssistantText
 getMessages
 getState
+getStderr
 prompt
 setModel
 setThinkingLevel
@@ -76,9 +79,9 @@ stop
 waitForIdle
 ```
 
-运行时原型仍会枚举 TypeScript 私有实现方法 `send`，但它不属于公开支持合同。
+运行时原型仍会枚举 TypeScript 私有实现方法 `send`，但它不属于公开支持合同。发布 `.d.ts` 同样把 `process` 声明为 `private`；Capture 只把发布 JavaScript 中对应的 ChildProcess 字段用作实现层观测点，不把它提升为公开 API，也不要求生产 Adapter 依赖该字段。
 
-发布包同时确认：根入口重新导出 modes；RPC entry 强制进入 RPC mode；Client 使用共享的严格 JSONL helper；RPC mode 暴露 Prompt Response、`agent_settled`、`get_state` 和 `get_messages`；JSONL Reader 只按 `\n` framing，不使用 `node:readline`。
+发布包同时确认：根入口重新导出 modes；RPC entry 强制进入 RPC mode；Client 使用共享的严格 JSONL helper；RPC mode 暴露 Prompt Response、`agent_settled`、`get_state` 和 `get_messages`；JSONL Reader 只按 `\n` framing，不使用 `node:readline`。源码还明确显示 `stop()` 先请求 `SIGTERM`，并在等待超时后保留 `SIGKILL` fallback；这两个源码信号与运行时是否真的触发 fallback 必须分别记录。
 
 关键发布文件只保存路径、大小和 SHA-256，不保存源码正文。
 
@@ -241,12 +244,22 @@ Runtime trace 从 `agent_start` 到 `agent_settled`，只有一次 Run，`agent_
 
 ```text
 mechanism=RpcClient.stop
-transport=SIGTERM
+instrumentationSurface=published-js-private-process-field
+published d.ts process visibility=private
+requestedSignals=[{ signal="SIGTERM", accepted=true }]
 Extension session_shutdown(reason=quit)
+processBoundaries[0]={ sequence=1, type=exit, code=143, signal=null, extensionShutdownRunIdentityMatched=true }
+processBoundaries[1]={ sequence=2, type=close, code=143, signal=null, extensionShutdownRunIdentityMatched=true }
+Extension evidence runIdentityMatched=true (per-run nonce removed from committed output)
+SIGKILL requests=0
 stderrPresent=false
 ```
 
-`RpcClient.stop(SIGTERM)` 与原始 JSONL 的 stdin EOF 是不同关闭表面，不能互相替代或外推为异常退出、Restart、Resume。
+这里的 `accepted=true` 是发布 ChildProcess `kill()` 的真实返回值，不是文档自报的 Transport 字符串。Probe在启动前删除旧 Evidence，生成每次运行的随机 nonce，经环境变量只传给本次 Worker；Extension把 nonce写入临时 Evidence，Process Boundary和最终读取都必须精确匹配本次 nonce。提交的脱敏结果只保留固定 `runIdentityMatched=true`，不会保存随机值。该绑定与 `session_shutdown(reason=quit)` 已落盘、`exit → close` 的完整 Process Boundary、两处 `code=143 / signal=null` 以及请求列表中没有 `SIGKILL` 共同构成重复诊断 Capture中的成功关闭证据。发布源码中仍存在 `SIGKILL` fallback；这些诊断运行证明对应成功路径没有触发 fallback，不代表错误路径已经验证，也不能在 recovery run完成前冒充新的 committed / fixed-container Fixture证据。
+
+`collectEvents()`的内部超时器由 Probe明确 `unref()`，避免 Prompt失败后仅为等待超时而拖住失败进程；与之配套，等待 `agent_settled`必须显式和真实 ChildProcess `exit/error`竞争。这样 Worker提前终止会进入正常异常路径、执行监听器/Timer清理并持久化 `status=failed`，不会因未完成的顶层 `await`不维持 Node事件循环而静默提前退出。
+
+`RpcClient.stop()` 的实现层 SIGTERM 请求与原始 JSONL 的 Host stdin EOF 是不同关闭表面：前者以 `exit(143) → close(143)` 收尾，后者以 `exit(0) → close(0)` 收尾。两者不能互相替代，也不能外推为异常退出、Restart 或 Resume。
 
 ## 可以共享与必须分离
 
@@ -263,14 +276,36 @@ RPC Runtime Event
 RPC State Snapshot
 RPC get_messages / get_last_assistant_text
 host stdin EOF
-RpcClient.stop(SIGTERM)
+host call RpcClient.stop()
+observed ChildProcess SIGTERM request / acceptance
 RPC Extension session_shutdown
 Process exit / close
 ```
 
 未来协议必须保留 `sourceSurface`、`sourceEventType`、`sourceSequence`、适用的 RPC ID / Command、稳定边界语义与 observed / host-synthesized provenance。
 
-## Fixture 身份与最终 provenance
+## Fixture 身份与 provenance 生命周期
+
+Manifest 的 `source` 必须精确包含 `head`、`workflowRun`、`artifactId`、`artifactDigest`四个键，额外键也会被拒绝；它只有两种合法状态：
+
+| 状态 | `head` | `workflowRun` / `artifactId` / `artifactDigest` | 允许范围 |
+|---|---|---|---|
+| `candidate` | 生成候选 JSON 的完整 40 位 Commit SHA | 三项必须全部为 `null` | 仅 Draft PR 的恢复与收敛阶段 |
+| `verified` | 被引用 Workflow Run 的 Capture HEAD | 三项必须全部为有效值 | Ready、所有非 Draft运行与 Merge Gate |
+
+不允许部分填写 provenance。`candidate` 只表示“候选 Fixture 的内容和来源 Commit 已明确，但 GitHub Artifact 身份尚未固定”，不是最终验证结论，也不能进入 Ready 或合并。
+
+Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生并通过两个 Fresh Checker，再读取、校验并与 committed Fixture 比较完整对象；只有 Capture和Fresh校验都成功时才上传脱敏 Artifact，但其上传仍使用 `always()`语义，不受随后旧 Fixture或完整对象比较失败影响。因此 committed漂移不会阻止本次运行留下可下载的合格 Fresh Evidence，而未通过脱敏 Checker的失败 JSON不会被当作 Evidence上传。`pull_request` 运行显式 checkout 事件中的 `pull_request.head.sha`，并立即用 `git rev-parse HEAD` 精确核对；不使用 Actions 默认的 synthetic merge ref 冒充 Capture 来源。恢复时在 Draft PR 中用该 Evidence 重建 JSON、分片和 Manifest，先以 `candidate` 收敛内容，再把真实 Run / Artifact 身份补齐为 `verified`。
+
+三个摘要不能混用：
+
+- `jsonSha256`：Manifest 分片解压后那份规范 JSON 字节的 SHA-256；
+- `compressedSha256`：提交到仓库的 gzip 字节 SHA-256；
+- `artifactDigest`：GitHub Actions `upload-artifact` 生成的 ZIP Archive SHA-256，用于把 Workflow Run / Artifact 与下载来源绑定；它不是内层 `result.json` 的 `jsonSha256`。
+
+Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker，核对 Workflow、事件类型、成功结论、Run HEAD、PR关联、Artifact所属 Run、按 `run_attempt`派生的 Artifact名称、未过期状态与 ZIP Digest，并要求 `source.head`是当前 PR HEAD的真实 Git祖先；Checker还下载对应 ZIP，严格要求其中唯一条目为 `result.json`，把下载 ZIP摘要、`result.json`字节摘要与 committed Fixture完整字节同时绑定。无法用真实 Compare或内容绑定证明时 fail closed，不使用 synthetic merge parent fallback。只有 Fresh Capture 与 committed Fixture完整相等、两个结果 Checker、Manifest / Artifact live provenance、当前 HEAD CI与独立审查全部通过，PR才满足合并条件。
+
+下面保留的是当前 Manifest 已记录的正式身份。实现层 instrumentation 刷新尚未取得新的固定容器 GitHub Artifact 前，不改写这些数字；新 Artifact 固定后必须把整组身份与 provenance 一次性同步，不能把旧数字冒充新 Capture：
 
 ```text
 format                       gzip+base64-parts
@@ -285,7 +320,7 @@ outer contract fingerprint   7ea076b4ce562ed7c2cab17fbaa13c95e5922f5698e46145697
 capture contract fingerprint 8c271d0cc1acb3eab5f10559b2a0c18370e076420a7155445d81bace11c624fc
 ```
 
-最终合同的 Fresh Capture：
+当前已记录的 Fresh Capture provenance：
 
 ```text
 capture head     d4d9a6f175fb0c5575743e3cad562d4e967c46e2
@@ -294,7 +329,7 @@ artifact id      9148765803
 artifact digest  sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d19081a373017e59a62894eb4
 ```
 
-Manifest 是 provenance 的机器事实源。
+Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态，也不能用旧 Artifact 身份证明新的 JSON 内容。
 
 ## 安全与脱敏
 
@@ -306,7 +341,15 @@ Manifest 是 provenance 的机器事实源。
 npm run check:pi-sdk-rpc-parity
 npm run check
 npm run probe:pi:sdk-rpc-parity
+
+# Draft recovery: only use the sanitized result.json from a fixed-container run.
+node scripts/pi-sdk-rpc-parity-fixture.mjs \
+  --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
+  --pack /path/to/result.json \
+  --source-head <capture-head>
 ```
+
+`--pack`把 Fresh JSON与 Fixture解压输出统一限制为 8 MiB，并在文件打开后及有界读取时再次强制该上限；它先运行以脚本目录为锚点的两个结果 Checker，再用固定 gzip level / mtime和跨平台规范化 header重建 candidate。新分片以序号和完整内容 SHA-256命名、只用排他创建；Packer拒绝 Fixture目录、Manifest或分片上的符号链接 / 非普通文件，在 Fixture父目录持有不会随 Fixture目录重命名而移动的排他锁，并持有父目录与 Fixture目录句柄，在每个事务关键点校验路径仍指向原目录身份。分片写入与同步、临时 Manifest完整回读和 Checker复验完成后，最后只原子替换 `manifest.json`。切换前失败时旧 Manifest与旧分片保持可读；切换后也保留旧分片，避免已经读取旧 Manifest的并发 Reader失去其引用，显式 GC必须另行建立 Reader lease或版本保留协议。进程崩溃或成功切换都可能留下安全的非活动分片；目录身份异常会保留父目录锁，锁只能在确认没有 Packer运行并检查 Fixture树后人工移除。它不会伪造 Workflow Run、Artifact ID或 Artifact Digest。输入必须是规范化、带末尾换行的完整 Fresh Result，`source-head`必须对应产生该结果的 Capture Commit。
 
 关键机器文件：
 
@@ -318,6 +361,7 @@ scripts/probes/pi-sdk-rpc-parity-capture.mjs
 scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
 scripts/check-pi-sdk-rpc-parity-result.mjs
 scripts/check-pi-sdk-rpc-client-messages-result.mjs
+scripts/check-pi-sdk-rpc-parity-provenance.mjs
 scripts/pi-sdk-rpc-parity-fixture.mjs
 ```
 

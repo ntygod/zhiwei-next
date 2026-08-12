@@ -178,9 +178,17 @@ capture f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee
 
 ## SDK / RPC 同任务成功路径
 
-阶段：`source-and-runtime-verified-sdk-rpc-parity`。详细文档：[`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md)。
+阶段：`source-and-runtime-verified-sdk-rpc-parity`。该标签描述当前正式基线；新的 `stop()` instrumentation provenance仍在 Draft中等待固定容器 GitHub Artifact，不能借用旧身份值声明已完成刷新。详细文档：[`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md)。
 
-发布 Artifact 根导出 `runRpcMode`和 `RpcClient`。知微只冻结公开 Client 方法，不把 TypeScript 私有实现方法 `send`当作支持合同。
+发布 Artifact 根导出 `runRpcMode`和 `RpcClient`。本场景冻结的是公开 Client 的必需方法子集，而不是全部公开 Surface：
+
+```text
+abort, collectEvents, getAvailableModels, getLastAssistantText,
+getMessages, getState, getStderr, prompt, setModel,
+setThinkingLevel, start, stop, waitForIdle
+```
+
+TypeScript 私有实现方法 `send`不属于支持合同；发布 `.d.ts` 中的 `process`也声明为 `private`。Probe 只用发布 JavaScript 对应字段观测 `stop()` 的实现层 ChildProcess 边界，不把它提升为公开 API 或生产 Adapter 依赖。
 
 SDK Public 与原始 RPC Runtime 的核心投影一致：
 
@@ -226,16 +234,28 @@ after agent_settled:
 
 ```text
 raw JSONL: host stdin EOF → extension shutdown(quit) → exit=0 → close=0
-RpcClient:  stop() → SIGTERM → extension shutdown(quit)
+RpcClient:  stop()
+  → observed kill(SIGTERM), accepted=true
+  → extension shutdown(quit), evidence durable
+  → exit(code=143, signal=null)
+  → close(code=143, signal=null)
 ```
 
-stdin EOF 与 `RpcClient.stop(SIGTERM)`必须分开记录；也不能外推 Worker Restart、Resume 或异常退出语义。
+对固定 npm Artifact的重复诊断 Capture中，`requestedSignals`只有一次被接受的 `SIGTERM`，没有 `SIGKILL`，所以对应成功路径没有触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。该结论的正式 committed / fixed-container Evidence等待 recovery run，当前旧 Fixture身份不能证明这些新增字段。stdin EOF与 `RpcClient.stop()`的实现层 SIGTERM请求必须分开记录，也不能外推 Worker Restart、Resume或异常退出语义。
 
 ### 来源边界
 
-必须保留 SDK Preflight、SDK Public、SDK Extension、RPC Command/Response ID、RPC Runtime Event、State Snapshot、`get_messages`、stdin EOF、SIGTERM、Extension Shutdown、Exit 和 Close。RPC `message_update`只保存 delta，不含累计 `partial`。
+必须保留 SDK Preflight、SDK Public、SDK Extension、RPC Command/Response ID、RPC Runtime Event、State Snapshot、`get_messages`、Host stdin EOF、Host `RpcClient.stop()`调用、实际 ChildProcess Signal请求、Extension Shutdown、Exit 和 Close。RPC `message_update`只保存 delta，不含累计 `partial`。
 
-### 最终 Fixture
+### Fixture 身份与来源状态
+
+Manifest `source` 只允许两态：`candidate` 保留完整 `head`，但 `workflowRun`、`artifactId`、`artifactDigest`必须全部为 `null`，只允许 Draft PR恢复；`verified`要求三项全部有效，是 Ready 与 Merge Gate。部分填写会失败，`candidate`也不能被当成最终 provenance。
+
+Workflow 使用 fresh-first recovery：固定容器先生成 Fresh Capture并通过两个脱敏 Checker，再校验 committed Fixture和完整对象；合格 Fresh Artifact的上传不受随后旧 Fixture漂移失败影响，未通过 Fresh Checker的失败 JSON则不会上传。PR运行显式 checkout事件中的 `pull_request.head.sha`并核对实际 Git HEAD，不把默认 synthetic merge ref当作来源。Draft中收敛 candidate后，必须引用真实 Workflow Run / Artifact升为 verified；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。Ready触发的非 Draft运行还执行 live provenance检查，要求来源 HEAD是当前 PR HEAD的真实祖先，并下载对应 Artifact ZIP，把 ZIP Digest、其中唯一 `result.json`的 SHA与 committed Fixture完整字节同时绑定。
+
+`jsonSha256`绑定解压后的规范 JSON字节，`compressedSha256`绑定仓库中的 gzip字节，`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive；三者作用域不同，不能互相替代。最终合并还要求 Fresh / committed完整相等、两个结果 Checker、live Run / Artifact provenance、当前 HEAD CI和 R3独立 AI审查全部通过。
+
+以下数字是当前 Manifest已记录的正式身份；等待实现层 instrumentation取得新的固定容器 Artifact后再整组更新，本轮不把旧身份数字改写成候选值：
 
 ```text
 parts                        6
@@ -252,7 +272,7 @@ capture artifact digest      sha256:eab20f5bd3efc5244f23f09aa56bb4c5a9bd468d1908
 external Provider prompts    0
 ```
 
-Manifest 是最终 provenance 的机器事实源。
+Manifest 是 provenance 的机器事实源；文档不能用旧 `artifactDigest`证明新的 `jsonSha256`。
 
 ## 隔离与验证
 
@@ -263,5 +283,7 @@ npm run check
 npm run check:pi-sdk-rpc-parity
 npm run probe:pi:sdk-rpc-parity
 ```
+
+Draft recovery只允许把固定容器上传的脱敏 `result.json`交给 `scripts/pi-sdk-rpc-parity-fixture.mjs --pack ... --source-head <capture-head>`。Packer将输入与解压输出统一限制为 8 MiB，使用锚定仓库位置的两个结果 Checker，并确定性生成带完整内容 SHA-256的不可变 candidate分片。它在 Fixture父目录持有排他锁，持有并反复核验父目录与 Fixture目录身份，先写入、同步并完整回读临时 Manifest，最后只原子切换 `manifest.json`；失败不会原地混写活动 Fixture，目录替换、符号链接或非普通文件也会 fail closed。旧分片不会在切换时删除，以保证已经读取旧 Manifest的并发 Reader仍能完成；显式 GC需要独立的 Reader lease或版本保留协议。崩溃或目录身份异常遗留的锁只能在确认没有 Packer运行并检查 Fixture树后人工移除。Workflow / Artifact provenance仍必须来自后续真实成功 Run，不能由本地命令补造。
 
 Issue #32 将单独验证异常 EOF/退出、Restart、Session Resume、非法 JSON、未知命令、Preflight 拒绝与 Provider Error。完成 #32 前不冻结正式 `NormalizedRuntimeEvent v1`，也不开始 SQLite Observation Ledger。

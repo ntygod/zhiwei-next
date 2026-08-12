@@ -17,6 +17,7 @@ import {
 
 const installDir = resolveRequiredPath("PI_INSTALL_DIR");
 const evidencePath = resolveRequiredPath("PI_RPC_EXTENSION_EVIDENCE");
+const runIdentity = resolveRequiredRunIdentity("PI_RPC_EXTENSION_RUN_IDENTITY");
 const events = [];
 let fauxHandle;
 
@@ -24,6 +25,14 @@ function resolveRequiredPath(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required.`);
   return resolve(value);
+}
+
+function resolveRequiredRunIdentity(name) {
+  const value = process.env[name];
+  if (!/^[a-f0-9]{64}$/.test(value ?? "")) {
+    throw new Error(`${name} must be a 64-character lowercase hexadecimal nonce.`);
+  }
+  return value;
 }
 
 function sha256(value) {
@@ -76,6 +85,7 @@ async function writeEvidence(shutdownReason) {
     schemaVersion: SDK_RPC_PARITY_SCHEMA_VERSION,
     status: "passed",
     scenario: SDK_RPC_PARITY_SCENARIO,
+    runIdentity,
     provider: {
       id: fauxHandle.provider.id,
       api: fauxHandle.api,
