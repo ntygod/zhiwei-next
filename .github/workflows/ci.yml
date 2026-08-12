@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
 
 concurrency:
@@ -104,6 +105,94 @@ jobs:
               String(filenames.some((filename) => lifecycleProbePaths.includes(filename))),
             );
             return JSON.stringify(filenames);
+
+      - name: Validate work item GitHub objects
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const body = context.payload.pull_request?.body ?? "";
+            const marker = "zhiwei-harness";
+            const markerIndex = body.lastIndexOf(marker);
+            const commentStart = body.lastIndexOf("<!--", markerIndex);
+            const commentEnd = body.indexOf("-->", markerIndex + marker.length);
+            if (markerIndex < 0 || commentStart < 0 || commentEnd < 0) {
+              throw new Error("Missing zhiwei-harness metadata block.");
+            }
+
+            const metadata = {};
+            const block = body.slice(markerIndex + marker.length, commentEnd);
+            for (const rawLine of block.split(/\r?\n/)) {
+              const line = rawLine.trim();
+              const separator = line.indexOf(":");
+              if (!line || separator < 0) continue;
+              metadata[line.slice(0, separator).trim()] =
+                line.slice(separator + 1).trim();
+            }
+
+            const parseReference = (field, { allowNone = false } = {}) => {
+              const value = metadata[field];
+              if (allowNone && value === "none") return null;
+              const match = /^#([1-9]\d*)$/.exec(value ?? "");
+              if (!match) {
+                throw new Error(
+                  `${field} must be an object reference in the form #N` +
+                    (allowNone ? " or none." : "."),
+                );
+              }
+              return Number(match[1]);
+            };
+
+            const { owner, repo } = context.repo;
+            const currentPullRequest = context.payload.pull_request.number;
+            const workItem = parseReference("work-item");
+            const ownerInput = parseReference("owner-input", { allowNone: true });
+            const supersedesPr = parseReference("supersedes-pr", { allowNone: true });
+
+            const { data: workItemData } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: workItem,
+            });
+            if (workItemData.pull_request) {
+              throw new Error(`work-item #${workItem} resolves to a Pull Request.`);
+            }
+            if (workItemData.state !== "open") {
+              throw new Error(`work-item #${workItem} must be open before merge.`);
+            }
+
+            if (ownerInput !== null) {
+              const { data: ownerInputData } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: ownerInput,
+              });
+              if (ownerInputData.pull_request) {
+                throw new Error(`owner-input #${ownerInput} resolves to a Pull Request.`);
+              }
+              if (ownerInputData.user?.login !== owner) {
+                throw new Error(
+                  `owner-input #${ownerInput} was not authored by repository owner ${owner}.`,
+                );
+              }
+            }
+
+            if (supersedesPr !== null) {
+              if (supersedesPr === currentPullRequest) {
+                throw new Error("supersedes-pr cannot reference the current Pull Request.");
+              }
+              await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: supersedesPr,
+              });
+            }
+
+            core.info(
+              `Verified work-item #${workItem}; owner-input ` +
+                `${ownerInput === null ? "none" : `#${ownerInput}`}; ` +
+                `supersedes-pr ${supersedesPr === null ? "none" : `#${supersedesPr}`}.`,
+            );
 
       - name: Read manual Pi probe requests
         if: github.event_name == 'workflow_dispatch'
