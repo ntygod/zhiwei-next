@@ -1,39 +1,68 @@
-name: AI RPC source export
+name: AI apply RPC initial implementation
 
 on:
   push:
     branches:
       - spike/m0-pi-rpc-worker-lifecycle
     paths:
-      - .github/ai-rpc-source-export-trigger
+      - .github/ai-rpc-apply-trigger
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export-source:
+  apply-initial-implementation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Checkout without persisted credentials
+      - name: Checkout implementation branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          persist-credentials: false
+          ref: spike/m0-pi-rpc-worker-lifecycle
+          persist-credentials: true
           fetch-depth: 0
 
-      - name: Package source and Git history
+      - name: Apply verified non-workflow payload
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude=.git -czf "$RUNNER_TEMP/zhiwei-next-source.tgz" .
-          git bundle create "$RUNNER_TEMP/zhiwei-next.bundle" --all
+          PAYLOAD="$RUNNER_TEMP/rpc-initial.tgz"
+          cat .github/ai-payload/rpc-initial-*.b64 | base64 --decode > "$PAYLOAD"
+          echo "c149679e065a78326bc9c48bf2650d4466fab5d46239ddc7dcf340b059efd3fe  $PAYLOAD" | sha256sum --check --strict
 
-      - name: Upload short-lived source snapshot
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: zhiwei-next-rpc-source-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/zhiwei-next-source.tgz
-            ${{ runner.temp }}/zhiwei-next.bundle
-          if-no-files-found: error
-          retention-days: 1
+          cat > "$RUNNER_TEMP/expected-files.txt" <<'EOF'
+          package.json
+          scripts/check-pi-rpc-worker-lifecycle-result.mjs
+          scripts/probes/pi-rpc-worker-lifecycle-capture.mjs
+          EOF
+          tar -tzf "$PAYLOAD" > "$RUNNER_TEMP/archive-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/archive-files.txt"
+          tar -xzf "$PAYLOAD"
+
+          rm -rf .github/ai-payload
+          rm -f .github/ai-rpc-apply-trigger .github/ai-rpc-source-export-trigger
+
+          node --check scripts/probes/pi-rpc-worker-lifecycle-capture.mjs
+          node --check scripts/check-pi-rpc-worker-lifecycle-result.mjs
+          npm run check
+          git diff --check
+          git status --short
+
+      - name: Commit initial implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add \
+            package.json \
+            scripts/check-pi-rpc-worker-lifecycle-result.mjs \
+            scripts/probes/pi-rpc-worker-lifecycle-capture.mjs
+          git add -u .github/ai-payload .github/ai-rpc-apply-trigger .github/ai-rpc-source-export-trigger
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "RPC implementation payload produced no changes."
+            exit 1
+          fi
+          git commit -m "spike(m0): add Pi RPC Worker lifecycle capture"
+          git push origin HEAD:spike/m0-pi-rpc-worker-lifecycle
