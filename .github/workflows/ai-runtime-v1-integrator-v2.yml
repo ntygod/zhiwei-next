@@ -1,0 +1,223 @@
+name: AI integrate NormalizedRuntimeEvent v1 v2
+
+on:
+  push:
+    branches:
+      - automation/runtime-v1-integrator-v2
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_BRANCH: feat/m0-normalized-runtime-event-v1
+      TARGET_PR: "48"
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: feat/m0-normalized-runtime-event-v1
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Apply idempotent integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          adapter_path = Path("packages/pi-adapter/src/normalize-runtime-event.ts")
+          source = adapter_path.read_text(encoding="utf-8")
+
+          if "function mapStopReason(" in source:
+              source = source.replace(
+                  "function mapStopReason(\n  reason: PiStopReason | undefined,\n): MessageLifecycleData[\"stopReason\"] | TurnLifecycleData[\"outcome\"] | undefined {",
+                  "function mapMessageStopReason(\n  reason: PiStopReason | undefined,\n): MessageLifecycleData[\"stopReason\"] | undefined {",
+                  1,
+              )
+          if "function mapTurnOutcome(" not in source:
+              marker = "function baseInput<TData extends NormalizedRuntimeEventData>("
+              if marker not in source:
+                  raise SystemExit("baseInput marker not found")
+              turn_mapper = '''function mapTurnOutcome(
+            reason: PiStopReason | undefined,
+          ): TurnLifecycleData["outcome"] | undefined {
+            switch (reason) {
+              case undefined:
+                return undefined;
+              case "stop":
+              case "error":
+              case "aborted":
+              case "length":
+                return reason;
+              case "toolUse":
+                return "tool-use";
+              default:
+                return "unknown";
+            }
+          }
+
+          '''
+              source = source.replace(marker, turn_mapper + marker, 1)
+          source = source.replace(
+              'outcome: input.type === "turn_end" ? mapStopReason(input.outcome) : undefined,',
+              'outcome: input.type === "turn_end" ? mapTurnOutcome(input.outcome) : undefined,',
+          )
+          source = source.replace(
+              'stopReason: mapStopReason(input.stopReason),',
+              'stopReason: mapMessageStopReason(input.stopReason),',
+          )
+          source = source.replace(
+              'toolCallId: input.toolCallId,\n        },\n      },\n      input.type,',
+              'toolCallId: context.correlation?.toolCallId ?? input.toolCallId,\n        },\n      },\n      input.type,',
+              1,
+          )
+          source = source.replace(
+              'rpcRequestId: input.requestId,\n  };',
+              'rpcRequestId: context.correlation?.rpcRequestId ?? input.requestId,\n  };',
+              1,
+          )
+
+          required = [
+              "function mapMessageStopReason",
+              "function mapTurnOutcome",
+              "mapTurnOutcome(input.outcome)",
+              "mapMessageStopReason(input.stopReason)",
+              "context.correlation?.toolCallId ?? input.toolCallId",
+              "context.correlation?.rpcRequestId ?? input.requestId",
+          ]
+          missing = [token for token in required if token not in source]
+          if missing:
+              raise SystemExit(f"adapter integration missing: {missing}")
+          adapter_path.write_text(source, encoding="utf-8")
+
+          for path, export_line in [
+              (Path("packages/protocol/src/index.ts"), 'export * from "./runtime-events.ts";'),
+              (Path("packages/pi-adapter/src/index.ts"), 'export * from "./normalize-runtime-event.ts";'),
+          ]:
+              text = path.read_text(encoding="utf-8")
+              if export_line not in text:
+                  path.write_text(f"{text.rstrip()}\n{export_line}\n", encoding="utf-8")
+
+          pi_path = Path("docs/architecture/pi-integration.md")
+          pi_text = pi_path.read_text(encoding="utf-8")
+          if "## NormalizedRuntimeEvent v1" not in pi_text:
+              pi_text = f'''{pi_text.rstrip()}
+
+          ## NormalizedRuntimeEvent v1
+
+          Pi 的 SDK、Extension、RPC 与宿主边界先由 `packages/pi-adapter` 转换为 [`NormalizedRuntimeEvent v1`](normalized-runtime-event.md)，再进入后续 Observation Ledger。
+
+          Adapter 必须保留：
+
+          - `sourceSurface = sdk | extension | rpc | host`；
+          - 每个来源流独立、严格递增的 `sourceSequence`；
+          - Prompt、Agent Run、Turn、Message、Tool、RPC Request 和 Worker 的显式关联；
+          - `observed` 与 `host-synthesized` 来源；
+          - `transient`、`boundary` 与 `stable` 三种持久化语义；
+          - Extension 缺少 `willRetry` 时的 `unknown`，而不是从 SDK 事件补造布尔值；
+          - RPC Prompt Response 与 Prompt Settled、EOF 与 Worker Exit 的分离；
+          - Compaction Summary 作为派生引用，而非原始 Observation。
+
+          正式 Ledger 只依赖该 Runtime 中立协议，不导入 Pi 类型。协议候选完成不代表 SQLite Ledger 已实现。
+          '''
+              pi_path.write_text(pi_text, encoding="utf-8")
+
+          state_path = Path("docs/harness/project-state.md")
+          state = state_path.read_text(encoding="utf-8")
+          if "NormalizedRuntimeEvent v1 协议候选" not in state:
+              anchor = "- Branch Cleanup Harness已通过"
+              item = "- NormalizedRuntimeEvent v1 协议候选：保留 SDK / Extension / RPC / Host 来源、独立源序列、稳定幂等键、分层关联、Durability 与 Provenance，并由 Fixture 派生场景测试约束；\n"
+              if anchor in state:
+                  state = state.replace(anchor, item + anchor, 1)
+              else:
+                  state = f"{state.rstrip()}\n\n{item}"
+
+          state = state.replace(
+              "- 正式 `NormalizedRuntimeEvent`与 SQLite Observation Ledger Schema。",
+              "- SQLite Observation Ledger Schema、Migration 与崩溃恢复语义；",
+          )
+          state = state.replace(
+              "- 正式 `NormalizedRuntimeEvent` 与 SQLite Observation Ledger Schema。",
+              "- SQLite Observation Ledger Schema、Migration 与崩溃恢复语义；",
+          )
+
+          section_start = state.find("## 当前下一步")
+          section_end = state.find("\n## ", section_start + 1) if section_start >= 0 else -1
+          if section_start >= 0:
+              if section_end < 0:
+                  section_end = len(state)
+              current_section = state[section_start:section_end]
+              if "冻结 Observation Ledger Schema" in current_section or "NormalizedRuntimeEvent" in current_section:
+                  replacement = '''## 当前下一步
+
+          按真实 Runtime风险排序：
+
+          1. 冻结 Observation Ledger Schema、Migration 与事务边界；
+          2. 实现 SQLite append-only Ledger、幂等写入与按 Session 回放；
+          3. 接入 Daemon / Pi Worker 并运行崩溃恢复场景。
+          '''
+                  state = state[:section_start] + replacement.rstrip() + "\n" + state[section_end:]
+          state_path.write_text(state, encoding="utf-8")
+          PY
+
+          node --check packages/protocol/src/runtime-events.ts
+          node --check packages/protocol/src/runtime-events.test.ts
+          node --check packages/pi-adapter/src/normalize-runtime-event.ts
+          node --check packages/pi-adapter/src/normalize-runtime-event.test.ts
+
+      - name: Run full repository checks
+        id: checks
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee "$RUNNER_TEMP/runtime-v1-check.log"
+
+      - name: Report failed checks
+        if: steps.checks.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAIL="$(tail -n 180 "$RUNNER_TEMP/runtime-v1-check.log")"
+          BODY=$(cat <<EOF
+          ## NormalizedRuntimeEvent v1 自动集成检查失败
+
+          精确目标分支：`${TARGET_BRANCH}`
+
+          ```text
+          ${TAIL}
+          ```
+
+          未推送集成结果；失败保持可见，下一轮将修复实现或测试而不放宽断言。
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$BODY"
+          exit 1
+
+      - name: Commit integrated protocol
+        if: steps.checks.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "chatgpt-codex-connector@users.noreply.github.com"
+          git add \
+            packages/protocol/src/index.ts \
+            packages/pi-adapter/src/index.ts \
+            packages/pi-adapter/src/normalize-runtime-event.ts \
+            docs/architecture/pi-integration.md \
+            docs/harness/project-state.md
+          if git diff --cached --quiet; then
+            echo "No integration changes remain; target already contains them."
+            exit 0
+          fi
+          git commit -m "feat(m0): integrate runtime event protocol v1"
+          git push origin HEAD:"${TARGET_BRANCH}"
