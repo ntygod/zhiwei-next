@@ -5,20 +5,22 @@
     "part-00.b64",
     "part-01.b64",
     "part-02.b64",
-    "part-03.b64"
+    "part-03.b64",
+    "part-04.b64",
+    "part-05.b64"
   ],
   "partLength": 2400,
-  "base64Length": 9600,
-  "compressedBytes": 7200,
-  "compressedSha256": "abaadbd56d89721e78ca4088e943dc4666431e6d4a7ed6a2009ceadb95e8b101",
-  "jsonBytes": 51475,
-  "jsonSha256": "c28f938094f33e646a5292bfee1a1cdd9b33641e3910f950e5e4fa8af8850d66",
-  "outerContractFingerprint": "6af9788dc9a2cf2326cbc6dbd9914d90b5ffb50687761fb652404631367f8e92",
-  "captureContractFingerprint": "d8b42a078a8655e840fc8ef5029ac0997f3f33f00168f84cb7a3cfcc92b1a0ac",
+  "base64Length": 12980,
+  "compressedBytes": 9735,
+  "compressedSha256": "471c41f24b07fcbdbb9d3204cd25aa4658969f81405d33d1cf8dc5446760e4cf",
+  "jsonBytes": 120977,
+  "jsonSha256": "b06d551498489adde06c3e54ff01f7e15e56f34be6cf961b5fac891040ddf940",
+  "outerContractFingerprint": "938fc175e10a2f0fdea2f387111874fe053b51614c25073ec350936ea22478d4",
+  "captureContractFingerprint": "3b30dfb46bd6e9ffc67646349249b866ecffc076275c0883190ac45274fa4514",
   "source": {
-    "head": "ac4426783a4bfc52e3c6b565ba760d745e436c8b",
-    "workflowRun": 31596589018,
-    "artifactId": 9141323017,
-    "artifactDigest": "sha256:67e761581f2f9f2e8560bc3e4c841f4f706054792d18f157c6302d2a53c2a3f8"
+    "head": "e37f50329f813e4a380b8d4492ab03ca34378dc7",
+    "workflowRun": 31608272319,
+    "artifactId": 9146088659,
+    "artifactDigest": "sha256:fdd1baa922dcb4bff6378298bd594973c1488271ccce589ad26beece0e254639"
   }
 }
