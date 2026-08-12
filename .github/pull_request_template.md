@@ -1,6 +1,6 @@
 ## 目标与结果
 
-<!-- 这项改动解决什么问题？用户或下一层系统最终获得什么？关联 Issue：#... -->
+<!-- 这项改动解决什么问题？用户或下一层系统最终获得什么？使用 Addresses/Closes/Fixes #N 关联唯一 canonical work item。 -->
 
 ## 范围与非目标
 
@@ -42,6 +42,10 @@ npm run check
 
 ## 自主交付记录
 
+- canonical work item：<!-- #N；必须是 Issue，不是 PR -->
+- PR 角色：<!-- primary / recovery -->
+- owner input：<!-- #N / none；仅引用经验证的所有者输入 Issue -->
+- supersedes PR：<!-- #N / none -->
 - 工作来源：<!-- Issue / 人类指令 / 回归 / 里程碑 -->
 - 作者自审：<!-- 完成 / 主要发现 -->
 - 独立 AI 审查：<!-- 不需要 / 待完成 / 评论链接 -->
@@ -50,6 +54,10 @@ npm run check
 
 <!--
 zhiwei-harness
+work-item: #1
+pr-role: primary
+owner-input: none
+supersedes-pr: none
 risk: R1
 autonomous-merge: yes
 independent-review: not-required
