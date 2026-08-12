@@ -139,6 +139,16 @@ npm run check
 - 默认分支 Commit/Tree provenance；
 - token-driven merge 的 dispatch sender/receiver 结果。
 
+在 pull_request CI 的 **pre-merge** 阶段，还必须通过只读 GitHub API核对：
+
+```text
+work-item      → 开放 Issue，不能是 PR
+owner-input    → 仓库所有者创建的 Issue，或 none
+supersedes-pr  → 真实 PR，或 none
+```
+
+静态格式检查不能替代这项实时对象验证；Repository Hygiene 合并后再次查询只作为审计和收敛，不允许先合并再发现类型错误。
+
 未能执行的验证必须写入 PR，不能用“应该没问题”代替。
 
 ## 8. 自审与 Draft PR
@@ -191,7 +201,7 @@ HEAD 变化后旧批准自动失效。审查直接留在 primary PR，不创建 
 - PR 非 Draft；
 - CI 成功且绑定当前 HEAD；
 - PR 合同完整；
-- `work-item`、`owner-input`、`supersedes-pr` 对象类型已验证；
+- pre-merge GitHub API 已验证 `work-item`、`owner-input`、`supersedes-pr` 对象类型；
 - 风险声明不低于机器推断；
 - R2/R3 的 metadata 为 `independent-review: complete`；
 - R2/R3 有匹配当前 HEAD 的可信独立批准；
