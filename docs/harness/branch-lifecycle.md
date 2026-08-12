@@ -2,18 +2,29 @@
 
 ## 定位
 
-工作分支是一次可验证任务的临时工作区，不是长期归档介质。
+工作分支是一次可验证任务的临时工作区，不是长期归档介质。长期审计与恢复依据来自 PR、完整 Commit SHA、Issue、Fixture、ADR、Incident、Provenance Proof 和 Actions 证据。
 
-长期审计与恢复依据来自：
+一个 execution Issue 最多有一个 active branch 和一个 primary PR。Review、Finalize、Integrate 在该分支上完成；不再创建 reviewer、integrator、finalizer 或 retirement PR。
 
-- Pull Request 描述、评论、Review 与合并状态；
-- 完整 Commit SHA 和默认分支历史；
-- Issue、Contract Fixture、ADR、Incident 与 Provenance Proof；
-- GitHub Actions 日志和脱敏 Artifact。
+完整 Issue / Branch / PR 关系见 `work-item-lifecycle.md`。
 
-因此，PR 已经结束后继续保留同仓库工作分支只会增加导航噪声，不增加可信审计能力。
+## 分支创建
 
-## 自动清理入口
+普通分支名必须包含 canonical work-item 编号：
+
+```text
+feat/49-normalized-runtime-event-v1
+fix/63-rpc-eof-loss
+spike/45-sdk-rpc-parity
+chore/57-work-item-lifecycle
+docs/71-memory-explanation
+```
+
+普通前缀为 `feat/`、`fix/`、`docs/`、`chore/`、`spike/`；`recovery/` 只用于 Incident Recovery。禁止普通开发使用 `ai/`、`automation/`、无租约 `helper/` 或没有 Issue 编号的分支。
+
+第一个实质性提交后，在同一工作周期创建 Draft primary PR。禁止长期保留没有 PR 的隐式草稿分支。
+
+## Branch Cleanup 自动入口
 
 `.github/workflows/branch-cleanup.yml` 在以下情况运行：
 
@@ -21,15 +32,15 @@
 2. 每周定时兜底；
 3. 显式 `workflow_dispatch` 手工复验。
 
-Workflow 不 checkout 或执行 PR 分支代码。它只以 `persist-credentials: false` checkout 该次 Workflow 自身绑定的受信任 `${{ github.sha }}`，加载 `scripts/branch-cleanup-policy.mjs`，并通过固定 Commit SHA 的 `actions/github-script` 调用 GitHub API。
+Workflow 不 checkout 或执行 PR 分支代码。它只以 `persist-credentials: false` checkout该次 Workflow自身绑定的受信任 `${{ github.sha }}`，加载 `scripts/branch-cleanup-policy.mjs`，并通过固定 Commit SHA的 `actions/github-script` 调用 GitHub API。
 
-策略模块同时由 `scripts/check-branch-cleanup.mjs` 在普通 `npm run check` 中执行。这样候选选择的语法和确定性场景在 PR 合并前已验证，而真实 Ref删除仍只发生在默认分支可信 Workflow 中。
+策略模块同时由 `scripts/check-branch-cleanup.mjs` 在普通 `npm run check` 中执行。候选选择在 PR 合并前验证，真实 Ref 删除只发生在默认分支可信 Workflow 中。
 
-## 删除候选
+## 关闭 PR 分支的删除候选
 
 一个分支只有同时满足以下条件才会删除：
 
-- 分支位于当前仓库，而不是 Fork；
+- 位于当前仓库，而不是 Fork；
 - GitHub 当前仍能列出该分支；
 - 至少有一个状态为 `closed` 的 PR 使用过该分支；
 - 当前分支 HEAD 与该关闭 PR 记录的 `head.sha` 完全一致；
@@ -37,62 +48,95 @@ Workflow 不 checkout 或执行 PR 分支代码。它只以 `persist-credentials
 - 分支不是仓库默认分支；
 - 分支未标记为 protected。
 
-`closed` 同时覆盖已合并 PR和明确关闭、放弃或被取代的 PR。关闭 PR表示该工作区不再活跃；需要继续工作时应重新打开原 PR或创建新的任务分支，而不是依赖遗留 Ref充当隐式草稿。
+`closed` 覆盖已合并、明确放弃或被取代的 PR。关闭 PR 表示工作区不再活跃；需要继续时从最新 main 创建符合 work-item 规则的新分支，而不是依赖遗留 Ref。
 
-HEAD 精确匹配是额外的防误删边界：若一个旧分支名在 PR关闭后被重新使用，或分支继续增加了未进入该 PR的新 Commit，它不再等于关闭 PR的 `head.sha`，自动化必须保留它。换言之，关闭后继续推进或复用的分支不会因为旧 PR记录而被回收。
+HEAD 精确匹配防止误删：若分支在 PR 关闭后继续增加 Commit 或被同名复用，它不再等于关闭 PR 的 `head.sha`，自动化必须保留。
+
+## Repository Hygiene
+
+`.github/workflows/repository-hygiene.yml` 补充处理 Branch Cleanup 无法安全推断的仓库级漂移：
+
+- 一个 work item 多个开放 primary PR；
+- retirement PR、no-op PR 或 capability-test PR；
+- `automation/*`、`ai/*`、无租约 `helper/*` 孤立分支；
+- 普通分支缺少 work-item 编号；
+- work-item、owner-input、supersedes-pr 的 GitHub 对象类型错误；
+- 已登记的 legacy helper branch 精确 HEAD 清理；
+- 明确登记的 substantive pre-governance snapshot 保留。
+
+一次性迁移记录位于：
+
+```text
+docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
+```
+
+Repository Hygiene 只自动删除该记录明确 allowlist、当前 HEAD 与 `expectedHead` 完全一致、没有开放 PR、非默认且非 protected 的 legacy helper branch。来源不明的普通分支继续 fail closed：报告但不猜测删除。
+
+## Helper Lease
+
+默认禁止 helper branch。确实无法在 primary branch、本地临时目录或受限 Artifact 内完成一次性动作时，临时分支必须命名为：
+
+```text
+helper/<work-item>/<purpose>/<expires-epoch>
+```
+
+并满足：
+
+- parent work item 和 primary PR 已存在；
+- 创建记录包含用途、完整起始 SHA 和到期时间；
+- 没有独立可合并产物；
+- 不创建 PR，尤其禁止 retirement PR；
+- 同一 Workflow 使用结束后立即删除；
+- 删除失败使 Workflow 失败并记录到 primary PR；
+- 被删完整 HEAD 写入日志，可从该 SHA恢复。
+
+不得使用“retire branch” PR 触发 Branch Cleanup，也不得创建辅助 PR来关闭辅助分支。
 
 ## 必须保留
 
-以下分支不会被自动删除：
+以下分支不会被 Branch Cleanup 猜测删除：
 
-- `main` 或未来的实际默认分支；
-- 任一开放 PR使用的同仓库分支；
-- Fork 中的分支；
+- `main` 或未来实际默认分支；
+- 任一开放 PR 使用的同仓库分支；
+- Fork 分支；
 - protected 分支；
-- 没有任何关闭 PR历史的分支；
-- HEAD 已经超过、偏离或复用了关闭 PR记录的分支。
+- 没有关闭 PR历史且不在 reconciliation allowlist 的分支；
+- HEAD 已超过、偏离或复用关闭 PR记录的分支；
+- reconciliation 中以 `preserve-snapshot` 且 HEAD 精确匹配的分支。
 
-最后两条是保守边界：自动化不会猜测一个没有 PR记录的分支是否可丢弃，也不会把旧 PR历史错误套到后来复用的同名分支上。发现此类孤立分支时应先建立或关闭对应 PR，再进入正常回收路径。
+没有 PR历史不再意味着可以通过创建一个 retirement PR来清理。应先验证来源；仅 legacy allowlist 或合规 helper lease 能由 Repository Hygiene 删除。
 
 ## 安全与幂等
 
-- Workflow 权限仅为 `contents: write` 和 `pull-requests: read`；
+- Branch Cleanup权限仅为 `contents: write` 和 `pull-requests: read`；Repository Hygiene另需 `issues: read`；
 - 不使用 `pull_request_target`；
 - 不读取 `${{ secrets.* }}`；
-- 不 checkout 或执行 PR 分支代码，不使用 `workflow_run.head_sha`；
-- 可信 checkout 固定到该次运行的 `${{ github.sha }}`，且不持久化 Git凭证；
-- 初次选择前重新读取所有现存分支、开放 PR和关闭 PR；
-- 删除候选同时绑定分支名与关闭 PR的真实 `head.sha`；
-- 每个候选在删除前再次读取当前仓库默认分支、当前 branch protection、当前 HEAD和同名开放 PR；任一状态变化都会保留该分支；
-- 策略模块和 Checker在普通 CI中运行完整确定性场景；Workflow执行真实删除前再次运行同一套场景；
-- 已被其他运行删除的 Ref返回 `404` 时安全跳过；
-- 其他删除失败会让 Job失败并在 Actions 历史中可见；
-- 并发组不取消正在执行的清理，避免两个运行互相打断。
+- 不 checkout 或执行 PR 分支代码；
+- 可信 checkout 固定到 `${{ github.sha }}`，且不持久化 Git凭证；
+- 初次选择前重新读取分支、开放 PR和必要的关闭 PR；
+- 删除候选绑定分支名与真实完整 SHA；
+- 删除前再次读取默认分支、protection、当前 HEAD和同名开放 PR；
+- 任一状态变化都会保留分支并使异常可见；
+- `404` 表示其他运行已删除，安全跳过；
+- 其他删除失败让 Job失败；
+- 并发组不取消正在执行的清理；
+- 不使用 force-push 或改写历史。
 
-GitHub 的 Ref 删除 API不提供原子 compare-and-delete，因此最终状态复核与 `deleteRef` 之间仍存在极短竞态窗口。当前仓库为单所有者、AI-primary写入模型，且错误删除可以从已记录 SHA恢复；该残余风险通过删除前即时复核、串行清理、失败可见性和恢复流程控制，不描述为绝对零风险。
+GitHub Ref删除 API没有原子 compare-and-delete。最终复核与 `deleteRef` 之间仍有极短竞态窗口；通过单所有者模型、即时复核、串行执行、完整 SHA日志和可恢复性降低风险，不描述为零风险。
 
-策略场景至少覆盖：
+## 策略场景
+
+至少覆盖：
 
 - 关闭 PR分支可删除；
-- 同一分支的多个关闭 PR记录稳定排序；
-- 开放 PR分支保留；
-- 关闭后已推进或复用的分支保留；
-- 默认和 protected 分支保留；
-- Fork 与无 PR分支保留；
-- 已不存在分支幂等跳过。
-
-## 历史分支的一次性收敛
-
-启用 Workflow 时，仓库已有的关闭 PR工作分支会在首个成功清理运行中统一回收。
-
-当前启用前应保留：
-
-```text
-main
-spike/m0-pi-lifecycle-capture  # PR #17 尚开放时
-```
-
-其余已合并或被后续 PR取代、且 HEAD 仍等于对应关闭 PR `head.sha` 的分支均符合回收条件。PR #17 结束后，它的分支也进入同一规则，不需要特殊名单。
+- 开放 PR、默认、protected、Fork分支保留；
+- 关闭后继续推进或复用的分支保留；
+- 无 PR普通分支保留；
+- 已不存在分支幂等跳过；
+- exact-head legacy helper可删除；
+- helper HEAD移动、获得开放 PR或变为 protected时拒绝删除；
+- preserved snapshot HEAD移动时 fail closed；
+- 多 primary PR、retirement PR和对象类型错误被报告。
 
 ## 回滚与恢复
 
@@ -100,9 +144,9 @@ spike/m0-pi-lifecycle-capture  # PR #17 尚开放时
 
 如策略错误：
 
-1. 立即禁用或通过新的 R3治理 PR删除 Branch Cleanup Workflow；
-2. 从 PR 的 `head_sha`、相关 Commit SHA或 GitHub 保留的 PR引用重新创建分支；
-3. 核对恢复分支 tree 后再继续工作；
+1. 立即通过新的 R3治理 PR禁用对应 Workflow；
+2. 从日志、PR `head_sha` 或 reconciliation 的完整 SHA重新创建分支；
+3. 核对恢复分支 tree 后再继续；
 4. 若错误触及开放工作或默认分支安全边界，创建 R3 Incident并暂停相关自动化。
 
 不得通过 force-push 或改写共享历史恢复分支。
