@@ -156,7 +156,7 @@ function runPrimaryCapture() {
   stage = "primary:capture";
   const primaryOutput = join(dirname(outputPath), "primary-sdk-rpc-parity.json");
   const result = spawnSync(process.execPath, [primaryCapturePath], {
-    cwd: join(workspaceDir, "primary"),
+    cwd: workspaceDir,
     env: {
       ...process.env,
       PI_LIFECYCLE_OUTPUT: primaryOutput,
