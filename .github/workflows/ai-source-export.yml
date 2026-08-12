@@ -5,7 +5,7 @@ on:
     branches:
       - spike/m0-pi-compaction-session-replacement
     paths:
-      - .github/ai-initial-trigger
+      - .github/ai-initial-trigger-v2
 
 permissions:
   contents: write
@@ -39,9 +39,10 @@ jobs:
           diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/archive-files.txt"
           tar -xzf "$PAYLOAD"
 
+          cp .github/workflows/pi-compaction-session-replacement.yml "$RUNNER_TEMP/pi-compaction-session-replacement.yml"
+          rm -f .github/workflows/pi-compaction-session-replacement.yml
           rm -rf .github/ai-payload
-          rm -f .github/ai-initial-trigger
-          rm -f .github/workflows/ai-source-export.yml
+          rm -f .github/ai-initial-trigger .github/ai-initial-trigger-v2
 
           node --check scripts/probes/pi-compaction-session-replacement-capture.mjs
           node --check scripts/check-pi-compaction-session-replacement-result.mjs
@@ -49,7 +50,7 @@ jobs:
           git diff --check
           git status --short
 
-      - name: Commit initial implementation
+      - name: Commit initial implementation without workflow mutation
         shell: bash
         run: |
           set -euo pipefail
@@ -57,9 +58,8 @@ jobs:
           git config user.email "chatgpt-codex-connector@users.noreply.github.com"
           git add \
             scripts/probes/pi-compaction-session-replacement-capture.mjs \
-            scripts/check-pi-compaction-session-replacement-result.mjs \
-            .github/workflows/pi-compaction-session-replacement.yml
-          git add -u .github/ai-payload .github/ai-initial-trigger .github/workflows/ai-source-export.yml
+            scripts/check-pi-compaction-session-replacement-result.mjs
+          git add -u .github/ai-payload .github/ai-initial-trigger .github/ai-initial-trigger-v2
           git diff --cached --check
           if git diff --cached --quiet; then
             echo "Implementation payload produced no changes."
