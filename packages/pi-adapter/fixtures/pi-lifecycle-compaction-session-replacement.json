@@ -1,0 +1,1215 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scenario": "compaction-session-replacement",
+  "upstream": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "artifact": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "installScriptsExecuted": false
+  },
+  "environment": {
+    "node": "22.23.1",
+    "npm": "10.9.8",
+    "platform": "linux-x64",
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+  },
+  "isolation": {
+    "hostSecretsPassedToProbe": false,
+    "hostWorkspaceMounted": false,
+    "sourceBundleReadOnly": true,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true
+  },
+  "capture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scenario": "compaction-session-replacement",
+    "package": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1"
+    },
+    "cases": {
+      "manualCompaction": {
+        "prompts": [
+          "Remember the first fixed compaction fact.",
+          "Remember the second fixed compaction fact."
+        ],
+        "responses": [
+          "First compaction response recorded.",
+          "Second compaction response recorded."
+        ],
+        "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+        "summaryUsage": {
+          "input": 11,
+          "output": 7,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 23,
+          "cost": {
+            "input": 0.11,
+            "output": 0.07,
+            "cacheRead": 0.03,
+            "cacheWrite": 0.02,
+            "total": 0.23
+          }
+        },
+        "provider": {
+          "id": "zhiwei-compaction-faux",
+          "api": "zhiwei-compaction-faux-api",
+          "callsBeforeCompact": 2,
+          "callsAfterCompact": 2,
+          "pendingBeforeCompact": 1,
+          "pendingAfterCompact": 1,
+          "promptsSentToExternalProvider": 0
+        },
+        "before": {
+          "messages": [
+            {
+              "index": 0,
+              "role": "user",
+              "contentKinds": [
+                "text"
+              ],
+              "text": "Remember the first fixed compaction fact."
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "stopReason": "stop",
+              "contentKinds": [
+                "text"
+              ],
+              "text": "First compaction response recorded."
+            },
+            {
+              "index": 2,
+              "role": "user",
+              "contentKinds": [
+                "text"
+              ],
+              "text": "Remember the second fixed compaction fact."
+            },
+            {
+              "index": 3,
+              "role": "assistant",
+              "stopReason": "stop",
+              "contentKinds": [
+                "text"
+              ],
+              "text": "Second compaction response recorded."
+            }
+          ],
+          "entries": [
+            {
+              "entry": "compaction-entry-1",
+              "parent": null,
+              "type": "model_change",
+              "provider": "zhiwei-compaction-faux",
+              "modelId": "faux-1"
+            },
+            {
+              "entry": "compaction-entry-2",
+              "parent": "compaction-entry-1",
+              "type": "thinking_level_change",
+              "thinkingLevel": "off"
+            },
+            {
+              "entry": "compaction-entry-3",
+              "parent": "compaction-entry-2",
+              "type": "message",
+              "message": {
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Remember the first fixed compaction fact."
+              }
+            },
+            {
+              "entry": "compaction-entry-4",
+              "parent": "compaction-entry-3",
+              "type": "message",
+              "message": {
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "First compaction response recorded."
+              }
+            },
+            {
+              "entry": "compaction-entry-5",
+              "parent": "compaction-entry-4",
+              "type": "message",
+              "message": {
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Remember the second fixed compaction fact."
+              }
+            },
+            {
+              "entry": "compaction-entry-6",
+              "parent": "compaction-entry-5",
+              "type": "message",
+              "message": {
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Second compaction response recorded."
+              }
+            }
+          ],
+          "entryTypes": [
+            "model_change",
+            "thinking_level_change",
+            "message",
+            "message",
+            "message",
+            "message"
+          ],
+          "stats": {
+            "userMessages": 2,
+            "assistantMessages": 2,
+            "toolCalls": 0,
+            "toolResults": 0,
+            "totalMessages": 4,
+            "tokens": {
+              "input": 472,
+              "output": 18,
+              "cacheRead": 448,
+              "cacheWrite": 472,
+              "total": 1410
+            },
+            "cost": 0
+          },
+          "isIdle": true,
+          "isCompacting": false
+        },
+        "compactResult": {
+          "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+          "firstKeptEntry": "compaction-entry-6",
+          "tokensBefore": 505,
+          "estimatedTokensAfter": 41,
+          "usage": {
+            "input": 11,
+            "output": 7,
+            "cacheRead": 3,
+            "cacheWrite": 2,
+            "totalTokens": 23,
+            "cost": {
+              "input": 0.11,
+              "output": 0.07,
+              "cacheRead": 0.03,
+              "cacheWrite": 0.02,
+              "total": 0.23
+            }
+          },
+          "details": {
+            "source": "zhiwei-extension",
+            "schemaVersion": 1
+          }
+        },
+        "after": {
+          "messages": [
+            {
+              "index": 0,
+              "role": "compactionSummary",
+              "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+              "tokensBefore": 505
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "stopReason": "stop",
+              "contentKinds": [
+                "text"
+              ],
+              "text": "Second compaction response recorded."
+            }
+          ],
+          "entries": [
+            {
+              "entry": "compaction-entry-1",
+              "parent": null,
+              "type": "model_change",
+              "provider": "zhiwei-compaction-faux",
+              "modelId": "faux-1"
+            },
+            {
+              "entry": "compaction-entry-2",
+              "parent": "compaction-entry-1",
+              "type": "thinking_level_change",
+              "thinkingLevel": "off"
+            },
+            {
+              "entry": "compaction-entry-3",
+              "parent": "compaction-entry-2",
+              "type": "message",
+              "message": {
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Remember the first fixed compaction fact."
+              }
+            },
+            {
+              "entry": "compaction-entry-4",
+              "parent": "compaction-entry-3",
+              "type": "message",
+              "message": {
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "First compaction response recorded."
+              }
+            },
+            {
+              "entry": "compaction-entry-5",
+              "parent": "compaction-entry-4",
+              "type": "message",
+              "message": {
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Remember the second fixed compaction fact."
+              }
+            },
+            {
+              "entry": "compaction-entry-6",
+              "parent": "compaction-entry-5",
+              "type": "message",
+              "message": {
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Second compaction response recorded."
+              }
+            },
+            {
+              "entry": "compaction-entry-7",
+              "parent": "compaction-entry-6",
+              "type": "compaction",
+              "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+              "firstKeptEntry": "compaction-entry-6",
+              "tokensBefore": 505,
+              "usage": {
+                "input": 11,
+                "output": 7,
+                "cacheRead": 3,
+                "cacheWrite": 2,
+                "totalTokens": 23,
+                "cost": {
+                  "input": 0.11,
+                  "output": 0.07,
+                  "cacheRead": 0.03,
+                  "cacheWrite": 0.02,
+                  "total": 0.23
+                }
+              },
+              "details": {
+                "source": "zhiwei-extension",
+                "schemaVersion": 1
+              }
+            }
+          ],
+          "entryTypes": [
+            "model_change",
+            "thinking_level_change",
+            "message",
+            "message",
+            "message",
+            "message",
+            "compaction"
+          ],
+          "stats": {
+            "userMessages": 2,
+            "assistantMessages": 2,
+            "toolCalls": 0,
+            "toolResults": 0,
+            "totalMessages": 4,
+            "tokens": {
+              "input": 483,
+              "output": 25,
+              "cacheRead": 451,
+              "cacheWrite": 474,
+              "total": 1433
+            },
+            "cost": 0.23
+          },
+          "isIdle": true,
+          "isCompacting": false
+        },
+        "extensionBeforeSnapshot": {
+          "branchEntryTypes": [
+            "model_change",
+            "thinking_level_change",
+            "message",
+            "message",
+            "message",
+            "message"
+          ],
+          "firstKeptEntry": "compaction-entry-6"
+        },
+        "publicEvents": [
+          {
+            "sequence": 1,
+            "type": "compaction_start",
+            "reason": "manual"
+          },
+          {
+            "sequence": 2,
+            "type": "compaction_end",
+            "reason": "manual",
+            "aborted": false,
+            "willRetry": false,
+            "result": {
+              "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+              "firstKeptEntry": "compaction-entry-6",
+              "tokensBefore": 505,
+              "estimatedTokensAfter": 41,
+              "usage": {
+                "input": 11,
+                "output": 7,
+                "cacheRead": 3,
+                "cacheWrite": 2,
+                "totalTokens": 23,
+                "cost": {
+                  "input": 0.11,
+                  "output": 0.07,
+                  "cacheRead": 0.03,
+                  "cacheWrite": 0.02,
+                  "total": 0.23
+                }
+              },
+              "details": {
+                "source": "zhiwei-extension",
+                "schemaVersion": 1
+              }
+            }
+          }
+        ],
+        "extensionEvents": [
+          {
+            "sequence": 1,
+            "type": "session_before_compact",
+            "reason": "manual",
+            "willRetry": false,
+            "firstKeptEntry": "compaction-entry-6",
+            "tokensBefore": 505,
+            "branchEntryTypes": [
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "message",
+              "message"
+            ],
+            "branchEntryAliases": [
+              "compaction-entry-1",
+              "compaction-entry-2",
+              "compaction-entry-3",
+              "compaction-entry-4",
+              "compaction-entry-5",
+              "compaction-entry-6"
+            ],
+            "signalAborted": false
+          },
+          {
+            "sequence": 2,
+            "type": "session_compact",
+            "reason": "manual",
+            "fromExtension": true,
+            "compactionEntry": "compaction-entry-7",
+            "firstKeptEntry": "compaction-entry-6",
+            "summary": "Verified extension summary.\n- First fixed compaction fact was recorded.\n- Second fixed compaction fact remains the recent turn.",
+            "tokensBefore": 505,
+            "usage": {
+              "input": 11,
+              "output": 7,
+              "cacheRead": 3,
+              "cacheWrite": 2,
+              "totalTokens": 23,
+              "cost": {
+                "input": 0.11,
+                "output": 0.07,
+                "cacheRead": 0.03,
+                "cacheWrite": 0.02,
+                "total": 0.23
+              }
+            },
+            "details": {
+              "source": "zhiwei-extension",
+              "schemaVersion": 1
+            }
+          },
+          {
+            "sequence": 3,
+            "type": "session_shutdown",
+            "reason": "exit"
+          }
+        ],
+        "counts": {
+          "public": {
+            "compaction_end": 1,
+            "compaction_start": 1
+          },
+          "extension": {
+            "session_before_compact": 1,
+            "session_compact": 1,
+            "session_shutdown": 1
+          },
+          "entriesBefore": 6,
+          "entriesAfter": 7,
+          "compactionEntriesAfter": 1
+        },
+        "aliases": {
+          "entries": [
+            "compaction-entry-1",
+            "compaction-entry-2",
+            "compaction-entry-3",
+            "compaction-entry-4",
+            "compaction-entry-5",
+            "compaction-entry-6",
+            "compaction-entry-7"
+          ]
+        },
+        "lifecycleNotes": [
+          {
+            "type": "shutdown-host-boundary",
+            "mechanism": "session.extensionRunner.emit",
+            "reason": "exit"
+          }
+        ]
+      },
+      "sessionReplacement": {
+        "prompts": {
+          "original": "Create the original replacement session fact.",
+          "fresh": "Create the new replacement session fact.",
+          "resumed": "Append a fact after resuming the original session."
+        },
+        "responses": {
+          "original": "Original session response.",
+          "fresh": "New session response.",
+          "resumed": "Resumed original session response."
+        },
+        "provider": {
+          "id": "zhiwei-session-replacement-faux",
+          "api": "zhiwei-session-replacement-faux-api",
+          "callCount": 3,
+          "pendingResponses": 0,
+          "promptsSentToExternalProvider": 0
+        },
+        "snapshots": {
+          "initial": {
+            "sessionObject": "session-object-1",
+            "sessionFile": "session-file-1",
+            "messages": [
+              {
+                "index": 0,
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Create the original replacement session fact."
+              },
+              {
+                "index": 1,
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Original session response."
+              }
+            ],
+            "isIdle": true
+          },
+          "newBeforePrompt": {
+            "sessionObject": "session-object-2",
+            "sessionFile": "session-file-2",
+            "messages": [],
+            "isIdle": true
+          },
+          "newAfterPrompt": {
+            "sessionObject": "session-object-2",
+            "sessionFile": "session-file-2",
+            "messages": [
+              {
+                "index": 0,
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Create the new replacement session fact."
+              },
+              {
+                "index": 1,
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "New session response."
+              }
+            ],
+            "isIdle": true
+          },
+          "resumedBeforePrompt": {
+            "sessionObject": "session-object-3",
+            "sessionFile": "session-file-1",
+            "messages": [
+              {
+                "index": 0,
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Create the original replacement session fact."
+              },
+              {
+                "index": 1,
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Original session response."
+              }
+            ],
+            "isIdle": true
+          },
+          "resumedAfterPrompt": {
+            "sessionObject": "session-object-3",
+            "sessionFile": "session-file-1",
+            "messages": [
+              {
+                "index": 0,
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Create the original replacement session fact."
+              },
+              {
+                "index": 1,
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Original session response."
+              },
+              {
+                "index": 2,
+                "role": "user",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Append a fact after resuming the original session."
+              },
+              {
+                "index": 3,
+                "role": "assistant",
+                "stopReason": "stop",
+                "contentKinds": [
+                  "text"
+                ],
+                "text": "Resumed original session response."
+              }
+            ],
+            "isIdle": true
+          }
+        },
+        "operations": {
+          "newSession": {
+            "cancelled": false
+          },
+          "switchSession": {
+            "cancelled": false
+          }
+        },
+        "extensionEvents": [
+          {
+            "sequence": 1,
+            "type": "session_start",
+            "generation": 1,
+            "reason": "startup"
+          },
+          {
+            "sequence": 2,
+            "type": "input",
+            "generation": 1,
+            "source": "interactive"
+          },
+          {
+            "sequence": 3,
+            "type": "message_end",
+            "generation": 1,
+            "messageRole": "user",
+            "messageText": "Create the original replacement session fact."
+          },
+          {
+            "sequence": 4,
+            "type": "message_end",
+            "generation": 1,
+            "messageRole": "assistant",
+            "messageText": "Original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 5,
+            "type": "agent_end",
+            "generation": 1
+          },
+          {
+            "sequence": 6,
+            "type": "agent_settled",
+            "generation": 1
+          },
+          {
+            "sequence": 7,
+            "type": "session_before_switch",
+            "generation": 1,
+            "reason": "new"
+          },
+          {
+            "sequence": 8,
+            "type": "session_shutdown",
+            "generation": 1,
+            "reason": "new",
+            "targetSessionFile": "session-file-2"
+          },
+          {
+            "sequence": 9,
+            "type": "session_start",
+            "generation": 2,
+            "reason": "new",
+            "previousSessionFile": "session-file-1"
+          },
+          {
+            "sequence": 10,
+            "type": "input",
+            "generation": 2,
+            "source": "interactive"
+          },
+          {
+            "sequence": 11,
+            "type": "message_end",
+            "generation": 2,
+            "messageRole": "user",
+            "messageText": "Create the new replacement session fact."
+          },
+          {
+            "sequence": 12,
+            "type": "message_end",
+            "generation": 2,
+            "messageRole": "assistant",
+            "messageText": "New session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 13,
+            "type": "agent_end",
+            "generation": 2
+          },
+          {
+            "sequence": 14,
+            "type": "agent_settled",
+            "generation": 2
+          },
+          {
+            "sequence": 15,
+            "type": "session_before_switch",
+            "generation": 2,
+            "reason": "resume",
+            "targetSessionFile": "session-file-1"
+          },
+          {
+            "sequence": 16,
+            "type": "session_shutdown",
+            "generation": 2,
+            "reason": "resume",
+            "targetSessionFile": "session-file-1"
+          },
+          {
+            "sequence": 17,
+            "type": "session_start",
+            "generation": 3,
+            "reason": "resume",
+            "previousSessionFile": "session-file-2"
+          },
+          {
+            "sequence": 18,
+            "type": "input",
+            "generation": 3,
+            "source": "interactive"
+          },
+          {
+            "sequence": 19,
+            "type": "message_end",
+            "generation": 3,
+            "messageRole": "user",
+            "messageText": "Append a fact after resuming the original session."
+          },
+          {
+            "sequence": 20,
+            "type": "message_end",
+            "generation": 3,
+            "messageRole": "assistant",
+            "messageText": "Resumed original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 21,
+            "type": "agent_end",
+            "generation": 3
+          },
+          {
+            "sequence": 22,
+            "type": "agent_settled",
+            "generation": 3
+          },
+          {
+            "sequence": 23,
+            "type": "session_shutdown",
+            "generation": 3,
+            "reason": "quit"
+          }
+        ],
+        "replacementPhases": [
+          {
+            "sequence": 1,
+            "phase": "initial:bind-extensions:start",
+            "sessionObject": "session-object-1",
+            "generation": 1
+          },
+          {
+            "sequence": 2,
+            "phase": "extension:session_start",
+            "generation": 1,
+            "reason": "startup",
+            "targetSessionFile": null,
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 3,
+            "phase": "initial:bind-extensions:end",
+            "sessionObject": "session-object-1",
+            "generation": 1
+          },
+          {
+            "sequence": 4,
+            "phase": "public-listener:attach",
+            "sessionObject": "session-object-1",
+            "bindingReason": "initial"
+          },
+          {
+            "sequence": 5,
+            "phase": "extension:session_before_switch",
+            "generation": 1,
+            "reason": "new",
+            "targetSessionFile": null,
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 6,
+            "phase": "extension:session_shutdown",
+            "generation": 1,
+            "reason": "new",
+            "targetSessionFile": "session-file-2",
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 7,
+            "phase": "before-session-invalidate",
+            "sessionObject": "session-object-1",
+            "sessionFile": "session-file-1"
+          },
+          {
+            "sequence": 8,
+            "phase": "rebind-session:start",
+            "sessionObject": "session-object-2",
+            "sessionFile": "session-file-2",
+            "generation": 2
+          },
+          {
+            "sequence": 9,
+            "phase": "extension:session_start",
+            "generation": 2,
+            "reason": "new",
+            "targetSessionFile": null,
+            "previousSessionFile": "session-file-1"
+          },
+          {
+            "sequence": 10,
+            "phase": "rebind-session:extensions-bound",
+            "sessionObject": "session-object-2",
+            "generation": 2
+          },
+          {
+            "sequence": 11,
+            "phase": "public-listener:attach",
+            "sessionObject": "session-object-2",
+            "bindingReason": "replacement"
+          },
+          {
+            "sequence": 12,
+            "phase": "rebind-session:end",
+            "sessionObject": "session-object-2",
+            "generation": 2
+          },
+          {
+            "sequence": 13,
+            "phase": "with-session:new",
+            "sessionObject": "session-object-2",
+            "sessionFile": "session-file-2",
+            "cwdMatches": true,
+            "isIdle": true
+          },
+          {
+            "sequence": 14,
+            "phase": "extension:session_before_switch",
+            "generation": 2,
+            "reason": "resume",
+            "targetSessionFile": "session-file-1",
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 15,
+            "phase": "extension:session_shutdown",
+            "generation": 2,
+            "reason": "resume",
+            "targetSessionFile": "session-file-1",
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 16,
+            "phase": "before-session-invalidate",
+            "sessionObject": "session-object-2",
+            "sessionFile": "session-file-2"
+          },
+          {
+            "sequence": 17,
+            "phase": "rebind-session:start",
+            "sessionObject": "session-object-3",
+            "sessionFile": "session-file-1",
+            "generation": 3
+          },
+          {
+            "sequence": 18,
+            "phase": "extension:session_start",
+            "generation": 3,
+            "reason": "resume",
+            "targetSessionFile": null,
+            "previousSessionFile": "session-file-2"
+          },
+          {
+            "sequence": 19,
+            "phase": "rebind-session:extensions-bound",
+            "sessionObject": "session-object-3",
+            "generation": 3
+          },
+          {
+            "sequence": 20,
+            "phase": "public-listener:attach",
+            "sessionObject": "session-object-3",
+            "bindingReason": "replacement"
+          },
+          {
+            "sequence": 21,
+            "phase": "rebind-session:end",
+            "sessionObject": "session-object-3",
+            "generation": 3
+          },
+          {
+            "sequence": 22,
+            "phase": "with-session:resume",
+            "sessionObject": "session-object-3",
+            "sessionFile": "session-file-1",
+            "cwdMatches": true,
+            "isIdle": true
+          },
+          {
+            "sequence": 23,
+            "phase": "extension:session_shutdown",
+            "generation": 3,
+            "reason": "quit",
+            "targetSessionFile": null,
+            "previousSessionFile": null
+          },
+          {
+            "sequence": 24,
+            "phase": "before-session-invalidate",
+            "sessionObject": "session-object-3",
+            "sessionFile": "session-file-1"
+          }
+        ],
+        "legacyPublicEvents": [
+          {
+            "sequence": 1,
+            "sessionObject": "session-object-1",
+            "type": "agent_start"
+          },
+          {
+            "sequence": 2,
+            "sessionObject": "session-object-1",
+            "type": "turn_start"
+          },
+          {
+            "sequence": 3,
+            "sessionObject": "session-object-1",
+            "type": "message_end",
+            "messageRole": "user",
+            "messageText": "Create the original replacement session fact."
+          },
+          {
+            "sequence": 4,
+            "sessionObject": "session-object-1",
+            "type": "message_end",
+            "messageRole": "assistant",
+            "messageText": "Original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 5,
+            "sessionObject": "session-object-1",
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "messageText": "Original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 6,
+            "sessionObject": "session-object-1",
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 7,
+            "sessionObject": "session-object-1",
+            "type": "agent_settled"
+          }
+        ],
+        "reboundPublicEvents": [
+          {
+            "sequence": 1,
+            "sessionObject": "session-object-1",
+            "type": "agent_start"
+          },
+          {
+            "sequence": 2,
+            "sessionObject": "session-object-1",
+            "type": "turn_start"
+          },
+          {
+            "sequence": 3,
+            "sessionObject": "session-object-1",
+            "type": "message_end",
+            "messageRole": "user",
+            "messageText": "Create the original replacement session fact."
+          },
+          {
+            "sequence": 4,
+            "sessionObject": "session-object-1",
+            "type": "message_end",
+            "messageRole": "assistant",
+            "messageText": "Original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 5,
+            "sessionObject": "session-object-1",
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "messageText": "Original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 6,
+            "sessionObject": "session-object-1",
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 7,
+            "sessionObject": "session-object-1",
+            "type": "agent_settled"
+          },
+          {
+            "sequence": 8,
+            "sessionObject": "session-object-2",
+            "type": "agent_start"
+          },
+          {
+            "sequence": 9,
+            "sessionObject": "session-object-2",
+            "type": "turn_start"
+          },
+          {
+            "sequence": 10,
+            "sessionObject": "session-object-2",
+            "type": "message_end",
+            "messageRole": "user",
+            "messageText": "Create the new replacement session fact."
+          },
+          {
+            "sequence": 11,
+            "sessionObject": "session-object-2",
+            "type": "message_end",
+            "messageRole": "assistant",
+            "messageText": "New session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 12,
+            "sessionObject": "session-object-2",
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "messageText": "New session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 13,
+            "sessionObject": "session-object-2",
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 14,
+            "sessionObject": "session-object-2",
+            "type": "agent_settled"
+          },
+          {
+            "sequence": 15,
+            "sessionObject": "session-object-3",
+            "type": "agent_start"
+          },
+          {
+            "sequence": 16,
+            "sessionObject": "session-object-3",
+            "type": "turn_start"
+          },
+          {
+            "sequence": 17,
+            "sessionObject": "session-object-3",
+            "type": "message_end",
+            "messageRole": "user",
+            "messageText": "Append a fact after resuming the original session."
+          },
+          {
+            "sequence": 18,
+            "sessionObject": "session-object-3",
+            "type": "message_end",
+            "messageRole": "assistant",
+            "messageText": "Resumed original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 19,
+            "sessionObject": "session-object-3",
+            "type": "turn_end",
+            "messageRole": "assistant",
+            "messageText": "Resumed original session response.",
+            "stopReason": "stop"
+          },
+          {
+            "sequence": 20,
+            "sessionObject": "session-object-3",
+            "type": "agent_end",
+            "willRetry": false
+          },
+          {
+            "sequence": 21,
+            "sessionObject": "session-object-3",
+            "type": "agent_settled"
+          }
+        ],
+        "negativeEvidence": {
+          "legacySubscriptionMigrated": false,
+          "legacyCountAfterOriginalPrompt": 7,
+          "legacyCountAfterNewPrompt": 7,
+          "legacyCountAfterResumePrompt": 7,
+          "publicSubscriptionRequiresRebind": true
+        },
+        "aliases": {
+          "sessionObjects": [
+            "session-object-1",
+            "session-object-2",
+            "session-object-3"
+          ],
+          "sessionFiles": [
+            "session-file-1",
+            "session-file-2"
+          ]
+        },
+        "counts": {
+          "extension": {
+            "agent_end": 3,
+            "agent_settled": 3,
+            "input": 3,
+            "message_end": 6,
+            "session_before_switch": 2,
+            "session_shutdown": 3,
+            "session_start": 3
+          },
+          "legacyPublic": {
+            "agent_end": 1,
+            "agent_settled": 1,
+            "agent_start": 1,
+            "message_end": 2,
+            "turn_end": 1,
+            "turn_start": 1
+          },
+          "reboundPublic": {
+            "agent_end": 3,
+            "agent_settled": 3,
+            "agent_start": 3,
+            "message_end": 6,
+            "turn_end": 3,
+            "turn_start": 3
+          },
+          "extensionGenerations": 3,
+          "sessionObjects": 3,
+          "sessionFiles": 2
+        },
+        "lifecycleNotes": [
+          {
+            "type": "runtime-dispose-boundary",
+            "mechanism": "AgentSessionRuntime.dispose",
+            "reason": "exit"
+          }
+        ]
+      }
+    },
+    "sanitization": {
+      "absolutePathsIncluded": false,
+      "rawSessionIdIncluded": false,
+      "rawSessionFileIncluded": false,
+      "rawEntryIdIncluded": false,
+      "environmentDumpIncluded": false,
+      "credentialsIncluded": false,
+      "rawChainOfThoughtIncluded": false
+    },
+    "contractFingerprint": "f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee"
+  },
+  "contractFingerprint": "9ebe87b12f0670214fa1244239d21d7a517b2332da2f3f85b3372b8b6895ab75"
+}

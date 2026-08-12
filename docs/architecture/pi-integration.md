@@ -26,7 +26,11 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Cancel / Retry公共与 Extension差异 | 已验证，Extension仍不提供 `auto_retry_start/end`或 `willRetry`增强 |
 | 并行 Tool ordering | 已验证，完成顺序 `beta → gamma → alpha`，Tool Result消息顺序 `alpha → beta → gamma` |
 | 并行 Tool公共/Extension表面 | 已验证，Public end与 Extension result跟随真实完成，消息与 `turn_end.toolResults`恢复声明顺序 |
-| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` → `source-and-runtime-verified-parallel-tool-ordering` |
+| Manual Compaction | 已验证，当前上下文变为 `compactionSummary → assistant`，原始 Entry树保留并追加 Compaction Entry |
+| Compaction Public/Extension表面 | 已验证，Public只有 start/end且 `entry_appended=0`；Extension提供 before/compact与确定性 Summary |
+| Session Replacement | 已验证，Original → New → Resume，Session File与内存 Session Object分别变化 |
+| Replacement Rebind | 已验证，旧 Public Listener不会自动迁移，Extension绑定与 Public Listener必须显式 Rebind |
+| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` → `source-and-runtime-verified-parallel-tool-ordering` → `source-and-runtime-verified-compaction-session-replacement` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -37,6 +41,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json
 packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
+packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
 ```
 
 当前固定的是 **M0契约基线**，不是生产依赖承诺。仓库仍未将 Pi加入正式依赖，也未冻结 `NormalizedRuntimeEvent`。
@@ -47,8 +52,8 @@ Pi至少暴露三类不能混为一谈的表面：
 
 | 表面 | 用途 | 当前确认程度 |
 |---|---|---|
-| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消、exhaustion和并行 Tool顺序均已动态验证 |
-| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消、exhaustion和并行 Tool底层生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
+| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消、exhaustion、并行 Tool、Compaction与 Session Replacement均已动态验证 |
+| Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消、exhaustion、并行 Tool、Compaction与 Session Replacement生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
 | RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型及无凭证空 Session启动已验证；真实任务时序待录制 |
 
 `pi-adapter`必须显式标记事件来自哪个表面，不能仅凭同名事件假设载荷和时序相同。
@@ -68,7 +73,7 @@ Pi至少暴露三类不能混为一谈的表面：
 - 不挂载宿主仓库，只挂载只读 curated probe bundle；
 - 不传 GitHub Secret、真实 Provider Credential、用户数据或完整环境变量；
 - Runtime场景只使用 Pi发布包自带内存 Faux Provider；
-- Normal Tool的 `echo`、Retry、Follow-up、取消/耗尽和并行 `ordered_echo`场景都没有外部副作用；
+- Normal Tool的 `echo`、Retry、Follow-up、取消/耗尽、并行 `ordered_echo`、Compaction和 Session Replacement场景都没有外部业务副作用；
 - 只输出脱敏、可机器复验结果。
 
 这些验证证明发布 Artifact的公开 manifest与目标运行表面符合当前基线。它们不是完整供应链审计，也不证明 Tarball每个源码字节都可由 Git Tag可重现构建得到。
@@ -355,11 +360,77 @@ Ledger需要分别记录：
 
 完成事件和消息不能覆盖彼此；两组顺序都属于可审计证据。
 
+## 已验证的 Compaction 与 Session Replacement
+
+详细事件与状态表见 [`compaction-session-replacement-lifecycle.md`](../spikes/pi-runtime-contract/compaction-session-replacement-lifecycle.md)。
+
+### Manual Compaction
+
+固定两个 Seed Turn后，Extension在 `session_before_compact`中提供确定性 Summary。Provider调用数保持 `2 → 2`，证明没有额外模型摘要调用。
+
+Public表面：
+
+```text
+compaction_start → compaction_end
+Public `entry_appended` count = 0
+```
+
+Extension表面：
+
+```text
+session_before_compact(reason=manual)
+  → session_compact(reason=manual, fromExtension=true)
+```
+
+压缩后的当前模型上下文为 `compactionSummary → assistant`，但 Session Entry树仍保留原始四条 Message Entry，并追加一个 Compaction Entry。因此 **Compaction Summary是派生上下文**，不能覆盖原始 Observation。
+
+Public `entry_appended`没有出现，意味着 Adapter不能只依赖 Public事件发现 Compaction Entry；必须从 Session Manager / Entry树读取持久化结果，同时记录该负证据。
+
+### Session Replacement
+
+真实身份变化：
+
+```text
+Session Object  session-object-1 → session-object-2 → session-object-3
+Session File    session-file-1 → session-file-2 → session-file-1
+```
+
+这证明 **Session File Identity与内存 Session Object Identity** 是两个不同维度。恢复同一个 Session File时，Runtime仍创建新的内存 Session Object。
+
+Replacement顺序：
+
+```text
+session_before_switch
+  → old session_shutdown
+  → beforeSessionInvalidate
+  → rebindSession:start
+  → new session_start
+  → bind Extensions
+  → attach Public listener
+  → rebindSession:end
+  → withSession
+```
+
+旧 Public Listener不会自动迁移。原 Listener只收到 Original Session的 `7`个事件；显式 Rebind Listener分别绑定三个 Session Object并累计收到 `21`个事件。Adapter必须把重新订阅作为必需状态转换，并记录新旧身份和 Replacement Generation。
+
+### 对 Observation Ledger的直接约束
+
+Ledger必须分别保存：
+
+- 压缩前原始 Entry与 Observation；
+- 派生 Compaction Summary、Usage、`firstKeptEntry`与 Compaction Entry；
+- 压缩后当前模型上下文；
+- Public / Extension Compaction事件来源和 `entry_appended=0`负证据；
+- Session File、Session Object与 Generation；
+- Shutdown、Invalidate、Rebind、`withSession()`和新 Session Start；
+- 旧 Listener未迁移与显式 Rebind；
+- New Session空上下文、Resume原上下文和后续追加 Turn。
+
 ## Extension生命周期映射
 
 | Pi生命周期 / Session事件 | 知微动作 | 当前证据 |
 |---|---|---|
-| session_start | 建立 Runtime Session映射 | SDK `createAgentSession` Fixture中 Inline Extension未观察到；不能作为唯一建链入口 |
+| session_start | 建立 Runtime Session映射 | 直接 SDK Fixture中 Inline Extension未观察到；`AgentSessionRuntime` Replacement经 `bindExtensions()`已观察 startup/new/resume；宿主创建与 Rebind仍是主边界 |
 | input | 写入用户 Observation | 已观察，为 Inline Extension首事件 |
 | before_agent_start | 请求 Context Capsule（M2） | 已观察 |
 | context | 控制每次模型调用认知预算（M2） | 未纳入当前 Capture |
@@ -369,7 +440,9 @@ Ledger需要分别记录：
 | agent_end | 一次底层 Agent Run结束 | Normal、Retry、Follow-up、Cancel和 exhaustion均已观察；Extension不携带 Session层 `willRetry` |
 | auto_retry_start/end | Session自动重试状态 | Retry恢复、取消和 exhaustion均只在 Public Session观察；Extension未观察 |
 | agent_settled | 形成 Session本轮稳定边界 | Normal、Retry、Follow-up、Cancel和 exhaustion均已观察，发生在最终 `agent_end`之后 |
-| session_before_compact | 固化工作状态（M2） | 待 Compaction Fixture |
+| session_before_compact | 固化工作状态（M2） | Manual Compaction已观察，携带 Branch Entries、firstKeptEntry、reason与 signal |
+| session_compact | 记录派生 Summary与 Compaction Entry | 已观察，`reason=manual`且 `fromExtension=true` |
+| session_before_switch | 准备 Session Replacement | 已观察 new/resume，发生在旧 Shutdown前 |
 | session_shutdown | 完成会话/Worker收尾 | 已观察；由宿主通过 ExtensionRunner明确发出 |
 
 ### `session_start`真实边界
@@ -418,7 +491,10 @@ session.extensionRunner.emit({ type: session_shutdown, reason: exit })
 - Session最终 idle后才发出一次 `agent_settled`；
 - 被 Retry替代的失败消息可能不在最终 `session.messages`；
 - Follow-up最终消息会保留在 `session.messages`，但排队时序仍只能从事件流获得；
-- `AgentSessionRuntime`替换 Session后，旧订阅不会自动迁移；
+- `AgentSessionRuntime`替换 Session后，旧 Public Listener不会自动迁移，必须在 `setRebindSession()`中重新绑定；
+- Session File Identity与内存 Session Object Identity不能合并；恢复原 File仍创建新 Object；
+- Manual Compaction的 Public表面只有 `compaction_start/end`，Compaction Entry必须从 Entry树确认；
+- Compaction Summary是派生上下文，原始 Message Entry仍保留；
 - 并行 Tool完成事件顺序与 Tool Result消息顺序已验证不同：完成按 `beta → gamma → alpha`，消息按 `alpha → beta → gamma`；
 - Message Update是流式分块，不是持久化领域边界。
 
@@ -454,7 +530,11 @@ defineTool
 - 把 `agent_settled`、Extension Shutdown和 Worker进程退出合并；
 - 仅凭 `tool_execution_end`或 Extension `tool_result`到达顺序重建 Assistant原始并行 Tool声明或 Tool Result消息顺序；
 - 把每一个流式 `message_update`直接写成长期 Observation；
-- 把 Extension `session_start`当作 SDK嵌入场景唯一建链事件。
+- 把 Extension `session_start`当作 SDK嵌入场景唯一建链事件；
+- 用 Compaction Summary覆盖或删除原始 Observation；
+- 仅凭 Public `entry_appended`发现 Compaction Entry；
+- 把 Session File恢复误判为同一个内存 Session Object；
+- 假设旧 Public Listener会跨 Session Replacement自动迁移。
 
 ## RPC契约要点
 
@@ -500,14 +580,16 @@ get_messages
 20. Prompt Promise返回只记录调用边界；任务成败由消息、Retry终止事件和最终 Settled共同决定。
 21. 并行 Tool必须分别记录声明顺序、真实完成顺序和 Tool Result消息顺序；任一顺序都不能覆盖其他顺序。
 22. 所有并行表面必须通过真实 `toolCallId`关联；不能用数组位置或完成先后编造关联键。
+23. Compaction Summary必须标记为派生上下文；原始 Observation和 Session Entry不得被覆盖。
+24. Compaction Public事件、Extension事件与 Entry树分别记录；`entry_appended`缺失不能解释为没有 Compaction Entry。
+25. Session File Identity、内存 Session Object Identity和 Replacement Generation必须分别建模。
+26. Session Replacement后必须显式 Rebind Public Listener；旧 Listener未迁移是需要持久化的负证据。
 
 ## M0后续技术验证
 
 下一步继续验证：
 
-- Compaction前后可回放信息；
-- Session Replacement后的重新订阅；
 - RPC真实 Prompt、Worker退出、重启和错误边界；
 - SDK与 RPC对同一场景的事件差异。
 
-完成这些 Runtime Fixtures前，不冻结正式 Observation协议，也不开始 SQLite Ledger实现。
+完成 RPC真实任务与 Worker边界 Fixture前，不冻结正式 Observation协议，也不开始 SQLite Ledger实现。

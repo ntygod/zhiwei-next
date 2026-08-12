@@ -36,6 +36,11 @@ best-effort-private-free
 - 并行 Tool ordering Fixture：三个调用全部开始后，真实完成顺序为 `beta → gamma → alpha`，Public `tool_execution_end`与 Extension `tool_result`保持该顺序；
 - Tool Result消息、`turn_end.toolResults`和最终 Session消息顺序恢复为 `alpha → beta → gamma`，证明完成顺序与消息顺序必须分开持久化；
 - 三个并行 Tool全程使用真实 `toolCallId`关联，没有文件、Shell、网络或外部写副作用，最终仍为单次 `agent_settled`；
+- Compaction 与 Session Replacement Fixture：Manual Compaction、New Session与 Resume原 Session均由固定 Pi Artifact动态验证；
+- 已完成验证 Compaction与 Session Replacement；压缩与替换边界已进入机器契约。
+- Compaction后当前上下文为 `compactionSummary → assistant`，原始 Message Entry仍完整保留并追加 Compaction Entry；
+- Session Object变化为 `session-object-1 → session-object-2 → session-object-3`，Session File变化为 `session-file-1 → session-file-2 → session-file-1`；
+- 旧 Public Listener不会自动迁移；Extension绑定、Public Listener与 Session身份必须在 Replacement后显式 Rebind；
 - Branch Cleanup Harness已通过 PR #19进入默认分支并持续回收关闭 PR工作分支；
 - Issue #9完整记录两次 direct-main误写和恢复；PR #10–#14建立并验证 Main Provenance、风险接受、事故停机与恢复链；
 - `developmentPause.active=false`，Issue #9 已关闭；事故、风险接受和两条 provenance proof永久保留。
@@ -135,21 +140,23 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 - Public SDK与 Extension在取消、Retry终止和 `willRetry`上的来源差异；
 - 并行 Tool声明、执行与完成关联：三个调用在首个完成前全部开始，完成顺序为 `beta → gamma → alpha`；
 - 并行 Tool消息边界：Tool Result消息、Turn结果数组和最终 Session顺序为 `alpha → beta → gamma`，不能从完成事件推导；
+- Manual Compaction边界：Public只有 `compaction_start/end`，`entry_appended=0`，Extension Summary不触发额外 Provider调用；
+- Compaction数据层级：当前模型上下文、完整 Session Entry树和未来 Observation Ledger必须分开；
+- Session Replacement边界：Shutdown、Invalidate、Rebind、Extension Start、Public Listener Attach与 `withSession()`顺序已冻结；
+- Session Identity边界：同一 Session File恢复后仍是新的内存 Session Object，旧 Public Listener不会自动迁移；
 - 宿主 Session创建和 Shutdown边界；
 - Runtime Fixture、隔离 Probe、Harness、架构边界与基础测试由 CI持续检查。
 
 尚未冻结：
 
-- Compaction前后状态；
-- Session Replacement重新订阅；
-- RPC真实 Prompt；
+- RPC真实 Prompt、Worker退出、重启和错误边界；
 - 正式 `NormalizedRuntimeEvent`与 SQLite Observation Ledger Schema。
 
 ## 当前下一步
 
 按真实 Runtime风险排序：
 
-1. 验证 Compaction与 Session Replacement；
+1. 录制 RPC真实 Prompt、Worker退出、重启和错误边界；
 2. 比较 SDK与 RPC对同一任务的事件差异；
 3. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
 4. 冻结 Observation Ledger Schema并进入 SQLite实现。
@@ -168,6 +175,6 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 ## 产品能力状态
 
-- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复、Follow-up队列、流式取消、Retry Backoff取消、Retry exhaustion和并行 Tool ordering路径；
+- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复、Follow-up队列、流式取消、Retry Backoff取消、Retry exhaustion、并行 Tool ordering、Compaction与 Session Replacement路径；
 - 真实 Observation持久化、记忆、Context、Attention和桌面端尚未进入实现阶段；
-- M0继续以 Runtime边界证据为先，未完成压缩和替换 Fixture前不提前冻结 Ledger。
+- M0继续以 Runtime边界证据为先，未完成 RPC真实任务与 Worker边界 Fixture前不提前冻结 Ledger。
