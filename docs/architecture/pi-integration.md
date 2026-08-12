@@ -16,6 +16,7 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Registry Artifact | integrity与 shasum已核对 |
 | SDK动态导入 | 已验证 |
 | RPC空会话启动 | 已验证，无凭证、无 Prompt |
+| SDK / RPC同任务真实 Prompt | 已验证，Prompt接受、运行中、最终消息、settled与关闭边界 |
 | SDK正常单 Tool会话 | 已验证，无外部 Provider、无副作用 |
 | Extension正常单 Tool生命周期 | 已验证，包含 Tool、settled与 shutdown边界 |
 | 自动重试恢复成功 | 已验证，首次 retryable error后第二次 Run成功 |
@@ -30,7 +31,7 @@ Pi是知微默认 Agent Runtime，但不是产品本体。优先使用 SDK、Ext
 | Compaction Public/Extension表面 | 已验证，Public只有 start/end且 `entry_appended=0`；Extension提供 before/compact与确定性 Summary |
 | Session Replacement | 已验证，Original → New → Resume，Session File与内存 Session Object分别变化 |
 | Replacement Rebind | 已验证，旧 Public Listener不会自动迁移，Extension绑定与 Public Listener必须显式 Rebind |
-| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` → `source-and-runtime-verified-parallel-tool-ordering` → `source-and-runtime-verified-compaction-session-replacement` |
+| 验证状态 | `source-and-runtime-verified-retry-success` → `source-and-runtime-verified-follow-up-queue` → `source-and-runtime-verified-cancel-retry-exhaustion` → `source-and-runtime-verified-parallel-tool-ordering` → `source-and-runtime-verified-compaction-session-replacement` → `source-and-runtime-verified-sdk-rpc-parity` |
 
 完整来源、失败恢复记录和隔离模型见 [`docs/spikes/pi-runtime-contract/`](../spikes/pi-runtime-contract/README.md)。机器结果：
 
@@ -42,6 +43,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-follow-up-queue.json
 packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
 packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
 ```
 
 当前固定的是 **M0契约基线**，不是生产依赖承诺。仓库仍未将 Pi加入正式依赖，也未冻结 `NormalizedRuntimeEvent`。
@@ -52,9 +54,9 @@ Pi至少暴露三类不能混为一谈的表面：
 
 | 表面 | 用途 | 当前确认程度 |
 |---|---|---|
-| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消、exhaustion、并行 Tool、Compaction与 Session Replacement均已动态验证 |
+| `AgentSession` SDK | Node/TypeScript进程内嵌入、Session控制和公开事件订阅 | 发布 Artifact、空 Session、正常 Tool、Retry、Follow-up、取消、exhaustion、并行 Tool、Compaction、Session Replacement与 SDK / RPC同任务均已动态验证 |
 | Extension lifecycle | Context、工具策略、Compaction、Session切换与 Shutdown Hook | 正常 Tool、Retry、Follow-up、取消、exhaustion、并行 Tool、Compaction与 Session Replacement生命周期已动态验证；没有公共 Retry或 Queue专有增强 |
-| RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型及无凭证空 Session启动已验证；真实任务时序待录制 |
+| RPC JSONL | 子进程隔离、非 Node客户端和 Worker边界 | framing、命令类型、无凭证空 Session与同一真实 Prompt成功路径已验证；重启、恢复和错误边界待 #32 |
 
 `pi-adapter`必须显式标记事件来自哪个表面，不能仅凭同名事件假设载荷和时序相同。
 
@@ -556,6 +558,8 @@ get_messages
 
 原始 Session ID只检查存在性，不进入持久化 Fixture。
 
+Issue #45还动态验证了同一真实 Prompt成功路径：Prompt success Response先于 `agent_start`、运行中 `get_state`与 `agent_settled`；Response后仍有29条 Runtime Event。最终 SDK / RPC消息和正文一致，RPC stdin EOF后按 `session_shutdown(quit) → exit(0) → close(0)`收尾。
+
 ## Adapter规则
 
 1. 只有 `packages/pi-adapter`可以导入 Pi SDK类型。
@@ -584,12 +588,111 @@ get_messages
 24. Compaction Public事件、Extension事件与 Entry树分别记录；`entry_appended`缺失不能解释为没有 Compaction Entry。
 25. Session File Identity、内存 Session Object Identity和 Replacement Generation必须分别建模。
 26. Session Replacement后必须显式 Rebind Public Listener；旧 Listener未迁移是需要持久化的负证据。
+27. RPC Prompt success Response只能规范化为接受边界，不能替代 `agent_settled`、最终 Snapshot或 Worker关闭。
+28. RPC Command Response、Runtime Event、State Snapshot、stdin EOF、Extension Shutdown、Process Exit和Close必须分别保留来源。
+29. SDK / RPC核心事件投影一致时仍必须保留 `sourceSurface`，不能删除特定表面的确认与进程边界。
 
 ## M0后续技术验证
 
 下一步继续验证：
 
-- RPC真实 Prompt、Worker退出、重启和错误边界；
-- SDK与 RPC对同一场景的事件差异。
+- RPC Worker重启、Session恢复和错误边界；
+- 非法 JSON、未知命令、Preflight拒绝与已接受后的 Provider Error。
 
-完成 RPC真实任务与 Worker边界 Fixture前，不冻结正式 Observation协议，也不开始 SQLite Ledger实现。
+完成 RPC Worker恢复与错误 Fixture前，不冻结正式 Observation协议，也不开始 SQLite Ledger实现。
+
+## SDK / RPC同任务边界
+
+Issue #45在固定 `@earendil-works/pi-coding-agent@0.84.1`发布 Artifact上，以同一无工具 Prompt、同一 Faux Provider和同一确定性 Assistant正文动态验证了进程内 SDK与隔离 RPC Worker。完整证据见 `docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md`。
+
+### 可共享的语义投影
+
+当前单 Prompt成功路径中，SDK Public与 RPC Runtime Event可以投影为同一语义序列：
+
+```text
+agent_start
+turn_start
+message_start(user)
+message_end(user)
+message_start(assistant)
+message_end(assistant)
+turn_end
+agent_end(willRetry=false)
+agent_settled
+```
+
+最终 Message roles和 Assistant正文也一致。这允许 Adapter为上层提供统一的 Agent Run / Turn / Message / Settled语义。
+
+### 不得统一丢失的来源边界
+
+统一投影不能抹平以下 Observation：
+
+- SDK `preflightResult`；
+- SDK Public Event；
+- SDK Extension `input`、`before_agent_start`和 `session_shutdown(exit)`；
+- RPC Command与唯一 Request ID；
+- RPC success / error Response；
+- RPC `get_state`、`get_messages`和 `get_last_assistant_text` Snapshot；
+- Host关闭 stdin的 EOF动作；
+- RPC Extension `session_shutdown(quit)`；
+- Process `exit`与 `close`。
+
+正式事件协议必须保留：
+
+```text
+sourceSurface = sdk | extension | rpc | host
+sourceEventType
+sourceSequence
+rpcRequestId / rpcCommand（适用时）
+observed | host-synthesized provenance
+stable-boundary semantics
+```
+
+### Prompt接受与稳定完成
+
+真实 RPC wire 顺序为：
+
+```text
+prompt success Response       index 4
+agent_start                   index 5
+running get_state Response   index 11
+agent_settled                index 35
+```
+
+Prompt Response后、`agent_settled`前仍有29条 Runtime Event。因此：
+
+> `response(command=prompt, success=true)`只表示命令接受 / Preflight，不表示 Agent Run成功完成。
+
+稳定完成至少需要 Runtime `agent_settled`；若宿主还要确认最终状态或关闭 Worker，则 State / Messages Snapshot、Extension Shutdown、Exit和Close继续是独立边界。
+
+### 运行中 State
+
+事件驱动的 `get_state`观测得到：
+
+```text
+before  isStreaming=false  messageCount=0
+during  isStreaming=true   messageCount=1
+after   isStreaming=false  messageCount=2
+```
+
+运行中查询由 Prompt Response触发，不以固定墙钟延时定义业务边界。Faux Provider的受控流速只提供可重复观测窗口。
+
+### JSONL与消息更新
+
+RPC使用严格 LF-only JSONL。Command Response携带 Request ID，Runtime Event不携带该 ID；两类记录必须分别建模。RPC `message_update`只保留 delta，不含累计 `partial`，而 SDK / Extension内部事件可能仍携带 `partial`。长期存储策略必须基于 `sourceSurface`，不能用单一字段假设覆盖全部表面。
+
+### Worker关闭
+
+成功路径只在 `agent_settled`和最终查询后由 Host关闭 stdin。随后真实观察：
+
+```text
+Extension session_shutdown(reason=quit)
+Process exit(code=0)
+Process close(code=0)
+```
+
+EOF、Extension Shutdown、Exit和Close不能折叠成一个“Worker结束”事件。恢复和审计需要知道哪些边界已真正观察、哪些只是宿主动作。
+
+### 当前限制
+
+该 Fixture只验证单 Prompt、无 Tool、无 Retry的成功路径。RPC Worker重启、Session恢复、非法 JSON、未知命令、Preflight拒绝和已接受后的 Provider Error由 Issue #32单独冻结；在此之前不得从成功路径推断错误与恢复语义。
