@@ -14,6 +14,7 @@ on:
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
       - scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
       - scripts/probes/pi-sdk-rpc-parity-capture.mjs
+      - scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
       - docs/spikes/pi-runtime-contract/README.md
       - docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md
       - docs/architecture/pi-integration.md
@@ -52,6 +53,7 @@ jobs:
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          node --check scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
           node --check scripts/pi-sdk-rpc-parity-fixture.mjs
           node scripts/pi-sdk-rpc-parity-fixture.mjs --check
@@ -64,17 +66,15 @@ jobs:
           set -euo pipefail
           BUNDLE="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-bundle"
           RESULT_DIR="$RUNNER_TEMP/zhiwei-pi-sdk-rpc-parity-result"
-          mkdir -p "$BUNDLE/packages/pi-adapter/fixtures" "$RESULT_DIR"
+          mkdir -p "$BUNDLE" "$RESULT_DIR"
           tar -cf - \
             packages/pi-adapter/fixtures/pi-upstream-baseline.json \
             scripts/probes/pi-lifecycle-ci.mjs \
             scripts/probes/pi-sdk-rpc-parity-contract.mjs \
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
+            scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             | tar -xf - -C "$BUNDLE"
-          node scripts/pi-sdk-rpc-parity-fixture.mjs \
-            --manifest packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json \
-            --output "$BUNDLE/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
 
@@ -95,9 +95,8 @@ jobs:
             --env CI=true \
             --env GITHUB_ACTIONS=true \
             --env PI_LIFECYCLE_OUTPUT=/output/result.json \
-            --env PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json \
             --env PI_LIFECYCLE_SCENARIO=sdk-rpc-parity \
-            --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-sdk-rpc-parity-capture.mjs \
+            --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
             --env PI_PROBE_SOURCE_READ_ONLY=true \
             --env PI_PROBE_HOST_WORKSPACE_MOUNTED=false \
             --env PI_PROBE_CONTAINER_ROOT_READ_ONLY=true \
