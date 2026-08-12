@@ -58,3 +58,4 @@ export function normalizePiEvent(
   }
   return { ...shared, type: "session.closed", observation: { actor: "system", kind: "session_event", payload: { reason: event.reason ?? "unknown" } } };
 }
+export * from "./normalize-runtime-event.ts";

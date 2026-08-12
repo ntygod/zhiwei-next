@@ -154,9 +154,9 @@ function mapRole(role: PiMessageRole): MessageLifecycleData["role"] {
   }
 }
 
-function mapStopReason(
+function mapMessageStopReason(
   reason: PiStopReason | undefined,
-): MessageLifecycleData["stopReason"] | TurnLifecycleData["outcome"] | undefined {
+): MessageLifecycleData["stopReason"] | undefined {
   switch (reason) {
     case undefined:
       return undefined;
@@ -165,6 +165,24 @@ function mapStopReason(
     case "aborted":
     case "length":
     case "pending":
+      return reason;
+    case "toolUse":
+      return "tool-use";
+    default:
+      return "unknown";
+  }
+}
+
+function mapTurnOutcome(
+  reason: PiStopReason | undefined,
+): TurnLifecycleData["outcome"] | undefined {
+  switch (reason) {
+    case undefined:
+      return undefined;
+    case "stop":
+    case "error":
+    case "aborted":
+    case "length":
       return reason;
     case "toolUse":
       return "tool-use";
@@ -366,7 +384,7 @@ function normalizeTurnEvent(
       {
         kind: "turn",
         phase: input.type === "turn_start" ? "started" : "ended",
-        outcome: input.type === "turn_end" ? mapStopReason(input.outcome) : undefined,
+        outcome: input.type === "turn_end" ? mapTurnOutcome(input.outcome) : undefined,
       },
       "boundary",
     ),
@@ -391,7 +409,7 @@ function normalizeMessageEvent(
         kind: "message",
         phase,
         role: mapRole(input.role),
-        stopReason: mapStopReason(input.stopReason),
+        stopReason: mapMessageStopReason(input.stopReason),
         contentLength: input.contentLength,
         contentRef: input.contentRef,
         errorCode: input.errorCode,
@@ -428,7 +446,7 @@ function normalizeToolEvent(
         ...context,
         correlation: {
           ...(context.correlation ?? {}),
-          toolCallId: input.toolCallId,
+          toolCallId: context.correlation?.toolCallId ?? input.toolCallId,
         },
       },
       input.type,
@@ -496,7 +514,7 @@ function normalizeRpcEvent(
   }
   const correlation = {
     ...(context.correlation ?? {}),
-    rpcRequestId: input.requestId,
+    rpcRequestId: context.correlation?.rpcRequestId ?? input.requestId,
   };
   return createNormalizedRuntimeEvent(
     baseInput(

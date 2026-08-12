@@ -593,3 +593,20 @@ get_messages
 - SDK与 RPC对同一场景的事件差异。
 
 完成 RPC真实任务与 Worker边界 Fixture前，不冻结正式 Observation协议，也不开始 SQLite Ledger实现。
+
+## NormalizedRuntimeEvent v1
+
+Pi 的 SDK、Extension、RPC 与宿主边界先由 `packages/pi-adapter` 转换为 [`NormalizedRuntimeEvent v1`](normalized-runtime-event.md)，再进入后续 Observation Ledger。
+
+Adapter 必须保留：
+
+- `sourceSurface = sdk | extension | rpc | host`；
+- 每个来源流独立、严格递增的 `sourceSequence`；
+- Prompt、Agent Run、Turn、Message、Tool、RPC Request 和 Worker 的显式关联；
+- `observed` 与 `host-synthesized` 来源；
+- `transient`、`boundary` 与 `stable` 三种持久化语义；
+- Extension 缺少 `willRetry` 时的 `unknown`，而不是从 SDK 事件补造布尔值；
+- RPC Prompt Response 与 Prompt Settled、EOF 与 Worker Exit 的分离；
+- Compaction Summary 作为派生引用，而非原始 Observation。
+
+正式 Ledger 只依赖该 Runtime 中立协议，不导入 Pi 类型。协议候选完成不代表 SQLite Ledger 已实现。

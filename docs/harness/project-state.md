@@ -41,6 +41,7 @@ best-effort-private-free
 - Compaction后当前上下文为 `compactionSummary → assistant`，原始 Message Entry仍完整保留并追加 Compaction Entry；
 - Session Object变化为 `session-object-1 → session-object-2 → session-object-3`，Session File变化为 `session-file-1 → session-file-2 → session-file-1`；
 - 旧 Public Listener不会自动迁移；Extension绑定、Public Listener与 Session身份必须在 Replacement后显式 Rebind；
+- NormalizedRuntimeEvent v1 协议候选：保留 SDK / Extension / RPC / Host 来源、独立源序列、稳定幂等键、分层关联、Durability 与 Provenance，并由 Fixture 派生场景测试约束；
 - Branch Cleanup Harness已通过 PR #19进入默认分支并持续回收关闭 PR工作分支；
 - Issue #9完整记录两次 direct-main误写和恢复；PR #10–#14建立并验证 Main Provenance、风险接受、事故停机与恢复链；
 - `developmentPause.active=false`，Issue #9 已关闭；事故、风险接受和两条 provenance proof永久保留。
@@ -150,7 +151,7 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 尚未冻结：
 
 - RPC真实 Prompt、Worker退出、重启和错误边界；
-- 正式 `NormalizedRuntimeEvent`与 SQLite Observation Ledger Schema。
+- SQLite Observation Ledger Schema、Migration 与崩溃恢复语义；
 
 ## 当前下一步
 
