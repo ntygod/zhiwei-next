@@ -1,9 +1,10 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
-import { spawnSync } from "node:child_process";
 
 export const DEFAULT_SDK_RPC_PARITY_MANIFEST =
   "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json";
@@ -98,6 +99,16 @@ export async function readSdkRpcParityFixture(
   return { manifest, result, jsonBytes };
 }
 
+function runChecker(checkerPath, materializedPath) {
+  const checker = spawnSync(process.execPath, [checkerPath, materializedPath], {
+    stdio: "inherit",
+  });
+  if (checker.error) throw checker.error;
+  if (checker.status !== 0) {
+    throw new Error(`${checkerPath} exited with status ${checker.status}.`);
+  }
+}
+
 async function runCli() {
   const args = process.argv.slice(2);
   let manifestPath = DEFAULT_SDK_RPC_PARITY_MANIFEST;
@@ -129,15 +140,8 @@ async function runCli() {
       await writeFile(materializedPath, jsonBytes);
     }
     if (check) {
-      const checker = spawnSync(
-        process.execPath,
-        ["scripts/check-pi-sdk-rpc-parity-result.mjs", materializedPath],
-        { stdio: "inherit" },
-      );
-      if (checker.error) throw checker.error;
-      if (checker.status !== 0) {
-        throw new Error(`SDK/RPC parity checker exited with status ${checker.status}.`);
-      }
+      runChecker("scripts/check-pi-sdk-rpc-parity-result.mjs", materializedPath);
+      runChecker("scripts/check-pi-sdk-rpc-client-messages-result.mjs", materializedPath);
     }
     console.log(
       `SDK/RPC parity Fixture: OK (${manifest.jsonBytes} JSON bytes, ${manifest.compressedBytes} compressed bytes)`,
@@ -149,7 +153,10 @@ async function runCli() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   try {
     await runCli();
   } catch (error) {
