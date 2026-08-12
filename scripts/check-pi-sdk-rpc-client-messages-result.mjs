@@ -28,6 +28,13 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function fingerprint(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const clone = structuredClone(value);
+  delete clone.contractFingerprint;
+  return sha256(JSON.stringify(clone));
+}
+
 function contiguous(events, label) {
   for (let index = 0; index < events.length; index += 1) {
     requireValue(events[index]?.sequence === index + 1, `${label} sequence drifted at index ${index}.`);
@@ -112,8 +119,16 @@ requireValue(
   "Outer contract fingerprint differs from the frozen SDK/RPC parity contract.",
 );
 requireValue(
+  result.contractFingerprint === fingerprint(result),
+  "Outer contract fingerprint is invalid.",
+);
+requireValue(
   capture?.contractFingerprint === SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
   "Nested contract fingerprint differs from the frozen SDK/RPC parity contract.",
+);
+requireValue(
+  capture?.contractFingerprint === fingerprint(capture),
+  "Nested contract fingerprint is invalid.",
 );
 
 requireValue(result.status === "passed", `Outer result must be passed, got ${result.status}.`);
