@@ -1,0 +1,1475 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "scenario": "parallel-tool-ordering",
+  "upstream": {
+    "repository": "earendil-works/pi",
+    "releaseTag": "v0.84.1",
+    "commit": "53fa77ccd8a279eb87e92294ef3687b03ff80112"
+  },
+  "artifact": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.84.1",
+    "integrity": "sha512-ncAqFrG+iybuPGOhMiZoEHkEzTpJgz3guYD32pD+M7ucc0WeHmauP6wa7qwP8V/KWvsZDVNa5XGsdZ7fkC7w7A==",
+    "shasum": "e098cada629fdeeb9df6e77c6d480d43e1b2c553",
+    "installScriptsExecuted": false
+  },
+  "environment": {
+    "node": "22.23.1",
+    "npm": "10.9.8",
+    "platform": "linux-x64",
+    "containerImage": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+  },
+  "isolation": {
+    "hostSecretsPassedToProbe": false,
+    "hostWorkspaceMounted": false,
+    "sourceBundleReadOnly": true,
+    "containerRootFilesystemReadOnly": true,
+    "containerCapabilitiesDropped": true,
+    "containerNoNewPrivileges": true
+  },
+  "capture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scenario": "parallel-tool-ordering",
+    "package": {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "0.84.1"
+    },
+    "provider": {
+      "id": "zhiwei-parallel-tool-faux",
+      "api": "zhiwei-parallel-tool-faux-api",
+      "callCount": 2,
+      "pendingResponses": 0,
+      "promptsSentToExternalProvider": 0
+    },
+    "prompt": {
+      "source": "interactive",
+      "text": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+    },
+    "toolBatch": {
+      "toolName": "ordered_echo",
+      "calls": [
+        {
+          "lane": "alpha",
+          "toolCallId": "zhiwei-parallel-tool-alpha"
+        },
+        {
+          "lane": "beta",
+          "toolCallId": "zhiwei-parallel-tool-beta"
+        },
+        {
+          "lane": "gamma",
+          "toolCallId": "zhiwei-parallel-tool-gamma"
+        }
+      ],
+      "declarationOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "plannedCompletionOrder": [
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma",
+        "zhiwei-parallel-tool-alpha"
+      ],
+      "deadlockGuardMs": 5000,
+      "activeBeforePrompt": [
+        "ordered_echo"
+      ],
+      "activeAfterPrompt": [
+        "ordered_echo"
+      ],
+      "executions": [
+        {
+          "sequence": 1,
+          "phase": "start",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "toolName": "ordered_echo",
+          "lane": "alpha"
+        },
+        {
+          "sequence": 2,
+          "phase": "start",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "toolName": "ordered_echo",
+          "lane": "beta"
+        },
+        {
+          "sequence": 3,
+          "phase": "start",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "toolName": "ordered_echo",
+          "lane": "gamma"
+        },
+        {
+          "sequence": 4,
+          "phase": "end",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "toolName": "ordered_echo",
+          "lane": "beta"
+        },
+        {
+          "sequence": 5,
+          "phase": "end",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "toolName": "ordered_echo",
+          "lane": "gamma"
+        },
+        {
+          "sequence": 6,
+          "phase": "end",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "toolName": "ordered_echo",
+          "lane": "alpha"
+        }
+      ],
+      "barrierTrace": [
+        {
+          "sequence": 1,
+          "type": "execute-start",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "lane": "alpha"
+        },
+        {
+          "sequence": 2,
+          "type": "execute-start",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "lane": "beta"
+        },
+        {
+          "sequence": 3,
+          "type": "execute-start",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "lane": "gamma"
+        },
+        {
+          "sequence": 4,
+          "type": "all-tools-started",
+          "toolCallIds": [
+            "zhiwei-parallel-tool-alpha",
+            "zhiwei-parallel-tool-beta",
+            "zhiwei-parallel-tool-gamma"
+          ]
+        },
+        {
+          "sequence": 5,
+          "type": "release",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "reason": "all-tools-started",
+          "completionIndex": 0
+        },
+        {
+          "sequence": 6,
+          "type": "execute-end",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "lane": "beta"
+        },
+        {
+          "sequence": 7,
+          "type": "public-tool-end",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "expectedToolCallId": "zhiwei-parallel-tool-beta",
+          "completionIndex": 0
+        },
+        {
+          "sequence": 8,
+          "type": "release",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "reason": "public-tool-end:zhiwei-parallel-tool-beta",
+          "completionIndex": 1
+        },
+        {
+          "sequence": 9,
+          "type": "execute-end",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "lane": "gamma"
+        },
+        {
+          "sequence": 10,
+          "type": "public-tool-end",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "expectedToolCallId": "zhiwei-parallel-tool-gamma",
+          "completionIndex": 1
+        },
+        {
+          "sequence": 11,
+          "type": "release",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "reason": "public-tool-end:zhiwei-parallel-tool-gamma",
+          "completionIndex": 2
+        },
+        {
+          "sequence": 12,
+          "type": "execute-end",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "lane": "alpha"
+        },
+        {
+          "sequence": 13,
+          "type": "public-tool-end",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "expectedToolCallId": "zhiwei-parallel-tool-alpha",
+          "completionIndex": 2
+        },
+        {
+          "sequence": 14,
+          "type": "completion-plan-finished",
+          "reason": "public-tool-end:zhiwei-parallel-tool-alpha"
+        }
+      ],
+      "barrierFailure": null
+    },
+    "outcome": {
+      "finalText": "Parallel tool ordering capture complete.",
+      "expectedFinalText": "Parallel tool ordering capture complete.",
+      "sessionWasIdleBeforeShutdown": true,
+      "pendingMessageCountBeforeShutdown": 0,
+      "messageRoles": [
+        "user",
+        "assistant",
+        "toolResult",
+        "toolResult",
+        "toolResult",
+        "assistant"
+      ],
+      "finalMessages": [
+        {
+          "index": 0,
+          "role": "user",
+          "contentKinds": [
+            "text"
+          ],
+          "text": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+        },
+        {
+          "index": 1,
+          "role": "assistant",
+          "stopReason": "toolUse",
+          "contentKinds": [
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "toolCallIds": [
+            "zhiwei-parallel-tool-alpha",
+            "zhiwei-parallel-tool-beta",
+            "zhiwei-parallel-tool-gamma"
+          ],
+          "toolNames": [
+            "ordered_echo",
+            "ordered_echo",
+            "ordered_echo"
+          ]
+        },
+        {
+          "index": 2,
+          "role": "toolResult",
+          "toolCallId": "zhiwei-parallel-tool-alpha",
+          "toolName": "ordered_echo",
+          "isError": false,
+          "contentKinds": [
+            "text"
+          ],
+          "text": "ordered echo result: alpha"
+        },
+        {
+          "index": 3,
+          "role": "toolResult",
+          "toolCallId": "zhiwei-parallel-tool-beta",
+          "toolName": "ordered_echo",
+          "isError": false,
+          "contentKinds": [
+            "text"
+          ],
+          "text": "ordered echo result: beta"
+        },
+        {
+          "index": 4,
+          "role": "toolResult",
+          "toolCallId": "zhiwei-parallel-tool-gamma",
+          "toolName": "ordered_echo",
+          "isError": false,
+          "contentKinds": [
+            "text"
+          ],
+          "text": "ordered echo result: gamma"
+        },
+        {
+          "index": 5,
+          "role": "assistant",
+          "stopReason": "stop",
+          "contentKinds": [
+            "text"
+          ],
+          "text": "Parallel tool ordering capture complete."
+        }
+      ]
+    },
+    "counts": {
+      "sessionEvents": 40,
+      "extensionEvents": 40,
+      "publicByType": {
+        "agent_end": 1,
+        "agent_settled": 1,
+        "agent_start": 1,
+        "message_end": 6,
+        "message_start": 6,
+        "message_update": 12,
+        "tool_execution_end": 3,
+        "tool_execution_start": 3,
+        "tool_execution_update": 3,
+        "turn_end": 2,
+        "turn_start": 2
+      },
+      "extensionByType": {
+        "agent_end": 1,
+        "agent_settled": 1,
+        "agent_start": 1,
+        "before_agent_start": 1,
+        "input": 1,
+        "message_end": 6,
+        "message_start": 6,
+        "message_update": 12,
+        "session_shutdown": 1,
+        "tool_call": 3,
+        "tool_result": 3,
+        "turn_end": 2,
+        "turn_start": 2
+      },
+      "sessionToolStarts": 3,
+      "sessionToolUpdates": 3,
+      "sessionToolEnds": 3,
+      "extensionToolCalls": 3,
+      "extensionToolResults": 3,
+      "extensionAgentEnds": 1,
+      "extensionAgentSettled": 1,
+      "extensionSessionShutdowns": 1
+    },
+    "correlations": {
+      "expectedToolCallIds": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "observedOrders": {
+        "declarationOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "plannedCompletionOrder": [
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma",
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "executeStartOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "executeEndOrder": [
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma",
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "publicStartOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "publicUpdateOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "publicEndOrder": [
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma",
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "extensionCallOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "extensionResultOrder": [
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma",
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "publicResultMessageStartOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "publicResultMessageEndOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "extensionResultMessageStartOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "extensionResultMessageEndOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "publicTurnToolResultOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "extensionTurnToolResultOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "finalSessionToolResultOrder": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ]
+      },
+      "everyObservedOrderUsesEachExpectedIdExactlyOnce": true
+    },
+    "ordering": {
+      "declarationOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "plannedCompletionOrder": [
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma",
+        "zhiwei-parallel-tool-alpha"
+      ],
+      "executeStartOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "executeEndOrder": [
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma",
+        "zhiwei-parallel-tool-alpha"
+      ],
+      "publicStartOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "publicUpdateOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "publicEndOrder": [
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma",
+        "zhiwei-parallel-tool-alpha"
+      ],
+      "extensionCallOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "extensionResultOrder": [
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma",
+        "zhiwei-parallel-tool-alpha"
+      ],
+      "publicResultMessageStartOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "publicResultMessageEndOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "extensionResultMessageStartOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "extensionResultMessageEndOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "publicTurnToolResultOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "extensionTurnToolResultOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "finalSessionToolResultOrder": [
+        "zhiwei-parallel-tool-alpha",
+        "zhiwei-parallel-tool-beta",
+        "zhiwei-parallel-tool-gamma"
+      ],
+      "allExecutionsStartedBeforeFirstCompletion": true,
+      "completionOrderDiffersFromDeclaration": true,
+      "agentEndBeforeSettled": true,
+      "settledBeforeShutdown": true
+    },
+    "sessionEvents": [
+      {
+        "sequence": 1,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 2,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 3,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+      },
+      {
+        "sequence": 4,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 6,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 7,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 9,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 10,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 11,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 12,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 13,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 14,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 15,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 16,
+        "type": "tool_execution_start",
+        "toolCallId": "zhiwei-parallel-tool-alpha",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 17,
+        "type": "tool_execution_start",
+        "toolCallId": "zhiwei-parallel-tool-beta",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 18,
+        "type": "tool_execution_start",
+        "toolCallId": "zhiwei-parallel-tool-gamma",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 19,
+        "type": "tool_execution_update",
+        "toolCallId": "zhiwei-parallel-tool-alpha",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 20,
+        "type": "tool_execution_update",
+        "toolCallId": "zhiwei-parallel-tool-beta",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 21,
+        "type": "tool_execution_update",
+        "toolCallId": "zhiwei-parallel-tool-gamma",
+        "toolName": "ordered_echo"
+      },
+      {
+        "sequence": 22,
+        "type": "tool_execution_end",
+        "toolCallId": "zhiwei-parallel-tool-beta",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "resultKinds": [
+          "text"
+        ],
+        "resultText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 23,
+        "type": "tool_execution_end",
+        "toolCallId": "zhiwei-parallel-tool-gamma",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "resultKinds": [
+          "text"
+        ],
+        "resultText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 24,
+        "type": "tool_execution_end",
+        "toolCallId": "zhiwei-parallel-tool-alpha",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "resultKinds": [
+          "text"
+        ],
+        "resultText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 25,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-alpha",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 26,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-alpha",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 27,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-beta",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 28,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-beta",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 29,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-gamma",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 30,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-gamma",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 31,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ],
+        "turnToolResultIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "turnToolResultNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 32,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 33,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 34,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 35,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 36,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 37,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 38,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete.",
+        "turnToolResultIds": [],
+        "turnToolResultNames": []
+      },
+      {
+        "sequence": 39,
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "sequence": 40,
+        "type": "agent_settled"
+      }
+    ],
+    "extensionEvents": [
+      {
+        "sequence": 1,
+        "type": "input",
+        "source": "interactive"
+      },
+      {
+        "sequence": 2,
+        "type": "before_agent_start"
+      },
+      {
+        "sequence": 3,
+        "type": "agent_start"
+      },
+      {
+        "sequence": 4,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 5,
+        "type": "message_start",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+      },
+      {
+        "sequence": 6,
+        "type": "message_end",
+        "messageRole": "user",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Call ordered_echo for alpha, beta, and gamma in that order in one assistant response, then finish."
+      },
+      {
+        "sequence": 7,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 8,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 9,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 10,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha"
+        ],
+        "assistantToolNames": [
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 11,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 12,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 13,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 14,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 15,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 16,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 17,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 18,
+        "type": "tool_call",
+        "toolCallId": "zhiwei-parallel-tool-alpha",
+        "toolName": "ordered_echo",
+        "input": {
+          "lane": "alpha"
+        }
+      },
+      {
+        "sequence": 19,
+        "type": "tool_call",
+        "toolCallId": "zhiwei-parallel-tool-beta",
+        "toolName": "ordered_echo",
+        "input": {
+          "lane": "beta"
+        }
+      },
+      {
+        "sequence": 20,
+        "type": "tool_call",
+        "toolCallId": "zhiwei-parallel-tool-gamma",
+        "toolName": "ordered_echo",
+        "input": {
+          "lane": "gamma"
+        }
+      },
+      {
+        "sequence": 21,
+        "type": "tool_result",
+        "toolCallId": "zhiwei-parallel-tool-beta",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "input": {
+          "lane": "beta"
+        },
+        "contentKinds": [
+          "text"
+        ],
+        "contentText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 22,
+        "type": "tool_result",
+        "toolCallId": "zhiwei-parallel-tool-gamma",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "input": {
+          "lane": "gamma"
+        },
+        "contentKinds": [
+          "text"
+        ],
+        "contentText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 23,
+        "type": "tool_result",
+        "toolCallId": "zhiwei-parallel-tool-alpha",
+        "toolName": "ordered_echo",
+        "isError": false,
+        "input": {
+          "lane": "alpha"
+        },
+        "contentKinds": [
+          "text"
+        ],
+        "contentText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 24,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-alpha",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 25,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-alpha",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: alpha"
+      },
+      {
+        "sequence": 26,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-beta",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 27,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-beta",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: beta"
+      },
+      {
+        "sequence": 28,
+        "type": "message_start",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-gamma",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 29,
+        "type": "message_end",
+        "messageRole": "toolResult",
+        "messageToolCallId": "zhiwei-parallel-tool-gamma",
+        "messageToolName": "ordered_echo",
+        "messageIsError": false,
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "ordered echo result: gamma"
+      },
+      {
+        "sequence": 30,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "toolUse",
+        "contentKinds": [
+          "toolCall",
+          "toolCall",
+          "toolCall"
+        ],
+        "assistantToolCallIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "assistantToolNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ],
+        "turnToolResultIds": [
+          "zhiwei-parallel-tool-alpha",
+          "zhiwei-parallel-tool-beta",
+          "zhiwei-parallel-tool-gamma"
+        ],
+        "turnToolResultNames": [
+          "ordered_echo",
+          "ordered_echo",
+          "ordered_echo"
+        ]
+      },
+      {
+        "sequence": 31,
+        "type": "turn_start"
+      },
+      {
+        "sequence": 32,
+        "type": "message_start",
+        "messageRole": "assistant",
+        "stopReason": "pending"
+      },
+      {
+        "sequence": 33,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 34,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 35,
+        "type": "message_update",
+        "messageRole": "assistant",
+        "stopReason": "pending",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 36,
+        "type": "message_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete."
+      },
+      {
+        "sequence": 37,
+        "type": "turn_end",
+        "messageRole": "assistant",
+        "stopReason": "stop",
+        "contentKinds": [
+          "text"
+        ],
+        "messageText": "Parallel tool ordering capture complete.",
+        "turnToolResultIds": [],
+        "turnToolResultNames": []
+      },
+      {
+        "sequence": 38,
+        "type": "agent_end"
+      },
+      {
+        "sequence": 39,
+        "type": "agent_settled"
+      },
+      {
+        "sequence": 40,
+        "type": "session_shutdown",
+        "reason": "exit"
+      }
+    ],
+    "lifecycleNotes": [
+      {
+        "type": "shutdown-host-boundary",
+        "mechanism": "session.extensionRunner.emit",
+        "reason": "exit"
+      }
+    ],
+    "sanitization": {
+      "absolutePathsIncluded": false,
+      "rawSessionIdIncluded": false,
+      "environmentDumpIncluded": false,
+      "credentialsIncluded": false,
+      "rawChainOfThoughtIncluded": false
+    },
+    "contractFingerprint": "164f0e95e7f617c7aa69d1a1b34a5ae7935673c1ee852fa452541d15c1551376"
+  },
+  "contractFingerprint": "fd372a8e73f4545bd7a34c6ac3e82cfc2d044dca473ae374627b847864389b02"
+}

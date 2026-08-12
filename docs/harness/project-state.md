@@ -33,6 +33,9 @@ best-effort-private-free
 - `agent_end(willRetry=true)`可在 Backoff期间被 `abortRetry()`终止，形成 **willRetry=true 但没有后续 Agent Run** 的真实边界；
 - Retry exhaustion最终保留最后一次失败 Assistant，前两次失败只存在于事件流，Prompt Promise仍 resolve；
 - 再次确认 Extension没有 `auto_retry_start/end`或 `willRetry`增强，不能独立重建 Session层 Cancel / Retry语义；
+- 并行 Tool ordering Fixture：三个调用全部开始后，真实完成顺序为 `beta → gamma → alpha`，Public `tool_execution_end`与 Extension `tool_result`保持该顺序；
+- Tool Result消息、`turn_end.toolResults`和最终 Session消息顺序恢复为 `alpha → beta → gamma`，证明完成顺序与消息顺序必须分开持久化；
+- 三个并行 Tool全程使用真实 `toolCallId`关联，没有文件、Shell、网络或外部写副作用，最终仍为单次 `agent_settled`；
 - Branch Cleanup Harness已通过 PR #19进入默认分支并持续回收关闭 PR工作分支；
 - Issue #9完整记录两次 direct-main误写和恢复；PR #10–#14建立并验证 Main Provenance、风险接受、事故停机与恢复链；
 - `developmentPause.active=false`，Issue #9 已关闭；事故、风险接受和两条 provenance proof永久保留。
@@ -130,12 +133,13 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 - Retry Backoff取消路径：`willRetry=true`是当时计划，不保证后续 Run，`abortRetry()`产生终止 Retry事件；
 - Retry exhaustion路径：`agent_end.willRetry=[true,true,false]`，最终保留最后一次失败 Assistant，Prompt Promise正常返回；
 - Public SDK与 Extension在取消、Retry终止和 `willRetry`上的来源差异；
+- 并行 Tool声明、执行与完成关联：三个调用在首个完成前全部开始，完成顺序为 `beta → gamma → alpha`；
+- 并行 Tool消息边界：Tool Result消息、Turn结果数组和最终 Session顺序为 `alpha → beta → gamma`，不能从完成事件推导；
 - 宿主 Session创建和 Shutdown边界；
 - Runtime Fixture、隔离 Probe、Harness、架构边界与基础测试由 CI持续检查。
 
 尚未冻结：
 
-- 并行 Tool完成顺序与消息顺序；
 - Compaction前后状态；
 - Session Replacement重新订阅；
 - RPC真实 Prompt；
@@ -145,11 +149,10 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 按真实 Runtime风险排序：
 
-1. 录制并行 Tool执行完成顺序与 Tool Result消息顺序；
-2. 验证 Compaction与 Session Replacement；
-3. 比较 SDK与 RPC对同一任务的事件差异；
-4. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
-5. 冻结 Observation Ledger Schema并进入 SQLite实现。
+1. 验证 Compaction与 Session Replacement；
+2. 比较 SDK与 RPC对同一任务的事件差异；
+3. 根据全部真实 Fixture修订 `NormalizedRuntimeEvent`；
+4. 冻结 Observation Ledger Schema并进入 SQLite实现。
 
 ## 已知风险
 
@@ -165,6 +168,6 @@ merge commit             4a81aa5d50035a7c004ec5f7fca59b7ffc926675
 
 ## 产品能力状态
 
-- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复、Follow-up队列、流式取消、Retry Backoff取消和 Retry exhaustion路径；
+- Pi source-and-runtime baseline已验证到正常 Tool、自动重试恢复、Follow-up队列、流式取消、Retry Backoff取消、Retry exhaustion和并行 Tool ordering路径；
 - 真实 Observation持久化、记忆、Context、Attention和桌面端尚未进入实现阶段；
-- M0继续以 Runtime边界证据为先，未完成并发、压缩和替换 Fixture前不提前冻结 Ledger。
+- M0继续以 Runtime边界证据为先，未完成压缩和替换 Fixture前不提前冻结 Ledger。

@@ -860,7 +860,8 @@ for (const [name, document, tokens] of [
       "部分 Assistant消息以 `stopReason=aborted`保留",
       "willRetry=true 但没有后续 Agent Run",
       "Retry exhaustion最终保留最后一次失败 Assistant",
-      "录制并行 Tool执行完成顺序",
+      "并行 Tool ordering Fixture",
+      "验证 Compaction与 Session Replacement",
     ],
   ],
 ]) {
