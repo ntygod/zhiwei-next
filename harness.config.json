@@ -126,6 +126,7 @@
     ".github/workflows/repository-hygiene.yml",
     ".github/workflows/main-provenance.yml",
     ".github/workflows/main-provenance-dispatch.yml",
+    ".github/workflows/pi-sdk-rpc-parity.yml",
     "scripts/branch-cleanup-policy.mjs",
     "scripts/work-item-policy.mjs",
     "scripts/check-agents.mjs",
@@ -134,6 +135,8 @@
     "scripts/check-harness.mjs",
     "scripts/check-pr-contract.mjs",
     "scripts/check-main-provenance.mjs",
-    "scripts/check-main-provenance-dispatch.mjs"
+    "scripts/check-main-provenance-dispatch.mjs",
+    "scripts/check-pi-sdk-rpc-parity-result.mjs",
+    "scripts/pi-sdk-rpc-parity-fixture.mjs"
   ]
 }
