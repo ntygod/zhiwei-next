@@ -29,6 +29,7 @@ jobs:
           set -euo pipefail
           PAYLOAD="$RUNNER_TEMP/sdk-rpc-final.tgz"
           LIST="$RUNNER_TEMP/sdk-rpc-final-files.txt"
+          EXPECTED="$RUNNER_TEMP/expected-sdk-rpc-files.txt"
           mapfile -t CHUNKS < <(find .github/ai-payload -maxdepth 1 -type f -name 'sdk-rpc-final-*.b64' -print | sort)
           if (( ${#CHUNKS[@]} != 6 )); then
             echo "Expected six SDK-RPC finalization chunks, found ${#CHUNKS[@]}." >&2
@@ -42,16 +43,16 @@ jobs:
             echo "Payload contains an unsafe or workflow path." >&2
             exit 1
           fi
-          cat > "$RUNNER_TEMP/expected-sdk-rpc-files.txt" <<'EOF'
-package.json
-scripts/check-pi-sdk-rpc-prompt-result.mjs
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-prompt.json
-docs/spikes/pi-runtime-contract/sdk-rpc-prompt-lifecycle.md
-docs/spikes/pi-runtime-contract/README.md
-docs/architecture/pi-integration.md
-docs/harness/project-state.md
-EOF
-          diff -u "$RUNNER_TEMP/expected-sdk-rpc-files.txt" "$LIST"
+          printf '%s\n' \
+            package.json \
+            scripts/check-pi-sdk-rpc-prompt-result.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-prompt.json \
+            docs/spikes/pi-runtime-contract/sdk-rpc-prompt-lifecycle.md \
+            docs/spikes/pi-runtime-contract/README.md \
+            docs/architecture/pi-integration.md \
+            docs/harness/project-state.md \
+            > "$EXPECTED"
+          diff -u "$EXPECTED" "$LIST"
           tar -xzf "$PAYLOAD"
           rm -rf .github/ai-payload
           rm -f .github/ai-sdk-rpc-finalize-trigger
