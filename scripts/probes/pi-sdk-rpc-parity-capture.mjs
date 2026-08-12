@@ -263,7 +263,7 @@ async function captureSurface() {
       rpcClientUsesStrictJsonlHelpers:
         sourceByPath["dist/modes/rpc/rpc-client.js"].includes("attachJsonlLineReader") &&
         sourceByPath["dist/modes/rpc/rpc-client.js"].includes("serializeJsonLine"),
-      rpcModeEmitsPromptResponse: /success\(command\.id,\s*["']prompt["']\)/.test(
+      rpcModeEmitsPromptResponse: /success\((?:id|command\.id),\s*["']prompt["']\)/.test(
         sourceByPath["dist/modes/rpc/rpc-mode.js"],
       ),
       rpcModeExposesSettledEvent: sourceByPath["dist/modes/rpc/rpc-mode.js"].includes(
