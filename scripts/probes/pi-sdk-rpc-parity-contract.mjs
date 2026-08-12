@@ -52,7 +52,6 @@ export const SDK_RPC_PARITY_REQUIRED_RPC_CLIENT_METHODS = Object.freeze([
   "getMessages",
   "getState",
   "prompt",
-  "send",
   "setModel",
   "setThinkingLevel",
   "start",
