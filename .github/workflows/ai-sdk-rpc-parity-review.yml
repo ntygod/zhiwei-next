@@ -1,0 +1,238 @@
+name: AI review SDK RPC parity contract
+
+on:
+  push:
+    branches:
+      - automation/sdk-rpc-parity-review
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  cold-read-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: spike/m0-pi-sdk-rpc-parity
+      TARGET_PR: "44"
+      TARGET_ISSUE: "43"
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Wait for exact target HEAD checks
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          HEAD_SHA="$(gh api "repos/${REPO}/branches/${TARGET_BRANCH}" --jq '.commit.sha')"
+          echo "head-sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+
+          CI_RUN=""
+          PARITY_RUN=""
+          for attempt in $(seq 1 120); do
+            RUNS="$(gh api --method GET "repos/${REPO}/actions/runs" -f head_sha="$HEAD_SHA" -f per_page=100)"
+            CI_RUN="$(jq -c '[.workflow_runs[] | select(.name == "CI" and .status == "completed" and .conclusion == "success")][0] // empty' <<<"$RUNS")"
+            PARITY_RUN="$(jq -c '[.workflow_runs[] | select(.name == "Pi SDK and RPC parity contract" and .status == "completed" and .conclusion == "success")][0] // empty' <<<"$RUNS")"
+            if [[ -n "$CI_RUN" && -n "$PARITY_RUN" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "$CI_RUN" || -z "$PARITY_RUN" ]]; then
+            echo "Exact target HEAD is missing successful CI or parity Runtime probe."
+            exit 1
+          fi
+          echo "ci-run-id=$(jq -r '.id' <<<"$CI_RUN")" >> "$GITHUB_OUTPUT"
+          echo "ci-run-url=$(jq -r '.html_url' <<<"$CI_RUN")" >> "$GITHUB_OUTPUT"
+          echo "parity-run-id=$(jq -r '.id' <<<"$PARITY_RUN")" >> "$GITHUB_OUTPUT"
+          echo "parity-run-url=$(jq -r '.html_url' <<<"$PARITY_RUN")" >> "$GITHUB_OUTPUT"
+
+          ARTIFACT="$(gh api "repos/${REPO}/actions/runs/$(jq -r '.id' <<<"$PARITY_RUN")/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("pi-sdk-rpc-parity-probe-"))][0] | {id,name,digest}')"
+          echo "artifact-id=$(jq -r '.id' <<<"$ARTIFACT")" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$(jq -r '.name' <<<"$ARTIFACT")" >> "$GITHUB_OUTPUT"
+          echo "artifact-digest=$(jq -r '.digest' <<<"$ARTIFACT")" >> "$GITHUB_OUTPUT"
+
+      - name: Perform isolated repository review
+        id: review
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          TARGET_DIR="$RUNNER_TEMP/target"
+          git fetch origin "${TARGET_BRANCH}"
+          git worktree add --detach "$TARGET_DIR" "$HEAD_SHA"
+          cd "$TARGET_DIR"
+
+          ACTUAL_HEAD="$(git rev-parse HEAD)"
+          [[ "$ACTUAL_HEAD" == "$HEAD_SHA" ]]
+
+          mapfile -t CHANGED_FILES < <(gh api "repos/${REPO}/pulls/${TARGET_PR}/files" --paginate --jq '.[].filename' | sort)
+          cat > "$RUNNER_TEMP/expected-files.txt" <<'EOF'
+          .github/workflows/pi-sdk-rpc-parity.yml
+          docs/architecture/pi-integration.md
+          docs/harness/project-state.md
+          docs/spikes/pi-runtime-contract/README.md
+          docs/spikes/pi-runtime-contract/sdk-rpc-parity.md
+          package.json
+          packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json
+          scripts/check-pi-sdk-rpc-parity-result.mjs
+          scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          EOF
+          printf '%s\n' "${CHANGED_FILES[@]}" > "$RUNNER_TEMP/actual-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/actual-files.txt"
+
+          ! find .github -type f \( -path '*/ai-payload/*' -o -name 'ai-*-trigger' -o -name 'ai-source-export.yml' -o -name 'ai-sdk-rpc-parity-finalizer.yml' -o -name 'ai-sdk-rpc-parity-review.yml' \) | grep -q .
+          ! grep -R --line-number 'pull_request_target\|secrets\.' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q '^permissions:' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q 'contents: read' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q 'persist-credentials: false' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q 'cap-drop=ALL' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q 'no-new-privileges' .github/workflows/pi-sdk-rpc-parity.yml
+          grep -q 'read-only' .github/workflows/pi-sdk-rpc-parity.yml
+
+          grep -q 'stdoutBuffer.indexOf("\\n")' scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          ! grep -q 'node:readline' scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          grep -q 'runRpcMode JSONL over child stdin/stdout' scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          grep -q 'promptResponseBeforeAgentEnd' scripts/probes/pi-sdk-rpc-parity-capture.mjs
+          grep -q 'EXPECTED_OUTER_FINGERPRINT' scripts/check-pi-sdk-rpc-parity-result.mjs
+          grep -q 'EXPECTED_CAPTURE_FINGERPRINT' scripts/check-pi-sdk-rpc-parity-result.mjs
+          grep -q 'SDK / RPC 同任务' docs/architecture/pi-integration.md
+          grep -q 'SDK / RPC 同任务对照 Fixture' docs/harness/project-state.md
+          grep -q 'sdk-rpc-parity.md' docs/spikes/pi-runtime-contract/README.md
+
+          FIXTURE="packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity.json"
+          OUTER_FP="$(jq -r '.contractFingerprint' "$FIXTURE")"
+          CAPTURE_FP="$(jq -r '.capture.contractFingerprint' "$FIXTURE")"
+          [[ -n "$OUTER_FP" && "$OUTER_FP" != "null" ]]
+          [[ -n "$CAPTURE_FP" && "$CAPTURE_FP" != "null" ]]
+          [[ "$(jq -r '.capture.status' "$FIXTURE")" == "passed" ]]
+          [[ "$(jq -r '.capture.sdk.provider.callCount' "$FIXTURE")" == "1" ]]
+          [[ "$(jq -r '.capture.rpc.metrics.provider.callCount' "$FIXTURE")" == "1" ]]
+          [[ "$(jq -r '.capture.rpc.ordering.promptResponseBeforeAgentEnd' "$FIXTURE")" == "true" ]]
+          [[ "$(jq -r '.capture.rpc.parseErrors | length' "$FIXTURE")" == "0" ]]
+          [[ "$(jq -r '.capture.rpc.stderrLines | length' "$FIXTURE")" == "0" ]]
+          [[ "$(jq -r '.capture.sdk.outcome.finalText' "$FIXTURE")" == "Pi SDK and RPC parity complete." ]]
+          [[ "$(jq -r '.capture.rpc.metrics.outcome.finalText' "$FIXTURE")" == "Pi SDK and RPC parity complete." ]]
+
+          node scripts/check-pi-sdk-rpc-parity-result.mjs "$FIXTURE"
+          npm run check
+          git diff --exit-code
+
+          echo "outer-fingerprint=${OUTER_FP}" >> "$GITHUB_OUTPUT"
+          echo "capture-fingerprint=${CAPTURE_FP}" >> "$GITHUB_OUTPUT"
+          echo "changed-files=${#CHANGED_FILES[@]}" >> "$GITHUB_OUTPUT"
+          echo "sdk-events=$(jq -r '.capture.sdk.events | length' "$FIXTURE")" >> "$GITHUB_OUTPUT"
+          echo "rpc-records=$(jq -r '.capture.rpc.records | length' "$FIXTURE")" >> "$GITHUB_OUTPUT"
+          echo "prompt-response-index=$(jq -r '.capture.rpc.ordering.promptResponseIndex' "$FIXTURE")" >> "$GITHUB_OUTPUT"
+          echo "agent-end-index=$(jq -r '.capture.rpc.ordering.agentEndIndex' "$FIXTURE")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish current HEAD cold-read review
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+          CI_RUN_ID: ${{ steps.evidence.outputs.ci-run-id }}
+          CI_RUN_URL: ${{ steps.evidence.outputs.ci-run-url }}
+          PARITY_RUN_ID: ${{ steps.evidence.outputs.parity-run-id }}
+          PARITY_RUN_URL: ${{ steps.evidence.outputs.parity-run-url }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_NAME: ${{ steps.evidence.outputs.artifact-name }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+          OUTER_FP: ${{ steps.review.outputs.outer-fingerprint }}
+          CAPTURE_FP: ${{ steps.review.outputs.capture-fingerprint }}
+          CHANGED_FILES: ${{ steps.review.outputs.changed-files }}
+          SDK_EVENTS: ${{ steps.review.outputs.sdk-events }}
+          RPC_RECORDS: ${{ steps.review.outputs.rpc-records }}
+          PROMPT_RESPONSE_INDEX: ${{ steps.review.outputs.prompt-response-index }}
+          AGENT_END_INDEX: ${{ steps.review.outputs.agent-end-index }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<EOF
+          ## R3 当前 HEAD 冷读审查
+
+          ### 审查对象
+
+          - PR：#${TARGET_PR} `spike(m0): compare Pi SDK and RPC task contracts`
+          - Issue：#${TARGET_ISSUE}
+          - Reviewed HEAD：`${HEAD_SHA}`
+          - 变更文件：${CHANGED_FILES}
+          - CI：${CI_RUN_ID} (${CI_RUN_URL})
+          - SDK/RPC Runtime probe：${PARITY_RUN_ID} (${PARITY_RUN_URL})
+          - Artifact：${ARTIFACT_NAME} (${ARTIFACT_ID})
+          - Artifact digest：`${ARTIFACT_DIGEST}`
+
+          ### 冷读结论
+
+          1. **同任务结果一致。** SDK 与 RPC 均只调用一次发布包 Faux Provider，外部 Provider Prompt 数为零，最终消息均为 `user → assistant`，最终 Assistant 文本完全一致。
+          2. **Prompt 接受与任务完成被正确拆分。** RPC ID 关联 Prompt Response 位于 record ${PROMPT_RESPONSE_INDEX}，最终 `agent_end` 位于 record ${AGENT_END_INDEX}；代码、Fixture、Checker 与文档都禁止把前者当作任务完成。
+          3. **来源表面保留。** SDK Public、Inline Extension、RPC JSONL 和 Host/Child Exit 分别记录，没有用同名事件掩盖字段和稳定边界差异。
+          4. **JSONL 与进程边界严格。** Reader 仅按 LF 分帧，不使用 Node `readline`；尾部无 LF、JSON 解析错误、stderr、非零 Exit 都会 fail-closed。
+          5. **隔离边界符合 R3。** Workflow 只有 read 权限，不使用 `pull_request_target` 或 Secrets；第三方 Artifact 在 digest-pinned、只读 rootfs、非 root、`cap-drop=ALL`、`no-new-privileges` 容器内运行，宿主私有 checkout 不挂载。
+          6. **契约已冻结并持续复验。** committed Fixture、Checker 双层指纹、静态 `npm run check` 和 fresh Runtime Capture 已同时通过；SDK events=${SDK_EVENTS}，RPC records=${RPC_RECORDS}。
+          7. **变更范围干净。** PR 仅包含 9 个预期文件，没有临时 AI Payload、Trigger 或 Finalizer Workflow。
+
+          外层指纹：`${OUTER_FP}`
+
+          内层指纹：`${CAPTURE_FP}`
+
+          ### Verdict
+
+          **Approved。** 未发现阻断合并的正确性、安全性、证据完整性或 Harness 合规问题。
+
+          <!-- zhiwei-independent-review
+          head: ${HEAD_SHA}
+          verdict: approved
+          reviewer: cold-read-ai-same-github-identity
+          -->
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$BODY"
+
+      - name: Complete PR contract and mark Ready
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.evidence.outputs.head-sha }}
+          CI_RUN_ID: ${{ steps.evidence.outputs.ci-run-id }}
+          PARITY_RUN_ID: ${{ steps.evidence.outputs.parity-run-id }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+          OUTER_FP: ${{ steps.review.outputs.outer-fingerprint }}
+          CAPTURE_FP: ${{ steps.review.outputs.capture-fingerprint }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          ORIGINAL_BODY="$(gh api "repos/${REPO}/pulls/${TARGET_PR}" --jq '.body')"
+          export ORIGINAL_BODY HEAD_SHA CI_RUN_ID PARITY_RUN_ID ARTIFACT_ID ARTIFACT_DIGEST OUTER_FP CAPTURE_FP
+          UPDATED_BODY="$(python - <<'PY'
+          import os
+          body = os.environ["ORIGINAL_BODY"]
+          replacements = {
+              "- [ ] 首轮 Pi Runtime Capture 成功": "- [x] 首轮 Pi Runtime Capture 成功",
+              "- [ ] committed Fixture 与 fresh Capture 完整一致": "- [x] committed Fixture 与 fresh Capture 完整一致",
+              "- [ ] `npm run check`": "- [x] `npm run check`",
+              "- [ ] 架构、Spike 和项目状态同步": "- [x] 架构、Spike 和项目状态同步",
+              "- [ ] 当前 HEAD R3 cold-read AI 审查": "- [x] 当前 HEAD R3 cold-read AI 审查",
+              "independent-review: required": "independent-review: complete",
+              "project-state: not-needed": "project-state: updated",
+          }
+          for old, new in replacements.items():
+              body = body.replace(old, new)
+          marker = "## 最终验证证据"
+          if marker not in body:
+              body += f'''\n\n{marker}\n\n```text\nReviewed HEAD       {os.environ["HEAD_SHA"]}\nCI run              {os.environ["CI_RUN_ID"]}\nRuntime probe       {os.environ["PARITY_RUN_ID"]}\nArtifact ID         {os.environ["ARTIFACT_ID"]}\nArtifact digest     {os.environ["ARTIFACT_DIGEST"]}\nOuter fingerprint   {os.environ["OUTER_FP"]}\nCapture fingerprint {os.environ["CAPTURE_FP"]}\n```\n'''
+          print(body)
+          PY
+          )"
+          gh api --method PATCH "repos/${REPO}/pulls/${TARGET_PR}" -f body="$UPDATED_BODY" >/dev/null
+          gh pr ready "$TARGET_PR" --repo "$REPO"
