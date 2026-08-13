@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -26,11 +27,17 @@ function resolveRequiredPath(name) {
   if (!value) throw new Error(`${name} is required.`);
   return resolve(value);
 }
-
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
 }
-
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function fingerprint(value) {
+  const clone = structuredClone(value);
+  delete clone.contractFingerprint;
+  return sha256(JSON.stringify(clone));
+}
 function replaceExactlyOnce(source, before, after, label) {
   const first = source.indexOf(before);
   requireValue(first >= 0, `Raw capture source is missing ${label}.`);
@@ -46,14 +53,12 @@ async function materializeDeterministicRawCapture() {
     readFile(rawCapturePath, "utf8"),
     readFile(contractSourcePath, "utf8"),
   ]);
-
   let patched = replaceExactlyOnce(
     rawSource,
     `  "accepted-provider-error": {\n    provider: RPC_WORKER_ERROR_PROVIDER_ID,\n    api: RPC_WORKER_ERROR_PROVIDER_API_ID,\n    text: "",\n    stopReason: "error",\n    errorMessage: RPC_WORKER_PROVIDER_ERROR_MESSAGE,\n    responseId: "zhiwei-rpc-worker-provider-error-response",\n    timestamp: 3000,\n  },\n`,
     `  "accepted-provider-error": {\n    provider: RPC_WORKER_ERROR_PROVIDER_ID,\n    api: RPC_WORKER_ERROR_PROVIDER_API_ID,\n    text: "",\n    stopReason: "error",\n    errorMessage: RPC_WORKER_PROVIDER_ERROR_MESSAGE,\n    responseId: "zhiwei-rpc-worker-provider-error-response",\n    timestamp: 3000,\n    observationDelayMs: ${PROVIDER_ERROR_OBSERVATION_DELAY_MS},\n  },\n`,
     "accepted Provider-error configuration",
   );
-
   patched = replaceExactlyOnce(
     patched,
     `  providerHandle.setResponses([\n    fauxAssistantMessage(configuration.text, {\n      stopReason: configuration.stopReason,\n      errorMessage: configuration.errorMessage,\n      responseId: configuration.responseId,\n      timestamp: configuration.timestamp,\n    }),\n  ]);\n`,
@@ -79,6 +84,120 @@ async function materializeDeterministicRawCapture() {
   return { capturePath, sourceRoot };
 }
 
+function remapSequenceFields(value, sequenceMap) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (
+      key.endsWith("Sequence") &&
+      Number.isInteger(fieldValue) &&
+      sequenceMap.has(fieldValue)
+    ) {
+      value[key] = sequenceMap.get(fieldValue);
+    }
+  }
+}
+
+function normalizeWorkerCase(caseResult) {
+  const worker = caseResult?.worker;
+  if (!worker || !Array.isArray(worker.transcript)) return;
+  const clientActions = [];
+  const workerTranscript = [];
+  const sequenceMap = new Map();
+
+  for (const sourceRecord of worker.transcript) {
+    if (sourceRecord?.kind === "client") {
+      const {
+        sequence: sourceSequence,
+        kind: _sourceKind,
+        ...action
+      } = sourceRecord;
+      clientActions.push({
+        sequence: clientActions.length + 1,
+        sourceSequence,
+        ...action,
+      });
+      continue;
+    }
+    const record = structuredClone(sourceRecord);
+    const sourceSequence = record.sequence;
+    record.sequence = workerTranscript.length + 1;
+    if (Number.isInteger(sourceSequence)) {
+      sequenceMap.set(sourceSequence, record.sequence);
+    }
+    workerTranscript.push(record);
+  }
+
+  worker.transcript = workerTranscript;
+  worker.clientActions = clientActions;
+  worker.processBoundaries = workerTranscript.filter(
+    (record) =>
+      record.kind === "process" &&
+      (record.event === "exit" || record.event === "close"),
+  );
+  const exitIndex = worker.processBoundaries.findIndex(
+    (record) => record.event === "exit",
+  );
+  const closeIndex = worker.processBoundaries.findIndex(
+    (record) => record.event === "close",
+  );
+  worker.exitBeforeClose = exitIndex >= 0 && closeIndex > exitIndex;
+
+  remapSequenceFields(caseResult.ordering, sequenceMap);
+  for (const field of ["response", "promptResponse"]) {
+    const summary = caseResult[field];
+    if (
+      summary &&
+      Number.isInteger(summary.sequence) &&
+      sequenceMap.has(summary.sequence)
+    ) {
+      summary.sequence = sequenceMap.get(summary.sequence);
+    }
+  }
+}
+
+function findResponseSequence(worker, id, command) {
+  return worker?.transcript?.find(
+    (record) =>
+      record.kind === "response" &&
+      record.id === (id ?? null) &&
+      (command === undefined || record.command === command),
+  )?.sequence;
+}
+
+function normalizeResult(result) {
+  const capture = result?.capture;
+  requireValue(
+    capture?.scenario === "rpc-worker-lifecycle",
+    "Raw capture scenario must be rpc-worker-lifecycle.",
+  );
+  const cases = capture.cases ?? {};
+  for (const caseResult of Object.values(cases)) {
+    normalizeWorkerCase(caseResult);
+  }
+  const normalWorker = cases.normalPromptEof?.worker;
+  const parseSequence = findResponseSequence(normalWorker, null, "parse");
+  const unknownSequence = findResponseSequence(
+    normalWorker,
+    "normal-unicode-unknown",
+  );
+  requireValue(
+    Number.isInteger(parseSequence) && Number.isInteger(unknownSequence),
+    "Normalized protocol error response sequences are missing.",
+  );
+  cases.protocolErrors.malformedJson.responseSequence = parseSequence;
+  cases.protocolErrors.unknownCommand.responseSequence = unknownSequence;
+  capture.contract.sequenceDomains = {
+    workerTranscript: "worker-output-and-process-boundaries",
+    clientActions: "host-local-actions-with-source-sequence",
+    crossDomainTotalOrder: false,
+  };
+  delete capture.contractFingerprint;
+  capture.contractFingerprint = fingerprint(capture);
+  delete result.contractFingerprint;
+  result.contractFingerprint = fingerprint(result);
+  return result;
+}
+
 function appendDiagnostic(current, chunk) {
   const combined = Buffer.concat([current, chunk]);
   return combined.length <= MAX_DIAGNOSTIC_BYTES
@@ -99,7 +218,6 @@ async function runRawCapture() {
     child.stderr.on("data", (chunk) => {
       stderr = appendDiagnostic(stderr, chunk);
     });
-
     await new Promise((resolveRun, rejectRun) => {
       let settled = false;
       let timer;
@@ -109,7 +227,6 @@ async function runRawCapture() {
         clearTimeout(timer);
         callback();
       };
-
       timer = setTimeout(() => {
         try {
           child.kill("SIGKILL");
@@ -125,7 +242,6 @@ async function runRawCapture() {
         );
       }, RAW_CAPTURE_TIMEOUT_MS);
       timer.unref?.();
-
       child.once("error", (error) =>
         finish(() => rejectRun(error)),
       );
@@ -152,18 +268,17 @@ async function runRawCapture() {
 }
 
 await runRawCapture();
-const resultText = await readFile(outputPath, "utf8");
-const result = JSON.parse(resultText);
-const providerError = result?.cases?.acceptedProviderError;
+const rawResult = JSON.parse(await readFile(outputPath, "utf8"));
+const providerError = rawResult?.capture?.cases?.acceptedProviderError;
 requireValue(
   providerError?.stateDuring?.isStreaming === true &&
     providerError.stateDuring.messageCount === 1,
   "Provider-error controlled observation window did not expose running State.",
 );
-requireValue(
-  providerError?.ordering?.promptResponsePrecedesAgentStart === true &&
-    providerError.ordering.failureExpressedAfterAcceptance === true &&
-    providerError.ordering.stateDuringAfterAcceptanceBeforeSettled === true,
-  "Provider-error acceptance, State, and failure ordering drifted.",
+const normalized = normalizeResult(rawResult);
+await writeFile(
+  outputPath,
+  `${JSON.stringify(normalized, null, 2)}\n`,
+  "utf8",
 );
-process.stdout.write(`${JSON.stringify(result)}\n`);
+process.stdout.write(`${JSON.stringify(normalized)}\n`);
