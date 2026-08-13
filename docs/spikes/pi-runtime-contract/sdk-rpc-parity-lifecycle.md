@@ -319,7 +319,7 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     fe4aeb840fa3efed7d881679a78955af470896d9
+capture head     822a8100c04895dc6c20f50996dec30a73ac816f
 workflow run     31666316897
 artifact id      9168052320
 artifact digest  sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e

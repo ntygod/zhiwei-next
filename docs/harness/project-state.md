@@ -69,7 +69,7 @@ capture fingerprint          70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 final Assistant sha256       5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
 external Provider prompts    0
 source state                 verified
-capture head                 fe4aeb840fa3efed7d881679a78955af470896d9
+capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
 capture workflow             31666316897
 capture artifact             9168052320
 capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e

@@ -117,6 +117,26 @@ function readYamlMapping(block, field) {
     : {};
 }
 
+function readTextFenceAfterMarker(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const remainder = source.slice(markerIndex + marker.length);
+  return /^\s*```text\s*\n([\s\S]*?)\n```/u.exec(remainder)?.[1] ?? null;
+}
+
+function requireExactTextField(block, field, expected, documentPath) {
+  if (block === null) return;
+  const matches = [
+    ...block.matchAll(
+      new RegExp(`^${escapeRegExp(field)}[\\t ]+(\\S+)[\\t ]*\\r?$`, "gmu"),
+    ),
+  ];
+  requireValue(
+    matches.length === 1 && matches[0][1] === String(expected),
+    `${documentPath} current verified SDK/RPC identity must contain exactly one ${field} field matching the manifest source.`,
+  );
+}
+
 function gatedCiResultAllowed(required, result) {
   return (required === "true" && result === "success") ||
     (required === "false" && result === "skipped");
@@ -129,6 +149,9 @@ const currentRisk = JSON.parse(await read(currentRiskPath));
 const rulesetRecord = JSON.parse(await read(rulesetPath));
 const proof12 = JSON.parse(await read(proof12Path));
 const proof13 = JSON.parse(await read(proof13Path));
+const sdkRpcFixtureManifestPath =
+  "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json";
+const sdkRpcFixtureManifest = JSON.parse(await read(sdkRpcFixtureManifestPath));
 const scripts = packageJson.scripts ?? {};
 
 requireValue(config.schemaVersion === 3, "harness.config.json schemaVersion must be 3.");
@@ -736,6 +759,70 @@ for (const token of [
   "Pi SDK / Extension",
 ]) {
   requireValue(state.includes(token), `project-state.md is missing continuity token: ${token}`);
+}
+
+const sdkRpcManifestSource = sdkRpcFixtureManifest.source;
+requireValue(
+  /^[0-9a-f]{40}$/u.test(sdkRpcManifestSource?.head ?? "") &&
+    Number.isSafeInteger(sdkRpcManifestSource?.workflowRun) &&
+    sdkRpcManifestSource.workflowRun > 0 &&
+    Number.isSafeInteger(sdkRpcManifestSource?.artifactId) &&
+    sdkRpcManifestSource.artifactId > 0 &&
+    /^sha256:[0-9a-f]{64}$/u.test(sdkRpcManifestSource?.artifactDigest ?? ""),
+  `${sdkRpcFixtureManifestPath} must retain a fully verified source while the documents describe the current verified identity.`,
+);
+
+const runtimeContractReadmePath = "docs/spikes/pi-runtime-contract/README.md";
+const sdkRpcLifecyclePath =
+  "docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md";
+const currentVerifiedIdentityDocuments = [
+  {
+    path: "docs/harness/project-state.md",
+    source: state,
+    marker: "SDK / RPC parity当前 `verified` Fixture身份：",
+    fields: [
+      ["source state", "verified"],
+      ["capture head", sdkRpcManifestSource?.head],
+      ["capture workflow", sdkRpcManifestSource?.workflowRun],
+      ["capture artifact", sdkRpcManifestSource?.artifactId],
+      ["capture artifact digest", sdkRpcManifestSource?.artifactDigest],
+    ],
+  },
+  {
+    path: runtimeContractReadmePath,
+    source: await read(runtimeContractReadmePath),
+    marker: "以下数字是当前 `verified` Manifest记录的内容身份与来源状态：",
+    fields: [
+      ["source state", "verified"],
+      ["capture head", sdkRpcManifestSource?.head],
+      ["capture workflow", sdkRpcManifestSource?.workflowRun],
+      ["capture artifact", sdkRpcManifestSource?.artifactId],
+      ["capture artifact digest", sdkRpcManifestSource?.artifactDigest],
+    ],
+  },
+  {
+    path: sdkRpcLifecyclePath,
+    source: await read(sdkRpcLifecyclePath),
+    marker: "当前 Manifest来源状态：",
+    fields: [
+      ["state", "verified"],
+      ["capture head", sdkRpcManifestSource?.head],
+      ["workflow run", sdkRpcManifestSource?.workflowRun],
+      ["artifact id", sdkRpcManifestSource?.artifactId],
+      ["artifact digest", sdkRpcManifestSource?.artifactDigest],
+    ],
+  },
+];
+
+for (const document of currentVerifiedIdentityDocuments) {
+  const identityBlock = readTextFenceAfterMarker(document.source, document.marker);
+  requireValue(
+    identityBlock !== null,
+    `${document.path} must retain its current verified SDK/RPC identity paragraph.`,
+  );
+  for (const [field, expected] of document.fields) {
+    requireExactTextField(identityBlock, field, expected, document.path);
+  }
 }
 
 const prTemplate = await read(".github/pull_request_template.md");
