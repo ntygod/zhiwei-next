@@ -223,6 +223,65 @@ external Provider prompts     0
 
 Committed Fixture使用确定性gzip/base64、内容寻址Part和Manifest。Loader执行有界Regular File读取、哈希、解压、运行时Checker与Fresh / committed完整对象比较。
 
+## 既有 Fixture 连续性锚点
+
+以下短语与指纹由历史 committed Checker机械读取，记录的是已经验证的事实，不是新的重复合同。
+
+### Source baseline
+
+```text
+source-verified
+runtime-unverified
+toolCallId
+agent_settled
+LF-only
+```
+
+### Retry success
+
+`source-and-runtime-verified-retry-success`对应`pi-lifecycle-retry-success.json`与`retry-success-lifecycle.md`。Public证据包含`agent_end.willRetry`；Extension auto_retry_start / end缺失仍是负证据。
+
+```text
+outer fingerprint   e87f7365eefbb4d7de7a4570a6c99df7a1fdf26f58aa2a40fab9149cb6deff02
+capture fingerprint ed1c450ce6e26be60c29aa6d9a29f13d339cb975999e1a3b4c0a43a5f9b4ac85
+```
+
+### Follow-up queue
+
+`source-and-runtime-verified-follow-up-queue`对应`pi-lifecycle-follow-up-queue.json`与`follow-up-queue-lifecycle.md`。一个公共 Agent Run内追加第二个 Turn；队列清空不等于 Prompt结束；Extension不接收 `queue_update`；`session.prompt()`覆盖排入的 Follow-up。
+
+```text
+outer fingerprint   00c3f7916a129869b768f7e7147a55a8c783b33e5a55e0e79c13eb45a1d692e8
+capture fingerprint 5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386
+```
+
+### Cancel / retry exhaustion
+
+`source-and-runtime-verified-cancel-retry-exhaustion`对应`pi-lifecycle-cancel-retry-exhaustion.json`与`cancel-retry-exhaustion-lifecycle.md`。部分 Assistant必须保留；存在willRetry=true 但没有后续 Run；Retry exhaustion最终保留最终一次失败的 Assistant。
+
+```text
+outer fingerprint   b866798d18569c78d5c712254c3ecdecd7a3e02c0ef11458e6b97b0863b1f6e0
+capture fingerprint b544631413935d2b3f55f9f9f8bcf15a06944bba682cf48471902e4726f79609
+```
+
+### Parallel Tool ordering
+
+`source-and-runtime-verified-parallel-tool-ordering`对应`pi-lifecycle-parallel-tool-ordering.json`与`parallel-tool-ordering-lifecycle.md`。完成顺序与消息顺序分离。
+
+```text
+outer fingerprint   fd372a8e73f4545bd7a34c6ac3e82cfc2d044dca473ae374627b847864389b02
+capture fingerprint 164f0e95e7f617c7aa69d1a1b34a5ae7935673c1ee852fa452541d15c1551376
+```
+
+### Compaction / Session Replacement
+
+`source-and-runtime-verified-compaction-session-replacement`对应`pi-lifecycle-compaction-session-replacement.json`与`compaction-session-replacement-lifecycle.md`。Public `entry_appended`没有出现；旧 Public Listener不会自动迁移。
+
+```text
+outer fingerprint   9ebe87b12f0670214fa1244239d21d7a517b2332da2f3f85b3372b8b6895ab75
+capture fingerprint f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee
+```
+
 ## 隔离与验证
 
 所有动态Probe固定Artifact identity，禁用install scripts，使用只读curated bundle/rootfs、非root、`cap-drop=ALL`、`no-new-privileges`，不传仓库Secret、真实Provider Credential、用户数据或完整宿主环境。结果不保存原始Session ID/File、PID、Provider Response ID、Extension nonce、绝对路径、原始stderr或模型思维链。
