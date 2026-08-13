@@ -436,6 +436,9 @@ function redactDynamicPaths(value) {
   ]) {
     if (path) result = result.split(path).join(replacement);
   }
+  for (const runIdentity of rpcRunIdentities) {
+    result = result.split(runIdentity).join("<run-identity>");
+  }
   return result;
 }
 
@@ -725,9 +728,17 @@ class RpcWorker {
         ),
       });
       if (this.waiters.size > 0) {
+        const stderrLines = this.stderr
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .slice(-10)
+          .map(redactDynamicPaths);
+        const stderrSummary =
+          stderrLines.length > 0 ? ` stderr=${JSON.stringify(stderrLines)}` : "";
         this.fail(
           new Error(
-            `${this.name} exited before ${this.waiters.size} awaited protocol record(s).`,
+            `${this.name} exited before ${this.waiters.size} awaited protocol record(s): ` +
+              `code=${code}, signal=${signal ?? "null"}.${stderrSummary}`,
           ),
         );
       }
@@ -1044,7 +1055,10 @@ async function resolveInstalledCli() {
 }
 
 async function writeSettings(targetAgentDir) {
-  await mkdir(targetAgentDir, { recursive: true });
+  await Promise.all([
+    mkdir(targetAgentDir, { recursive: true }),
+    mkdir(join(targetAgentDir, "home"), { recursive: true }),
+  ]);
   await writeFile(
     join(targetAgentDir, "settings.json"),
     `${JSON.stringify({ retry: { enabled: false } }, null, 2)}\n`,
@@ -1071,8 +1085,6 @@ async function createWorker({
   const args = [
     "--mode",
     "rpc",
-    "--agent-dir",
-    workerAgentDir,
     "--no-tools",
     "--no-extensions",
     "--no-skills",
@@ -1100,6 +1112,7 @@ async function createWorker({
     extensionRunIdentity,
     env: cleanChildEnvironment({
       HOME: join(workerAgentDir, "home"),
+      PI_CODING_AGENT_DIR: workerAgentDir,
       PI_INSTALL_DIR: rpcInstallDir,
       AI_AGENT: "zhiwei-rpc-worker-lifecycle-probe",
       ...(extensionCase
