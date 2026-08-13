@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rawCapturePath = fileURLToPath(
@@ -74,20 +74,25 @@ async function materializeStableRawCapture() {
   );
 
   const sourceRoot = await mkdtemp(
-    join(dirname(outputPath) || tmpdir(), "rpc-worker-stable-source-"),
+    join(tmpdir(), "zhiwei-rpc-worker-stable-source-"),
   );
   const capturePath = join(
     sourceRoot,
     "pi-sdk-rpc-parity-faux-extension.mjs",
   );
+  const contractPath = join(
+    sourceRoot,
+    "pi-sdk-rpc-parity-contract.mjs",
+  );
   await Promise.all([
-    writeFile(capturePath, patched, { flag: "wx", mode: 0o600 }),
-    writeFile(
-      join(sourceRoot, "pi-sdk-rpc-parity-contract.mjs"),
-      contractSource,
-      { flag: "wx", mode: 0o600 },
-    ),
+    writeFile(capturePath, patched, { flag: "wx", mode: 0o400 }),
+    writeFile(contractPath, contractSource, { flag: "wx", mode: 0o400 }),
   ]);
+  await Promise.all([
+    chmod(capturePath, 0o400),
+    chmod(contractPath, 0o400),
+  ]);
+  await chmod(sourceRoot, 0o500);
   return { capturePath, sourceRoot };
 }
 
@@ -322,6 +327,11 @@ async function runRawCapture() {
       });
     });
   } finally {
+    try {
+      await chmod(sourceRoot, 0o700);
+    } catch {
+      // Best-effort permission restoration before recursive cleanup.
+    }
     await rm(sourceRoot, { recursive: true, force: true });
   }
 }
