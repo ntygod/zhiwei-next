@@ -168,6 +168,161 @@ function validateProvenance(manifest) {
   );
 }
 
+function remapSequenceFields(value, sequenceMap) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (
+      key.endsWith("Sequence") &&
+      Number.isInteger(fieldValue) &&
+      sequenceMap.has(fieldValue)
+    ) {
+      value[key] = sequenceMap.get(fieldValue);
+    }
+  }
+}
+
+function normalizeProviderErrorStateRace(caseResult) {
+  const transcript = caseResult?.worker?.transcript;
+  requireValue(
+    Array.isArray(transcript),
+    "Provider-error Worker transcript is missing.",
+  );
+  const stateResponses = transcript.filter(
+    (record) =>
+      record?.kind === "response" &&
+      record.id === "provider-error-state-during" &&
+      record.command === "get_state",
+  );
+  requireValue(
+    stateResponses.length === 1 && stateResponses[0].success === true,
+    "Provider-error State probe must produce one successful response.",
+  );
+  const observed = stateResponses[0].data;
+  requireValue(
+    (observed?.isStreaming === true && observed?.messageCount === 1) ||
+      (observed?.isStreaming === false && observed?.messageCount === 2),
+    "Provider-error State probe escaped the bounded running/settled race.",
+  );
+  caseResult.worker.transcript = transcript.filter(
+    (record) => record !== stateResponses[0],
+  );
+  delete caseResult.stateDuring;
+  if (caseResult.ordering) {
+    delete caseResult.ordering.stateDuringResponseSequence;
+    delete caseResult.ordering.stateDuringAfterAcceptanceBeforeSettled;
+  }
+  caseResult.acceptanceStateProbe = {
+    command: "get_state",
+    requestId: "provider-error-state-during",
+    responseObserved: true,
+    allowedObservedPhases: ["running", "settled"],
+    excludedFromFrozenFixture: true,
+    reason: "provider-error-completion-races-state-response",
+  };
+}
+
+function normalizeWorkerCase(caseResult) {
+  const worker = caseResult?.worker;
+  if (!worker || !Array.isArray(worker.transcript)) return;
+  const clientActions = [];
+  const transcript = [];
+  const sequenceMap = new Map();
+
+  for (const sourceRecord of worker.transcript) {
+    if (sourceRecord?.kind === "client") {
+      const {
+        sequence: _sourceSequence,
+        kind: _sourceKind,
+        ...action
+      } = sourceRecord;
+      clientActions.push({
+        sequence: clientActions.length + 1,
+        ...action,
+      });
+      continue;
+    }
+    const record = structuredClone(sourceRecord);
+    const sourceSequence = record.sequence;
+    record.sequence = transcript.length + 1;
+    if (Number.isInteger(sourceSequence)) {
+      sequenceMap.set(sourceSequence, record.sequence);
+    }
+    transcript.push(record);
+  }
+
+  worker.transcript = transcript;
+  worker.processBoundaries = transcript.filter(
+    (record) =>
+      record.kind === "process" &&
+      (record.event === "exit" || record.event === "close"),
+  );
+  const exitIndex = worker.processBoundaries.findIndex(
+    (record) => record.event === "exit",
+  );
+  const closeIndex = worker.processBoundaries.findIndex(
+    (record) => record.event === "close",
+  );
+  worker.exitBeforeClose = exitIndex >= 0 && closeIndex > exitIndex;
+  worker.clientActions = clientActions;
+
+  remapSequenceFields(caseResult.ordering, sequenceMap);
+  for (const field of ["response", "promptResponse"]) {
+    const summary = caseResult[field];
+    if (
+      summary &&
+      Number.isInteger(summary.sequence) &&
+      sequenceMap.has(summary.sequence)
+    ) {
+      summary.sequence = sequenceMap.get(summary.sequence);
+    }
+  }
+}
+
+function findResponseSequence(worker, id, command) {
+  return worker?.transcript?.find(
+    (record) =>
+      record.kind === "response" &&
+      record.id === (id ?? null) &&
+      (command === undefined || record.command === command),
+  )?.sequence;
+}
+
+function normalizeResult(result) {
+  const capture = result?.capture;
+  requireValue(
+    capture?.scenario === "rpc-worker-lifecycle",
+    "RPC Worker Fixture scenario drifted.",
+  );
+  const cases = capture.cases ?? {};
+  normalizeProviderErrorStateRace(cases.acceptedProviderError);
+  for (const caseResult of Object.values(cases)) {
+    normalizeWorkerCase(caseResult);
+  }
+  const normalWorker = cases.normalPromptEof?.worker;
+  const parseSequence = findResponseSequence(normalWorker, null, "parse");
+  const unknownSequence = findResponseSequence(
+    normalWorker,
+    "normal-unicode-unknown",
+  );
+  requireValue(
+    Number.isInteger(parseSequence) && Number.isInteger(unknownSequence),
+    "Normalized protocol response sequences are missing.",
+  );
+  cases.protocolErrors.malformedJson.responseSequence = parseSequence;
+  cases.protocolErrors.unknownCommand.responseSequence = unknownSequence;
+  capture.contract.sequenceDomains = {
+    workerTranscript: "worker-output-and-process-boundaries",
+    clientActions: "host-local-actions",
+    crossDomainTotalOrder: false,
+    raceSensitiveSnapshots: "bounded-validation-then-excluded",
+  };
+  delete capture.contractFingerprint;
+  capture.contractFingerprint = fingerprint(capture);
+  delete result.contractFingerprint;
+  result.contractFingerprint = fingerprint(result);
+  return result;
+}
+
 async function loadFixture() {
   const manifest = parseUtf8Json(
     await readBoundedRegular(
@@ -277,20 +432,22 @@ async function loadFixture() {
       "Base Provider-error case is missing.",
     );
     result.capture.cases.acceptedProviderError = replacement.replacement;
-    result.capture.contractFingerprint = manifest.captureContractFingerprint;
-    result.contractFingerprint = manifest.outerContractFingerprint;
-    const jsonBytes = Buffer.from(JSON.stringify(result), "utf8");
-    requireValue(jsonBytes.length === manifest.jsonBytes, "Final JSON length drifted.");
-    requireValue(sha256(jsonBytes) === manifest.jsonSha256, "Final JSON hash drifted.");
+    const normalized = normalizeResult(result);
+    const jsonBytes = Buffer.from(JSON.stringify(normalized), "utf8");
+    const actual = {
+      jsonBytes: jsonBytes.length,
+      jsonSha256: sha256(jsonBytes),
+      outerContractFingerprint: normalized.contractFingerprint,
+      captureContractFingerprint: normalized.capture.contractFingerprint,
+    };
     requireValue(
-      result.contractFingerprint === fingerprint(result),
-      "Final outer fingerprint is invalid.",
+      actual.jsonBytes === manifest.jsonBytes &&
+        actual.jsonSha256 === manifest.jsonSha256 &&
+        actual.outerContractFingerprint === manifest.outerContractFingerprint &&
+        actual.captureContractFingerprint === manifest.captureContractFingerprint,
+      `Final normalized identity drifted: ${JSON.stringify(actual)}.`,
     );
-    requireValue(
-      result.capture.contractFingerprint === fingerprint(result.capture),
-      "Final capture fingerprint is invalid.",
-    );
-    return { manifest, result, jsonBytes };
+    return { manifest, result: normalized, jsonBytes };
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
