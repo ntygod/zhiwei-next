@@ -11,7 +11,7 @@ const repositoryRoot = resolve(fixtureDir, "../../../../");
 const manifestPath = join(fixtureDir, "rpc-worker-lifecycle-manifest.json");
 const checkerPath = join(
   repositoryRoot,
-  "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+  "scripts/check-pi-sdk-rpc-client-messages-legacy-result.mjs",
 );
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_PART_BYTES = 1024 * 1024;
