@@ -115,6 +115,18 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest.json
 ```
 
+## committed Runtime 连续性锚点
+
+这些句子由历史 Fixture Checker机械读取，记录已经进入 main 的 Runtime 事实；项目状态压缩不得删除。
+
+- **自动重试恢复成功 Fixture**：公共 `agent_end.willRetry=[true,false]`；Extension没有 `auto_retry_start/end`，被替代失败Message仍从事件流持久化。
+- **Follow-up队列 Fixture**：一个公共 Agent Run包含两个 Turn；Extension没有 `queue_update`；初始 `session.prompt()`会等到 Follow-up完成、Queue排空和Session idle后返回。
+- 已验证用户取消、`abortRetry()`和 retry exhaustion；**取消、abortRetry与 Retry exhaustion Fixture**中，部分 Assistant消息以 `stopReason=aborted`保留，存在willRetry=true 但没有后续 Agent Run，Retry exhaustion最终保留最后一次失败 Assistant。
+- **并行 Tool ordering Fixture**：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
+- **Compaction 与 Session Replacement Fixture**：模型Context为 `compactionSummary → assistant`；Session对象为 `session-object-1 → session-object-2 → session-object-3`；旧 Public Listener不会自动迁移。验证 Compaction与 Session Replacement后，原始Entry、派生Summary、Session Object与Listener Rebind仍保持不同来源。
+- **RPC真实 Prompt**：Command Response、Runtime Event、State / Messages、Extension Shutdown与Process Boundary分别保存。
+- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；当前由即时dispatch与reconciler闭环，不能通过降低来源校验解决。
+
 ## Harness 与默认分支
 
 - `developmentPause.active=false`，Issue #9 已关闭，事故审计历史继续保留；
@@ -144,7 +156,7 @@ branch feat/m0-sqlite-observation-ledger-v1
 head   0da4e97e5cac42add96a55285976a93afd992495
 ```
 
-该分支是冻结、未审查、未交付代码快照。解锁后必须从最新main创建符合当前规则的#56分支，逐项审查是否复用，不直接合并旧快照。
+该分支是冻结、未审查、未交付代码快照。正式 Ledger实现仍需重新从最新 main创建合规分支，逐项审查是否复用，不直接合并旧快照。
 
 ## 当前 M0 能力
 
