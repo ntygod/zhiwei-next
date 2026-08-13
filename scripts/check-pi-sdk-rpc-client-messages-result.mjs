@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -223,7 +223,52 @@ async function readBounded(path) {
   if (before.size > BigInt(MAX_BYTES)) {
     throw new Error("RPC Worker evidence exceeds its byte limit.");
   }
-  return readFile(path, "utf8");
+
+  const handle = await open(path, "r");
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size > BigInt(MAX_BYTES)
+    ) {
+      throw new Error("RPC Worker evidence changed while it was opened.");
+    }
+
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(
+        Math.min(64 * 1024, MAX_BYTES + 1 - total),
+      );
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > MAX_BYTES) {
+        throw new Error("RPC Worker evidence exceeds its byte limit.");
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+
+    const after = await handle.stat({ bigint: true });
+    if (
+      after.dev !== opened.dev ||
+      after.ino !== opened.ino ||
+      after.size !== opened.size
+    ) {
+      throw new Error("RPC Worker evidence changed while it was read.");
+    }
+
+    const bytes = Buffer.concat(chunks, total);
+    const text = bytes.toString("utf8");
+    if (!Buffer.from(text, "utf8").equals(bytes)) {
+      throw new Error("RPC Worker evidence must be valid UTF-8.");
+    }
+    return text;
+  } finally {
+    await handle.close();
+  }
 }
 
 async function runWorkerChecker(path) {
@@ -236,6 +281,9 @@ async function runWorkerChecker(path) {
     );
   }
 
+  // Compatibility-only view for the legacy invariant checker. This object is
+  // written to an isolated temporary file and is never committed or compared
+  // as Runtime evidence; the normalized Fixture above remains authoritative.
   const projected = structuredClone(result);
   const providerError = projected.capture.cases.acceptedProviderError;
   providerError.stateDuring = structuredClone(providerError.finalState);
