@@ -80,7 +80,7 @@ for (const required of [
   "node scripts/check-pi-retry-lifecycle-result.mjs \"$PI_RETRY_LIFECYCLE_OUTPUT\"",
   "Upload sanitized retry lifecycle evidence",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "if: always()",
+  "if: success()",
 ]) {
   requireValue(ci.includes(required), `CI workflow is missing retry lifecycle token: ${required}`);
 }

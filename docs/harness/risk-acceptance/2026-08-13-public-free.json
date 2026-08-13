@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "decisionId": "RISK-MAIN-PUBLIC-FREE-2026-08-13",
+  "status": "accepted",
+  "repository": "ntygod/zhiwei-next",
+  "repositoryVisibility": "public",
+  "githubPlan": "free",
+  "operatingMode": "public-free-ruleset",
+  "decidedAt": "2026-08-13",
+  "decidedBy": "repository-owner-visibility-change-and-autonomous-governance",
+  "supersedes": "docs/harness/risk-acceptance/2026-08-11-private-free.json",
+  "evidence": {
+    "governanceIssue": 61,
+    "ownerChangedRepositoryToPublic": true,
+    "ownerRequestedContinuedDevelopment": true,
+    "rulesetRecord": "docs/harness/rulesets/2026-08-13-main-public-free.json"
+  },
+  "ownerDecision": {
+    "changedRepositoryToPublic": true,
+    "keepPublic": true,
+    "upgradePlanRequested": false,
+    "continueAutonomousDevelopment": true
+  },
+  "governanceDecision": {
+    "keepCurrentFreePlan": true,
+    "enableServerRuleset": true,
+    "restrictActionsToPinnedGitHubOwnedActions": true,
+    "enableSecretScanningAndPushProtection": true
+  },
+  "acceptedResidualRisks": [
+    "Repository source, issue and pull request history, and intentionally uploaded sanitized artifacts are publicly readable.",
+    "The public-surface audit observed 610 Actions artifact records but did not perform a historical byte-by-byte audit; current workflows must enforce sanitization before upload and short explicit retention.",
+    "A repository administrator can still change or delete the server ruleset; post-merge hygiene and project audits must make that drift visible.",
+    "The required check context and GitHub Actions integration identity can drift and fail closed by blocking merges.",
+    "A server ruleset does not replace untrusted fork isolation, workflow token minimization, Main Provenance, or incident recovery controls.",
+    "GitHub service or API availability can block autonomous merges even when repository code is correct."
+  ],
+  "mandatoryControls": [
+    "The active default-branch ruleset has no bypass actors.",
+    "Default-branch updates require a pull request, the GitHub Actions check context, linear history, and resolved review conversations.",
+    "Only squash merge is allowed; force pushes and branch deletion are blocked.",
+    "Repository merge settings disable merge commits and rebase merges in addition to the main ruleset's squash-only policy.",
+    "Pull request workflows execute untrusted fork code with read-only tokens and no repository secrets.",
+    "External-fork pull requests are never autonomously merged; token-bearing workflow_run jobs require a same-repository source.",
+    "Token-bearing provenance jobs never execute fork-controlled code.",
+    "Secret scanning and push protection remain enabled while validity checks stay disabled unless a later risk review authorizes issuer verification side effects.",
+    "Probe artifacts are uploaded only after both capture and sanitization checks succeed; failure JSON is not public evidence.",
+    "Main Provenance continues to audit successful merges even though pre-receive protection is now active.",
+    "R2 and R3 changes require a current-HEAD cold-read AI review.",
+    "Secrets, real user memory, production data, private repository material, and raw chain of thought remain prohibited from commits and artifacts."
+  ],
+  "revisitTriggers": [
+    "The repository becomes private again or moves to another owner.",
+    "The GitHub plan or default branch changes.",
+    "The active ruleset is disabled, deleted, bypassed, or materially modified.",
+    "Real user memory, production credentials, or production data are introduced.",
+    "More than one human collaborator receives write access.",
+    "A production release workflow is introduced.",
+    "Secret scanning or push protection is disabled.",
+    "An unauthorized direct-main update succeeds despite the active ruleset."
+  ]
+}

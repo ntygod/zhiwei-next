@@ -129,7 +129,7 @@ jobs:
         run: node scripts/check-pi-compaction-session-replacement-result.mjs "$PI_COMPACTION_SESSION_REPLACEMENT_OUTPUT"
 
       - name: Upload sanitized Compaction and Session Replacement evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pi-compaction-session-replacement-probe-${{ github.run_id }}-${{ github.run_attempt }}

@@ -69,7 +69,7 @@ for (const required of [
   "PI_LIFECYCLE_COMMITTED_FIXTURE=/probe/packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json",
   "Upload sanitized lifecycle evidence",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "if: always()",
+  "if: success()",
 ]) {
   requireValue(ci.includes(required), `CI workflow is missing lifecycle token: ${required}`);
 }

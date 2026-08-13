@@ -3,7 +3,9 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const violations = [];
-const riskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
+const historicalRiskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
+const currentRiskPath = "docs/harness/risk-acceptance/2026-08-13-public-free.json";
+const rulesetPath = "docs/harness/rulesets/2026-08-13-main-public-free.json";
 const proof12Path = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
 const proof13Path = "docs/harness/provenance-proofs/2026-08-11-pr-13.json";
 
@@ -24,16 +26,22 @@ function requireValue(condition, message) {
   if (!condition) violations.push(message);
 }
 
+function jsonEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 const config = JSON.parse(await read("harness.config.json"));
 const packageJson = JSON.parse(await read("package.json"));
-const risk = JSON.parse(await read(riskPath));
+const historicalRisk = JSON.parse(await read(historicalRiskPath));
+const currentRisk = JSON.parse(await read(currentRiskPath));
+const rulesetRecord = JSON.parse(await read(rulesetPath));
 const proof12 = JSON.parse(await read(proof12Path));
 const proof13 = JSON.parse(await read(proof13Path));
 const scripts = packageJson.scripts ?? {};
 
 requireValue(config.schemaVersion === 3, "harness.config.json schemaVersion must be 3.");
 requireValue(config.mode === "ai-primary", "Harness mode must remain ai-primary.");
-requireValue(config.operatingMode === "best-effort-private-free", "Harness operatingMode must be best-effort-private-free.");
+requireValue(config.operatingMode === "public-free-ruleset", "Harness operatingMode must be public-free-ruleset.");
 requireValue(config.defaultBranch === "main", "Harness defaultBranch must be main.");
 requireValue(config.humanReviewRequired === false, "humanReviewRequired must remain false.");
 requireValue(config.pullRequestRequired === true, "Normal autonomous work must require pull requests.");
@@ -51,11 +59,13 @@ requireValue(
 );
 
 for (const [field, expected] of Object.entries({
-  serverEnforced: false,
-  availability: "unavailable-current-plan",
+  serverEnforced: true,
+  availability: "active-public-ruleset",
   ownerActionRequired: false,
   residualRiskAccepted: true,
-  riskAcceptanceRecord: riskPath,
+  riskAcceptanceRecord: currentRiskPath,
+  rulesetRecord: rulesetPath,
+  rulesetId: 20776157,
   liveProofVerified: true,
   liveProofRecord: proof12Path,
   incidentClosureProofRecord: proof13Path,
@@ -67,16 +77,197 @@ for (const [field, expected] of Object.entries({
   requireValue(config.mainProtection?.[field] === expected, `mainProtection.${field} must be ${expected}.`);
 }
 
-requireValue(risk.schemaVersion === 1 && risk.status === "accepted", "Risk acceptance must remain accepted schema 1.");
-requireValue(risk.operatingMode === config.operatingMode, "Risk acceptance operating mode differs from config.");
-requireValue(risk.repository === "ntygod/zhiwei-next", "Risk acceptance repository is incorrect.");
-requireValue(risk.repositoryVisibility === "private" && risk.githubPlan === "free", "Risk acceptance visibility/plan is incorrect.");
-requireValue(risk.ownerDecision?.keepPrivate === true, "Owner decision must keep the repository private.");
-requireValue(risk.ownerDecision?.upgradePlan === false, "Owner decision must reject plan upgrade.");
-requireValue(risk.ownerDecision?.removeIneffectiveRuleset === true, "Owner decision must record removal of the ineffective Ruleset.");
-requireValue(risk.ownerDecision?.continueAutonomousDevelopment === true, "Owner decision must continue autonomous development.");
-requireValue(risk.evidence?.incidentIssue === 9 && risk.evidence?.ownerDecisionCommentId === 5253754189, "Risk acceptance evidence is incorrect.");
-requireValue(risk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."), "A second incident must trigger reassessment.");
+requireValue(
+  historicalRisk.schemaVersion === 1 && historicalRisk.status === "accepted",
+  "Historical Private + Free risk acceptance must remain accepted schema 1.",
+);
+requireValue(historicalRisk.operatingMode === "best-effort-private-free", "Historical risk operating mode is incorrect.");
+requireValue(
+  historicalRisk.repositoryVisibility === "private" && historicalRisk.githubPlan === "free",
+  "Historical risk visibility/plan is incorrect.",
+);
+requireValue(historicalRisk.ownerDecision?.keepPrivate === true, "Historical owner decision must retain keepPrivate=true.");
+requireValue(historicalRisk.ownerDecision?.upgradePlan === false, "Historical owner decision must retain upgradePlan=false.");
+requireValue(
+  historicalRisk.ownerDecision?.removeIneffectiveRuleset === true,
+  "Historical owner decision must retain removal of the ineffective Ruleset.",
+);
+requireValue(
+  historicalRisk.ownerDecision?.continueAutonomousDevelopment === true,
+  "Historical owner decision must retain continued autonomous development.",
+);
+requireValue(
+  historicalRisk.evidence?.incidentIssue === 9 && historicalRisk.evidence?.ownerDecisionCommentId === 5253754189,
+  "Historical risk acceptance evidence is incorrect.",
+);
+
+requireValue(
+  currentRisk.schemaVersion === 1 && currentRisk.status === "accepted",
+  "Current Public + Free risk acceptance must be accepted schema 1.",
+);
+requireValue(currentRisk.decisionId === "RISK-MAIN-PUBLIC-FREE-2026-08-13", "Current risk decision ID is incorrect.");
+requireValue(
+  currentRisk.decidedBy === "repository-owner-visibility-change-and-autonomous-governance",
+  "Current risk decision attribution is incorrect.",
+);
+requireValue(currentRisk.repository === "ntygod/zhiwei-next", "Current risk repository is incorrect.");
+requireValue(
+  currentRisk.repositoryVisibility === "public" && currentRisk.githubPlan === "free",
+  "Current risk visibility/plan must be Public + Free.",
+);
+requireValue(currentRisk.operatingMode === config.operatingMode, "Current risk operating mode differs from config.");
+requireValue(currentRisk.supersedes === historicalRiskPath, "Current risk must supersede the historical Private + Free record.");
+requireValue(
+  currentRisk.evidence?.governanceIssue === 61 &&
+    currentRisk.evidence?.ownerChangedRepositoryToPublic === true &&
+    currentRisk.evidence?.ownerRequestedContinuedDevelopment === true &&
+    currentRisk.evidence?.rulesetRecord === rulesetPath,
+  "Current risk acceptance evidence is incorrect.",
+);
+requireValue(
+  currentRisk.ownerDecision?.changedRepositoryToPublic === true &&
+    currentRisk.ownerDecision?.keepPublic === true &&
+    currentRisk.ownerDecision?.upgradePlanRequested === false &&
+    currentRisk.ownerDecision?.continueAutonomousDevelopment === true,
+  "Current Public + Free owner decision is incomplete.",
+);
+requireValue(
+  currentRisk.governanceDecision?.keepCurrentFreePlan === true &&
+    currentRisk.governanceDecision?.enableServerRuleset === true &&
+    currentRisk.governanceDecision?.restrictActionsToPinnedGitHubOwnedActions === true &&
+    currentRisk.governanceDecision?.enableSecretScanningAndPushProtection === true,
+  "Current autonomous governance decision is incomplete.",
+);
+for (const control of [
+  "The active default-branch ruleset has no bypass actors.",
+  "Pull request workflows execute untrusted fork code with read-only tokens and no repository secrets.",
+  "External-fork pull requests are never autonomously merged; token-bearing workflow_run jobs require a same-repository source.",
+  "Token-bearing provenance jobs never execute fork-controlled code.",
+  "Secret scanning and push protection remain enabled while validity checks stay disabled unless a later risk review authorizes issuer verification side effects.",
+  "Probe artifacts are uploaded only after both capture and sanitization checks succeed; failure JSON is not public evidence.",
+]) {
+  requireValue(currentRisk.mandatoryControls?.includes(control), `Current risk acceptance is missing mandatory control: ${control}`);
+}
+requireValue(
+  currentRisk.revisitTriggers?.includes("The active ruleset is disabled, deleted, bypassed, or materially modified."),
+  "Ruleset drift must trigger current risk reassessment.",
+);
+
+requireValue(
+  rulesetRecord.schemaVersion === 1 && rulesetRecord.status === "active-verified",
+  "Ruleset record must be active-verified schema 1.",
+);
+requireValue(
+  rulesetRecord.repository === "ntygod/zhiwei-next" &&
+    rulesetRecord.repositoryVisibility === "public" &&
+    rulesetRecord.githubPlan === "free" &&
+    rulesetRecord.governanceIssue === 61,
+  "Ruleset record repository, plan or governance issue is incorrect.",
+);
+requireValue(
+  rulesetRecord.preChangeEvidence?.rulesetCount === 0 && rulesetRecord.preChangeEvidence?.mainProtected === false,
+  "Ruleset pre-change evidence is incorrect.",
+);
+for (const [field, expected] of Object.entries({
+  id: 20776157,
+  name: "Protect main (public-free)",
+  target: "branch",
+  sourceType: "Repository",
+  source: "ntygod/zhiwei-next",
+  enforcement: "active",
+})) {
+  requireValue(rulesetRecord.ruleset?.[field] === expected, `Ruleset ${field} must be ${expected}.`);
+}
+requireValue(jsonEqual(rulesetRecord.ruleset?.bypassActors, []), "Ruleset bypassActors must be empty.");
+requireValue(
+  jsonEqual(rulesetRecord.ruleset?.conditions, {
+    refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+  }),
+  "Ruleset must target only the default branch.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.ruleset?.rules, [
+    { type: "deletion" },
+    { type: "non_fast_forward" },
+    { type: "required_linear_history" },
+    {
+      type: "pull_request",
+      parameters: {
+        allowedMergeMethods: ["squash"],
+        dismissStaleReviewsOnPush: false,
+        requireCodeOwnerReview: false,
+        requireLastPushApproval: false,
+        requiredApprovingReviewCount: 0,
+        requiredReviewThreadResolution: true,
+      },
+    },
+    {
+      type: "required_status_checks",
+      parameters: {
+        doNotEnforceOnCreate: false,
+        strictRequiredStatusChecksPolicy: true,
+        requiredStatusChecks: [{ context: "check", integrationId: 15368, integrationSlug: "github-actions" }],
+      },
+    },
+  ]),
+  "Ruleset rules or parameters differ from the exact approved configuration.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.liveReadback, {
+    rulesetApiStatus: 200,
+    activeRulesApiStatus: 200,
+    mainProtected: true,
+    currentUserCanBypass: "never",
+    activeRuleTypes: ["deletion", "non_fast_forward", "required_linear_history", "pull_request", "required_status_checks"],
+  }),
+  "Ruleset live readback is incomplete or incorrect.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.actionsSecurity, {
+    enabled: true,
+    allowedActions: "selected",
+    shaPinningRequired: true,
+    githubOwnedAllowed: true,
+    verifiedAllowed: false,
+    patternsAllowed: [],
+    forkPullRequestApprovalPolicy: "all_external_contributors",
+    defaultWorkflowPermissions: "read",
+    actionsCanApprovePullRequestReviews: false,
+  }),
+  "Actions security settings differ from the approved Public repository boundary.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.repositoryMergeSettings, {
+    allowMergeCommit: false,
+    allowSquashMerge: true,
+    allowRebaseMerge: false,
+  }),
+  "Repository merge settings must allow squash only.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.securityAndAnalysis, {
+    secretScanning: "enabled",
+    secretScanningPushProtection: "enabled",
+    validityChecks: "disabled",
+    validityChecksReason:
+      "Credential issuer verification can create an external network side effect and is outside this minimal governance change.",
+  }),
+  "Secret scanning, push protection or validity-check decision differs from the approved record.",
+);
+requireValue(
+  rulesetRecord.publicSurfaceAudit?.directCollaborators?.length === 1 &&
+    rulesetRecord.publicSurfaceAudit.directCollaborators[0] === "ntygod" &&
+    rulesetRecord.publicSurfaceAudit?.deployKeys === 0 &&
+    rulesetRecord.publicSurfaceAudit?.actionsSecrets === 0 &&
+    rulesetRecord.publicSurfaceAudit?.actionsVariables === 0 &&
+    rulesetRecord.publicSurfaceAudit?.environments === 0 &&
+    rulesetRecord.publicSurfaceAudit?.selfHostedRunners === 0 &&
+    rulesetRecord.publicSurfaceAudit?.deployments === 0 &&
+    rulesetRecord.publicSurfaceAudit?.releases === 0 &&
+    rulesetRecord.publicSurfaceAudit?.actionsArtifactsApiTotalCount === 610 &&
+    rulesetRecord.publicSurfaceAudit?.artifactByteAuditPerformed === false,
+  "Public surface audit must retain its measured access and artifact boundary.",
+);
 
 function verifyProof(proof, expected) {
   requireValue(proof.schemaVersion === 1 && proof.status === "verified", `${expected.label} proof must be verified schema 1.`);
@@ -126,7 +317,9 @@ for (const path of config.governanceFiles ?? []) {
   requireValue(await exists(path), `Missing governance file declared by harness.config.json: ${path}`);
 }
 for (const required of [
-  riskPath,
+  historicalRiskPath,
+  currentRiskPath,
+  rulesetPath,
   proof12Path,
   proof13Path,
   "docs/harness/main-protection.md",
@@ -166,9 +359,15 @@ const status = /^status:\s*(\S+)\s*$/m.exec(stateBlock)?.[1];
 requireValue(milestone === config.currentMilestone, "project-state milestone differs from Harness config.");
 requireValue(status === "active", "project-state status must be active after incident closure.");
 for (const token of [
+  "public-free-ruleset",
+  "Public + GitHub Free",
+  "Ruleset `20776157`",
   "best-effort-private-free",
   "developmentPause.active=false",
   "Issue #9 已关闭",
+  "PR #60已合并",
+  "Issue #61",
+  "Issue #32",
   "31498003965",
   "31498045898",
   "31498045864",
@@ -216,7 +415,7 @@ for (const required of [
   "node scripts/probes/pi-artifact-ci.mjs",
   "scripts/check-pi-artifact-result.mjs",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "if: always()",
+  "if: success()",
   "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
   "--read-only",
   "--user=1000:1000",
@@ -228,9 +427,22 @@ for (const required of [
 }
 requireValue(!ci.includes("pull_request_target:"), "CI must not use pull_request_target.");
 requireValue(!/\$\{\{\s*secrets\./.test(ci), "CI must not inject repository secrets into the Pi Artifact probe.");
+requireValue(!ci.includes("if: always()"), "CI must never upload failed or unvalidated probe output with if: always().");
+
+for (const workflowPath of [
+  ".github/workflows/pi-compaction-session-replacement.yml",
+  ".github/workflows/pi-parallel-tool-ordering.yml",
+]) {
+  const workflow = await read(workflowPath);
+  requireValue(workflow.includes("if: success()"), `${workflowPath} must upload evidence only after successful validation.`);
+  requireValue(!workflow.includes("if: always()"), `${workflowPath} must not upload failed or unvalidated probe output.`);
+}
 
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");
 for (const required of [
+  "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.head_repository?.full_name !== repositoryFullName",
+  "pr.head.repo?.full_name !== repositoryFullName",
   "readTrustedJson(\"harness.config.json\")",
   "developmentPause?.active",
   "configuredIncidentIssue",
@@ -263,6 +475,8 @@ for (const required of [
 const dispatchWorkflow = await read(".github/workflows/main-provenance-dispatch.yml");
 for (const required of [
   "workflow_run:",
+  "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.head_repository?.full_name !== repositoryFullName",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
@@ -270,6 +484,20 @@ for (const required of [
   "reason: \"provenance-dispatch-failed\"",
 ]) {
   requireValue(dispatchWorkflow.includes(required), `Main Provenance Dispatch is missing required token: ${required}`);
+}
+
+const repositoryHygiene = await read(".github/workflows/repository-hygiene.yml");
+for (const required of [
+  "auditMainProtection",
+  "repository.visibility === \"public\"",
+  "mainBranch.protected === true",
+  '"GET /repos/{owner}/{repo}/rulesets/{ruleset_id}"',
+  "liveRuleset.current_user_can_bypass === \"never\"",
+  "repository.allow_merge_commit ===",
+  "repository.security_and_analysis?.secret_scanning?.status ===",
+  "Live required-status Ruleset parameters drifted from the record.",
+]) {
+  requireValue(repositoryHygiene.includes(required), `Repository Hygiene is missing Public Ruleset audit token: ${required}`);
 }
 
 for (const [name, workflow] of [
@@ -283,12 +511,16 @@ for (const [name, workflow] of [
 
 const protection = await read("docs/harness/main-protection.md");
 for (const required of [
-  "best-effort-private-free",
-  "Private + GitHub Free",
+  "public-free-ruleset",
+  "Public + GitHub Free",
+  "Ruleset `20776157`",
   "pre-receive",
-  "direct-push bypass",
-  riskPath,
-  "再次发生未经授权的 direct-main Incident",
+  "Bypass actors",
+  "Fork 与 Token 边界",
+  currentRiskPath,
+  historicalRiskPath,
+  rulesetPath,
+  "在 active Ruleset下仍发生未经授权的 direct-main更新",
 ]) {
   requireValue(protection.includes(required), `Main protection document is missing: ${required}`);
 }
@@ -312,9 +544,10 @@ for (const required of ["docs/harness/README.md", "docs/harness/autonomy-policy.
 const harnessAgents = await read("docs/harness/AGENTS.md");
 for (const required of [
   "禁止把 `branch: main`",
-  "best-effort-private-free",
+  "public-free-ruleset",
   "Main Incident 安全停机",
-  riskPath.replace("docs/harness/", ""),
+  currentRiskPath.replace("docs/harness/", ""),
+  rulesetPath.replace("docs/harness/", ""),
   "npm run check:main-provenance-dispatch",
 ]) {
   requireValue(harnessAgents.includes(required), `Harness AGENTS.md is missing rule: ${required}`);
@@ -325,4 +558,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Autonomous development Harness: OK (best-effort-private-free, incident closed, active)");
+console.log("Autonomous development Harness: OK (public-free-ruleset, server protected, incident closed, active)");
