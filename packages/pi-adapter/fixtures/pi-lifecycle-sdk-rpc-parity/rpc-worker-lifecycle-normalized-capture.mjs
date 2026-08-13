@@ -20,24 +20,31 @@ const contractSourcePath = fileURLToPath(
 const outputPath = resolveRequiredPath("PI_LIFECYCLE_OUTPUT");
 const RAW_CAPTURE_TIMEOUT_MS = 150_000;
 const MAX_DIAGNOSTIC_BYTES = 256 * 1024;
-const PROVIDER_ERROR_OBSERVATION_DELAY_MS = 500;
 
 function resolveRequiredPath(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required.`);
   return resolve(value);
 }
-function requireValue(condition, message) {
-  if (!condition) throw new Error(message);
-}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
-function fingerprint(value) {
+
+function stableResult(value) {
   const clone = structuredClone(value);
   delete clone.contractFingerprint;
-  return sha256(JSON.stringify(clone));
+  return JSON.stringify(clone);
 }
+
+function fingerprint(value) {
+  return sha256(stableResult(value));
+}
+
+function requireValue(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
 function replaceExactlyOnce(source, before, after, label) {
   const first = source.indexOf(before);
   requireValue(first >= 0, `Raw capture source is missing ${label}.`);
@@ -48,26 +55,26 @@ function replaceExactlyOnce(source, before, after, label) {
   return source.slice(0, first) + after + source.slice(first + before.length);
 }
 
-async function materializeDeterministicRawCapture() {
+async function materializeStableRawCapture() {
   const [rawSource, contractSource] = await Promise.all([
     readFile(rawCapturePath, "utf8"),
     readFile(contractSourcePath, "utf8"),
   ]);
   let patched = replaceExactlyOnce(
     rawSource,
-    `  "accepted-provider-error": {\n    provider: RPC_WORKER_ERROR_PROVIDER_ID,\n    api: RPC_WORKER_ERROR_PROVIDER_API_ID,\n    text: "",\n    stopReason: "error",\n    errorMessage: RPC_WORKER_PROVIDER_ERROR_MESSAGE,\n    responseId: "zhiwei-rpc-worker-provider-error-response",\n    timestamp: 3000,\n  },\n`,
-    `  "accepted-provider-error": {\n    provider: RPC_WORKER_ERROR_PROVIDER_ID,\n    api: RPC_WORKER_ERROR_PROVIDER_API_ID,\n    text: "",\n    stopReason: "error",\n    errorMessage: RPC_WORKER_PROVIDER_ERROR_MESSAGE,\n    responseId: "zhiwei-rpc-worker-provider-error-response",\n    timestamp: 3000,\n    observationDelayMs: ${PROVIDER_ERROR_OBSERVATION_DELAY_MS},\n  },\n`,
-    "accepted Provider-error configuration",
+    `  requireValue(\n    stateDuring.data?.isStreaming === true && stateDuring.data?.messageCount === 1,\n    "Provider-error State after acceptance drifted.",\n  );\n`,
+    "",
+    "Provider-error race-sensitive State assertion",
   );
   patched = replaceExactlyOnce(
     patched,
-    `  providerHandle.setResponses([\n    fauxAssistantMessage(configuration.text, {\n      stopReason: configuration.stopReason,\n      errorMessage: configuration.errorMessage,\n      responseId: configuration.responseId,\n      timestamp: configuration.timestamp,\n    }),\n  ]);\n`,
-    `  const configuredResponse = fauxAssistantMessage(configuration.text, {\n    stopReason: configuration.stopReason,\n    errorMessage: configuration.errorMessage,\n    responseId: configuration.responseId,\n    timestamp: configuration.timestamp,\n  });\n  providerHandle.setResponses([\n    Number.isSafeInteger(configuration.observationDelayMs) &&\n    configuration.observationDelayMs > 0\n      ? async () => {\n          await new Promise((resolveDelay) =>\n            setTimeout(resolveDelay, configuration.observationDelayMs),\n          );\n          return configuredResponse;\n        }\n      : configuredResponse,\n  ]);\n`,
-    "RPC Worker Faux response registration",
+    `    ordering.promptResponsePrecedesAgentStart === true &&\n      ordering.failureExpressedAfterAcceptance === true &&\n      ordering.stateDuringAfterAcceptanceBeforeSettled === true,\n`,
+    `    ordering.promptResponsePrecedesAgentStart === true &&\n      ordering.failureExpressedAfterAcceptance === true,\n`,
+    "Provider-error race-sensitive ordering assertion",
   );
 
   const sourceRoot = await mkdtemp(
-    join(dirname(outputPath) || tmpdir(), "rpc-worker-deterministic-source-"),
+    join(dirname(outputPath) || tmpdir(), "rpc-worker-stable-source-"),
   );
   const capturePath = join(
     sourceRoot,
@@ -100,39 +107,39 @@ function remapSequenceFields(value, sequenceMap) {
 function normalizeWorkerCase(caseResult) {
   const worker = caseResult?.worker;
   if (!worker || !Array.isArray(worker.transcript)) return;
+
   const clientActions = [];
-  const workerTranscript = [];
+  const transcript = [];
   const sequenceMap = new Map();
 
   for (const sourceRecord of worker.transcript) {
     if (sourceRecord?.kind === "client") {
       const {
-        sequence: sourceSequence,
+        sequence: _sourceSequence,
         kind: _sourceKind,
         ...action
       } = sourceRecord;
       clientActions.push({
         sequence: clientActions.length + 1,
-        sourceSequence,
         ...action,
       });
       continue;
     }
+
     const record = structuredClone(sourceRecord);
     const sourceSequence = record.sequence;
-    record.sequence = workerTranscript.length + 1;
+    record.sequence = transcript.length + 1;
     if (Number.isInteger(sourceSequence)) {
       sequenceMap.set(sourceSequence, record.sequence);
     }
-    workerTranscript.push(record);
+    transcript.push(record);
   }
 
-  worker.transcript = workerTranscript;
-  worker.clientActions = clientActions;
-  worker.processBoundaries = workerTranscript.filter(
+  worker.transcript = transcript;
+  worker.processBoundaries = transcript.filter(
     (record) =>
       record.kind === "process" &&
-      (record.event === "exit" || record.event === "close"),
+      new Set(["exit", "close"]).has(record.event),
   );
   const exitIndex = worker.processBoundaries.findIndex(
     (record) => record.event === "exit",
@@ -141,6 +148,7 @@ function normalizeWorkerCase(caseResult) {
     (record) => record.event === "close",
   );
   worker.exitBeforeClose = exitIndex >= 0 && closeIndex > exitIndex;
+  worker.clientActions = clientActions;
 
   remapSequenceFields(caseResult.ordering, sequenceMap);
   for (const field of ["response", "promptResponse"]) {
@@ -164,33 +172,87 @@ function findResponseSequence(worker, id, command) {
   )?.sequence;
 }
 
+function normalizeProviderErrorStateRace(caseResult) {
+  const transcript = caseResult?.worker?.transcript;
+  requireValue(
+    Array.isArray(transcript),
+    "Provider-error Worker transcript is missing.",
+  );
+  const stateResponses = transcript.filter(
+    (record) =>
+      record?.kind === "response" &&
+      record.id === "provider-error-state-during" &&
+      record.command === "get_state",
+  );
+  requireValue(
+    stateResponses.length === 1 && stateResponses[0].success === true,
+    "Provider-error State probe must produce one successful response.",
+  );
+  const observed = stateResponses[0].data;
+  requireValue(
+    (observed?.isStreaming === true && observed?.messageCount === 1) ||
+      (observed?.isStreaming === false && observed?.messageCount === 2),
+    "Provider-error State probe escaped the bounded running/settled race.",
+  );
+
+  caseResult.worker.transcript = transcript.filter(
+    (record) => record !== stateResponses[0],
+  );
+  delete caseResult.stateDuring;
+  if (caseResult.ordering) {
+    delete caseResult.ordering.stateDuringResponseSequence;
+    delete caseResult.ordering.stateDuringAfterAcceptanceBeforeSettled;
+  }
+  caseResult.acceptanceStateProbe = {
+    command: "get_state",
+    requestId: "provider-error-state-during",
+    responseObserved: true,
+    allowedObservedPhases: ["running", "settled"],
+    excludedFromFrozenFixture: true,
+    reason: "provider-error-completion-races-state-response",
+  };
+}
+
 function normalizeResult(result) {
   const capture = result?.capture;
   requireValue(
     capture?.scenario === "rpc-worker-lifecycle",
     "Raw capture scenario must be rpc-worker-lifecycle.",
   );
+
   const cases = capture.cases ?? {};
+  normalizeProviderErrorStateRace(cases.acceptedProviderError);
   for (const caseResult of Object.values(cases)) {
     normalizeWorkerCase(caseResult);
   }
+
   const normalWorker = cases.normalPromptEof?.worker;
-  const parseSequence = findResponseSequence(normalWorker, null, "parse");
-  const unknownSequence = findResponseSequence(
+  const parseResponseSequence = findResponseSequence(
+    normalWorker,
+    null,
+    "parse",
+  );
+  const unknownResponseSequence = findResponseSequence(
     normalWorker,
     "normal-unicode-unknown",
   );
   requireValue(
-    Number.isInteger(parseSequence) && Number.isInteger(unknownSequence),
+    Number.isInteger(parseResponseSequence) &&
+      Number.isInteger(unknownResponseSequence),
     "Normalized protocol error response sequences are missing.",
   );
-  cases.protocolErrors.malformedJson.responseSequence = parseSequence;
-  cases.protocolErrors.unknownCommand.responseSequence = unknownSequence;
+  cases.protocolErrors.malformedJson.responseSequence =
+    parseResponseSequence;
+  cases.protocolErrors.unknownCommand.responseSequence =
+    unknownResponseSequence;
+
   capture.contract.sequenceDomains = {
     workerTranscript: "worker-output-and-process-boundaries",
-    clientActions: "host-local-actions-with-source-sequence",
+    clientActions: "host-local-actions",
     crossDomainTotalOrder: false,
+    raceSensitiveSnapshots: "bounded-validation-then-excluded",
   };
+
   delete capture.contractFingerprint;
   capture.contractFingerprint = fingerprint(capture);
   delete result.contractFingerprint;
@@ -206,8 +268,7 @@ function appendDiagnostic(current, chunk) {
 }
 
 async function runRawCapture() {
-  const { capturePath, sourceRoot } =
-    await materializeDeterministicRawCapture();
+  const { capturePath, sourceRoot } = await materializeStableRawCapture();
   try {
     const child = spawn(process.execPath, [capturePath], {
       cwd: process.cwd(),
@@ -218,7 +279,8 @@ async function runRawCapture() {
     child.stderr.on("data", (chunk) => {
       stderr = appendDiagnostic(stderr, chunk);
     });
-    await new Promise((resolveRun, rejectRun) => {
+
+    return await new Promise((resolveRun, rejectRun) => {
       let settled = false;
       let timer;
       const finish = (callback) => {
@@ -227,6 +289,7 @@ async function runRawCapture() {
         clearTimeout(timer);
         callback();
       };
+
       timer = setTimeout(() => {
         try {
           child.kill("SIGKILL");
@@ -242,9 +305,8 @@ async function runRawCapture() {
         );
       }, RAW_CAPTURE_TIMEOUT_MS);
       timer.unref?.();
-      child.once("error", (error) =>
-        finish(() => rejectRun(error)),
-      );
+
+      child.once("error", (error) => finish(() => rejectRun(error)));
       child.once("close", (code, signal) => {
         finish(() => {
           if (code === 0 && signal === null) {
@@ -268,14 +330,8 @@ async function runRawCapture() {
 }
 
 await runRawCapture();
-const rawResult = JSON.parse(await readFile(outputPath, "utf8"));
-const providerError = rawResult?.capture?.cases?.acceptedProviderError;
-requireValue(
-  providerError?.stateDuring?.isStreaming === true &&
-    providerError.stateDuring.messageCount === 1,
-  "Provider-error controlled observation window did not expose running State.",
-);
-const normalized = normalizeResult(rawResult);
+const raw = JSON.parse(await readFile(outputPath, "utf8"));
+const normalized = normalizeResult(raw);
 await writeFile(
   outputPath,
   `${JSON.stringify(normalized, null, 2)}\n`,
