@@ -31,7 +31,7 @@ docs/harness/risk-acceptance/2026-08-13-public-free.json
 docs/harness/rulesets/2026-08-13-main-public-free.json
 ```
 
-此前 Private + Free风险记录保留为历史。Required context `check`是早注册、无`needs`的只读observer，只接受当前Workflow run attempt内唯一`CI required evidence`成功。内部evidence直接`needs`聚合五个CI Probe并每60秒轮询三套path-gated standalone run；standalone success ID必须保持60秒quiet window稳定，latest ID变化即重置。CI机器标题绑定PR事件身份，Autonomous Merge只消费仍与实时PR一致的Ready成功；Draft或已被后续编辑取代的旧CI不能触发合并。observer不复用先前attempt；仅重跑失败Job不足以恢复缺失evidence，必须重跑全部Job。两层都必须fail closed。
+此前 Private + Free风险记录保留为历史。Required context `check`是早注册、无`needs`的只读observer，只接受当前run attempt内唯一`CI required evidence`成功。内部evidence以workflow filename endpoint、`run.path`、机器`display_title`、repo/ref/SHA和时间戳识别三套standalone run；不依赖会等于自定义显示标题的Actions `run.name`。所有必需success ID须共同quiet 60秒，latest变化即重置。observer不复用先前attempt；仅重跑失败Job不足，必须重跑全部Job。
 
 ## 默认工作方式
 

@@ -253,7 +253,6 @@ const expectedRequiredStatusCheck = {
     match: [
       "workflow-id",
       "workflow-path",
-      "workflow-name",
       "display-title",
       "pull-request-number",
       "pull-request-action",
@@ -913,7 +912,6 @@ for (const workflowContract of standaloneExpectedEntries) {
       .toUpperCase()}`,
     `workflowId: "${workflowContract.workflowId}"`,
     `path: "${workflowContract.path}"`,
-    `name: "${workflowContract.name}"`,
     `runNamePrefix: "${workflowContract.runNamePrefix}"`,
   ]) {
     requireValue(
@@ -963,7 +961,6 @@ for (const token of [
   'run.event === "pull_request"',
   "run.head_sha === headSha",
   "run.path === workflow.path",
-  "run.name === workflow.name",
   "run.display_title === expectedDisplayTitle",
   "run.head_repository?.full_name === headRepository",
   "run.head_branch === headRef",
@@ -978,7 +975,7 @@ for (const token of [
   "stableSince: observedAt",
   `observedAt - previousObservation.stableSince < ${standaloneContract?.successRunQuietWindowSeconds}_000`,
   "registration quiet window",
-  "waiting.push(`${workflow.name}: missing`)",
+  "waiting.push(`${workflow.runNamePrefix}: missing`)",
   "if (Date.now() >= deadline)",
   "Timed out waiting for standalone workflows",
   "All required standalone workflow runs succeeded.",
@@ -991,6 +988,10 @@ for (const token of [
 requireValue(
   !evidenceBlock.includes("allowExistingSameHead"),
   "Required evidence must never reuse an older same-HEAD standalone run, including for edited.",
+);
+requireValue(
+  !evidenceBlock.includes("run.name"),
+  "Required evidence must not compare Actions run.name, which is the custom display title.",
 );
 
 for (const [jobId, gateOutput] of Object.entries(requiredStatusCheck?.gatedJobs ?? {})) {

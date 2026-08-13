@@ -896,21 +896,18 @@ jobs:
                 required: process.env.PARALLEL_TOOL_ORDERING_REQUIRED,
                 workflowId: "pi-parallel-tool-ordering.yml",
                 path: ".github/workflows/pi-parallel-tool-ordering.yml",
-                name: "Pi parallel Tool ordering contract",
                 runNamePrefix: "parallel-tool-ordering",
               },
               {
                 required: process.env.COMPACTION_SESSION_REPLACEMENT_REQUIRED,
                 workflowId: "pi-compaction-session-replacement.yml",
                 path: ".github/workflows/pi-compaction-session-replacement.yml",
-                name: "Pi Compaction and Session Replacement contract",
                 runNamePrefix: "compaction-session-replacement",
               },
               {
                 required: process.env.SDK_RPC_PARITY_REQUIRED,
                 workflowId: "pi-sdk-rpc-parity.yml",
                 path: ".github/workflows/pi-sdk-rpc-parity.yml",
-                name: "Pi SDK and RPC parity contract",
                 runNamePrefix: "sdk-rpc-parity",
               },
             ];
@@ -940,7 +937,7 @@ jobs:
             for (const workflow of expected) {
               if (!new Set(["true", "false"]).has(workflow.required)) {
                 throw new Error(
-                  `${workflow.name} required gate is invalid: ${workflow.required}.`,
+                  `${workflow.runNamePrefix} required gate is invalid: ${workflow.required}.`,
                 );
               }
             }
@@ -979,7 +976,6 @@ jobs:
                         run.event === "pull_request" &&
                         run.head_sha === headSha &&
                         run.path === workflow.path &&
-                        run.name === workflow.name &&
                         run.display_title === expectedDisplayTitle &&
                         run.head_repository?.full_name === headRepository &&
                         run.head_branch === headRef &&
@@ -1002,20 +998,20 @@ jobs:
                 if (!latest) {
                   observedSuccess.delete(workflow.workflowId);
                   allStable = false;
-                  waiting.push(`${workflow.name}: missing`);
+                  waiting.push(`${workflow.runNamePrefix}: missing`);
                   continue;
                 }
                 if (latest.status !== "completed") {
                   observedSuccess.delete(workflow.workflowId);
                   allStable = false;
                   waiting.push(
-                    `${workflow.name}: run ${latest.id} ${latest.status}`,
+                    `${workflow.runNamePrefix}: run ${latest.id} ${latest.status}`,
                   );
                   continue;
                 }
                 if (latest.conclusion !== "success") {
                   throw new Error(
-                    `${workflow.name} latest run ${latest.id} completed with ` +
+                    `${workflow.runNamePrefix} latest run ${latest.id} completed with ` +
                       `${latest.conclusion ?? "<missing>"}: ${latest.html_url}`,
                   );
                 }
@@ -1027,7 +1023,7 @@ jobs:
                   });
                   allStable = false;
                   waiting.push(
-                    `${workflow.name}: run ${latest.id} succeeded; starting the ` +
+                    `${workflow.runNamePrefix}: run ${latest.id} succeeded; starting the ` +
                       "registration quiet window",
                   );
                   continue;
@@ -1035,7 +1031,7 @@ jobs:
                 if (observedAt - previousObservation.stableSince < 60_000) {
                   allStable = false;
                   waiting.push(
-                    `${workflow.name}: run ${latest.id} succeeded; waiting for ` +
+                    `${workflow.runNamePrefix}: run ${latest.id} succeeded; waiting for ` +
                       "the registration quiet window",
                   );
                   continue;
@@ -1045,7 +1041,7 @@ jobs:
               if (allStable) {
                 for (const { workflow, latest } of observations) {
                   core.notice(
-                    `${workflow.name} run ${latest.id} succeeded for PR #${pullNumber} ` +
+                    `${workflow.runNamePrefix} run ${latest.id} succeeded for PR #${pullNumber} ` +
                       `at ${headSha}: ${latest.html_url}`,
                   );
                 }

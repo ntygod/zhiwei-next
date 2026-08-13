@@ -94,7 +94,7 @@ CI内 `needs`聚合真值表为：
 
 `static-contracts`本身必须是`success`。Artifact gate只约束`pi-artifact-probe`；Lifecycle gate同时约束 normal、retry、follow-up、cancel/retry-exhaustion四个 Lifecycle Job。
 
-内部evidence的standalone轮询只接受事件为`pull_request`，且 Workflow ID、路径、名称以及当前 PR的 head repository、ref、SHA全部匹配后的最新 run（先按`created_at`、再按run ID降序）。每套 Workflow还发布唯一prefix的机器`run-name`，其完整`display_title`精确编码PR number、action、事件原始`updated_at`和head SHA，因此不能跨PR或跨事件复用。轮询先等待10秒，之后每60秒查询，脚本deadline为32分钟。发现`completed/success`后记录其run ID并开始60秒quiet window；窗口内若latest ID变化就以新候选重置计时，只有同一success ID稳定60秒才接受。该窗口只确认最新候选已稳定，不承担身份认证；身份仍由机器标题和Workflow/HEAD字段决定。失败或取消等其他结论立即失败，运行中、缺失或quiet window未完成则继续等待直至timeout。
+内部evidence的standalone轮询只接受事件为`pull_request`，且查询所用的workflow filename endpoint、返回的`run.path`以及当前PR的head repository、ref、SHA、时间戳全部匹配后的最新run（先按`created_at`、再按run ID降序）。每套Workflow还发布唯一prefix的机器`run-name`，其完整`display_title`精确编码PR number、action、事件原始`updated_at`和head SHA，因此不能跨PR或跨事件复用。Actions API在配置自定义`run-name`后会让`run.name`等于该显示标题，而不是YAML顶层workflow name；运行时身份合同因此不比较`run.name`，YAML名称仍由静态Checker直接检查workflow文件。发现`completed/success`后记录其run ID并开始60秒quiet window；只有所有必需workflow的同一success ID稳定60秒才整体接受，期间任何latest ID变化、pending或缺失都会重置对应候选。失败或取消立即阻断。
 
 observer禁止复用先前attempt的evidence。若只选择“Re-run failed jobs”，新attempt可能只有observer而没有`CI required evidence`，此时必须缺失并fail closed或timeout；恢复方式是“Re-run all jobs”，让当前attempt重新产生完整evidence。这是有意的安全/可用性边界，不能通过读取旧attempt绕过。
 

@@ -115,7 +115,6 @@
         "match": [
           "workflow-id",
           "workflow-path",
-          "workflow-name",
           "display-title",
           "pull-request-number",
           "pull-request-action",

@@ -99,7 +99,7 @@ PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独�
 - `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
 - Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；当前由Autonomous Merge即时provenance dispatch和完成后reconciler共同闭环：post-merge失败必须按`after`登记Incident，reconciler短时重试可见性并使用精确来源CI attempt安全补发，不能降低来源校验。
 - PR #62的CI Run `31663188980`显示旧`check`静态 Job先于五个CI内动态 Probe成功，服务端 required context当时没有依赖这些 Probe；该次五个CI内 Probe最终均成功且 Autonomous Merge等待整个CI Workflow完成，但路径相关的standalone SDK / RPC parity Workflow失败不在等待范围内，PR仍被合并，构成实际 required-status缺口；
-- #61 follow-up把旧 Job更名为`static-contracts`；内部`CI required evidence`聚合五个CI Probe，并每60秒轮询三套standalone Workflow，success候选ID须quiet 60秒且latest ID变化会重置；唯一`check`是早注册observer，只接受当前run attempt evidence，禁止复用旧attempt。
+- #61 follow-up的内部`CI required evidence`以workflow endpoint/path、机器`display_title`、repo/ref/SHA和时间戳识别standalone run，不比较会等于自定义标题的Actions `run.name`；三套success候选须共同quiet 60秒。唯一`check`只接受当前run attempt evidence。
 
 PR #62已把Public Ruleset与仓库治理基线合入`main`，但上述 Required Check聚合缺口使Issue #61继续保持开放；当前`chore/61-required-check-aggregation` follow-up收紧CI内聚合、standalone轮询和事实源。该follow-up尚须在真实路径命中的 PR事件上验证，合并且验证前不关闭 #61，Issue #32保持排队而不创建新的 Runtime primary branch。
 
