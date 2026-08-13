@@ -80,3 +80,29 @@ export const SDK_RPC_PARITY_REQUIRED_RPC_CLIENT_METHODS = Object.freeze([
   "stop",
   "waitForIdle",
 ]);
+
+export const RPC_WORKER_LIFECYCLE_SCHEMA_VERSION = 1;
+export const RPC_WORKER_LIFECYCLE_SCENARIO = "rpc-worker-lifecycle";
+export const RPC_WORKER_COMMAND_TIMEOUT_MS = 30_000;
+export const RPC_WORKER_PROCESS_TIMEOUT_MS = 45_000;
+export const RPC_WORKER_NORMAL_PROMPTS = Object.freeze({
+  initial: "Record the first fixed RPC worker fact.",
+  resumed: "Append the second fixed RPC worker fact after restart.",
+});
+export const RPC_WORKER_NORMAL_RESPONSES = Object.freeze({
+  initial: "First RPC worker response recorded.",
+  resumed: "Second RPC worker response recorded after restart.",
+});
+export const RPC_WORKER_PROVIDER_ERROR_PROMPT =
+  "Trigger the fixed accepted RPC provider error.";
+export const RPC_WORKER_PROVIDER_ERROR_MESSAGE =
+  "ZHIWEI_RPC_FIXED_PROVIDER_ERROR";
+export const RPC_WORKER_PROVIDER_ID = "zhiwei-rpc-worker-faux";
+export const RPC_WORKER_PROVIDER_API_ID = "zhiwei-rpc-worker-faux-api";
+export const RPC_WORKER_ERROR_PROVIDER_ID = "zhiwei-rpc-worker-error-faux";
+export const RPC_WORKER_ERROR_PROVIDER_API_ID =
+  "zhiwei-rpc-worker-error-faux-api";
+export const RPC_WORKER_MODEL_ID = "faux-1";
+export const RPC_WORKER_MODEL_NAME = "Zhiwei RPC Worker Faux";
+export const RPC_WORKER_TOKENS_PER_SECOND = 128;
+export const RPC_WORKER_TOKEN_SIZE = 16;
