@@ -169,7 +169,7 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 - 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
 - active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions最终`check`、最新 base、线性历史和 Review Thread解决；无`needs`的`check`observer只等待当前run内`CI required evidence`成功，内部evidence才聚合`static-contracts`、五个CI Probe和三套standalone run；2026-08-13 owner/admin读回记录`bypass_actors=[]`，仓库 merge设置也只允许 squash；
 - Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
-- Autonomous Merge与 Main Provenance Dispatch的`workflow_run`写权限路径同时检查same-repository source和CI机器事件身份；Autonomous Merge只消费仍与实时PR的number、Ready状态、event time、base及head一致的成功CI，Main Provenance Dispatch对Draft正常no-op并以最新成功Ready run去重；
+- Autonomous Merge与 Main Provenance Dispatch的`workflow_run`写权限路径同时检查same-repository source和CI机器事件身份；Autonomous Merge只消费仍与实时PR的number、Ready状态、event time、base及head一致的成功CI，Main Provenance Dispatch对Draft正常no-op且允许每个精确Ready成功CI对同一merge发送幂等repository dispatch，不做可能漏派发的“latest run”选主；
 - 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；

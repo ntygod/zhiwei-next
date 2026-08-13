@@ -98,7 +98,7 @@ CI内 `needs`聚合真值表为：
 
 observer禁止复用先前attempt的evidence。若只选择“Re-run failed jobs”，新attempt可能只有observer而没有`CI required evidence`，此时必须缺失并fail closed或timeout；恢复方式是“Re-run all jobs”，让当前attempt重新产生完整evidence。这是有意的安全/可用性边界，不能通过读取旧attempt绕过。
 
-CI本身也发布机器`run-name`，逐字编码event、PR number、action、事件`updated_at`、Draft/Ready、tested base、head和run ID。Autonomous Merge只接受`ready=true`且仍与实时PR的number、`updated_at`、base和head完全一致的成功CI，因此Draft成功后立刻转Ready、或Ready成功后又编辑PR，都不能让旧CI触发合并。Main Provenance Dispatch把`ready=false`视为正常no-op；合并后PR的`updated_at`必然变化，所以它不做错误的post-merge时间比较，而以已解析的Ready身份、head/base、squash parent和同PR/HEAD最新成功Ready CI run完成去重与来源核验。
+CI本身也发布机器`run-name`，逐字编码event、PR number、action、事件`updated_at`、Draft/Ready、tested base、head和run ID。Autonomous Merge只接受`ready=true`且仍与实时PR的number、`updated_at`、base和head完全一致的成功CI，因此Draft成功后立刻转Ready、或Ready成功后又编辑PR，都不能让旧CI触发合并。Main Provenance Dispatch把`ready=false`视为正常no-op；合并后PR的`updated_at`必然变化，所以它不做错误的post-merge时间比较，而以已解析的Ready身份、head/base和squash parent核验来源。多个精确Ready成功CI都可为同一merge提交发送repository dispatch；下游按`after`身份与并发串行实现幂等，不能通过“选最新run”造成无人负责的漏派发。
 
 ## 仍然存在的残余风险
 

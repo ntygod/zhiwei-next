@@ -370,14 +370,9 @@ for (const token of [
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
   "reason: \"provenance-dispatch-failed\"",
-  "actions: read",
   "const ciIdentityPattern =",
   "ciReady === \"false\"",
   "Draft pull request CI completed; no provenance dispatch is required.",
-  "github.rest.actions.listWorkflowRuns",
-  "successful-ci-run-selection-unavailable",
-  "successful-ci-run-selection-mismatch",
-  "successfulReadyRuns[0]?.id !== run.id",
 ]) {
   requireValue(dispatchWorkflow.includes(token), `Main Provenance Dispatch is missing token: ${token}`);
 }

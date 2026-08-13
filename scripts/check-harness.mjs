@@ -1162,7 +1162,6 @@ for (const required of [
 
 const provenanceDispatch = await read(".github/workflows/main-provenance-dispatch.yml");
 for (const required of [
-  "actions: read",
   "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
   "const ciIdentityPattern =",
   "event=pull_request",
@@ -1172,17 +1171,6 @@ for (const required of [
   "ciReady !== \"true\"",
   "ciHeadSha !== run.head_sha",
   "ciRunId !== String(run.id)",
-  "github.rest.actions.listWorkflowRuns",
-  "candidateRun.head_repository?.full_name === repositoryFullName",
-  "candidateIdentity?.[1] === pullNumberText",
-  "candidateIdentity?.[4] === \"true\"",
-  "candidateIdentity?.[5] === testedBaseSha",
-  "candidateIdentity?.[6] === run.head_sha",
-  "candidateIdentity?.[7] === String(candidateRun.id)",
-  "successful-ci-run-selection-unavailable",
-  "successful-ci-run-selection-mismatch",
-  "successfulReadyRuns[0]?.id !== run.id",
-  "provenance dispatch is left to the latest run",
 ]) {
   requireValue(
     provenanceDispatch.includes(required),
