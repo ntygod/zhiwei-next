@@ -1,0 +1,1 @@
+RPC Worker fixture v2 composes the verified base fixture with one readable Provider-error case replacement.
