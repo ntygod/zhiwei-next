@@ -113,7 +113,6 @@ for (const token of [
   "issues: write",
   "github.event.workflow_run.event == 'workflow_run'",
   "github.event.workflow_run.head_repository.full_name == github.repository",
-  "autonomousMergeRun.name !== \"Autonomous Merge\"",
   "autonomousMergeRun.path !== \".github/workflows/autonomous-merge.yml\"",
   "const autonomousMergeIdentityPattern =",
   "source_ci_run=([1-9][0-9]*)",
@@ -129,7 +128,6 @@ for (const token of [
   "run_id: sourceCiRunId",
   "attempt_number: sourceCiAttempt",
   "sourceCiRun.run_attempt !== sourceCiAttempt",
-  "sourceCiRun.name !== \"CI\"",
   "sourceCiRun.path !== \".github/workflows/ci.yml\"",
   "sourceCiRun.conclusion !== \"success\"",
   "sourceCiRun.head_repository?.full_name !== repositoryFullName",
@@ -165,6 +163,19 @@ for (const token of [
 requireValue(
   !reconciler.includes('workflows: ["CI"]'),
   "Main Provenance reconciler must not race Autonomous Merge from the CI workflow_run event.",
+);
+for (const forbidden of [
+  'autonomousMergeRun.name !== "Autonomous Merge"',
+  'sourceCiRun.name !== "CI"',
+]) {
+  requireValue(
+    !reconciler.includes(forbidden),
+    `Main Provenance reconciler must not rely on custom run-name presentation: ${forbidden}`,
+  );
+}
+requireValue(
+  !autonomousMerge.includes('run.name !== "CI"'),
+  "Autonomous Merge must not rely on the CI custom run-name presentation.",
 );
 requireValue(
   !reconciler.includes('autonomousMergeRun.conclusion === "success"'),

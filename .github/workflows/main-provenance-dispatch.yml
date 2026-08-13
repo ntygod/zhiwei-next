@@ -38,14 +38,12 @@ jobs:
               return;
             }
             if (
-              autonomousMergeRun.name !== "Autonomous Merge" ||
               autonomousMergeRun.path !== ".github/workflows/autonomous-merge.yml" ||
               autonomousMergeRun.event !== "workflow_run"
             ) {
               core.setFailed("Refusing provenance reconciliation for a non-canonical workflow identity.");
               return;
             }
-
             const autonomousMergeIdentityPattern =
               /^autonomous-merge \| source_ci_run=([1-9][0-9]*) \| source_ci_attempt=([1-9][0-9]*) \| source_ci_head=([0-9a-f]{40})$/;
             const autonomousMergeIdentity = autonomousMergeIdentityPattern.exec(
@@ -164,7 +162,6 @@ jobs:
             if (
               sourceCiRun.id !== sourceCiRunId ||
               sourceCiRun.run_attempt !== sourceCiAttempt ||
-              sourceCiRun.name !== "CI" ||
               sourceCiRun.path !== ".github/workflows/ci.yml" ||
               sourceCiRun.head_sha !== sourceCiHead
             ) {
@@ -186,7 +183,6 @@ jobs:
               );
               return;
             }
-
             const ciIdentityPattern =
               /^ci \| event=pull_request \| pr=([1-9][0-9]*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=([^ |]+) \| ready=(true|false) \| base=([0-9a-f]{40}) \| head=([0-9a-f]{40}) \| run=([1-9][0-9]*)$/;
             const ciIdentity = ciIdentityPattern.exec(sourceCiRun.display_title ?? "");

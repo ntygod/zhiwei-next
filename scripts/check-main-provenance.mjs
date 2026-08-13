@@ -376,14 +376,12 @@ for (const token of [
   "workflows: [\"Autonomous Merge\"]",
   "github.event.workflow_run.head_repository.full_name == github.repository",
   "autonomousMergeRun.head_repository?.full_name !== repositoryFullName",
-  "autonomousMergeRun.name !== \"Autonomous Merge\"",
   "autonomousMergeRun.path !== \".github/workflows/autonomous-merge.yml\"",
   "const autonomousMergeIdentityPattern =",
   "github.rest.actions.getWorkflowRunAttempt",
   "attempt < 3",
   "async function failSourceCiReadClosed",
   "reason = \"reconciler-source-ci-undetermined\"",
-  "sourceCiRun.name !== \"CI\"",
   "sourceCiRun.path !== \".github/workflows/ci.yml\"",
   "sourceCiRun.conclusion !== \"success\"",
   "async function failClosed",
@@ -401,7 +399,7 @@ for (const token of [
 for (const token of [
   "run-name: autonomous-merge | source_ci_run=${{ github.event.workflow_run.id }} | source_ci_attempt=${{ github.event.workflow_run.run_attempt }} | source_ci_head=${{ github.event.workflow_run.head_sha }}",
   "github.event.workflow_run.head_repository.full_name == github.repository",
-  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
+  "run.path !== \".github/workflows/ci.yml\"",
   "run.head_repository?.full_name !== repositoryFullName",
   "pr.head.repo?.full_name !== repositoryFullName",
   "readTrustedJson(\"harness.config.json\")",
@@ -432,6 +430,16 @@ for (const [name, source] of [
 ]) {
   requireValue(!source.includes("pull_request_target:"), `${name} must not use pull_request_target.`);
   requireValue(!/\$\{\{\s*secrets\./.test(source), `${name} must not inject repository secrets.`);
+}
+for (const [name, source, forbidden] of [
+  ["Autonomous Merge", autoMerge, 'run.name !== "CI"'],
+  ["Main Provenance reconciler", dispatchWorkflow, 'autonomousMergeRun.name !== "Autonomous Merge"'],
+  ["Main Provenance reconciler", dispatchWorkflow, 'sourceCiRun.name !== "CI"'],
+]) {
+  requireValue(
+    !source.includes(forbidden),
+    `${name} must not rely on custom run-name presentation: ${forbidden}`,
+  );
 }
 requireValue(template.includes("main-incident-recovery: no"), "PR template must default main-incident-recovery to no.");
 

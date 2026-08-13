@@ -18,6 +18,8 @@ export const SDK_RPC_PARITY_ARTIFACT_PREFIX = "pi-sdk-rpc-parity-probe";
 const GITHUB_API_VERSION = "2022-11-28";
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_ARTIFACT_ZIP_BYTES = 16 * 1024 * 1024;
+const SDK_RPC_PARITY_DISPLAY_TITLE_PATTERN =
+  /^sdk-rpc-parity \| event=pull_request \| pr=([1-9]\d*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z) \| head=([0-9a-f]{40})$/;
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
@@ -331,8 +333,32 @@ export function validateSdkRpcParityProvenance({
   requireValue(isRecord(run), "Live workflow run response must be an object.");
   requireValue(run.id === source.workflowRun, "Workflow run ID differs from the manifest source.");
   requireValue(
-    run.name === SDK_RPC_PARITY_WORKFLOW_NAME && run.path === SDK_RPC_PARITY_WORKFLOW_PATH,
-    "Workflow run is not the canonical SDK/RPC parity workflow.",
+    run.path === SDK_RPC_PARITY_WORKFLOW_PATH,
+    "Workflow run path is not the canonical SDK/RPC parity workflow path.",
+  );
+  const displayTitleMatch = SDK_RPC_PARITY_DISPLAY_TITLE_PATTERN.exec(
+    run.display_title ?? "",
+  );
+  requireValue(
+    displayTitleMatch !== null,
+    "Workflow run display title is not the canonical SDK/RPC parity event identity.",
+  );
+  const displayPullNumber = Number(displayTitleMatch[1]);
+  const displayUpdatedAt = Date.parse(displayTitleMatch[3]);
+  const runCreatedAt = Date.parse(run.created_at ?? "");
+  requireValue(
+    Number.isSafeInteger(displayPullNumber) && displayPullNumber === eventPullRequest.number,
+    "Workflow run display title pull request differs from the current pull request.",
+  );
+  requireValue(
+    displayTitleMatch[4] === source.head,
+    "Workflow run display title head differs from the manifest source head.",
+  );
+  requireValue(
+    Number.isFinite(displayUpdatedAt) &&
+      Number.isFinite(runCreatedAt) &&
+      runCreatedAt >= displayUpdatedAt,
+    "Workflow run creation time does not follow its encoded pull request event time.",
   );
   requireValue(run.event === "pull_request", "SDK/RPC parity workflow run must use pull_request.");
   requireValue(

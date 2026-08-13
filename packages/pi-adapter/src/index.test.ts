@@ -600,8 +600,14 @@ test("SDK/RPC live provenance binds the successful run and Artifact to the curre
   };
   const run = {
     id: source.workflowRun,
-    name: "Pi SDK and RPC parity contract",
+    name:
+      `sdk-rpc-parity | event=pull_request | pr=${eventPullRequest.number} | ` +
+      `action=synchronize | updated_at=2026-08-12T23:59:58Z | head=${source.head}`,
+    display_title:
+      `sdk-rpc-parity | event=pull_request | pr=${eventPullRequest.number} | ` +
+      `action=synchronize | updated_at=2026-08-12T23:59:58Z | head=${source.head}`,
     path: ".github/workflows/pi-sdk-rpc-parity.yml",
+    created_at: "2026-08-12T23:59:59Z",
     event: "pull_request",
     status: "completed",
     conclusion: "success",
@@ -614,7 +620,7 @@ test("SDK/RPC live provenance binds the successful run and Artifact to the curre
   };
   const workflow = {
     id: run.workflow_id,
-    name: run.name,
+    name: "Pi SDK and RPC parity contract",
     path: run.path,
     state: "active",
   };
@@ -656,6 +662,11 @@ test("SDK/RPC live provenance binds the successful run and Artifact to the curre
     (invalid) => (invalid.comparison.behind_by = 1),
     (invalid) => (invalid.artifact.digest = `sha256:${"d".repeat(64)}`),
     (invalid) => (invalid.pullRequest.head.sha = "e".repeat(40)),
+    (invalid) =>
+      (invalid.run.display_title = invalid.run.display_title.replace(
+        `pr=${eventPullRequest.number}`,
+        "pr=61",
+      )),
   ]) {
     const invalid = structuredClone(input);
     mutate(invalid);

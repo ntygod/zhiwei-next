@@ -82,7 +82,7 @@ Manifest 是 Capture provenance 的机器事实源，并只允许两态：
 - `candidate`：`head`为完整 Commit SHA，`workflowRun`、`artifactId`、`artifactDigest`全部为 `null`；只允许 Draft PR恢复，不满足 Ready或合并条件；
 - `verified`：三项 provenance全部有效；非 Draft PR、`push main`、手动运行和定时 Gate强制 `--require-verified-source`，非 Draft PR再以 live provenance Checker绑定真实 Run / Artifact、证明来源 HEAD是当前 PR HEAD的真实祖先，并下载 ZIP确认其中唯一 `result.json`与 Manifest SHA及 committed Fixture完整字节相同。
 
-SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生 Fresh Capture并通过两个脱敏 Checker，再验证 committed Fixture和完整对象相等性；只有合格 Fresh Evidence会上传，且其上传不受随后旧 Fixture漂移失败影响。PR运行显式 checkout并核对事件中的 head SHA，不使用默认 synthetic merge ref作为 Capture来源。旧 Fixture漂移因此会安全失败，但不会阻止下载本次合格 Evidence重建 candidate；未通过 Fresh Checker的失败 JSON不会冒充脱敏 Artifact。`jsonSha256`绑定解压后的规范 JSON字节；`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive，二者不是同一摘要。
+SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生Fresh Capture并通过两个脱敏Checker，再验证committed Fixture和完整对象相等性。Ready live provenance以run ID/`workflow_id`端点、canonical path和机器`display_title`绑定PR/action/updated_at/head，同时保留run attempt、PR关联、Artifact ZIP与committed字节绑定；不再把自定义标题化的Actions `run.name`与YAML name比较。
 
 恢复 Packer对 Fresh JSON与解压输出使用同一个 8 MiB有界读取上限，以仓库绝对位置运行 Checker，并用 Fixture父目录排他锁、父目录 / Fixture目录身份句柄、内容寻址不可变分片、完整 staging回读与单 Manifest原子切换避免失败时混写活动 Fixture；目录替换、符号链接、非普通文件和并发 Packer均 fail closed。旧分片保留给已读取旧 Manifest的并发 Reader，显式 GC需先增加 Reader lease或版本保留协议；崩溃或目录身份异常残留锁需要先确认没有运行中的 Packer并检查 Fixture树后人工清理。
 

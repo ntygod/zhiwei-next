@@ -180,6 +180,15 @@
             "path": ".github/workflows/pi-sdk-rpc-parity.yml",
             "name": "Pi SDK and RPC parity contract",
             "runNamePrefix": "sdk-rpc-parity",
+            "liveProvenance": {
+              "runtimeRunNameCompared": false,
+              "workflowMetadataEndpoint": "run.workflow_id",
+              "workflowMetadataNameRequired": true,
+              "workflowPathRequired": true,
+              "displayTitleIdentityRequired": true,
+              "pullRequestRunHeadAttemptRequired": true,
+              "artifactContentBindingRequired": true
+            },
             "paths": [
               ".github/workflows/pi-sdk-rpc-parity.yml",
               ".github/workflows/ci.yml",

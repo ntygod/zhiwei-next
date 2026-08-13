@@ -37,11 +37,10 @@ jobs:
               );
               return;
             }
-            if (run.name !== "CI" || run.path !== ".github/workflows/ci.yml") {
+            if (run.path !== ".github/workflows/ci.yml") {
               core.warning("Refusing autonomous merge for a non-canonical CI workflow identity.");
               return;
             }
-
             const ciIdentityPattern =
               /^ci \| event=pull_request \| pr=([1-9][0-9]*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=([^ |]+) \| ready=(true|false) \| base=([0-9a-f]{40}) \| head=([0-9a-f]{40}) \| run=([1-9][0-9]*)$/;
             const ciIdentity = ciIdentityPattern.exec(run.display_title ?? "");

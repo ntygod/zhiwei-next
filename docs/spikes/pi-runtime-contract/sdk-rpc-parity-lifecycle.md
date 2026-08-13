@@ -298,7 +298,7 @@ Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生�
 - `compressedSha256`：提交到仓库的 gzip 字节 SHA-256；
 - `artifactDigest`：GitHub Actions `upload-artifact` 生成的 ZIP Archive SHA-256，用于把 Workflow Run / Artifact 与下载来源绑定；它不是内层 `result.json` 的 `jsonSha256`。
 
-Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker，核对 Workflow、事件类型、成功结论、Run HEAD、PR关联、Artifact所属 Run、按 `run_attempt`派生的 Artifact名称、未过期状态与 ZIP Digest，并要求 `source.head`是当前 PR HEAD的真实 Git祖先；Checker还下载对应 ZIP，严格要求其中唯一条目为 `result.json`，把下载 ZIP摘要、`result.json`字节摘要与 committed Fixture完整字节同时绑定。无法用真实 Compare或内容绑定证明时 fail closed，不使用 synthetic merge parent fallback。只有 Fresh Capture 与 committed Fixture完整相等、两个结果 Checker、Manifest / Artifact live provenance、当前 HEAD CI与独立审查全部通过，PR才满足合并条件。
+Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker：用Manifest中的run ID读取Run，再以`run.workflow_id`查询canonical Workflow元数据，核对workflow ID/path、事件类型、机器`display_title`中的PR/action/updated_at/head、成功结论、Run HEAD与attempt、PR关联及Artifact所属Run。自定义`run-name`会让Actions API的`run.name`等于显示标题，因此Checker不再把它与YAML workflow name比较；YAML name仍在workflow元数据响应上验证。Checker还绑定Artifact名称/有效期/ZIP Digest，下载唯一`result.json`并与committed Fixture逐字节核对。任何身份或内容无法证明时fail closed。
 
 下面是当前 `verified` Manifest已记录的内容身份：
 

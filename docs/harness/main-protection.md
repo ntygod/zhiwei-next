@@ -121,7 +121,7 @@ CI本身也发布机器`run-name`，逐字编码event、PR number、action、事
 - 所有 external contributor的 fork PR必须先由维护者批准运行，默认 Workflow Token保持 read-only且不能批准 PR；
 - external fork PR只允许进入批准后的只读 CI，不进入 Autonomous Merge；写权限 `workflow_run` Job在调度层要求 same-repository source，并在可信脚本内再次核对 PR head repo；
 - 运行 PR-controlled脚本的 Job不得获得写 Token；
-- SDK/RPC live provenance仅在 same-repository PR创建 token-bearing Job；fork由无 Token、无 checkout的聚合 Gate明确拒绝；
+- SDK/RPC live provenance仅在same-repository PR创建token-bearing Job；它用run ID/`workflow_id`元数据端点、canonical path和机器`display_title`绑定来源，不把自定义标题化的`run.name`当YAML名称；fork由无Token、无checkout的聚合Gate明确拒绝；
 - `workflow_run`写权限 Workflow只执行默认分支中的可信脚本，不 checkout或执行 fork内容；
 - 若维护者人工合并 external fork，same-repository Provenance Dispatch不会运行，真实 `push main`路径仍必须完成来源审计；
 - Public不改变数据红线；所有 Probe Artifact只在 Capture与脱敏 Checker成功后上传，失败 JSON不得作为公开 Evidence上传。

@@ -318,6 +318,15 @@ const expectedRequiredStatusCheck = {
         path: ".github/workflows/pi-sdk-rpc-parity.yml",
         name: "Pi SDK and RPC parity contract",
         runNamePrefix: "sdk-rpc-parity",
+        liveProvenance: {
+          runtimeRunNameCompared: false,
+          workflowMetadataEndpoint: "run.workflow_id",
+          workflowMetadataNameRequired: true,
+          workflowPathRequired: true,
+          displayTitleIdentityRequired: true,
+          pullRequestRunHeadAttemptRequired: true,
+          artifactContentBindingRequired: true,
+        },
         paths: [
           ".github/workflows/pi-sdk-rpc-parity.yml",
           ".github/workflows/ci.yml",
@@ -1133,6 +1142,34 @@ for (const workflowPath of [
   requireValue(!workflow.includes("if: always()"), `${workflowPath} must not upload failed or unvalidated probe output.`);
 }
 
+const sdkRpcProvenance = await read("scripts/check-pi-sdk-rpc-parity-provenance.mjs");
+for (const token of [
+  'run.path === SDK_RPC_PARITY_WORKFLOW_PATH',
+  "SDK_RPC_PARITY_DISPLAY_TITLE_PATTERN.exec(",
+  'run.display_title ?? ""',
+  "displayPullNumber === eventPullRequest.number",
+  "displayTitleMatch[4] === source.head",
+  "runCreatedAt >= displayUpdatedAt",
+  "run.id === source.workflowRun",
+  "run.head_sha === source.head",
+  "isPositiveSafeInteger(run.workflow_id) && isPositiveSafeInteger(run.run_attempt)",
+  "candidate?.number === eventPullRequest.number",
+  "workflow.id === run.workflow_id",
+  "workflow.name === SDK_RPC_PARITY_WORKFLOW_NAME && workflow.path === SDK_RPC_PARITY_WORKFLOW_PATH",
+  'request(`/actions/workflows/${run.workflow_id}`, "Workflow")',
+  "artifact.workflow_run?.id === source.workflowRun",
+  "validateSdkRpcParityArtifactContent",
+]) {
+  requireValue(
+    sdkRpcProvenance.includes(token),
+    `SDK/RPC live provenance identity contract is missing token: ${token}`,
+  );
+}
+requireValue(
+  !sdkRpcProvenance.includes("run.name"),
+  "SDK/RPC live provenance must not compare Actions run.name with the YAML workflow name.",
+);
+
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");
 for (const required of [
   "run-name: autonomous-merge | source_ci_run=${{ github.event.workflow_run.id }} | source_ci_attempt=${{ github.event.workflow_run.run_attempt }} | source_ci_head=${{ github.event.workflow_run.head_sha }}",
@@ -1149,7 +1186,7 @@ for (const required of [
   "merge_method: \"squash\"",
   "pr.base.sha !== testedBaseSha",
   "metadata[\"independent-review\"] !== \"complete\"",
-  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
+  "run.path !== \".github/workflows/ci.yml\"",
   "const ciIdentityPattern =",
   "event=pull_request",
   "ready=(true|false)",
@@ -1182,7 +1219,6 @@ for (const required of [
   "workflows: [\"Autonomous Merge\"]",
   "github.event.workflow_run.event == 'workflow_run'",
   "github.event.workflow_run.head_repository.full_name == github.repository",
-  "autonomousMergeRun.name !== \"Autonomous Merge\"",
   "autonomousMergeRun.path !== \".github/workflows/autonomous-merge.yml\"",
   "const autonomousMergeIdentityPattern =",
   "source_ci_run=([1-9][0-9]*)",
@@ -1197,7 +1233,6 @@ for (const required of [
   "after: ${sourceCiHead}",
   "run_id: sourceCiRunId",
   "attempt_number: sourceCiAttempt",
-  "sourceCiRun.name !== \"CI\"",
   "sourceCiRun.path !== \".github/workflows/ci.yml\"",
   "sourceCiRun.conclusion !== \"success\"",
   "const ciIdentityPattern =",
@@ -1223,6 +1258,16 @@ requireValue(
     !provenanceDispatch.includes('autonomousMergeRun.conclusion === "success"'),
   "Main Provenance reconciler must not retain the lossy post-CI merge observation window.",
 );
+for (const [source, forbidden, label] of [
+  [autoMerge, 'run.name !== "CI"', "Autonomous Merge"],
+  [provenanceDispatch, 'autonomousMergeRun.name !== "Autonomous Merge"', "Main Provenance reconciler"],
+  [provenanceDispatch, 'sourceCiRun.name !== "CI"', "Main Provenance reconciler"],
+]) {
+  requireValue(
+    !source.includes(forbidden),
+    `${label} must not rely on custom run-name presentation: ${forbidden}`,
+  );
+}
 
 const mainProvenance = await read(".github/workflows/main-provenance.yml");
 for (const required of [
