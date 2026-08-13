@@ -235,7 +235,7 @@ jobs:
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
-          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle/fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
 
       - name: Capture fresh Pi RPC Worker lifecycle in sandbox
         id: capture_rpc_worker
@@ -300,7 +300,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle/fixture.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
 
       - name: Compare committed RPC Worker Fixture with fresh evidence
         if: always() && !cancelled() && steps.capture_rpc_worker.outcome == 'success' && steps.validate_rpc_worker_fresh.outcome == 'success'
@@ -309,7 +309,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle/fixture.mjs \
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs \
             --compare "$PI_RPC_WORKER_LIFECYCLE_OUTPUT"
 
       - name: Upload fresh sanitized RPC Worker lifecycle evidence
