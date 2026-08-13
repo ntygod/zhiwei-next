@@ -33,6 +33,7 @@ import {
   RPC_WORKER_PROVIDER_ID,
   RPC_WORKER_TOKEN_SIZE,
   RPC_WORKER_TOKENS_PER_SECOND,
+  RPC_WORKER_UNKNOWN_COMMAND_TYPE,
   SDK_RPC_PARITY_API_ID,
   SDK_RPC_PARITY_FINAL_TEXT,
   SDK_RPC_PARITY_MODEL_ID,
@@ -796,7 +797,15 @@ class RpcWorker {
         reject: rejectWait,
         timer: setTimeout(() => {
           this.waiters.delete(waiter);
-          rejectWait(new Error(`${this.name} timed out waiting for ${label}.`));
+          const recentRecords = this.records
+            .slice(-10)
+            .map(({ raw: _raw, ...record }) => record);
+          rejectWait(
+            new Error(
+              `${this.name} timed out waiting for ${label}. ` +
+                `recentRecords=${JSON.stringify(recentRecords)}`,
+            ),
+          );
         }, timeoutMs),
       };
       this.waiters.add(waiter);
@@ -1197,14 +1206,15 @@ async function runNormalPromptAndRestart(cliEntry, aliases) {
   workerOne.sendRaw("{", "invalid-json");
   const parseResponse = await workerOne.waitForResponse(null, "parse");
 
-  const unicodeUnknownLine =
-    '{"id":"normal-unicode-unknown","type":"unknown_with_unicode_note","note":"alpha\\u2028beta\\u2029gamma"}'
-      .replace("\\u2028", "\u2028")
-      .replace("\\u2029", "\u2029");
+  const unicodeUnknownLine = JSON.stringify({
+    id: "normal-unicode-unknown",
+    type: RPC_WORKER_UNKNOWN_COMMAND_TYPE,
+    note: "alpha\u2028beta\u2029gamma",
+  });
   workerOne.sendRaw(unicodeUnknownLine, "unicode-separators-inside-json-string");
   const unknownResponse = await workerOne.waitForResponse(
     "normal-unicode-unknown",
-    "unknown",
+    RPC_WORKER_UNKNOWN_COMMAND_TYPE,
   );
 
   workerOne.send({ id: "normal-state-before", type: "get_state" });
@@ -1871,6 +1881,7 @@ async function runRpcWorkerLifecycleCapture() {
         transport: "stdio-jsonl",
         framing: "lf-only",
         unicodeLineSeparatorsInsideJsonString: ["U+2028", "U+2029"],
+        unknownCommandResponseCommand: "echo-request-type",
         promptResponseMeaning: "preflight-acceptance-not-run-completion",
       },
       providers: {

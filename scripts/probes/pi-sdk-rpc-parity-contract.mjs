@@ -97,6 +97,7 @@ export const RPC_WORKER_PROVIDER_ERROR_PROMPT =
   "Trigger the fixed accepted RPC provider error.";
 export const RPC_WORKER_PROVIDER_ERROR_MESSAGE =
   "ZHIWEI_RPC_FIXED_PROVIDER_ERROR";
+export const RPC_WORKER_UNKNOWN_COMMAND_TYPE = "unknown_with_unicode_note";
 export const RPC_WORKER_PROVIDER_ID = "zhiwei-rpc-worker-faux";
 export const RPC_WORKER_PROVIDER_API_ID = "zhiwei-rpc-worker-faux-api";
 export const RPC_WORKER_ERROR_PROVIDER_ID = "zhiwei-rpc-worker-error-faux";

@@ -20,6 +20,7 @@ import {
   RPC_WORKER_PROVIDER_ERROR_MESSAGE,
   RPC_WORKER_PROVIDER_ERROR_PROMPT,
   RPC_WORKER_PROVIDER_ID,
+  RPC_WORKER_UNKNOWN_COMMAND_TYPE,
   SDK_RPC_PARITY_API_ID,
   SDK_RPC_PARITY_EXPECTED_CAPTURE_CONTRACT_FINGERPRINT,
   SDK_RPC_PARITY_EXPECTED_OUTER_CONTRACT_FINGERPRINT,
@@ -524,6 +525,7 @@ function validateRpcWorkerLifecycle(result, rawText) {
       transport: "stdio-jsonl",
       framing: "lf-only",
       unicodeLineSeparatorsInsideJsonString: ["U+2028", "U+2029"],
+      unknownCommandResponseCommand: "echo-request-type",
       promptResponseMeaning: "preflight-acceptance-not-run-completion",
     },
     "RPC Worker protocol contract drifted",
@@ -595,7 +597,7 @@ function validateRpcWorkerLifecycle(result, rawText) {
   requireValue(protocol?.malformedJson?.command === "parse", "Malformed JSON command must be parse.");
   requireValue(protocol?.malformedJson?.success === false && protocol?.malformedJson?.responseCount === 1, "Malformed JSON must produce one failed response.");
   requireValue(protocol?.unknownCommand?.id === "normal-unicode-unknown", "Unknown command correlation ID drifted.");
-  requireValue(protocol?.unknownCommand?.command === "unknown", "Unknown command response type drifted.");
+  requireValue(protocol?.unknownCommand?.command === RPC_WORKER_UNKNOWN_COMMAND_TYPE, "Unknown command response must echo the request type.");
   requireValue(protocol?.unknownCommand?.success === false && protocol?.unknownCommand?.responseCount === 1, "Unknown command must produce one failed response.");
   equal(protocol?.unknownCommand?.unicodeSeparatorsInsideJsonString, ["U+2028", "U+2029"], "Unicode JSONL framing evidence drifted");
   requireValue(protocol?.workerRemainedUsable === true, "Protocol errors made the Worker unusable.");
@@ -612,7 +614,7 @@ function validateRpcWorkerLifecycle(result, rawText) {
   requireValue(normal?.worker?.alias === "rpc-worker-1", "Normal Worker alias drifted.");
   requireValue(normal?.worker?.stderr?.present === false && normal?.worker?.stderr?.length === 0 && normal?.worker?.stderr?.sha256 === sha256(""), "Normal Worker stderr drifted.");
   requireValue(responses(normal?.worker, null, "parse").length === 1, "Normal transcript must retain one parse failure response.");
-  requireValue(responses(normal?.worker, "normal-unicode-unknown", "unknown").length === 1, "Normal transcript must retain one unknown response.");
+  requireValue(responses(normal?.worker, "normal-unicode-unknown", RPC_WORKER_UNKNOWN_COMMAND_TYPE).length === 1, "Normal transcript must retain one correlated unknown-command response.");
   requireValue(responses(normal?.worker, "normal-prompt-1", "prompt").length === 1 && responses(normal?.worker, "normal-prompt-1", "prompt")[0]?.success === true, "Normal Prompt must have one successful acceptance response.");
   for (const type of ["agent_start", "turn_start", "message_start", "message_end", "turn_end", "agent_end", "agent_settled"]) {
     requireValue(events(normal?.worker, type).length > 0, `Normal transcript is missing ${type}.`);
