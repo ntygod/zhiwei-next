@@ -120,6 +120,30 @@ Worker exit / close
 - SDK Session 映射由宿主 `createAgentSession()`成功边界建立，不能只依赖 Extension `session_start`；
 - `session_shutdown`由宿主或 Worker 明确发出，`dispose()`只负责资源释放。
 
+## 已冻结场景连续性锚点
+
+这些短语既是文档事实，也是 committed Checker 的机械连续性入口；不得因项目状态压缩而删除。
+
+### Retry success
+
+`source-and-runtime-verified-retry-success`：**Public SDK与 Extension差异**必须保留。Extension没有收到 Public Session 的 `auto_retry_start/end`，但事件流仍保存被 Retry替代的失败 Assistant。一个 Prompt可包含多个 Agent Run。
+
+### Follow-up queue
+
+`source-and-runtime-verified-follow-up-queue`：一个 Prompt可包含多个 Agent Run，一个 Agent Run也可能包含多个 Turn。宿主应显式注册 `queue_update` Listener；队列为空不等于 Prompt完成，不能把 Follow-up固定映射成新 Agent Run。
+
+### Cancel / abortRetry / exhaustion
+
+`source-and-runtime-verified-cancel-retry-exhaustion`：被取消的部分 Assistant仍是 Observation；willRetry=true 不保证后续 Agent Run。Retry exhaustion结束时，Prompt Promise仍正常 resolve，而Extension仍不提供 `auto_retry_start/end`。
+
+### Parallel Tool ordering
+
+`source-and-runtime-verified-parallel-tool-ordering`：声明顺序为 `alpha → beta → gamma`，真实完成顺序为 `beta → gamma → alpha`，Tool Result消息顺序恢复声明顺序。不能仅凭 `tool_execution_end`推断最终消息持久化顺序。
+
+### Compaction / Session Replacement
+
+`source-and-runtime-verified-compaction-session-replacement`：Compaction Summary是派生上下文；Session File Identity与内存 Session Object Identity分开。旧 Public Listener不会自动迁移，Public `entry_appended`没有出现在固定手动Compaction的公开事件流中。
+
 ## SDK / RPC 同任务成功路径
 
 固定无工具 Prompt 中，SDK Public 与 RPC Runtime 的核心投影一致：
