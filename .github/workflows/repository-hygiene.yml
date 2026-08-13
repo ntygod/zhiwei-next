@@ -67,6 +67,289 @@ jobs:
 
             runWorkItemPolicySelfTests();
 
+            const protectionFinding = (message) => ({
+              kind: "main-protection-drift",
+              severity: "error",
+              message,
+            });
+            const sortedStrings = (value) =>
+              Array.isArray(value) ? [...value].sort() : value;
+            const jsonEqual = (left, right) =>
+              JSON.stringify(left) === JSON.stringify(right);
+
+            const auditMainProtection = async (repository) => {
+              const findings = [];
+              const requireProtection = (condition, message) => {
+                if (!condition) findings.push(protectionFinding(message));
+              };
+              const rulesetRecordPath = config.mainProtection?.rulesetRecord;
+              let record;
+
+              try {
+                if (
+                  typeof rulesetRecordPath !== "string" ||
+                  !rulesetRecordPath.startsWith("docs/harness/rulesets/") ||
+                  rulesetRecordPath.includes("..") ||
+                  !rulesetRecordPath.endsWith(".json")
+                ) {
+                  throw new Error("mainProtection.rulesetRecord is not a trusted ruleset record path");
+                }
+                record = JSON.parse(
+                  await readFile(join(root, rulesetRecordPath), "utf8"),
+                );
+              } catch (error) {
+                findings.push(
+                  protectionFinding(
+                    `Cannot read the configured main Ruleset record: ` +
+                      `${error.message ?? String(error)}`,
+                  ),
+                );
+                return findings;
+              }
+
+              const expectedRuleset = record.ruleset;
+              const expectedRules = Array.isArray(expectedRuleset?.rules)
+                ? expectedRuleset.rules
+                : [];
+              const expectedRule = (type) =>
+                expectedRules.find((rule) => rule.type === type);
+
+              requireProtection(
+                config.defaultBranch === "main",
+                `Harness default branch drifted from main to ` +
+                  `${config.defaultBranch ?? "<missing>"}.`,
+              );
+              requireProtection(
+                config.mainProtection?.serverEnforced === true,
+                "Harness no longer declares server-enforced main protection.",
+              );
+              requireProtection(
+                record.status === "active-verified",
+                `Ruleset record status is ${record.status ?? "<missing>"}, not active-verified.`,
+              );
+              requireProtection(
+                record.repository === repositoryFullName,
+                `Ruleset record repository is ${record.repository ?? "<missing>"}, ` +
+                  `not ${repositoryFullName}.`,
+              );
+              requireProtection(
+                record.repositoryVisibility === "public",
+                `Ruleset record visibility is ` +
+                  `${record.repositoryVisibility ?? "<missing>"}, not public.`,
+              );
+              requireProtection(
+                Number.isInteger(expectedRuleset?.id) &&
+                  config.mainProtection?.rulesetId === expectedRuleset.id,
+                "Harness Ruleset ID does not match the configured Ruleset record.",
+              );
+              requireProtection(
+                expectedRuleset?.target === "branch" &&
+                  expectedRuleset?.conditions?.refName?.include?.length === 1 &&
+                  expectedRuleset.conditions.refName.include[0] === "~DEFAULT_BRANCH" &&
+                  expectedRuleset.conditions.refName.exclude?.length === 0,
+                "Configured Ruleset record does not target only the default branch.",
+              );
+              requireProtection(
+                Array.isArray(expectedRuleset?.bypassActors) &&
+                  expectedRuleset.bypassActors.length === 0,
+                "Configured admin-captured Ruleset record must declare no bypass actors.",
+              );
+
+              requireProtection(
+                repository.full_name === repositoryFullName,
+                `Repository API returned ${repository.full_name ?? "<missing>"}, ` +
+                  `not ${repositoryFullName}.`,
+              );
+              requireProtection(
+                repository.visibility === "public" && repository.private === false,
+                `Repository visibility drifted to ` +
+                  `${repository.visibility ?? "<missing>"}.`,
+              );
+              requireProtection(
+                repository.default_branch === "main",
+                `Repository default branch drifted to ` +
+                  `${repository.default_branch ?? "<missing>"}.`,
+              );
+
+              const expectedMergeSettings = record.repositoryMergeSettings;
+              requireProtection(
+                expectedMergeSettings?.allowMergeCommit === false &&
+                  expectedMergeSettings?.allowSquashMerge === true &&
+                  expectedMergeSettings?.allowRebaseMerge === false,
+                "Configured repository merge settings are not squash-only.",
+              );
+              requireProtection(
+                repository.allow_merge_commit ===
+                    expectedMergeSettings?.allowMergeCommit &&
+                  repository.allow_squash_merge ===
+                    expectedMergeSettings?.allowSquashMerge &&
+                  repository.allow_rebase_merge ===
+                    expectedMergeSettings?.allowRebaseMerge,
+                "Live repository merge settings drifted from the configured record.",
+              );
+
+              const expectedSecurity = record.securityAndAnalysis;
+              requireProtection(
+                expectedSecurity?.secretScanning === "enabled" &&
+                  expectedSecurity?.secretScanningPushProtection === "enabled",
+                "Configured security record does not require Secret Scanning and Push Protection.",
+              );
+              core.info(
+                "Live drift detection is limited to the subset exposed to the ordinary " +
+                  "GITHUB_TOKEN. security_and_analysis, bypass_actors, and " +
+                  "current_user_can_bypass remain admin-captured record evidence " +
+                  "and are not asserted from this token.",
+              );
+
+              let mainBranch;
+              try {
+                ({ data: mainBranch } = await github.rest.repos.getBranch({
+                  owner,
+                  repo,
+                  branch: "main",
+                }));
+              } catch (error) {
+                findings.push(
+                  protectionFinding(
+                    `Cannot read live main branch protection: ` +
+                      `${error.message ?? String(error)}`,
+                  ),
+                );
+              }
+              if (mainBranch) {
+                requireProtection(
+                  mainBranch.name === "main" && mainBranch.protected === true,
+                  "The live main branch is not protected.",
+                );
+              }
+
+              let liveRuleset;
+              if (Number.isInteger(expectedRuleset?.id)) {
+                try {
+                  ({ data: liveRuleset } = await github.request(
+                    "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}",
+                    {
+                      owner,
+                      repo,
+                      ruleset_id: expectedRuleset.id,
+                    },
+                  ));
+                } catch (error) {
+                  findings.push(
+                    protectionFinding(
+                      `Cannot read GITHUB_TOKEN-readable live Ruleset subset ` +
+                        `${expectedRuleset.id}: ` +
+                        `${error.message ?? String(error)}`,
+                    ),
+                  );
+                }
+              } else {
+                findings.push(
+                  protectionFinding("Configured Ruleset record has no integer Ruleset ID."),
+                );
+              }
+
+              if (!liveRuleset) return findings;
+
+              requireProtection(
+                liveRuleset.id === expectedRuleset.id &&
+                  liveRuleset.name === expectedRuleset.name,
+                "GITHUB_TOKEN-readable live Ruleset identity does not match the configured record.",
+              );
+              requireProtection(
+                liveRuleset.target === "branch" &&
+                  liveRuleset.source_type === "Repository" &&
+                  liveRuleset.source === repositoryFullName,
+                "GITHUB_TOKEN-readable live Ruleset target or repository source drifted.",
+              );
+              requireProtection(
+                liveRuleset.enforcement === "active",
+                `GITHUB_TOKEN-readable live Ruleset enforcement is ` +
+                  `${liveRuleset.enforcement ?? "<missing>"}, not active.`,
+              );
+              requireProtection(
+                jsonEqual(
+                  sortedStrings(liveRuleset.conditions?.ref_name?.include),
+                  sortedStrings(expectedRuleset.conditions?.refName?.include),
+                ) &&
+                  jsonEqual(
+                    sortedStrings(liveRuleset.conditions?.ref_name?.exclude),
+                    sortedStrings(expectedRuleset.conditions?.refName?.exclude),
+                  ),
+                "GITHUB_TOKEN-readable live Ruleset branch target conditions drifted from the record.",
+              );
+
+              const liveRules = Array.isArray(liveRuleset.rules)
+                ? liveRuleset.rules
+                : [];
+              const liveRule = (type) =>
+                liveRules.find((rule) => rule.type === type);
+              requireProtection(
+                jsonEqual(
+                  liveRules.map((rule) => rule.type).sort(),
+                  expectedRules.map((rule) => rule.type).sort(),
+                ),
+                "GITHUB_TOKEN-readable live Ruleset rule types drifted from the configured record.",
+              );
+
+              const expectedPullRequest = expectedRule("pull_request")?.parameters;
+              const livePullRequest = liveRule("pull_request")?.parameters;
+              requireProtection(
+                Boolean(livePullRequest) &&
+                  livePullRequest.required_approving_review_count ===
+                    expectedPullRequest?.requiredApprovingReviewCount &&
+                  livePullRequest.dismiss_stale_reviews_on_push ===
+                    expectedPullRequest?.dismissStaleReviewsOnPush &&
+                  livePullRequest.require_code_owner_review ===
+                    expectedPullRequest?.requireCodeOwnerReview &&
+                  livePullRequest.require_last_push_approval ===
+                    expectedPullRequest?.requireLastPushApproval &&
+                  livePullRequest.required_review_thread_resolution ===
+                    expectedPullRequest?.requiredReviewThreadResolution &&
+                  jsonEqual(
+                    sortedStrings(livePullRequest.allowed_merge_methods),
+                    sortedStrings(expectedPullRequest?.allowedMergeMethods),
+                  ),
+                "GITHUB_TOKEN-readable live pull-request Ruleset parameters drifted from the record.",
+              );
+
+              const expectedStatus = expectedRule("required_status_checks")?.parameters;
+              const liveStatus = liveRule("required_status_checks")?.parameters;
+              const normalizeChecks = (checks, integrationKey) =>
+                Array.isArray(checks)
+                  ? checks
+                      .map((check) => ({
+                        context: check.context,
+                        integrationId: check[integrationKey],
+                      }))
+                      .sort((left, right) =>
+                        `${left.context}:${left.integrationId}`.localeCompare(
+                          `${right.context}:${right.integrationId}`,
+                        ),
+                      )
+                  : checks;
+              requireProtection(
+                Boolean(liveStatus) &&
+                  liveStatus.strict_required_status_checks_policy ===
+                    expectedStatus?.strictRequiredStatusChecksPolicy &&
+                  liveStatus.do_not_enforce_on_create ===
+                    expectedStatus?.doNotEnforceOnCreate &&
+                  jsonEqual(
+                    normalizeChecks(
+                      liveStatus.required_status_checks,
+                      "integration_id",
+                    ),
+                    normalizeChecks(
+                      expectedStatus?.requiredStatusChecks,
+                      "integrationId",
+                    ),
+                  ),
+                "GITHUB_TOKEN-readable live required-status Ruleset parameters drifted from the record.",
+              );
+
+              return findings;
+            };
+
             const readRepositoryState = async () => {
               const [{ data: repository }, branches, openPullRequests] =
                 await Promise.all([
@@ -87,12 +370,24 @@ jobs:
             };
 
             let state = await readRepositoryState();
-            const cleanupCandidates = selectAllowlistedLegacyHelperBranches({
-              defaultBranch: state.repository.default_branch,
-              branches: state.branches,
-              openPullRequests: state.openPullRequests,
-              cleanupEntries: reconciliation.legacyBranches,
-            });
+            const protectionFindings = await auditMainProtection(state.repository);
+            const protectionBlocked = protectionFindings.some(
+              (finding) => finding.severity === "error",
+            );
+            const cleanupCandidates = protectionBlocked
+              ? []
+              : selectAllowlistedLegacyHelperBranches({
+                  defaultBranch: state.repository.default_branch,
+                  branches: state.branches,
+                  openPullRequests: state.openPullRequests,
+                  cleanupEntries: reconciliation.legacyBranches,
+                });
+            if (protectionBlocked) {
+              core.warning(
+                "The GITHUB_TOKEN-readable live main-protection subset could not be " +
+                  "verified; branch cleanup is disabled for this run.",
+              );
+            }
 
             const cleanupFailures = [];
             const deleted = [];
@@ -177,14 +472,17 @@ jobs:
               allowedOrphanBranches.push(entry.branch);
             }
 
-            const findings = auditRepositoryWorkItems({
-              defaultBranch: state.repository.default_branch,
-              branches: state.branches,
-              openPullRequests: state.openPullRequests,
-              allowedOrphanBranches,
-              maxOpenPrimaryPullRequests:
-                config.workItemLifecycle.maxOpenPrimaryPullRequests,
-            });
+            const findings = [
+              ...protectionFindings,
+              ...auditRepositoryWorkItems({
+                defaultBranch: state.repository.default_branch,
+                branches: state.branches,
+                openPullRequests: state.openPullRequests,
+                allowedOrphanBranches,
+                maxOpenPrimaryPullRequests:
+                  config.workItemLifecycle.maxOpenPrimaryPullRequests,
+              }),
+            ];
 
             for (const pullRequest of state.openPullRequests) {
               for (const violation of validatePullRequestWorkItemContract({

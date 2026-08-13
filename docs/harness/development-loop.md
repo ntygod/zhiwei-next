@@ -93,7 +93,7 @@ branch: <default branch>
 在真实仓库创建 no-op Issue / PR / Branch 测试 Connector
 ```
 
-GitHub Free 私有仓库没有 pre-receive 硬屏障，因此这一前置检查是强制操作合同，而不是可选风格。
+Public + GitHub Free仓库已有 active的默认分支 Ruleset；无 bypass状态来自 2026-08-13 owner/admin live readback并已版本化，普通 `GITHUB_TOKEN`持续审计不覆盖该管理员字段。这一写入前置检查仍是强制操作合同，不能把服务端拒绝当作日常流程控制。
 
 ## 5. 一个 primary PR 完成实现
 
@@ -230,7 +230,7 @@ HEAD 变化后旧批准自动失效。审查直接留在 primary PR，不创建 
 - 任一无法证明合同，登记 Main Incident并停机；
 - dispatch payload永远不是自动恢复 tree 的可信来源。
 
-两条路径都不会直接 reset 或 force-push 默认分支。它们是 post-push 检测与恢复提案层，不替代服务端 Ruleset。
+两条路径都不会直接 reset 或 force-push默认分支。它们是 post-merge / 异常 push的检测与恢复提案层，与服务端 Ruleset互补。
 
 ## 12. 收尾和连续性
 

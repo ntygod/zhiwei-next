@@ -11,10 +11,14 @@ updated: 2026-08-13
 知微处于 **M0：能观察**。AI-primary 自主开发运行模式为：
 
 ```text
-best-effort-private-free
+public-free-ruleset
 ```
 
-仓库保持 Private + GitHub Free。所有者已接受缺少服务端 pre-receive 默认分支硬保护的残余风险；正常写入仍必须使用非默认分支和 Pull Request。
+仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认没有 bypass actor。服务端要求 `main`只能经最新 base上的 Pull Request、GitHub Actions `check`、线性历史与已解决 Review Thread进入，并且只允许 squash、禁止 force push和删除。正常写入仍必须使用非默认分支和 Pull Request；Main Provenance继续独立审计实际进入默认分支的来源。
+
+仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。2026-08-13 owner/admin读回确认 Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
+
+普通临时 `GITHUB_TOKEN`不能读取 Ruleset `bypass_actors`或 Repository `security_and_analysis`。这两类管理员字段以版本化 owner/admin读回作为当前证据；Repository Hygiene只持续核验 Token可读子集。仓库不保存 PAT或其他长期管理员 Secret，降低凭证暴露面的代价是管理员字段漂移要到新的 owner/admin读回或其他治理信号才会被发现。
 
 ## 最近完成
 
@@ -31,7 +35,7 @@ best-effort-private-free
 - 原始 RPC State变化为 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；stdin EOF后 Extension `session_shutdown(reason=quit)`，Worker `exit=0 → close=0`；
 - 发布 `RpcClient`在 Prompt前返回 `getMessages()=[]`，`prompt()`返回时可观察 `isStreaming=true / messageCount=1`，`agent_settled`后返回 `user → assistant`；
 - 固定容器 verified Capture中，`RpcClient.stop()`的实现层 instrumentation真实观察到一次被接受的 `SIGTERM`请求、Extension Evidence在 Process Boundary前已落盘，以及 `exit(code=143, signal=null) → close(code=143, signal=null)`；请求列表没有 `SIGKILL`，但发布源码保留超时后的 `SIGKILL` fallback；
-- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。成功 Run `31639460875`已把 committed Fixture与 Artifact完整绑定，PR #60保持 Draft完成最终 HEAD的 R3独立审查。
+- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。成功 Run `31639460875`已把 committed Fixture与 Artifact完整绑定；PR #60已合并，squash commit为 `e71f44fce5022a520a1cc3c081659cb7819cb77d`。
 
 ### Runtime 合同连续性
 
@@ -82,16 +86,20 @@ SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生 Fresh C
 
 恢复 Packer对 Fresh JSON与解压输出使用同一个 8 MiB有界读取上限，以仓库绝对位置运行 Checker，并用 Fixture父目录排他锁、父目录 / Fixture目录身份句柄、内容寻址不可变分片、完整 staging回读与单 Manifest原子切换避免失败时混写活动 Fixture；目录替换、符号链接、非普通文件和并发 Packer均 fail closed。旧分片保留给已读取旧 Manifest的并发 Reader，显式 GC需先增加 Reader lease或版本保留协议；崩溃或目录身份异常残留锁需要先确认没有运行中的 Packer并检查 Fixture树后人工清理。
 
-PR #60已完成 candidate收敛与真实 Artifact绑定，保持 Draft等待最终 HEAD的 R3独立审查。标为 Ready后会重新运行要求 `verified`来源的 Capture与 live provenance Gate；只有 Fresh / committed完整相等、两个结果 Checker、当前 HEAD CI和独立审查全部为绿色，才允许合并。
+PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独立审查和 verified来源 Gate，并已 squash合并。后续 Runtime工作必须继承其 Fresh / committed完整相等、双结果 Checker和来源 provenance边界，不能把历史 candidate状态重新描述为当前状态。
 
 ### Harness 与默认分支
 
 - 渐进式 `AGENTS.md` 与 AI-primary Harness；
 - Main Provenance、token-driven dispatch、Incident停机与恢复提案；
-- `best-effort-private-free` 风险接受和两条 live provenance proof；
+- 当前 `public-free-ruleset`模式、active Ruleset、Actions限制、Secret scanning / push protection与公开面审计；
+- 2026-08-13 owner/admin字段版本化证据、临时 `GITHUB_TOKEN`持续读回子集和无长期管理员 PAT边界；
+- 历史 `best-effort-private-free` 风险接受和两条 live provenance proof继续保留，但不再描述当前保护能力；
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
 - `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
 - Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；失败必须可见并安全重跑，不能降低来源校验。
+
+Issue #61是公开仓库治理前置：服务端设置已落地，当前 primary branch正在把 Ruleset、Actions、Secret scanning、fork / token边界与机器 Checker同步进仓库。#61合并并通过真实 post-merge回读前，Issue #32保持排队而不创建新的 Runtime primary branch。
 
 ### 历史连续性锚点
 
@@ -133,9 +141,10 @@ Issue #57 和 PR #59 建立 work-item lifecycle：
 当前收敛结果：
 
 - Issue #44《后台任务进度获取》保留为所有者产品输入，并完成事件驱动进度订阅的 triage；
-- Issue #45 由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
+- Issue #45 已由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
 - Issue #31、#37 已作为 #45 的 duplicate关闭；
-- Issue #32 是当前下一项 canonical execution work item；
+- Issue #61 是因仓库转为 Public触发的当前 R3治理前置；
+- Issue #32 是 #61合并后立即恢复的下一项 canonical Runtime execution work item；
 - Issue #49 等待 #32 后冻结 `NormalizedRuntimeEvent v1`；
 - Issue #56 等待 #49 后实现 SQLite Observation Ledger；
 - PR #33、#34 未完成 Draft已明确未交付并关闭；
@@ -156,6 +165,10 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 - GitHub Connector内容写入前创建并显式指定非默认分支；
 - 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
+- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions `check`、最新 base、线性历史和 Review Thread解决；2026-08-13 owner/admin读回记录 `bypass_actors=[]`，仓库 merge设置也只允许 squash；
+- Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
+- Autonomous Merge与 Main Provenance Dispatch的 `workflow_run`写权限路径同时检查 same-repository source，实时 PR对象还会再次核对 `head.repo`；
+- 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
 - PR Checker从 GitHub Event Payload读取 title、branch和PR number；
@@ -165,7 +178,7 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 - `GITHUB_TOKEN`自动合并由 Dispatch / Receiver路径审计；
 - 未验证 main更新创建 R3 Incident并阻断普通自动合并；
 - Branch Cleanup处理关闭 PR分支；Repository Hygiene处理 exact-head legacy helper和仓库级WIP漂移；
-- 当前模式是 post-push检测与恢复提案，不是服务端硬保护。
+- Repository Hygiene使用临时 `GITHUB_TOKEN`持续回读 Public visibility、merge methods、`main.protected`以及可见的 Ruleset身份、enforcement、条件与规则参数；它不声称在线验证 `bypass_actors`或 `security_and_analysis`。Main Provenance继续作为服务端 pre-receive规则之后的来源审计与恢复层。
 
 ## 当前 M0能力
 
@@ -193,9 +206,10 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 严格按依赖推进：
 
-1. **Issue #32**：创建 `spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
-2. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
-3. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
+1. **Issue #61**：完成 Public + Free Ruleset、Actions、Secret scanning、fork / Token边界和机器事实源的 R3治理闭环；
+2. **Issue #32**：#61合并后从最新 `main`创建 `spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
+3. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
+4. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
 
 Issue #56已有 pre-governance snapshot：
 
@@ -210,16 +224,20 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 
 ## 已知风险
 
-- GitHub当前方案无法从服务端事前阻止 direct-main写入；
-- 具有 `contents: write` 的主体仍可能先产生 Commit，再被检测；
-- 仓库内 Workflow不能抵御同一 direct Commit同时篡改检测逻辑的最坏情况；
+- 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene持续暴露删除和 Token可读漂移，管理员字段则依赖新的 owner/admin读回或其他治理信号，任何审计都不能让管理员权限变成不可变；
+- 普通 `GITHUB_TOKEN`看不到 bypass actors与 security-and-analysis管理员字段；不保存长期管理员 PAT降低凭证风险，但这些字段的漂移只能靠 revisit trigger后的 owner/admin读回或其他治理信号发现；
+- Required Check名称或 GitHub Actions App身份漂移会 fail closed并阻塞全部合并；修复必须走 R3治理，不能增加 bypass；
+- Public仓库的源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；公开面审计观察到610条历史 Actions artifact记录，但没有逐字节审计历史 Artifact，现行 Workflow仍必须在上传前脱敏并使用明确的短保留期；
+- 旧 Probe Workflow的 `if: always()`已移除；Capture或脱敏 Checker失败时不再上传 failure JSON，不能把失败诊断冒充公开 Evidence；
+- Secret scanning与 push protection降低误提交风险但不能替代禁止真实记忆、凭证、生产数据和私有仓库内容进入 Commit或 Artifact；validity checks仍未启用；
+- External fork的只读 CI仍执行不受信任代码；same-repository `workflow_run`门禁、无 Secret和最小 Token必须保持，不能依赖运行批准本身建立信任；
 - Branch Cleanup与Repository Hygiene的 `deleteRef`没有原子 compare-and-delete，最终复核和删除间有极短可恢复竞态；
 - Repository Hygiene只删除 exact-head allowlist或合规 helper，不猜测删除来源不明分支；
 - 独立 AI审查仍使用同一仓库身份下的 cold-read评论协议，尚无独立Reviewer Bot；
 - 同一最终 HEAD多次成功 CI可能产生重复但幂等 provenance dispatch，Issue #15跟踪；
 - Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
 - RPC成功路径、正常 EOF与 `RpcClient.stop()`实现层 SIGTERM / `exit(143) → close(143)`已有固定容器 verified Evidence。发布源码中的 `SIGKILL` fallback、Restart / Resume / Error仍必须按各自场景保留来源，其中 Worker恢复与错误语义由 #32独立冻结，不能从当前成功 Fixture外推；
-- 在真实用户记忆、生产凭证、多人写入、生产发布或第二次 direct-main Incident出现时，必须重新评估风险接受。
+- 在仓库转回 Private、方案或默认分支变化、Ruleset / Secret scanning漂移、管理员字段相关变更后读回证据未刷新、提议引入长期管理员 PAT、真实用户记忆、生产凭证、多人写入、生产发布或 active Ruleset下仍出现未经授权的 direct-main更新时，必须重新评估风险接受。
 
 ## 产品能力状态
 

@@ -38,10 +38,10 @@
 ## 当前运行模式
 
 ```text
-best-effort-private-free
+public-free-ruleset
 ```
 
-仓库保持 Private + GitHub Free。当前方案没有私有仓库可用的 pre-receive Ruleset / Protected Branch 硬保护；所有者已接受该残余风险。
+仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。无 bypass、Secret Scanning与 Push Protection状态来自 2026-08-13 owner/admin live readback并作为版本化证据静态锁定；普通临时 `GITHUB_TOKEN`只持续回读权限可见子集。机器事实源、无长期管理员 PAT的权衡与残余风险见 `main-protection.md`。
 
 Harness 提供：
 
@@ -49,13 +49,15 @@ Harness 提供：
 - owner-input 与 canonical execution Issue；
 - 一个 work item 一个 active branch / primary PR；
 - PR、CI、风险合同与 cold-read AI 审查；
+- Public仓库 fork / Token隔离；
+- 默认分支服务端 Ruleset；
 - 自主 squash merge；
 - 外部 push 与 token-driven merge 双路径 provenance；
 - 未验证 main 更新的 R3 Incident 停机；
 - Branch Cleanup 与 Repository Hygiene；
 - Work Item 生命周期机器检查。
 
-它不能声称从服务端绝对阻止 direct push。详细边界见 `main-protection.md`。
+Ruleset不替代可信 Workflow、Main Provenance、Incident和恢复链路；管理员仍可修改服务端配置，Required Check漂移也会安全阻塞合并。详细边界见 `main-protection.md`。
 
 ## Work Item 生命周期
 
@@ -116,15 +118,16 @@ Branch Cleanup + Repository Hygiene 收敛分支和 Work Item
 
 完整政策见 `autonomy-policy.md`。
 
-## Main 分支补偿控制
+## Main 分支保护
 
-仓库采用三层最佳努力防护：
+仓库采用四层防护：
 
 1. **写入前置协议**：Connector 写入显式指定非默认分支。
-2. **Main Provenance 双路径审计**：外部 push 与自动合并都重新查询真实 PR 和 Commit。
-3. **Incident-aware autonomous merge**：开放 Main Incident 或可信停机时，普通 PR 自动合并暂停。
+2. **PR门禁**：CI、Work Item合同和当前 HEAD独立审查。
+3. **服务端 Ruleset**：无 bypass，要求 PR、`check`、线性历史和 squash。
+4. **Main Provenance / Incident**：重新查询真实 PR和 Commit；异常时暂停普通合并。
 
-若未来仓库套餐或可见性改变，应加入服务端 Ruleset，但不得删除上述控制。
+服务端保护与事后 provenance互补，任何一层都不能因为另一层存在而删除。
 
 ## 工作分支生命周期
 
@@ -171,6 +174,8 @@ rollback
 CI 在 **pre-merge** 阶段使用只读 GitHub API 实时验证：`work-item` 必须是开放 Issue、`owner-input` 必须是仓库所有者创建的 Issue、`supersedes-pr` 必须是真实 PR。验证失败时 CI 失败，旧 Autonomous Merge 不会运行；对象类型不能等到合并后才发现。
 
 Repository Hygiene 在可信默认分支上下文中再次查询真实 GitHub 对象，复核 work-item / owner-input / supersedes-pr，并安全回收精确登记的 legacy helper branch。它是 post-merge 审计与收敛层，不替代 pre-merge 门禁。
+
+对默认分支治理，Repository Hygiene持续回读 Public visibility、merge methods、`main.protected`与普通 `GITHUB_TOKEN`可见的 Ruleset身份、条件和规则参数。它不能在线读取 `bypass_actors`或 `security_and_analysis`，不得把版本化 owner/admin读回证据误写成每次 Workflow都完成的管理员字段验证。
 
 所有 Workflow Action 固定完整 Commit SHA。机器配置、Policy、Checker、Workflow 和文档均注册在 `harness.config.json`。
 

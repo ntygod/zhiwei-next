@@ -7,7 +7,7 @@
 - Harness 是治理代码，不是建议性文档。
 - 本目录只描述 AI 如何持续开发、验证、审查、合并和交接；产品与架构事实仍放在各自目录。
 - `harness.config.json` 是机器可读配置，本文档体系解释其语义。
-- 当前仓库运行在 `best-effort-private-free` 模式：有检测、停机和恢复提案，但没有 GitHub 服务端 pre-receive 硬保护。
+- 当前仓库运行在 `public-free-ruleset` 模式：默认分支有 active的 GitHub服务端 Ruleset；2026-08-13 owner/admin读回记录无 bypass。Main Provenance、停机与恢复提案继续作为独立审计层。
 
 ## 修改规则
 
@@ -16,7 +16,8 @@
 - 当前治理任务仍受任务开始时的旧规则约束，不能依赖本次新规则获得通过。
 - 修改文档时同步机器检查；修改机器检查时同步文档和回滚说明。
 - 不复制根 `AGENTS.md` 的完整规则，只补充 Harness 局部语义。
-- 不得把最佳努力模式描述成“硬保护”“无法直写”或“服务端已阻止”。
+- 不得把 Ruleset描述成不可变：管理员仍可修改服务端配置，任何漂移必须 fail closed并触发 R3重评。
+- 不得把 owner/admin权限才能读取的 Ruleset `bypass_actors`或 Repository `security_and_analysis`描述成普通 `GITHUB_TOKEN`持续在线验证；记录其 dated版本化证据，并在相关 revisit trigger触发时重新读回。禁止为了持续监控把 PAT或长期管理员 Secret提交到仓库或保存到 Actions。
 
 ## Work Item 与人类输入
 
@@ -42,7 +43,7 @@
 
 禁止把 `branch: main`、默认分支名或空 branch 参数传给仓库内容写工具。唯一例外是已经发生直接写入后，为消除正在暴露的敏感或持续有害内容所做的最小紧急恢复；恢复后必须立即创建 R3 Incident，并暂停普通开发。
 
-残余风险和补偿控制见 `main-protection.md` 与 `risk-acceptance/2026-08-11-private-free.json`。
+当前保护与残余风险见 `main-protection.md`、`rulesets/2026-08-13-main-public-free.json` 与 `risk-acceptance/2026-08-13-public-free.json`；Private + Free记录只保留为历史。
 
 ## Main Incident 安全停机
 

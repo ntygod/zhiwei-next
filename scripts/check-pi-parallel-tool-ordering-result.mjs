@@ -660,7 +660,7 @@ for (const required of [
   "node scripts/probes/pi-lifecycle-ci.mjs",
   'node scripts/check-pi-parallel-tool-ordering-result.mjs "$PI_PARALLEL_TOOL_ORDERING_OUTPUT"',
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "if: always()",
+  "if: success()",
   "persist-credentials: false",
   "--read-only",
   "--user=1000:1000",

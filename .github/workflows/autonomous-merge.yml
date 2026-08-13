@@ -14,7 +14,8 @@ jobs:
   merge:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request'
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -25,6 +26,17 @@ jobs:
             const { owner, repo } = context.repo;
             const run = context.payload.workflow_run;
             const defaultBranch = context.payload.repository.default_branch;
+            const repositoryFullName = `${owner}/${repo}`;
+
+            if (run.head_repository?.full_name !== repositoryFullName) {
+              core.warning(
+                `Refusing autonomous merge for CI source ` +
+                  `${run.head_repository?.full_name ?? "<missing>"}; ` +
+                  `expected ${repositoryFullName}.`,
+              );
+              return;
+            }
+
             let candidates = run.pull_requests ?? [];
 
             if (candidates.length === 0) {
@@ -57,6 +69,14 @@ jobs:
 
             core.info(`Evaluating PR #${pullNumber}: head=${pr.head.sha}, base=${pr.base.sha}, bodyLength=${(pr.body ?? "").length}.`);
 
+            if (pr.head.repo?.full_name !== repositoryFullName) {
+              core.warning(
+                `Refusing autonomous merge for PR #${pullNumber} from ` +
+                  `${pr.head.repo?.full_name ?? "<missing>"}; ` +
+                  `expected ${repositoryFullName}.`,
+              );
+              return;
+            }
             if (pr.state !== "open" || pr.draft) {
               core.info("Pull request is closed or still draft; autonomous merge is skipped.");
               return;
@@ -309,9 +329,7 @@ jobs:
                 record: parseBlock(comment.body, "zhiwei-independent-review"),
               }))
               .filter(({ record }) => Boolean(record))
-              .filter(({ comment }) =>
-                trustedAssociations.has(comment.author_association) || comment.user?.type === "Bot"
-              )
+              .filter(({ comment }) => trustedAssociations.has(comment.author_association))
               .filter(({ record }) => record.head === pr.head.sha);
 
             if (reviewRecords.some(({ record }) => record.verdict === "blocked")) {

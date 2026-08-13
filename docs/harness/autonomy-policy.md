@@ -21,16 +21,17 @@ AI 获得对仓库工作的长期授权，包括：
 仓库运行于：
 
 ```text
-best-effort-private-free
+public-free-ruleset
 ```
 
-所有者选择保持 Private、不升级 GitHub 方案，并接受当前套餐无法提供私有仓库服务端 pre-receive 保护的残余风险。机器记录见：
+所有者已将仓库转为 Public并要求继续开发。GitHub Free公开仓库已启用 active的默认分支 Ruleset，2026-08-13 owner/admin读回记录无 bypass；Public源码暴露、管理员配置漂移、Required Check身份和 GitHub可用性风险已重新接受。机器记录见：
 
 ```text
-docs/harness/risk-acceptance/2026-08-11-private-free.json
+docs/harness/risk-acceptance/2026-08-13-public-free.json
+docs/harness/rulesets/2026-08-13-main-public-free.json
 ```
 
-这一决定允许自主开发继续，但不把 post-push 检测夸大成硬保护。
+此前 Private + Free风险记录保留为历史。Ruleset提供 pre-receive保护，仓库级 merge设置只允许 squash；2026-08-13 owner/admin live readback确认没有 bypass actor且 Secret Scanning与 Push Protection已启用。普通 `GITHUB_TOKEN`只能持续核验权限可读子集，项目不保存 PAT或长期管理员 Secret来伪装完整持续监控；这些控制仍不替代 PR合同、独立审查、Fork隔离、Main Provenance或 Incident恢复。
 
 ## 默认工作方式
 
@@ -74,7 +75,8 @@ docs/harness/risk-acceptance/2026-08-11-private-free.json
 - 不能提交真实个人数据、密钥、数据库、原始模型思维链或敏感转储；
 - 不能把“AI 自称成功”当作真实 Outcome；
 - 不能在开放 Main Incident 或可信 `developmentPause` 期间继续普通产品开发；
-- 不能声称 `best-effort-private-free` 已从服务端阻止 direct push。
+- 不能修改、删除或绕过 Ruleset来使当前 PR通过；服务端配置漂移必须按 R3处理。
+- 不能因为仓库 Public而提交真实记忆、凭证、私有仓库内容、数据库或其他敏感数据。
 
 ## Main Incident
 
@@ -95,10 +97,13 @@ docs/harness/risk-acceptance/2026-08-11-private-free.json
 - 真实用户记忆、生产凭证或生产数据进入系统；
 - 多于一名人类协作者获得写权限；
 - 引入生产发布、签名或部署 Workflow；
-- 仓库公开或 GitHub 方案变化；
+- 仓库可见性、Owner、默认分支或 GitHub方案变化；
+- active Ruleset被禁用、删除、绕过或实质修改；
+- Ruleset或 Repository安全设置发生可能影响管理员字段的变化，而 owner/admin读回证据未刷新；
+- 提议为持续监控引入 PAT或其他长期管理员凭证；
 - 再次发生 direct-main Incident。
 
-此时应重新评估 GitHub Pro、公开仓库 Ruleset 或具有 Team/Enterprise 能力的组织。
+此时应重新评估当前 Ruleset、GitHub方案或迁移到具有 Team/Enterprise能力的组织。
 
 ## 人类介入
 

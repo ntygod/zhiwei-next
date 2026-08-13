@@ -299,7 +299,7 @@ jobs:
         run: node scripts/check-pi-artifact-result.mjs "$PI_PROBE_OUTPUT"
 
       - name: Upload sanitized probe evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-artifact-probe-${{ github.run_id }}-${{ github.run_attempt }}
@@ -387,7 +387,7 @@ jobs:
         run: node scripts/check-pi-lifecycle-result.mjs "$PI_LIFECYCLE_OUTPUT"
 
       - name: Upload sanitized lifecycle evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-lifecycle-probe-${{ github.run_id }}-${{ github.run_attempt }}
@@ -475,7 +475,7 @@ jobs:
         run: node scripts/check-pi-retry-lifecycle-result.mjs "$PI_RETRY_LIFECYCLE_OUTPUT"
 
       - name: Upload sanitized retry lifecycle evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-retry-lifecycle-probe-${{ github.run_id }}-${{ github.run_attempt }}
@@ -563,7 +563,7 @@ jobs:
         run: node scripts/check-pi-follow-up-lifecycle-result.mjs "$PI_FOLLOW_UP_LIFECYCLE_OUTPUT"
 
       - name: Upload sanitized follow-up lifecycle evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-follow-up-lifecycle-probe-${{ github.run_id }}-${{ github.run_attempt }}
@@ -651,7 +651,7 @@ jobs:
         run: node scripts/check-pi-cancel-retry-exhaustion-result.mjs "$PI_CANCEL_RETRY_EXHAUSTION_OUTPUT"
 
       - name: Upload sanitized cancellation and retry exhaustion evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pi-cancel-retry-exhaustion-probe-${{ github.run_id }}-${{ github.run_attempt }}

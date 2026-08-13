@@ -118,7 +118,7 @@ jobs:
         run: node scripts/check-pi-parallel-tool-ordering-result.mjs "$PI_PARALLEL_TOOL_ORDERING_OUTPUT"
 
       - name: Upload sanitized parallel Tool ordering evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pi-parallel-tool-ordering-probe-${{ github.run_id }}-${{ github.run_attempt }}

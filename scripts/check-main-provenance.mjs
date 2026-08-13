@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 
 const root = process.cwd();
 const fixturePath = "docs/harness/incidents/2026-08-11-direct-main.json";
-const riskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
+const historicalRiskPath = "docs/harness/risk-acceptance/2026-08-11-private-free.json";
+const currentRiskPath = "docs/harness/risk-acceptance/2026-08-13-public-free.json";
+const rulesetPath = "docs/harness/rulesets/2026-08-13-main-public-free.json";
 const proof12Path = "docs/harness/provenance-proofs/2026-08-11-pr-12.json";
 const proof13Path = "docs/harness/provenance-proofs/2026-08-11-pr-13.json";
 const violations = [];
@@ -64,9 +66,24 @@ function mergeHaltDecision({ configuredPause, configuredIncidentIssue, activeInc
     : "recovery-missing-reference";
 }
 
-const [fixtureText, riskText, proof12Text, proof13Text, workflow, dispatchWorkflow, autoMerge, template] = await Promise.all([
+const [
+  fixtureText,
+  historicalRiskText,
+  currentRiskText,
+  configText,
+  rulesetText,
+  proof12Text,
+  proof13Text,
+  workflow,
+  dispatchWorkflow,
+  autoMerge,
+  template,
+] = await Promise.all([
   readFile(fixturePath, "utf8"),
-  readFile(riskPath, "utf8"),
+  readFile(historicalRiskPath, "utf8"),
+  readFile(currentRiskPath, "utf8"),
+  readFile("harness.config.json", "utf8"),
+  readFile(rulesetPath, "utf8"),
   readFile(proof12Path, "utf8"),
   readFile(proof13Path, "utf8"),
   readFile(".github/workflows/main-provenance.yml", "utf8"),
@@ -75,7 +92,10 @@ const [fixtureText, riskText, proof12Text, proof13Text, workflow, dispatchWorkfl
   readFile(".github/pull_request_template.md", "utf8"),
 ]);
 const fixture = JSON.parse(fixtureText);
-const risk = JSON.parse(riskText);
+const historicalRisk = JSON.parse(historicalRiskText);
+const currentRisk = JSON.parse(currentRiskText);
+const config = JSON.parse(configText);
+const rulesetRecord = JSON.parse(rulesetText);
 const proof12 = JSON.parse(proof12Text);
 const proof13 = JSON.parse(proof13Text);
 
@@ -91,7 +111,10 @@ for (const field of ["productCodeChanged", "secretsExposed", "userDataExposed", 
 
 requireValue(fixture.serverProtection?.status === "unavailable-risk-accepted", "Server protection status must disclose accepted unavailability.");
 requireValue(fixture.serverProtection?.operatingMode === "best-effort-private-free", "Incident operating mode is incorrect.");
-requireValue(fixture.serverProtection?.riskAcceptanceRecord === riskPath, "Incident fixture must point to the risk acceptance record.");
+requireValue(
+  fixture.serverProtection?.riskAcceptanceRecord === historicalRiskPath,
+  "Historical incident fixture must point to the historical Private + Free risk record.",
+);
 requireValue(fixture.serverProtection?.residualRiskAcceptedByOwner === true, "Owner residual-risk acceptance must remain explicit.");
 
 requireValue(fixture.technicalMitigation?.status === "implemented-and-live-verified", "Technical mitigation must be live verified.");
@@ -141,14 +164,95 @@ requireValue(closure?.issueState === "closed", "Incident issue state must be clo
 requireValue(closure?.stateReason === "completed", "Incident issue state reason must be completed.");
 requireValue(closure?.closedAt === "2026-08-11T14:03:22Z", "Incident closedAt timestamp is incorrect.");
 
-requireValue(risk.schemaVersion === 1 && risk.status === "accepted", "Risk acceptance must remain accepted schema 1.");
-requireValue(risk.operatingMode === "best-effort-private-free", "Risk acceptance operating mode is incorrect.");
-requireValue(risk.repositoryVisibility === "private" && risk.githubPlan === "free", "Risk acceptance repository/plan is incorrect.");
-requireValue(risk.ownerDecision?.keepPrivate === true, "Owner decision must keep the repository private.");
-requireValue(risk.ownerDecision?.upgradePlan === false, "Owner decision must reject plan upgrade.");
-requireValue(risk.ownerDecision?.continueAutonomousDevelopment === true, "Owner decision must continue autonomous development.");
-requireValue(risk.evidence?.incidentIssue === 9 && risk.evidence?.ownerDecisionCommentId === 5253754189, "Risk acceptance evidence is incorrect.");
-requireValue(risk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."), "A second incident must trigger reassessment.");
+requireValue(
+  historicalRisk.schemaVersion === 1 && historicalRisk.status === "accepted",
+  "Historical risk acceptance must remain accepted schema 1.",
+);
+requireValue(historicalRisk.operatingMode === "best-effort-private-free", "Historical risk operating mode is incorrect.");
+requireValue(
+  historicalRisk.repositoryVisibility === "private" && historicalRisk.githubPlan === "free",
+  "Historical risk repository/plan is incorrect.",
+);
+requireValue(historicalRisk.ownerDecision?.keepPrivate === true, "Historical owner decision must keep the repository private.");
+requireValue(historicalRisk.ownerDecision?.upgradePlan === false, "Historical owner decision must reject plan upgrade.");
+requireValue(
+  historicalRisk.ownerDecision?.continueAutonomousDevelopment === true,
+  "Historical owner decision must continue autonomous development.",
+);
+requireValue(
+  historicalRisk.evidence?.incidentIssue === 9 && historicalRisk.evidence?.ownerDecisionCommentId === 5253754189,
+  "Historical risk acceptance evidence is incorrect.",
+);
+requireValue(
+  historicalRisk.revisitTriggers?.includes("A second unauthorized direct-main incident occurs."),
+  "Historical second-incident reassessment trigger must be preserved.",
+);
+
+requireValue(config.operatingMode === "public-free-ruleset", "Current Harness mode must be public-free-ruleset.");
+requireValue(config.mainProtection?.serverEnforced === true, "Current Harness must declare server-enforced main protection.");
+requireValue(
+  config.mainProtection?.availability === "active-public-ruleset" &&
+    config.mainProtection?.riskAcceptanceRecord === currentRiskPath &&
+    config.mainProtection?.rulesetRecord === rulesetPath &&
+    config.mainProtection?.rulesetId === 20776157 &&
+    config.mainProtection?.adminReadbackEvidence === rulesetPath &&
+    config.mainProtection?.continuousReadbackScope === "token-readable-subset" &&
+    config.mainProtection?.longLivedAdminCredentialStored === false,
+  "Current Harness main-protection facts are incorrect.",
+);
+requireValue(
+  currentRisk.schemaVersion === 1 &&
+    currentRisk.status === "accepted" &&
+    currentRisk.repositoryVisibility === "public" &&
+    currentRisk.githubPlan === "free" &&
+    currentRisk.operatingMode === config.operatingMode &&
+    currentRisk.supersedes === historicalRiskPath,
+  "Current Public + Free risk acceptance does not match the Harness.",
+);
+requireValue(
+  currentRisk.evidence?.governanceIssue === 61 &&
+    currentRisk.evidence?.rulesetRecord === rulesetPath &&
+    currentRisk.evidence?.ownerAdminReadbackCapturedAt === "2026-08-13T02:45:00Z" &&
+    currentRisk.ownerDecision?.changedRepositoryToPublic === true &&
+    currentRisk.governanceDecision?.enableServerRuleset === true &&
+    currentRisk.governanceDecision?.storeLongLivedAdminCredential === false,
+  "Current Public + Free risk evidence or decision is incomplete.",
+);
+requireValue(
+  currentRisk.mandatoryControls?.includes(
+    "Repository Hygiene continuously verifies only the subset readable by its ephemeral GITHUB_TOKEN and must not claim continuous verification of administrator-only fields.",
+  ) &&
+    currentRisk.mandatoryControls?.includes(
+      "No PAT or other long-lived administrator credential is stored for continuous governance monitoring.",
+    ),
+  "Current risk acceptance must preserve the token-readable monitoring boundary.",
+);
+requireValue(
+  rulesetRecord.lastOwnerAdminVerifiedAt === "2026-08-13T02:45:00Z" &&
+    rulesetRecord.ruleset?.id === 20776157 &&
+    JSON.stringify(rulesetRecord.ruleset?.bypassActors) === "[]" &&
+    rulesetRecord.securityAndAnalysis?.secretScanning === "enabled" &&
+    rulesetRecord.securityAndAnalysis?.secretScanningPushProtection === "enabled",
+  "Current Ruleset record must statically preserve the admin-captured bypass and security settings.",
+);
+requireValue(
+  rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.capturedAt === "2026-08-13T02:45:00Z" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.evidenceKind ===
+      "versioned-owner-admin-api-readback" &&
+    JSON.stringify(rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.rulesetBypassActors) === "[]" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.securityAndAnalysis?.secretScanning === "enabled" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.securityAndAnalysis?.secretScanningPushProtection ===
+      "enabled" &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.scope === "token-readable-subset" &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.excludedAdminFields?.includes(
+      "ruleset.bypass_actors",
+    ) &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.excludedAdminFields?.includes(
+      "repository.security_and_analysis",
+    ) &&
+    rulesetRecord.verificationBoundary?.longLivedAdminCredentialStored === false,
+  "Current Ruleset record must separate versioned owner/admin evidence from continuous GITHUB_TOKEN readback.",
+);
 
 function verifyProof(proof, expected) {
   requireValue(proof.schemaVersion === 1 && proof.status === "verified", `${expected.label} proof must be verified schema 1.`);
@@ -259,6 +363,8 @@ for (const token of [
 }
 for (const token of [
   "name: Main Provenance Dispatch",
+  "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.head_repository?.full_name !== repositoryFullName",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
@@ -267,6 +373,9 @@ for (const token of [
   requireValue(dispatchWorkflow.includes(token), `Main Provenance Dispatch is missing token: ${token}`);
 }
 for (const token of [
+  "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.head_repository?.full_name !== repositoryFullName",
+  "pr.head.repo?.full_name !== repositoryFullName",
   "readTrustedJson(\"harness.config.json\")",
   "developmentPause?.active",
   "zhiwei-main-incident",
@@ -310,4 +419,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Main provenance incident, risk acceptance and closure proofs: OK");
+console.log("Main provenance incident, historical/current risk acceptance and closure proofs: OK");

@@ -63,7 +63,7 @@ e098cada629fdeeb9df6e77c6d480d43e1b2c553
 - 不注入仓库 Secret；
 - npm install scripts 禁用；
 - 只输出脱敏 JSON；
-- 失败 Artifact 使用 `if: always()` 保存，但 Job 保持失败。
+- 只有 Capture与脱敏 Checker都成功时才上传 Artifact；失败 JSON不作为公开 Evidence保存，Job保持失败并使用日志诊断。
 
 ## 场景
 

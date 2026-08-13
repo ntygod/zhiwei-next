@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "recordId": "RULESET-MAIN-PUBLIC-FREE-2026-08-13",
+  "status": "active-verified",
+  "repository": "ntygod/zhiwei-next",
+  "repositoryVisibility": "public",
+  "githubPlan": "free",
+  "governanceIssue": 61,
+  "capturedAt": "2026-08-13T02:28:17Z",
+  "lastOwnerAdminVerifiedAt": "2026-08-13T02:45:00Z",
+  "preChangeEvidence": {
+    "rulesetCount": 0,
+    "mainProtected": false
+  },
+  "ruleset": {
+    "id": 20776157,
+    "name": "Protect main (public-free)",
+    "target": "branch",
+    "sourceType": "Repository",
+    "source": "ntygod/zhiwei-next",
+    "enforcement": "active",
+    "bypassActors": [],
+    "conditions": {
+      "refName": {
+        "include": [
+          "~DEFAULT_BRANCH"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "required_linear_history"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "allowedMergeMethods": [
+            "squash"
+          ],
+          "dismissStaleReviewsOnPush": false,
+          "requireCodeOwnerReview": false,
+          "requireLastPushApproval": false,
+          "requiredApprovingReviewCount": 0,
+          "requiredReviewThreadResolution": true
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "doNotEnforceOnCreate": false,
+          "strictRequiredStatusChecksPolicy": true,
+          "requiredStatusChecks": [
+            {
+              "context": "check",
+              "integrationId": 15368,
+              "integrationSlug": "github-actions"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "liveReadback": {
+    "rulesetApiStatus": 200,
+    "activeRulesApiStatus": 200,
+    "mainProtected": true,
+    "activeRuleTypes": [
+      "deletion",
+      "non_fast_forward",
+      "required_linear_history",
+      "pull_request",
+      "required_status_checks"
+    ]
+  },
+  "verificationBoundary": {
+    "ownerAdminLiveReadback": {
+      "capturedAt": "2026-08-13T02:45:00Z",
+      "evidenceKind": "versioned-owner-admin-api-readback",
+      "versionedRecord": "docs/harness/rulesets/2026-08-13-main-public-free.json",
+      "rulesetBypassActors": [],
+      "currentUserCanBypass": "never",
+      "securityAndAnalysis": {
+        "secretScanning": "enabled",
+        "secretScanningPushProtection": "enabled",
+        "validityChecks": "disabled"
+      }
+    },
+    "continuousGithubTokenReadback": {
+      "credential": "ephemeral-GITHUB_TOKEN",
+      "scope": "token-readable-subset",
+      "fields": [
+        "repository.visibility",
+        "repository.default_branch",
+        "repository.merge_settings",
+        "main.protected",
+        "ruleset.identity",
+        "ruleset.enforcement",
+        "ruleset.conditions",
+        "ruleset.rules"
+      ],
+      "excludedAdminFields": [
+        "ruleset.bypass_actors",
+        "repository.security_and_analysis"
+      ]
+    },
+    "longLivedAdminCredentialStored": false,
+    "tradeoff": "The repository does not store a PAT or other long-lived administrator secret for continuous monitoring; bypass actors and security-and-analysis drift require a fresh owner/admin readback when a revisit trigger fires."
+  },
+  "actionsSecurity": {
+    "enabled": true,
+    "allowedActions": "selected",
+    "shaPinningRequired": true,
+    "githubOwnedAllowed": true,
+    "verifiedAllowed": false,
+    "patternsAllowed": [],
+    "forkPullRequestApprovalPolicy": "all_external_contributors",
+    "defaultWorkflowPermissions": "read",
+    "actionsCanApprovePullRequestReviews": false
+  },
+  "repositoryMergeSettings": {
+    "allowMergeCommit": false,
+    "allowSquashMerge": true,
+    "allowRebaseMerge": false
+  },
+  "securityAndAnalysis": {
+    "secretScanning": "enabled",
+    "secretScanningPushProtection": "enabled",
+    "validityChecks": "disabled",
+    "validityChecksReason": "Credential issuer verification can create an external network side effect and is outside this minimal governance change."
+  },
+  "publicSurfaceAudit": {
+    "capturedAt": "2026-08-13T02:40:00Z",
+    "directCollaborators": [
+      "ntygod"
+    ],
+    "deployKeys": 0,
+    "actionsSecrets": 0,
+    "actionsVariables": 0,
+    "environments": 0,
+    "selfHostedRunners": 0,
+    "deployments": 0,
+    "releases": 0,
+    "actionsArtifactsApiTotalCount": 610,
+    "artifactByteAuditPerformed": false,
+    "artifactBoundary": "Workflow artifacts are uploaded only after successful capture and sanitization checks and use an explicit short retention period; failure JSON is not uploaded as evidence."
+  },
+  "rollback": {
+    "preferred": "Update ruleset 20776157 only after preserving the failed merge and API readback evidence.",
+    "temporaryFailSafe": "Set enforcement to disabled if the exact ruleset blocks all compliant pull request recovery paths.",
+    "destructiveFallback": "Delete only ruleset 20776157, then open or update the R3 governance incident before ordinary development resumes."
+  }
+}
