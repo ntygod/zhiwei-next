@@ -1,25 +1,10 @@
 # Pi Runtime 契约 Spike
 
-关联 Issue：#5、#7、#16、#20、#22、#24、#26、#28、#45；后续依赖：#32 → #49 → #56。
+关联 Issue：#5、#7、#16、#20、#22、#24、#26、#28、#45、#32；后续依赖：#49 → #56。
 
-## 状态演化
+## 当前状态
 
-```text
-PR #6   source-verified / runtime-unverified
-PR #8   source-and-runtime-verified
-PR #17  source-and-runtime-verified-normal-tool
-PR #21  source-and-runtime-verified-retry-success
-PR #23  source-and-runtime-verified-follow-up-queue
-PR #25  source-and-runtime-verified-cancel-retry-exhaustion
-PR #27  source-and-runtime-verified-parallel-tool-ordering
-阶段 8  source-and-runtime-verified-compaction-session-replacement
-PR #60  source-and-runtime-verified-sdk-rpc-parity
-当前    source-and-runtime-verified-sdk-rpc-parity
-```
-
-历史标签 `source-verified`、`runtime-unverified` 只说明当时的证据强度，不代表当前能力回退。
-
-## 固定基线
+固定基线：
 
 ```text
 Repository  earendil-works/pi
@@ -31,7 +16,23 @@ Node        22.23.1
 npm         10.9.8
 ```
 
-RPC 使用严格 **LF-only** JSONL；字符串里的 `U+2028/U+2029`不是记录边界。Tool 生命周期使用真实 `toolCallId`；`agent_end`与最终稳定事件 `agent_settled`不能合并。
+证据演化：
+
+```text
+PR #6   source-verified / runtime-unverified
+PR #8   source-and-runtime-verified
+PR #17  source-and-runtime-verified-normal-tool
+PR #21  source-and-runtime-verified-retry-success
+PR #23  source-and-runtime-verified-follow-up-queue
+PR #25  source-and-runtime-verified-cancel-retry-exhaustion
+PR #27  source-and-runtime-verified-parallel-tool-ordering
+阶段 8  source-and-runtime-verified-compaction-session-replacement
+PR #60  source-and-runtime-verified-sdk-rpc-parity
+PR #64  source-and-runtime-verified-rpc-worker-lifecycle（候选交付，尚未合并）
+当前    RPC Worker证据与committed Fixture已验证；等待最终HEAD门禁
+```
+
+历史标签只说明当时的证据强度，不代表当前能力回退。PR #64 合并前，Issue #32 的 Runtime 事实已经由真实 Artifact、重复 Capture 和 committed Fixture验证，但用户结果仍处于候选交付状态。
 
 ## 机器事实源
 
@@ -47,140 +48,35 @@ packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json
 packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json
 packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-00.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-01.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-02.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-03.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-04.b64
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-05.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-00-443405699ddd4616c78c6aff8be6c368917cbcb1295fedb862eec98e41e82225.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-01-1c6d75c4a7e2ed1958aa729037fc7c4e9d785c3739d28d92a11cf3bf20db3a64.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-02-b1212b1afa8989ef3a8da5e528b70fd160f5ed8382ad3171874f920390e7081f.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-03-b6da21595679dc47deed3bb2330294d164387f502c5ce75d515bd658114e6060.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-04-e8a50d04ce2b2252e6c2fba4db603f7977ed2855826e4bb008ef33a20a37a12e.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-05-30bc6c8157c81bbfc5da609f13431fffac9d445a082ea4e0af46c30d13b1d9e5.b64
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-part-00-bfcc1561e9cc08585e2675ecce0a2ccea0b2a14900a63a242f9884ab3286300f.b64
 ```
 
-Fresh Capture 必须与 committed Fixture 完整对象比较；Source-derived Fixture 不能代替发布 Artifact 的动态行为证据。
+Fresh Capture 必须先通过脱敏 Checker，再与 committed Fixture 做完整对象比较。Source-derived Fixture不能代替发布 Artifact的动态行为证据，指纹也不能代替完整对象相等。
 
-## 正常 Tool
+## 已验证场景索引
 
-详细文档：[`normal-tool-lifecycle.md`](normal-tool-lifecycle.md)。
-
-```text
-Prompt → Tool Start / Update / End → Tool Result
-→ Final Assistant → agent_end(willRetry=false)
-→ agent_settled → session_shutdown(reason=exit)
-```
-
-最终消息：`user → assistant → toolResult → assistant`。
-
-```text
-outer   75b0c9fe4d146df046d9657653673be4e7ed21069cae2319a809dcc2da1313e7
-capture 77d726e9e571f0c61eb8e79b63dbdd11f22498576889851c3650fecf597974d6
-```
-
-固定 SDK Inline Extension 从 `input`开始，没有收到 `session_start`；Session 映射必须建立在 `createAgentSession()`成功返回的宿主边界。
-
-## Retry 恢复成功
-
-阶段：`source-and-runtime-verified-retry-success`。
-
-```text
-Fixture  pi-lifecycle-retry-success.json
-Document retry-success-lifecycle.md
-```
-
-公共 `agent_end.willRetry=[true,false]`；失败 Run 后出现 `auto_retry_start`，恢复后出现 `auto_retry_end(success=true)`，最终 `agent_settled`一次。**Extension auto_retry_start** 与 `auto_retry_end`均不存在，第一次失败 Assistant 只能从事件流恢复。
-
-```text
-outer   e87f7365eefbb4d7de7a4570a6c99df7a1fdf26f58aa2a40fab9149cb6deff02
-capture ed1c450ce6e26be60c29aa6d9a29f13d339cb975999e1a3b4c0a43a5f9b4ac85
-```
-
-## Follow-up 队列
-
-阶段：`source-and-runtime-verified-follow-up-queue`。
-
-```text
-Fixture  pi-lifecycle-follow-up-queue.json
-Document follow-up-queue-lifecycle.md
-```
-
-- Follow-up 在**一个公共 Agent Run内追加第二个 Turn**；
-- **队列清空不等于 Prompt结束**；
-- **Extension不接收 `queue_update`**；
-- **`session.prompt()`覆盖排入的 Follow-up**，直到队列排空、Session idle 和最终 `agent_settled`；
-- 最终消息：`user → assistant → user → assistant`。
-
-```text
-outer   00c3f7916a129869b768f7e7147a55a8c783b33e5a55e0e79c13eb45a1d692e8
-capture 5b2e266feb27155b7ded59c33aa12e6cd060ce89201dc21a8cd35f49a8748386
-```
-
-## Cancel、abortRetry 与 exhaustion
-
-阶段：`source-and-runtime-verified-cancel-retry-exhaustion`。
-
-```text
-Fixture  pi-lifecycle-cancel-retry-exhaustion.json
-Document cancel-retry-exhaustion-lifecycle.md
-```
-
-- 流式取消后保留**部分 Assistant**，`stopReason=aborted`；
-- Backoff 取消可能出现 **willRetry=true 但没有后续 Run**；
-- exhaustion 的 `willRetry=[true,true,false]`，保留**最终一次失败的 Assistant**；
-- Prompt Promise 正常 resolve 不等于任务成功。
-
-```text
-outer   b866798d18569c78d5c712254c3ecdecd7a3e02c0ef11458e6b97b0863b1f6e0
-capture b544631413935d2b3f55f9f9f8bcf15a06944bba682cf48471902e4726f79609
-```
-
-## 并行 Tool ordering
-
-阶段：`source-and-runtime-verified-parallel-tool-ordering`。
-
-```text
-Fixture  pi-lifecycle-parallel-tool-ordering.json
-Document parallel-tool-ordering-lifecycle.md
-```
-
-```text
-声明顺序  alpha → beta → gamma
-完成顺序  beta → gamma → alpha
-消息顺序  alpha → beta → gamma
-```
-
-该场景证明**完成顺序与消息顺序分离**，所有表面只能通过真实 `toolCallId`关联。
-
-```text
-outer   fd372a8e73f4545bd7a34c6ac3e82cfc2d044dca473ae374627b847864389b02
-capture 164f0e95e7f617c7aa69d1a1b34a5ae7935673c1ee852fa452541d15c1551376
-```
-
-## Compaction 与 Session Replacement
-
-阶段：`source-and-runtime-verified-compaction-session-replacement`。
-
-```text
-Fixture  packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json
-Document compaction-session-replacement-lifecycle.md
-```
-
-```text
-compaction_start → compaction_end
-Public `entry_appended`没有出现
-context before  user → assistant → user → assistant
-context after   compactionSummary → assistant
-```
-
-原始 Entry 仍完整保留；Summary 是派生上下文。Session Object 为 `session-object-1 → session-object-2 → session-object-3`；**旧 Public Listener不会自动迁移**。
-
-```text
-outer   9ebe87b12f0670214fa1244239d21d7a517b2332da2f3f85b3372b8b6895ab75
-capture f4e3d675207416c961585ee645c5fc43c395320ed7a736da71bae741577b1fee
-```
+| 场景 | 关键结论 | 详细事实源 |
+|---|---|---|
+| 正常单 Tool | `user → assistant → toolResult → assistant`；`agent_end < agent_settled < shutdown` | [`normal-tool-lifecycle.md`](normal-tool-lifecycle.md) |
+| Retry恢复 | Public `willRetry=[true,false]`；被替代失败Message仍来自事件流 | [`retry-success-lifecycle.md`](retry-success-lifecycle.md) |
+| Follow-up | 一个Agent Run包含两个Turn；Queue清空不等于Prompt完成 | [`follow-up-queue-lifecycle.md`](follow-up-queue-lifecycle.md) |
+| Cancel / abortRetry / exhaustion | 部分Assistant保留；`willRetry=true`不保证后续Run；Promise返回不等于成功 | [`cancel-retry-exhaustion-lifecycle.md`](cancel-retry-exhaustion-lifecycle.md) |
+| 并行 Tool | 声明`alpha→beta→gamma`，完成`beta→gamma→alpha`，消息恢复声明顺序 | [`parallel-tool-ordering-lifecycle.md`](parallel-tool-ordering-lifecycle.md) |
+| Compaction / Replacement | Summary是派生Context；Session File、Object和Listener Rebind分离 | [`compaction-session-replacement-lifecycle.md`](compaction-session-replacement-lifecycle.md) |
+| SDK / RPC同任务 | 核心语义投影一致，但Command、Event、Snapshot、Shutdown与Process来源保留 | [`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md) |
+| RPC Worker生命周期 | LF framing、Prompt接受/完成、EOF、SIGTERM、Restart/Resume与错误边界分离 | [`../../architecture/pi-rpc-worker-lifecycle.md`](../../architecture/pi-rpc-worker-lifecycle.md) |
 
 ## SDK / RPC 同任务成功路径
 
-阶段：`source-and-runtime-verified-sdk-rpc-parity`。包含新 `stop()` instrumentation的固定容器 Evidence已经由成功 Run与 Artifact完整绑定，Manifest恢复为 `verified`。详细文档：[`sdk-rpc-parity-lifecycle.md`](sdk-rpc-parity-lifecycle.md)。
-
-发布 Artifact 根导出 `runRpcMode`和 `RpcClient`。本场景冻结的是公开 Client 的必需方法子集，而不是全部公开 Surface：
+发布 Artifact 根导出 `runRpcMode`和 `RpcClient`。当前冻结的是公开 Client 的必需方法子集，不是全部运行时可枚举方法：
 
 ```text
 abort, collectEvents, getAvailableModels, getLastAssistantText,
@@ -188,22 +84,20 @@ getMessages, getState, getStderr, prompt, setModel,
 setThinkingLevel, start, stop, waitForIdle
 ```
 
-TypeScript 私有实现方法 `send`不属于支持合同；发布 `.d.ts` 中的 `process`也声明为 `private`。Probe 只用发布 JavaScript 对应字段观测 `stop()` 的实现层 ChildProcess 边界，不把它提升为公开 API 或生产 Adapter 依赖。
-
-SDK Public 与原始 RPC Runtime 的核心投影一致：
+SDK Public 与 RPC Runtime 的核心投影均为：
 
 ```text
 agent_start → turn_start → user message → assistant message
 → turn_end → agent_end(willRetry=false) → agent_settled
 ```
 
-最终均为 `user → assistant`，Assistant 长度 `1194`，SHA-256：
+最终均为 `user → assistant`，Assistant SHA-256：
 
 ```text
 5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
 ```
 
-### Prompt 接受不是完成
+### Prompt接受不是完成
 
 ```text
 prompt success Response       index 4
@@ -213,47 +107,30 @@ agent_settled                index 35
 Runtime Events after Response 29
 ```
 
-状态：`isStreaming=false → true → false`，`messageCount=0 → 1 → 2`。Prompt success Response 和 `RpcClient.prompt()`返回都只是接受边界。
+状态是 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`。RPC Prompt Response 与公开 `RpcClient.prompt()`返回都只表达接受。
 
-### 发布 RpcClient 的 Messages
-
-```text
-before prompt:
-  getMessages()=[]
-  isStreaming=false, messageCount=0
-
-after prompt acceptance:
-  isStreaming=true, messageCount=1
-
-after agent_settled:
-  getMessages()=user → assistant
-  isStreaming=false, messageCount=2
-```
-
-### 关闭面
+### 两类关闭面
 
 ```text
-raw JSONL: host stdin EOF → extension shutdown(quit) → exit=0 → close=0
-RpcClient:  stop()
+raw JSONL:
+  host stdin EOF
+  → extension shutdown(quit)
+  → exit(0)
+  → close(0)
+
+published RpcClient.stop():
+  host stop()
   → observed kill(SIGTERM), accepted=true
   → extension shutdown(quit), evidence durable
   → exit(code=143, signal=null)
   → close(code=143, signal=null)
 ```
 
-固定容器 verified Capture中，`requestedSignals`只有一次被接受的 `SIGTERM`，没有 `SIGKILL`，所以对应成功路径没有触发 fallback；发布源码仍明确包含等待超时后的 `SIGKILL` fallback。Artifact与隔离诊断结果逐字节一致。stdin EOF与 `RpcClient.stop()`的实现层 SIGTERM请求必须分开记录，也不能外推 Worker Restart、Resume或异常退出语义。
+发布源码仍包含等待超时后的 `SIGKILL` fallback；固定成功 Capture只证明该次路径未触发 fallback。stdin EOF、Host `stop()`、实际 Signal请求、Extension Shutdown、Exit和Close不能合并。
 
-### 来源边界
+### 当前 verified Fixture
 
-必须保留 SDK Preflight、SDK Public、SDK Extension、RPC Command/Response ID、RPC Runtime Event、State Snapshot、`get_messages`、Host stdin EOF、Host `RpcClient.stop()`调用、实际 ChildProcess Signal请求、Extension Shutdown、Exit 和 Close。RPC `message_update`只保存 delta，不含累计 `partial`。
-
-### Fixture 身份与来源状态
-
-Manifest `source` 只允许两态：`candidate` 保留完整 `head`，但 `workflowRun`、`artifactId`、`artifactDigest`必须全部为 `null`，只允许 Draft PR恢复；`verified`要求三项全部有效，是 Ready 与 Merge Gate。部分填写会失败，`candidate`也不能被当成最终 provenance。
-
-Workflow 使用 fresh-first recovery：固定容器先生成 Fresh Capture并通过两个脱敏 Checker，再校验 committed Fixture和完整对象；合格 Fresh Artifact的上传不受随后旧 Fixture漂移失败影响。Ready live provenance用run ID和`run.workflow_id`端点绑定canonical workflow ID/path，解析机器`display_title`绑定PR/action/updated_at/head，并继续核对run attempt、PR关联、Artifact和下载内容；不把自定义标题化的Actions `run.name`误当YAML workflow name。来源 HEAD还必须是当前PR HEAD的真实祖先，ZIP中唯一`result.json`须与Manifest SHA和committed Fixture一致。
-
-`jsonSha256`绑定解压后的规范 JSON字节，`compressedSha256`绑定仓库中的 gzip字节，`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive；三者作用域不同，不能互相替代。最终合并还要求 Fresh / committed完整相等、两个结果 Checker、live Run / Artifact provenance、当前 HEAD CI和 R3独立 AI审查全部通过。
+Manifest 的 SDK / RPC parity `source`继续只允许 `candidate`与 `verified`两态。当前状态必须保持 `verified`，Ready live provenance继续绑定真实 Workflow、PR、HEAD ancestry、Artifact ZIP和唯一 `result.json`内容。
 
 以下数字是当前 `verified` Manifest记录的内容身份与来源状态：
 
@@ -273,18 +150,99 @@ capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591
 external Provider prompts    0
 ```
 
-固定容器 Run `31666316897`整体成功；Artifact `9168052320`的 ZIP Digest与上面的 `artifactDigest`一致，其中唯一 `result.json`的 SHA-256为 `a3f47e34…`，并与 committed Fixture逐字节相同。该 Run来自当前 PR #63，供 Ready live provenance做PR关联与ancestry核验；Manifest 是 provenance 的机器事实源。
+## RPC Worker 生命周期
+
+Issue #32 使用真实 `pi --mode rpc`子进程冻结 Command Response、Runtime Event、State / Messages和Process Boundary。
+
+### 协议错误仍可恢复
+
+- malformed JSON产生一次失败的`command=parse` Response；
+- unknown command携带原Request ID并只返回一次失败Response；
+- JSON字符串中的`U+2028` / `U+2029`不会被LF Reader拆成记录；
+- 两类错误后同一个Worker仍可执行`get_state`。
+
+### Prompt接受与稳定完成
+
+首个持久化Prompt：
+
+```text
+prompt Response              sequence 11
+agent_start                  sequence 13
+turn_start                   sequence 14
+user message start/end       sequence 15 / 16
+assistant message start      sequence 17
+running State Response       sequence 19
+assistant message end        sequence 22
+turn_end                     sequence 23
+agent_end                    sequence 24
+agent_settled                sequence 25
+```
+
+State为`false/0 → true/1 → false/2`。Prompt Response只能表示接受，不能替代Agent、Message、settled或最终Snapshot。
+
+### EOF、Restart与Signal
+
+```text
+stdin EOF
+→ extension session_shutdown(quit)
+→ exit(0)
+→ close(0)
+```
+
+第二个真实Worker恢复相同Session ID / File稳定别名与先前`user → assistant`消息，然后追加第二轮，最终为`user → assistant → user → assistant`。
+
+```text
+idle kill(SIGTERM), accepted=true
+→ extension session_shutdown(quit)
+→ exit(143, signal=null)
+→ close(143, signal=null)
+```
+
+Worker Instance与Runtime Session必须分别关联；Host Signal请求也不能替代真实Process结果。
+
+### 拒绝与执行失败
+
+- 无可用Model/API Key：一次`prompt success=false`，没有`agent_start`，Worker仍可查询并正常关闭；
+- 已接受Provider Error：先有一次`prompt success=true`，之后产生Assistant error Message、`agent_end(willRetry=false)`和`agent_settled`；
+- 执行失败不补造第二个相关Prompt Response。
+
+### Fixture身份与重复性
+
+两次成功Workflow attempt的Artifact均只有一个`result.json`，74,588字节且逐字节一致：
+
+```text
+source capture head           c0d782ce074e770d39876600feef3554d0471756
+source workflow               31677138404
+source artifact               9172023070
+comparison artifact           9171976965
+artifact result sha256        a3bffda1548cd0619b28d89f389edf8ca7a0cb797ffb3f035195d4d03bc65946
+outer contract fingerprint    cea0a302391a2e072a7a1767b0ed0115458e49e228c3ee57607a8e58f8c114ba
+capture contract fingerprint  a30add6e0834c3cdc52ea198997d3ccd7bc3bebfaced456e47891bfafdf17631
+external Provider prompts     0
+```
+
+Committed Fixture使用确定性gzip/base64、内容寻址Part和Manifest。Loader执行有界Regular File读取、哈希、解压、运行时Checker与Fresh / committed完整对象比较。
 
 ## 隔离与验证
 
-所有动态 Probe：固定 Artifact integrity/shasum、禁用 install scripts、只读 curated bundle/rootfs、非 root、`cap-drop=ALL`、`no-new-privileges`、零仓库 Secret、零真实 Provider Prompt；不保存原始 Session ID/File、PID、绝对路径、环境转储、原始 stderr 或思维链。
+所有动态Probe固定Artifact identity，禁用install scripts，使用只读curated bundle/rootfs、非root、`cap-drop=ALL`、`no-new-privileges`，不传仓库Secret、真实Provider Credential、用户数据或完整宿主环境。结果不保存原始Session ID/File、PID、Provider Response ID、Extension nonce、绝对路径、原始stderr或模型思维链。
 
 ```bash
 npm run check
 npm run check:pi-sdk-rpc-parity
+npm run check:pi-rpc-worker-lifecycle
 npm run probe:pi:sdk-rpc-parity
+npm run probe:pi:rpc-worker-lifecycle
 ```
 
-Draft recovery只允许把固定容器上传的脱敏 `result.json`交给 `scripts/pi-sdk-rpc-parity-fixture.mjs --pack ... --source-head <capture-head>`。Packer将输入与解压输出统一限制为 8 MiB，使用锚定仓库位置的两个结果 Checker，并确定性生成带完整内容 SHA-256的不可变 candidate分片。它在 Fixture父目录持有排他锁，持有并反复核验父目录与 Fixture目录身份，先写入、同步并完整回读临时 Manifest，最后只原子切换 `manifest.json`；失败不会原地混写活动 Fixture，目录替换、符号链接或非普通文件也会 fail closed。旧分片不会在切换时删除，以保证已经读取旧 Manifest的并发 Reader仍能完成；显式 GC需要独立的 Reader lease或版本保留协议。崩溃或目录身份异常遗留的锁只能在确认没有 Packer运行并检查 Fixture树后人工移除。Workflow / Artifact provenance仍必须来自后续真实成功 Run，不能由本地命令补造。
+只有Capture和脱敏Checker成功后才上传Artifact。SDK / RPC parity继续使用其版本化Packer与live provenance；RPC Worker Fixture当前以两次逐字节一致的Artifact身份和完整对象比较固定。
 
-Issue #32 将单独验证异常 EOF/退出、Restart、Session Resume、非法 JSON、未知命令、Preflight 拒绝与 Provider Error。完成 #32 前不冻结正式 `NormalizedRuntimeEvent v1`，也不开始 SQLite Observation Ledger。
+## 边界与下一步
+
+本轮不覆盖RPC Tool、Steering、Follow-up、Compaction / Replacement命令、网络RPC、多人并发客户端、SIGKILL、OOM、宿主崩溃或Windows信号差异。这些行为不能从当前Fixture外推。
+
+Issue #32 合并后，M0依赖顺序为：
+
+1. Issue #49：定义并验证 `NormalizedRuntimeEvent v1`；
+2. Issue #56：实现 append-only SQLite Observation Ledger；
+3. 后续 Daemon / Worker Supervisor：消费已冻结协议实现真实健康状态、崩溃检测和重连。
