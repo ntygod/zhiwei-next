@@ -20,7 +20,6 @@ on:
       - scripts/probes/pi-lifecycle-ci.mjs
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
       - scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-      - scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs
       - scripts/probes/pi-sdk-rpc-parity-capture.mjs
       - scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
       - docs/spikes/pi-runtime-contract/README.md
@@ -45,7 +44,6 @@ on:
       - scripts/probes/pi-lifecycle-ci.mjs
       - scripts/probes/pi-sdk-rpc-parity-contract.mjs
       - scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-      - scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs
       - scripts/probes/pi-sdk-rpc-parity-capture.mjs
       - scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
       - docs/spikes/pi-runtime-contract/README.md
@@ -98,7 +96,7 @@ jobs:
           set -euo pipefail
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-          node --check scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-capture.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
@@ -237,7 +235,7 @@ jobs:
           node --check scripts/probes/pi-lifecycle-ci.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-          node --check scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
           node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
 
@@ -256,7 +254,7 @@ jobs:
             scripts/probes/pi-lifecycle-ci.mjs \
             scripts/probes/pi-sdk-rpc-parity-contract.mjs \
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
-            scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs \
             | tar -xf - -C "$BUNDLE"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
@@ -279,7 +277,7 @@ jobs:
             --env GITHUB_ACTIONS=true \
             --env PI_LIFECYCLE_OUTPUT=/output/result.json \
             --env PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle \
-            --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs \
+            --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs \
             --env PI_PROBE_SOURCE_READ_ONLY=true \
             --env PI_PROBE_HOST_WORKSPACE_MOUNTED=false \
             --env PI_PROBE_CONTAINER_ROOT_READ_ONLY=true \
