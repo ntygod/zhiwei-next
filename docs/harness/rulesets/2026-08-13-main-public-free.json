@@ -7,7 +7,7 @@
   "githubPlan": "free",
   "governanceIssue": 61,
   "capturedAt": "2026-08-13T02:28:17Z",
-  "lastVerifiedAt": "2026-08-13T02:45:00Z",
+  "lastOwnerAdminVerifiedAt": "2026-08-13T02:45:00Z",
   "preChangeEvidence": {
     "rulesetCount": 0,
     "mainProtected": false
@@ -71,7 +71,6 @@
     "rulesetApiStatus": 200,
     "activeRulesApiStatus": 200,
     "mainProtected": true,
-    "currentUserCanBypass": "never",
     "activeRuleTypes": [
       "deletion",
       "non_fast_forward",
@@ -79,6 +78,40 @@
       "pull_request",
       "required_status_checks"
     ]
+  },
+  "verificationBoundary": {
+    "ownerAdminLiveReadback": {
+      "capturedAt": "2026-08-13T02:45:00Z",
+      "evidenceKind": "versioned-owner-admin-api-readback",
+      "versionedRecord": "docs/harness/rulesets/2026-08-13-main-public-free.json",
+      "rulesetBypassActors": [],
+      "currentUserCanBypass": "never",
+      "securityAndAnalysis": {
+        "secretScanning": "enabled",
+        "secretScanningPushProtection": "enabled",
+        "validityChecks": "disabled"
+      }
+    },
+    "continuousGithubTokenReadback": {
+      "credential": "ephemeral-GITHUB_TOKEN",
+      "scope": "token-readable-subset",
+      "fields": [
+        "repository.visibility",
+        "repository.default_branch",
+        "repository.merge_settings",
+        "main.protected",
+        "ruleset.identity",
+        "ruleset.enforcement",
+        "ruleset.conditions",
+        "ruleset.rules"
+      ],
+      "excludedAdminFields": [
+        "ruleset.bypass_actors",
+        "repository.security_and_analysis"
+      ]
+    },
+    "longLivedAdminCredentialStored": false,
+    "tradeoff": "The repository does not store a PAT or other long-lived administrator secret for continuous monitoring; bypass actors and security-and-analysis drift require a fresh owner/admin readback when a revisit trigger fires."
   },
   "actionsSecurity": {
     "enabled": true,

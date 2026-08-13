@@ -66,6 +66,9 @@ for (const [field, expected] of Object.entries({
   riskAcceptanceRecord: currentRiskPath,
   rulesetRecord: rulesetPath,
   rulesetId: 20776157,
+  adminReadbackEvidence: rulesetPath,
+  continuousReadbackScope: "token-readable-subset",
+  longLivedAdminCredentialStored: false,
   liveProofVerified: true,
   liveProofRecord: proof12Path,
   incidentClosureProofRecord: proof13Path,
@@ -121,7 +124,8 @@ requireValue(
   currentRisk.evidence?.governanceIssue === 61 &&
     currentRisk.evidence?.ownerChangedRepositoryToPublic === true &&
     currentRisk.evidence?.ownerRequestedContinuedDevelopment === true &&
-    currentRisk.evidence?.rulesetRecord === rulesetPath,
+    currentRisk.evidence?.rulesetRecord === rulesetPath &&
+    currentRisk.evidence?.ownerAdminReadbackCapturedAt === "2026-08-13T02:45:00Z",
   "Current risk acceptance evidence is incorrect.",
 );
 requireValue(
@@ -135,7 +139,8 @@ requireValue(
   currentRisk.governanceDecision?.keepCurrentFreePlan === true &&
     currentRisk.governanceDecision?.enableServerRuleset === true &&
     currentRisk.governanceDecision?.restrictActionsToPinnedGitHubOwnedActions === true &&
-    currentRisk.governanceDecision?.enableSecretScanningAndPushProtection === true,
+    currentRisk.governanceDecision?.enableSecretScanningAndPushProtection === true &&
+    currentRisk.governanceDecision?.storeLongLivedAdminCredential === false,
   "Current autonomous governance decision is incomplete.",
 );
 for (const control of [
@@ -144,6 +149,9 @@ for (const control of [
   "External-fork pull requests are never autonomously merged; token-bearing workflow_run jobs require a same-repository source.",
   "Token-bearing provenance jobs never execute fork-controlled code.",
   "Secret scanning and push protection remain enabled while validity checks stay disabled unless a later risk review authorizes issuer verification side effects.",
+  "The 2026-08-13 owner/admin live readback of bypass actors and security-and-analysis settings remains versioned in the Ruleset record.",
+  "Repository Hygiene continuously verifies only the subset readable by its ephemeral GITHUB_TOKEN and must not claim continuous verification of administrator-only fields.",
+  "No PAT or other long-lived administrator credential is stored for continuous governance monitoring.",
   "Probe artifacts are uploaded only after both capture and sanitization checks succeed; failure JSON is not public evidence.",
 ]) {
   requireValue(currentRisk.mandatoryControls?.includes(control), `Current risk acceptance is missing mandatory control: ${control}`);
@@ -152,10 +160,26 @@ requireValue(
   currentRisk.revisitTriggers?.includes("The active ruleset is disabled, deleted, bypassed, or materially modified."),
   "Ruleset drift must trigger current risk reassessment.",
 );
+requireValue(
+  currentRisk.revisitTriggers?.includes(
+    "A Ruleset, security setting, permission, or governance change affects an administrator-only field and the owner/admin readback has not been refreshed.",
+  ),
+  "Administrator-only field changes must trigger a fresh owner/admin readback.",
+);
+requireValue(
+  currentRisk.revisitTriggers?.includes(
+    "A PAT or other long-lived administrator credential is proposed for continuous governance monitoring.",
+  ),
+  "A proposed long-lived administrator credential must trigger reassessment.",
+);
 
 requireValue(
   rulesetRecord.schemaVersion === 1 && rulesetRecord.status === "active-verified",
   "Ruleset record must be active-verified schema 1.",
+);
+requireValue(
+  rulesetRecord.lastOwnerAdminVerifiedAt === "2026-08-13T02:45:00Z",
+  "Ruleset record must retain the dated owner/admin verification timestamp.",
 );
 requireValue(
   rulesetRecord.repository === "ntygod/zhiwei-next" &&
@@ -217,10 +241,44 @@ requireValue(
     rulesetApiStatus: 200,
     activeRulesApiStatus: 200,
     mainProtected: true,
-    currentUserCanBypass: "never",
     activeRuleTypes: ["deletion", "non_fast_forward", "required_linear_history", "pull_request", "required_status_checks"],
   }),
   "Ruleset live readback is incomplete or incorrect.",
+);
+requireValue(
+  jsonEqual(rulesetRecord.verificationBoundary, {
+    ownerAdminLiveReadback: {
+      capturedAt: "2026-08-13T02:45:00Z",
+      evidenceKind: "versioned-owner-admin-api-readback",
+      versionedRecord: rulesetPath,
+      rulesetBypassActors: [],
+      currentUserCanBypass: "never",
+      securityAndAnalysis: {
+        secretScanning: "enabled",
+        secretScanningPushProtection: "enabled",
+        validityChecks: "disabled",
+      },
+    },
+    continuousGithubTokenReadback: {
+      credential: "ephemeral-GITHUB_TOKEN",
+      scope: "token-readable-subset",
+      fields: [
+        "repository.visibility",
+        "repository.default_branch",
+        "repository.merge_settings",
+        "main.protected",
+        "ruleset.identity",
+        "ruleset.enforcement",
+        "ruleset.conditions",
+        "ruleset.rules",
+      ],
+      excludedAdminFields: ["ruleset.bypass_actors", "repository.security_and_analysis"],
+    },
+    longLivedAdminCredentialStored: false,
+    tradeoff:
+      "The repository does not store a PAT or other long-lived administrator secret for continuous monitoring; bypass actors and security-and-analysis drift require a fresh owner/admin readback when a revisit trigger fires.",
+  }),
+  "Ruleset verification boundary must separate dated owner/admin evidence from the continuously token-readable subset.",
 );
 requireValue(
   jsonEqual(rulesetRecord.actionsSecurity, {
@@ -362,6 +420,11 @@ for (const token of [
   "public-free-ruleset",
   "Public + GitHub Free",
   "Ruleset `20776157`",
+  "owner/admin live readback",
+  "普通临时 `GITHUB_TOKEN`不能读取",
+  "`bypass_actors`",
+  "`security_and_analysis`",
+  "不保存 PAT或其他长期管理员 Secret",
   "best-effort-private-free",
   "developmentPause.active=false",
   "Issue #9 已关闭",
@@ -492,13 +555,28 @@ for (const required of [
   "repository.visibility === \"public\"",
   "mainBranch.protected === true",
   '"GET /repos/{owner}/{repo}/rulesets/{ruleset_id}"',
-  "liveRuleset.current_user_can_bypass === \"never\"",
   "repository.allow_merge_commit ===",
-  "repository.security_and_analysis?.secret_scanning?.status ===",
-  "Live required-status Ruleset parameters drifted from the record.",
+  "Configured admin-captured Ruleset record must declare no bypass actors.",
+  "Configured security record does not require Secret Scanning and Push Protection.",
+  "GITHUB_TOKEN. security_and_analysis, bypass_actors, and",
+  "are not asserted from this token.",
+  "GITHUB_TOKEN-readable live Ruleset identity does not match the configured record.",
+  "GITHUB_TOKEN-readable live required-status Ruleset parameters drifted from the record.",
 ]) {
   requireValue(repositoryHygiene.includes(required), `Repository Hygiene is missing Public Ruleset audit token: ${required}`);
 }
+requireValue(
+  !repositoryHygiene.includes("liveRuleset.bypass_actors"),
+  "Repository Hygiene must not claim GITHUB_TOKEN live visibility of Ruleset bypass actors.",
+);
+requireValue(
+  !repositoryHygiene.includes("liveRuleset.current_user_can_bypass"),
+  "Repository Hygiene must not claim GITHUB_TOKEN live visibility of current-user bypass state.",
+);
+requireValue(
+  !repositoryHygiene.includes("repository.security_and_analysis?.secret_scanning?.status ==="),
+  "Repository Hygiene must not claim GITHUB_TOKEN live visibility of security-and-analysis settings.",
+);
 
 for (const [name, workflow] of [
   ["CI", ci],
@@ -517,6 +595,9 @@ for (const required of [
   "pre-receive",
   "Bypass actors",
   "Fork 与 Token 边界",
+  "owner/admin live readback",
+  "不声称在线验证 `bypass_actors`或 `security_and_analysis`",
+  "PAT或其他长期管理员 Secret",
   currentRiskPath,
   historicalRiskPath,
   rulesetPath,
@@ -546,6 +627,8 @@ for (const required of [
   "禁止把 `branch: main`",
   "public-free-ruleset",
   "Main Incident 安全停机",
+  "不得把 owner/admin权限才能读取",
+  "PAT或长期管理员 Secret",
   currentRiskPath.replace("docs/harness/", ""),
   rulesetPath.replace("docs/harness/", ""),
   "npm run check:main-provenance-dispatch",

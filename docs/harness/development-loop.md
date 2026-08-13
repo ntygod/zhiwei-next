@@ -93,7 +93,7 @@ branch: <default branch>
 在真实仓库创建 no-op Issue / PR / Branch 测试 Connector
 ```
 
-Public + GitHub Free仓库已有 active、无 bypass的默认分支 Ruleset；这一写入前置检查仍是强制操作合同，不能把服务端拒绝当作日常流程控制。
+Public + GitHub Free仓库已有 active的默认分支 Ruleset；无 bypass状态来自 2026-08-13 owner/admin live readback并已版本化，普通 `GITHUB_TOKEN`持续审计不覆盖该管理员字段。这一写入前置检查仍是强制操作合同，不能把服务端拒绝当作日常流程控制。
 
 ## 5. 一个 primary PR 完成实现
 

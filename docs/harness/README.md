@@ -41,7 +41,7 @@
 public-free-ruleset
 ```
 
-仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。GitHub Secret Scanning与 Push Protection已启用。机器事实源与残余风险见 `main-protection.md`。
+仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。无 bypass、Secret Scanning与 Push Protection状态来自 2026-08-13 owner/admin live readback并作为版本化证据静态锁定；普通临时 `GITHUB_TOKEN`只持续回读权限可见子集。机器事实源、无长期管理员 PAT的权衡与残余风险见 `main-protection.md`。
 
 Harness 提供：
 
@@ -174,6 +174,8 @@ rollback
 CI 在 **pre-merge** 阶段使用只读 GitHub API 实时验证：`work-item` 必须是开放 Issue、`owner-input` 必须是仓库所有者创建的 Issue、`supersedes-pr` 必须是真实 PR。验证失败时 CI 失败，旧 Autonomous Merge 不会运行；对象类型不能等到合并后才发现。
 
 Repository Hygiene 在可信默认分支上下文中再次查询真实 GitHub 对象，复核 work-item / owner-input / supersedes-pr，并安全回收精确登记的 legacy helper branch。它是 post-merge 审计与收敛层，不替代 pre-merge 门禁。
+
+对默认分支治理，Repository Hygiene持续回读 Public visibility、merge methods、`main.protected`与普通 `GITHUB_TOKEN`可见的 Ruleset身份、条件和规则参数。它不能在线读取 `bypass_actors`或 `security_and_analysis`，不得把版本化 owner/admin读回证据误写成每次 Workflow都完成的管理员字段验证。
 
 所有 Workflow Action 固定完整 Commit SHA。机器配置、Policy、Checker、Workflow 和文档均注册在 `harness.config.json`。
 

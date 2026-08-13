@@ -71,6 +71,7 @@ const [
   historicalRiskText,
   currentRiskText,
   configText,
+  rulesetText,
   proof12Text,
   proof13Text,
   workflow,
@@ -82,6 +83,7 @@ const [
   readFile(historicalRiskPath, "utf8"),
   readFile(currentRiskPath, "utf8"),
   readFile("harness.config.json", "utf8"),
+  readFile(rulesetPath, "utf8"),
   readFile(proof12Path, "utf8"),
   readFile(proof13Path, "utf8"),
   readFile(".github/workflows/main-provenance.yml", "utf8"),
@@ -93,6 +95,7 @@ const fixture = JSON.parse(fixtureText);
 const historicalRisk = JSON.parse(historicalRiskText);
 const currentRisk = JSON.parse(currentRiskText);
 const config = JSON.parse(configText);
+const rulesetRecord = JSON.parse(rulesetText);
 const proof12 = JSON.parse(proof12Text);
 const proof13 = JSON.parse(proof13Text);
 
@@ -191,7 +194,10 @@ requireValue(
   config.mainProtection?.availability === "active-public-ruleset" &&
     config.mainProtection?.riskAcceptanceRecord === currentRiskPath &&
     config.mainProtection?.rulesetRecord === rulesetPath &&
-    config.mainProtection?.rulesetId === 20776157,
+    config.mainProtection?.rulesetId === 20776157 &&
+    config.mainProtection?.adminReadbackEvidence === rulesetPath &&
+    config.mainProtection?.continuousReadbackScope === "token-readable-subset" &&
+    config.mainProtection?.longLivedAdminCredentialStored === false,
   "Current Harness main-protection facts are incorrect.",
 );
 requireValue(
@@ -206,9 +212,46 @@ requireValue(
 requireValue(
   currentRisk.evidence?.governanceIssue === 61 &&
     currentRisk.evidence?.rulesetRecord === rulesetPath &&
+    currentRisk.evidence?.ownerAdminReadbackCapturedAt === "2026-08-13T02:45:00Z" &&
     currentRisk.ownerDecision?.changedRepositoryToPublic === true &&
-    currentRisk.governanceDecision?.enableServerRuleset === true,
+    currentRisk.governanceDecision?.enableServerRuleset === true &&
+    currentRisk.governanceDecision?.storeLongLivedAdminCredential === false,
   "Current Public + Free risk evidence or decision is incomplete.",
+);
+requireValue(
+  currentRisk.mandatoryControls?.includes(
+    "Repository Hygiene continuously verifies only the subset readable by its ephemeral GITHUB_TOKEN and must not claim continuous verification of administrator-only fields.",
+  ) &&
+    currentRisk.mandatoryControls?.includes(
+      "No PAT or other long-lived administrator credential is stored for continuous governance monitoring.",
+    ),
+  "Current risk acceptance must preserve the token-readable monitoring boundary.",
+);
+requireValue(
+  rulesetRecord.lastOwnerAdminVerifiedAt === "2026-08-13T02:45:00Z" &&
+    rulesetRecord.ruleset?.id === 20776157 &&
+    JSON.stringify(rulesetRecord.ruleset?.bypassActors) === "[]" &&
+    rulesetRecord.securityAndAnalysis?.secretScanning === "enabled" &&
+    rulesetRecord.securityAndAnalysis?.secretScanningPushProtection === "enabled",
+  "Current Ruleset record must statically preserve the admin-captured bypass and security settings.",
+);
+requireValue(
+  rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.capturedAt === "2026-08-13T02:45:00Z" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.evidenceKind ===
+      "versioned-owner-admin-api-readback" &&
+    JSON.stringify(rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.rulesetBypassActors) === "[]" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.securityAndAnalysis?.secretScanning === "enabled" &&
+    rulesetRecord.verificationBoundary?.ownerAdminLiveReadback?.securityAndAnalysis?.secretScanningPushProtection ===
+      "enabled" &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.scope === "token-readable-subset" &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.excludedAdminFields?.includes(
+      "ruleset.bypass_actors",
+    ) &&
+    rulesetRecord.verificationBoundary?.continuousGithubTokenReadback?.excludedAdminFields?.includes(
+      "repository.security_and_analysis",
+    ) &&
+    rulesetRecord.verificationBoundary?.longLivedAdminCredentialStored === false,
+  "Current Ruleset record must separate versioned owner/admin evidence from continuous GITHUB_TOKEN readback.",
 );
 
 function verifyProof(proof, expected) {

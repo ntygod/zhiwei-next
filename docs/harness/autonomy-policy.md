@@ -24,14 +24,14 @@ AI 获得对仓库工作的长期授权，包括：
 public-free-ruleset
 ```
 
-所有者已将仓库转为 Public并要求继续开发。GitHub Free公开仓库已启用 active、无 bypass 的默认分支 Ruleset；Public源码暴露、管理员配置漂移、Required Check身份和 GitHub可用性风险已重新接受。机器记录见：
+所有者已将仓库转为 Public并要求继续开发。GitHub Free公开仓库已启用 active的默认分支 Ruleset，2026-08-13 owner/admin读回记录无 bypass；Public源码暴露、管理员配置漂移、Required Check身份和 GitHub可用性风险已重新接受。机器记录见：
 
 ```text
 docs/harness/risk-acceptance/2026-08-13-public-free.json
 docs/harness/rulesets/2026-08-13-main-public-free.json
 ```
 
-此前 Private + Free风险记录保留为历史。Ruleset提供 pre-receive保护，仓库级 merge设置只允许 squash，Secret Scanning与 Push Protection已启用；这些控制仍不替代 PR合同、独立审查、Fork隔离、Main Provenance或 Incident恢复。
+此前 Private + Free风险记录保留为历史。Ruleset提供 pre-receive保护，仓库级 merge设置只允许 squash；2026-08-13 owner/admin live readback确认没有 bypass actor且 Secret Scanning与 Push Protection已启用。普通 `GITHUB_TOKEN`只能持续核验权限可读子集，项目不保存 PAT或长期管理员 Secret来伪装完整持续监控；这些控制仍不替代 PR合同、独立审查、Fork隔离、Main Provenance或 Incident恢复。
 
 ## 默认工作方式
 
@@ -99,6 +99,8 @@ docs/harness/rulesets/2026-08-13-main-public-free.json
 - 引入生产发布、签名或部署 Workflow；
 - 仓库可见性、Owner、默认分支或 GitHub方案变化；
 - active Ruleset被禁用、删除、绕过或实质修改；
+- Ruleset或 Repository安全设置发生可能影响管理员字段的变化，而 owner/admin读回证据未刷新；
+- 提议为持续监控引入 PAT或其他长期管理员凭证；
 - 再次发生 direct-main Incident。
 
 此时应重新评估当前 Ruleset、GitHub方案或迁移到具有 Team/Enterprise能力的组织。

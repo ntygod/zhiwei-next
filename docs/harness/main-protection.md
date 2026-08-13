@@ -8,13 +8,13 @@
 public-free-ruleset
 ```
 
-GitHub Ruleset `20776157`（`Protect main (public-free)`）已对默认分支启用，实时 API 回读确认：
+GitHub Ruleset `20776157`（`Protect main (public-free)`）已对默认分支启用。下表结合了两类证据：普通临时 `GITHUB_TOKEN`可持续回读的字段，以及 2026-08-13 仓库所有者 / 管理员权限 API live readback后写入版本库的管理员字段。
 
 | 设置 | 当前值 |
 |---|---|
 | Target | `~DEFAULT_BRANCH`（当前为 `main`） |
 | Enforcement | `active` |
-| Bypass actors | 空 |
+| Bypass actors | 空；2026-08-13 owner/admin live readback版本化证据 |
 | Pull Request | 必须；只允许 `squash` |
 | Required approvals | `0`；独立 AI 审查由 Harness 单独验证 |
 | Review threads | 必须全部解决 |
@@ -25,6 +25,8 @@ GitHub Ruleset `20776157`（`Protect main (public-free)`）已对默认分支启
 | Force push | 禁止 |
 | Branch deletion | 禁止 |
 | Repository merge methods | 只启用 `squash`；全仓关闭 merge commit与 rebase merge |
+
+普通 `GITHUB_TOKEN`看不到 Ruleset `bypass_actors`和 Repository `security_and_analysis`。因此“无 bypass”“Secret Scanning / Push Protection为 enabled”仍是被 Checker精确锁定的当前机器记录，但不是 Repository Hygiene每次运行都能在线重读的字段。
 
 机器事实源：
 
@@ -73,7 +75,8 @@ Ruleset 是服务端 pre-receive 屏障；Main Provenance、Incident 和恢复�
 
 ## 仍然存在的残余风险
 
-- 仓库管理员仍可修改或删除 Ruleset；因此 Repository Hygiene、人工/API回读和风险重评触发器必须保留；
+- 仓库管理员仍可修改或删除 Ruleset；Repository Hygiene只能持续检查其 Token可读子集，管理员字段依靠版本化 owner/admin读回、风险重评触发器和必要时的新读回；
+- 仓库不保存 PAT或其他长期管理员 Secret来扩大持续监控权限。这减少了高权限凭证泄露面，但 bypass actor、Secret Scanning或 Push Protection漂移可能要到下一次 owner/admin读回或其他治理信号才会被发现；
 - Required Check名称或 GitHub Actions App身份漂移会安全阻塞全部合并，需要 R3治理修复；
 - 合规 PR仍可能修改 Workflow或治理代码，所以 R3独立审查、可信默认分支读取和最小 Token权限不能删除；
 - Public意味着源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；真实记忆、凭证、私有仓库内容、数据库和原始思维链仍禁止进入仓库或 Artifact；
@@ -84,7 +87,7 @@ Ruleset 是服务端 pre-receive 屏障；Main Provenance、Incident 和恢复�
 
 - `pull_request`只运行最小只读权限，不注入仓库 Secret；
 - 仓库只允许运行 GitHub-owned Action，所有 Action引用必须固定完整 Commit SHA；
-- GitHub Secret Scanning与 Push Protection已启用；Validity Checks因可能向凭证签发方发起有效性查询而保持关闭，若要启用需单独风险重评；
+- 2026-08-13 owner/admin live readback确认 GitHub Secret Scanning与 Push Protection已启用；Validity Checks因可能向凭证签发方发起有效性查询而保持关闭，若要启用需单独风险重评；
 - 所有 external contributor的 fork PR必须先由维护者批准运行，默认 Workflow Token保持 read-only且不能批准 PR；
 - external fork PR只允许进入批准后的只读 CI，不进入 Autonomous Merge；写权限 `workflow_run` Job在调度层要求 same-repository source，并在可信脚本内再次核对 PR head repo；
 - 运行 PR-controlled脚本的 Job不得获得写 Token；
@@ -95,11 +98,12 @@ Ruleset 是服务端 pre-receive 屏障；Main Provenance、Incident 和恢复�
 
 ## 验证与漂移检测
 
-- Ruleset创建前回读为 `rulesets=[]`、`main.protected=false`；创建后回读为 `active`、`bypass_actors=[]`、`main.protected=true`；
-- 仓库级 merge设置只允许 squash；Secret Scanning和 Push Protection实时为 enabled；
+- Ruleset创建前回读为 `rulesets=[]`、`main.protected=false`；2026-08-13 owner/admin回读确认创建后为 `active`、`bypass_actors=[]`、`main.protected=true`；
+- 2026-08-13 owner/admin回读确认 Secret Scanning和 Push Protection为 enabled；该 dated事实与 `bypass_actors=[]`一起保存在版本化 Ruleset记录中，并由普通 CI静态精确验证；
+- Repository Hygiene使用临时 `GITHUB_TOKEN`持续回读 `visibility`、默认分支、merge methods、`main.protected`以及 Ruleset身份、enforcement、conditions和 rules参数；它不声称在线验证 `bypass_actors`或 `security_and_analysis`；
 - `GET /repos/ntygod/zhiwei-next/rules/branches/main`返回五条活动规则，与机器记录完整一致；
-- Repository Hygiene实时要求 `visibility=public`且默认分支 `protected=true`，漂移时失败；
 - 普通 CI静态验证机器记录、Workflow Token边界与历史风险事实源；
+- 不为填补管理员字段的持续可见性而把 PAT或长期管理员 Secret存入 Actions；相关配置、权限或安全信号变化时，必须重新执行 owner/admin live readback并更新版本化证据；
 - 不通过向 `main`写测试提交验证保护能力。服务端规则的只读 API、规则应用回读和真实合规 PR合并共同提供证据。
 
 ## 回滚
@@ -118,6 +122,9 @@ Ruleset 是服务端 pre-receive 屏障；Main Provenance、Incident 和恢复�
 - 仓库重新转为 Private、迁移 Owner或默认分支变化；
 - GitHub方案变化；
 - Ruleset被禁用、删除、出现 bypass或规则实质变化；
+- Ruleset、安全设置、权限或治理发生可能影响管理员字段的变化，但 owner/admin读回尚未刷新；
+- 提议为持续监控引入 PAT或其他长期管理员凭证；
+- Secret Scanning或 Push Protection被禁用或无法由 owner/admin重新确认；
 - 开始保存真实用户记忆、生产凭证或生产数据；
 - 多于一名人类协作者获得写权限；
 - 引入生产发布、签名或部署 Workflow；

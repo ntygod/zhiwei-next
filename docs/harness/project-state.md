@@ -14,9 +14,11 @@ updated: 2026-08-13
 public-free-ruleset
 ```
 
-仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active 且没有 bypass actor，服务端要求 `main`只能经最新 base上的 Pull Request、GitHub Actions `check`、线性历史与已解决 Review Thread进入，并且只允许 squash、禁止 force push和删除。正常写入仍必须使用非默认分支和 Pull Request；Main Provenance继续独立审计实际进入默认分支的来源。
+仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认没有 bypass actor。服务端要求 `main`只能经最新 base上的 Pull Request、GitHub Actions `check`、线性历史与已解决 Review Thread进入，并且只允许 squash、禁止 force push和删除。正常写入仍必须使用非默认分支和 Pull Request；Main Provenance继续独立审计实际进入默认分支的来源。
 
-仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
+仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。2026-08-13 owner/admin读回确认 Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
+
+普通临时 `GITHUB_TOKEN`不能读取 Ruleset `bypass_actors`或 Repository `security_and_analysis`。这两类管理员字段以版本化 owner/admin读回作为当前证据；Repository Hygiene只持续核验 Token可读子集。仓库不保存 PAT或其他长期管理员 Secret，降低凭证暴露面的代价是管理员字段漂移要到新的 owner/admin读回或其他治理信号才会被发现。
 
 ## 最近完成
 
@@ -91,6 +93,7 @@ PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独�
 - 渐进式 `AGENTS.md` 与 AI-primary Harness；
 - Main Provenance、token-driven dispatch、Incident停机与恢复提案；
 - 当前 `public-free-ruleset`模式、active Ruleset、Actions限制、Secret scanning / push protection与公开面审计；
+- 2026-08-13 owner/admin字段版本化证据、临时 `GITHUB_TOKEN`持续读回子集和无长期管理员 PAT边界；
 - 历史 `best-effort-private-free` 风险接受和两条 live provenance proof继续保留，但不再描述当前保护能力；
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
 - `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
@@ -162,10 +165,10 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 - GitHub Connector内容写入前创建并显式指定非默认分支；
 - 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
-- active、无 bypass的默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions `check`、最新 base、线性历史和 Review Thread解决；仓库 merge设置也只允许 squash；
+- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions `check`、最新 base、线性历史和 Review Thread解决；2026-08-13 owner/admin读回记录 `bypass_actors=[]`，仓库 merge设置也只允许 squash；
 - Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
 - Autonomous Merge与 Main Provenance Dispatch的 `workflow_run`写权限路径同时检查 same-repository source，实时 PR对象还会再次核对 `head.repo`；
-- Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
+- 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
 - PR Checker从 GitHub Event Payload读取 title、branch和PR number；
@@ -175,7 +178,7 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 - `GITHUB_TOKEN`自动合并由 Dispatch / Receiver路径审计；
 - 未验证 main更新创建 R3 Incident并阻断普通自动合并；
 - Branch Cleanup处理关闭 PR分支；Repository Hygiene处理 exact-head legacy helper和仓库级WIP漂移；
-- Repository Hygiene实时回读 Public visibility、`main.protected`和精确 Ruleset身份、条件与参数；Main Provenance继续作为服务端 pre-receive规则之后的来源审计与恢复层。
+- Repository Hygiene使用临时 `GITHUB_TOKEN`持续回读 Public visibility、merge methods、`main.protected`以及可见的 Ruleset身份、enforcement、条件与规则参数；它不声称在线验证 `bypass_actors`或 `security_and_analysis`。Main Provenance继续作为服务端 pre-receive规则之后的来源审计与恢复层。
 
 ## 当前 M0能力
 
@@ -221,7 +224,8 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 
 ## 已知风险
 
-- 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene与后续 API回读只能暴露漂移，不能让管理员权限变成不可变；
+- 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene持续暴露删除和 Token可读漂移，管理员字段则依赖新的 owner/admin读回或其他治理信号，任何审计都不能让管理员权限变成不可变；
+- 普通 `GITHUB_TOKEN`看不到 bypass actors与 security-and-analysis管理员字段；不保存长期管理员 PAT降低凭证风险，但这些字段的漂移只能靠 revisit trigger后的 owner/admin读回或其他治理信号发现；
 - Required Check名称或 GitHub Actions App身份漂移会 fail closed并阻塞全部合并；修复必须走 R3治理，不能增加 bypass；
 - Public仓库的源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；公开面审计观察到610条历史 Actions artifact记录，但没有逐字节审计历史 Artifact，现行 Workflow仍必须在上传前脱敏并使用明确的短保留期；
 - 旧 Probe Workflow的 `if: always()`已移除；Capture或脱敏 Checker失败时不再上传 failure JSON，不能把失败诊断冒充公开 Evidence；
@@ -233,7 +237,7 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - 同一最终 HEAD多次成功 CI可能产生重复但幂等 provenance dispatch，Issue #15跟踪；
 - Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
 - RPC成功路径、正常 EOF与 `RpcClient.stop()`实现层 SIGTERM / `exit(143) → close(143)`已有固定容器 verified Evidence。发布源码中的 `SIGKILL` fallback、Restart / Resume / Error仍必须按各自场景保留来源，其中 Worker恢复与错误语义由 #32独立冻结，不能从当前成功 Fixture外推；
-- 在仓库转回 Private、方案或默认分支变化、Ruleset / Secret scanning漂移、真实用户记忆、生产凭证、多人写入、生产发布或 active Ruleset下仍出现未经授权的 direct-main更新时，必须重新评估风险接受。
+- 在仓库转回 Private、方案或默认分支变化、Ruleset / Secret scanning漂移、管理员字段相关变更后读回证据未刷新、提议引入长期管理员 PAT、真实用户记忆、生产凭证、多人写入、生产发布或 active Ruleset下仍出现未经授权的 direct-main更新时，必须重新评估风险接受。
 
 ## 产品能力状态
 

@@ -149,6 +149,11 @@ jobs:
                   expectedRuleset.conditions.refName.exclude?.length === 0,
                 "Configured Ruleset record does not target only the default branch.",
               );
+              requireProtection(
+                Array.isArray(expectedRuleset?.bypassActors) &&
+                  expectedRuleset.bypassActors.length === 0,
+                "Configured admin-captured Ruleset record must declare no bypass actors.",
+              );
 
               requireProtection(
                 repository.full_name === repositoryFullName,
@@ -189,13 +194,11 @@ jobs:
                   expectedSecurity?.secretScanningPushProtection === "enabled",
                 "Configured security record does not require Secret Scanning and Push Protection.",
               );
-              requireProtection(
-                repository.security_and_analysis?.secret_scanning?.status ===
-                    expectedSecurity?.secretScanning &&
-                  repository.security_and_analysis?.secret_scanning_push_protection
-                    ?.status ===
-                    expectedSecurity?.secretScanningPushProtection,
-                "Live Secret Scanning or Push Protection is unavailable or drifted from the configured record.",
+              core.info(
+                "Live drift detection is limited to the subset exposed to the ordinary " +
+                  "GITHUB_TOKEN. security_and_analysis, bypass_actors, and " +
+                  "current_user_can_bypass remain admin-captured record evidence " +
+                  "and are not asserted from this token.",
               );
 
               let mainBranch;
@@ -234,7 +237,8 @@ jobs:
                 } catch (error) {
                   findings.push(
                     protectionFinding(
-                      `Cannot read live Ruleset ${expectedRuleset.id}: ` +
+                      `Cannot read GITHUB_TOKEN-readable live Ruleset subset ` +
+                        `${expectedRuleset.id}: ` +
                         `${error.message ?? String(error)}`,
                     ),
                   );
@@ -250,24 +254,18 @@ jobs:
               requireProtection(
                 liveRuleset.id === expectedRuleset.id &&
                   liveRuleset.name === expectedRuleset.name,
-                "Live Ruleset identity does not match the configured record.",
+                "GITHUB_TOKEN-readable live Ruleset identity does not match the configured record.",
               );
               requireProtection(
                 liveRuleset.target === "branch" &&
                   liveRuleset.source_type === "Repository" &&
                   liveRuleset.source === repositoryFullName,
-                "Live Ruleset target or repository source drifted.",
+                "GITHUB_TOKEN-readable live Ruleset target or repository source drifted.",
               );
               requireProtection(
                 liveRuleset.enforcement === "active",
-                `Live Ruleset enforcement is ` +
+                `GITHUB_TOKEN-readable live Ruleset enforcement is ` +
                   `${liveRuleset.enforcement ?? "<missing>"}, not active.`,
-              );
-              requireProtection(
-                Array.isArray(liveRuleset.bypass_actors) &&
-                  liveRuleset.bypass_actors.length === 0 &&
-                  liveRuleset.current_user_can_bypass === "never",
-                "Live Ruleset has a bypass actor or current-user bypass.",
               );
               requireProtection(
                 jsonEqual(
@@ -278,7 +276,7 @@ jobs:
                     sortedStrings(liveRuleset.conditions?.ref_name?.exclude),
                     sortedStrings(expectedRuleset.conditions?.refName?.exclude),
                   ),
-                "Live Ruleset branch target conditions drifted from the record.",
+                "GITHUB_TOKEN-readable live Ruleset branch target conditions drifted from the record.",
               );
 
               const liveRules = Array.isArray(liveRuleset.rules)
@@ -291,7 +289,7 @@ jobs:
                   liveRules.map((rule) => rule.type).sort(),
                   expectedRules.map((rule) => rule.type).sort(),
                 ),
-                "Live Ruleset rule types drifted from the configured record.",
+                "GITHUB_TOKEN-readable live Ruleset rule types drifted from the configured record.",
               );
 
               const expectedPullRequest = expectedRule("pull_request")?.parameters;
@@ -312,7 +310,7 @@ jobs:
                     sortedStrings(livePullRequest.allowed_merge_methods),
                     sortedStrings(expectedPullRequest?.allowedMergeMethods),
                   ),
-                "Live pull-request Ruleset parameters drifted from the record.",
+                "GITHUB_TOKEN-readable live pull-request Ruleset parameters drifted from the record.",
               );
 
               const expectedStatus = expectedRule("required_status_checks")?.parameters;
@@ -346,7 +344,7 @@ jobs:
                       "integrationId",
                     ),
                   ),
-                "Live required-status Ruleset parameters drifted from the record.",
+                "GITHUB_TOKEN-readable live required-status Ruleset parameters drifted from the record.",
               );
 
               return findings;
@@ -386,7 +384,8 @@ jobs:
                 });
             if (protectionBlocked) {
               core.warning(
-                "Main protection could not be verified; branch cleanup is disabled for this run.",
+                "The GITHUB_TOKEN-readable live main-protection subset could not be " +
+                  "verified; branch cleanup is disabled for this run.",
               );
             }
 
