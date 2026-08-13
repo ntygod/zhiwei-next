@@ -98,7 +98,9 @@ CI内 `needs`聚合真值表为：
 
 observer禁止复用先前attempt的evidence。若只选择“Re-run failed jobs”，新attempt可能只有observer而没有`CI required evidence`，此时必须缺失并fail closed或timeout；恢复方式是“Re-run all jobs”，让当前attempt重新产生完整evidence。这是有意的安全/可用性边界，不能通过读取旧attempt绕过。
 
-CI本身也发布机器`run-name`，逐字编码event、PR number、action、事件`updated_at`、Draft/Ready、tested base、head和run ID。Autonomous Merge只接受`ready=true`且仍与实时PR的number、`updated_at`、base和head完全一致的成功CI，因此Draft成功后立刻转Ready、或Ready成功后又编辑PR，都不能让旧CI触发合并。Main Provenance Dispatch把`ready=false`视为正常no-op；合并后PR的`updated_at`必然变化，所以它不做错误的post-merge时间比较，而以已解析的Ready身份、head/base和squash parent核验来源。多个精确Ready成功CI都可为同一merge提交发送repository dispatch；下游按`after`身份与并发串行实现幂等，不能通过“选最新run”造成无人负责的漏派发。
+CI本身也发布机器`run-name`，逐字编码event、PR number、action、事件`updated_at`、Draft/Ready、tested base、head和run ID。Autonomous Merge只接受`ready=true`且仍与实时PR的number、`updated_at`、base和head完全一致的成功CI，因此Draft成功后立刻转Ready、或Ready成功后又编辑PR，都不能让旧CI触发合并。Autonomous Merge自己的机器标题再绑定来源CI run ID、attempt和HEAD；`pulls.merge`返回成功后，同一Job必须确认真实merged PR、merge SHA、来源HEAD/base和单一squash parent，随后立即发送现有`main-provenance` payload。`after`是重放/Incident身份；任何post-merge确认或dispatch错误都按该SHA fail closed，而不是让Workflow表面成功。
+
+`Main Provenance Dispatch`现在是 Autonomous Merge完成后的reconciler，不再和合并Job同时消费CI完成事件，也不再用90秒窗口猜测排队中的合并。它先从Autonomous Merge机器标题读取精确来源CI run/attempt/head，并用`actions: read`最多三次重取该attempt；若非成功Autonomous Merge始终无法读回来源，则以source CI HEAD同时作为before/after登记`reconciler-source-ci-undetermined`持久Incident并停机，成功主路径则保持可见失败供重试。来源可读后，非PR、非success或fork是正常no-op，候选Ready same-repository才继续严格核验。reconciler短时重试PR的merge可见性：只有最后连续至少三次可信读回都未合并才no-op；API始终失败或最终状态不确定会用来源HEAD作为稳定fallback键登记持久Incident，而不把一次旧读回当结论。已确认同源merge时，无论Autonomous Merge最终是success、failure还是cancelled，reconciler都复验head/base和单一parent，并以相同`before`/`after`/PR/source payload幂等补发。这允许正常路径产生相同`after`的安全重复事件，也覆盖merge后失败、取消和响应丢失。receiver仍按`after`串行重新查询真实PR与commit；dispatch payload不是恢复tree的可信来源。
 
 ## 仍然存在的残余风险
 

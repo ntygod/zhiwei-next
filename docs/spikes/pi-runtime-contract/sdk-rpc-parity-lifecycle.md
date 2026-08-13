@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Run `31639460875`已经成功完成 Fresh Capture、两个 Checker、committed Fixture校验和完整对象比较；其 Artifact `9158276952`与 committed Fixture逐字节绑定，当前 Manifest因此处于 `verified`状态。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Run `31666316897`已经成功完成 Fresh Capture、两个 Checker、committed Fixture校验和完整对象比较；其 Artifact `9168052320`与 committed Fixture逐字节绑定，当前 Manifest因此处于 `verified`状态。
 
 Committed Fixture：
 
@@ -320,12 +320,12 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 ```text
 state            verified
 capture head     fe4aeb840fa3efed7d881679a78955af470896d9
-workflow run     31639460875
-artifact id      9158276952
-artifact digest  sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b
+workflow run     31666316897
+artifact id      9168052320
+artifact digest  sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
 ```
 
-Artifact ZIP内只有一个 `122178`字节的 `result.json`；ZIP摘要与上面的 `artifactDigest`一致，`result.json`摘要与 `jsonSha256`一致，并与 Loader从 committed分片还原的 JSON逐字节相同。此前 Run `31638606535`只作为旧 Fixture恢复时的 candidate输入，其整体失败结论与 Artifact身份没有写入 `source`。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
+Artifact ZIP内只有一个 `122178`字节的 `result.json`；ZIP摘要与上面的 `artifactDigest`一致，`result.json`摘要与 `jsonSha256`一致，并与 Loader从 committed分片还原的 JSON逐字节相同。Run `31666316897`来自当前治理 PR #63 的 Draft head，因此后续 Ready gate可以把这份成功 Evidence与当前 PR ancestry、Workflow和 Artifact实时绑定。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
 
 ## 安全与脱敏
 

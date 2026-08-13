@@ -86,7 +86,7 @@ docs/harness/rulesets/2026-08-13-main-public-free.json
 2. 普通自动合并立即停机；
 3. 只有可信真实 push 事件能提供自动恢复 tree；
 4. 若当前 main 仍指向该 push 且 tree 发生变化，只创建 Draft 恢复 PR，不直接重置分支；
-5. `repository_dispatch` 失败或无效时只登记 Incident，不从 payload 构造恢复提交；
+5. Autonomous Merge在确认squash commit和单一parent后立即发送`repository_dispatch`；post-merge确认或发送失败按`after`登记 Incident，完成后 reconciler只用精确来源CI attempt复验所有已确认同源merge并按相同`after`幂等补发，覆盖失败、取消或响应丢失；API无法确定merge状态也必须持久登记Incident，且不从 payload构造恢复提交；
 6. 恢复 PR 必须是 R3、引用全部要求事故并完成当前 HEAD 独立审查；
 7. 只有技术缓解、live provenance proof 和明确风险处置完成后才可解除停机。
 

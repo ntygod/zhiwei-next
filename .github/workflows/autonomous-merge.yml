@@ -1,4 +1,5 @@
 name: Autonomous Merge
+run-name: autonomous-merge | source_ci_run=${{ github.event.workflow_run.id }} | source_ci_attempt=${{ github.event.workflow_run.run_attempt }} | source_ci_head=${{ github.event.workflow_run.head_sha }}
 
 on:
   workflow_run:
@@ -8,7 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  issues: read
+  issues: write
 
 jobs:
   merge:
@@ -136,6 +137,50 @@ jobs:
                 result[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
               }
               return result;
+            }
+
+            async function failPostMergeClosed({ before, after, reason, detail }) {
+              const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+              });
+              let incident = openIssues.find((issue) => {
+                const record = parseBlock(issue.body, "zhiwei-main-incident");
+                return record?.status === "open" && record?.after === after;
+              });
+              const body = `## 自动合并后的 provenance 审计链失败\n\n` +
+                `PR #${pullNumber} 已由 Autonomous Merge 合并，但无法确认可信的 Main Provenance 审计事件。\n\n` +
+                `- before: \`${before}\`\n` +
+                `- after: \`${after}\`\n` +
+                `- reason: \`${reason}\`\n` +
+                `- detail: \`${String(detail ?? "").slice(0, 500)}\`\n` +
+                `- source CI workflow run: ${run.html_url}\n` +
+                `- Autonomous Merge workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
+                `该更新来自已合并 PR，但 provenance 链不完整，因此按 fail-closed 方式进入 Main Incident 安全停机。\n\n` +
+                `<!--\nzhiwei-main-incident\nstatus: open\nkind: unauthorized-main-write\nreason: ${reason}\nbefore: ${before}\nafter: ${after}\n-->`;
+              if (!incident) {
+                ({ data: incident } = await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title: `incident(r3): provenance chain failed for ${after.slice(0, 12)}`,
+                  body,
+                }));
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: incident.number,
+                  body: `Autonomous Merge post-merge provenance failed again.\n\n` +
+                    `- reason: \`${reason}\`\n` +
+                    `- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                });
+              }
+              core.setFailed(
+                `Merged PR #${pullNumber}, but Main Provenance failed closed. ` +
+                  `Incident #${incident.number}: ${reason}.`,
+              );
             }
 
             async function readTrustedJson(path) {
@@ -381,3 +426,109 @@ jobs:
               return;
             }
             core.notice(`Autonomously merged PR #${pullNumber} at ${merge.sha}.`);
+
+            const after = merge.sha;
+            if (!/^[0-9a-f]{40}$/.test(after ?? "")) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after: String(after ?? "missing-merge-sha"),
+                reason: "post-merge-confirmation-failed",
+                detail: "GitHub reported a successful merge without a full merge commit SHA.",
+              });
+              return;
+            }
+
+            let mergedPr;
+            let successfulMergedPrRead = false;
+            let lastMergedPrReadError;
+            for (let attempt = 0; attempt < 15; attempt += 1) {
+              try {
+                ({ data: mergedPr } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                }));
+                successfulMergedPrRead = true;
+                lastMergedPrReadError = undefined;
+                if (mergedPr.merged_at && mergedPr.merge_commit_sha) break;
+              } catch (error) {
+                lastMergedPrReadError = error;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+            if (
+              !successfulMergedPrRead ||
+              !mergedPr?.merged_at ||
+              mergedPr.merge_commit_sha !== after
+            ) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after,
+                reason: "post-merge-confirmation-failed",
+                detail: lastMergedPrReadError
+                  ? `GitHub API: ${lastMergedPrReadError.message ?? lastMergedPrReadError}`
+                  : `merged_at=${mergedPr?.merged_at ?? "<missing>"}, ` +
+                    `merge_commit_sha=${mergedPr?.merge_commit_sha ?? "<missing>"}`,
+              });
+              return;
+            }
+            if (mergedPr.head.sha !== run.head_sha || mergedPr.base.sha !== testedBaseSha) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after,
+                reason: "post-merge-source-mismatch",
+                detail: `head=${mergedPr.head.sha}, expectedHead=${run.head_sha}, ` +
+                  `base=${mergedPr.base.sha}, expectedBase=${testedBaseSha}`,
+              });
+              return;
+            }
+
+            let mergeCommit;
+            try {
+              ({ data: mergeCommit } = await github.rest.git.getCommit({
+                owner,
+                repo,
+                commit_sha: after,
+              }));
+            } catch (error) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after,
+                reason: "post-merge-commit-read-failed",
+                detail: error.message ?? error,
+              });
+              return;
+            }
+            const parents = mergeCommit.parents ?? [];
+            if (parents.length !== 1 || parents[0].sha !== testedBaseSha) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after,
+                reason: "squash-parent-contract-mismatch",
+                detail: `parents=${parents.map((parent) => parent.sha).join(",") || "<none>"}`,
+              });
+              return;
+            }
+
+            try {
+              await github.rest.repos.createDispatchEvent({
+                owner,
+                repo,
+                event_type: "main-provenance",
+                client_payload: {
+                  before: testedBaseSha,
+                  after,
+                  default_branch: defaultBranch,
+                  pull_number: pullNumber,
+                  source: "autonomous-merge",
+                },
+              });
+              core.notice(`Dispatched Main Provenance for PR #${pullNumber} at ${after}.`);
+            } catch (error) {
+              await failPostMergeClosed({
+                before: testedBaseSha,
+                after,
+                reason: "provenance-dispatch-failed",
+                detail: error.message ?? error,
+              });
+            }

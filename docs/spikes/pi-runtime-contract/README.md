@@ -267,13 +267,13 @@ outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
 capture head                 fe4aeb840fa3efed7d881679a78955af470896d9
-capture workflow             31639460875
-capture artifact             9158276952
-capture artifact digest      sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b
+capture workflow             31666316897
+capture artifact             9168052320
+capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
 external Provider prompts    0
 ```
 
-固定容器 Run `31639460875`整体成功；Artifact `9158276952`的 ZIP Digest与上面的 `artifactDigest`一致，其中唯一 `result.json`的 SHA-256为 `a3f47e34…`，并与 committed Fixture逐字节相同。Manifest 是 provenance 的机器事实源。
+固定容器 Run `31666316897`整体成功；Artifact `9168052320`的 ZIP Digest与上面的 `artifactDigest`一致，其中唯一 `result.json`的 SHA-256为 `a3f47e34…`，并与 committed Fixture逐字节相同。该 Run来自当前 PR #63，供 Ready live provenance做PR关联与ancestry核验；Manifest 是 provenance 的机器事实源。
 
 ## 隔离与验证
 

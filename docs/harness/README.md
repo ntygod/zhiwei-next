@@ -52,7 +52,7 @@ Harness 提供：
 - Public仓库 fork / Token隔离；
 - 默认分支服务端 Ruleset；
 - 自主 squash merge；
-- 外部 push 与 token-driven merge 双路径 provenance；
+- 外部 push与 Autonomous Merge即时 dispatch / 完成后 reconciler双路径 provenance；
 - 未验证 main 更新的 R3 Incident 停机；
 - Branch Cleanup 与 Repository Hygiene；
 - Work Item 生命周期机器检查。
@@ -125,7 +125,7 @@ Branch Cleanup + Repository Hygiene 收敛分支和 Work Item
 1. **写入前置协议**：Connector 写入显式指定非默认分支。
 2. **PR门禁**：CI、Work Item合同和当前 HEAD独立审查。
 3. **服务端 Ruleset**：无 bypass，要求 PR、早注册observer `check`、线性历史和 squash。
-4. **Main Provenance / Incident**：重新查询真实 PR和 Commit；异常时暂停普通合并。
+4. **Main Provenance / Incident**：Autonomous Merge在 squash成功后立即核验并dispatch，完成事件上的 reconciler补偿 runner取消或响应丢失；receiver重新查询真实 PR和 Commit，异常时暂停普通合并。
 
 服务端保护与事后 provenance互补，任何一层都不能因为另一层存在而删除。
 
@@ -151,13 +151,15 @@ Repository Hygiene 负责：
 - 架构边界；
 - `AGENTS.md` 层级与引用；
 - `check:work-items` Work Item Policy 和治理一致性；
-- Main Provenance 和 dispatch；
+- Main Provenance、Autonomous Merge即时 dispatch和完成后 reconciler；
 - Branch Cleanup（`check:branch-cleanup`）；
 - Harness 配置与风险接受；
 - Pi source/runtime 契约；
 - 自动化测试。
 
 CI先由`static-contracts`执行上述静态合同并计算 Probe gate。内部`CI required evidence`通过`needs`聚合CI内五个动态 Job，并按精确路径gate每60秒轮询三套standalone run；success候选ID必须保持60秒不被更新的latest ID替换，变化即重置quiet window。任何失败、取消、缺失、枚举截断或32分钟deadline超时都会使evidence失败。Ruleset要求的唯一`check`没有`needs`、不checkout源码；它只观察当前run attempt内唯一evidence。CI机器标题还绑定event、PR、action、事件时间、Ready状态、base、head和run ID，Autonomous Merge只消费仍与实时PR一致的Ready成功。仅“Re-run failed jobs”可能因本attempt缺evidence而阻断，必须使用“Re-run all jobs”恢复。
+
+Autonomous Merge的机器标题绑定来源 CI run ID、attempt和HEAD。`pulls.merge`确认成功后，同一可信 Job立即复查merged PR、来源HEAD/base及单一squash parent，再发送以`after`为重放身份的`main-provenance`事件；任何 post-merge确认或dispatch失败都会创建按`after`去重的 Main Incident。`Main Provenance Dispatch`不再从CI完成事件猜测90秒内是否会合并，而监听 Autonomous Merge完成：它以只读Actions API最多三次重取精确来源CI attempt；非成功Autonomous Merge若始终无法读回来源，就用source CI HEAD同时作为before/after登记`reconciler-source-ci-undetermined`持久Incident，成功主路径则显式失败等待重试但不重复登记。来源可读后正常忽略非PR、非success和fork；短时重试合并可见性，只有连续可信的未合并读回才no-op，API无法确定则持久登记Incident；已确认同源merge无论主路径结论如何都复验来源与parent并按相同`after`幂等补发。
 
 PR 还执行 `scripts/check-pr-contract.mjs`，从 GitHub Event Payload 读取 title、head、number，并核对：
 

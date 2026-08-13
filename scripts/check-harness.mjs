@@ -166,7 +166,10 @@ for (const [field, expected] of Object.entries({
   incidentClosureProofRecord: proof13Path,
   instructions: "docs/harness/main-protection.md",
   provenanceWorkflow: ".github/workflows/main-provenance.yml",
-  provenanceDispatchWorkflow: ".github/workflows/main-provenance-dispatch.yml",
+  provenanceDispatchWorkflow: ".github/workflows/autonomous-merge.yml",
+  provenanceReconcilerWorkflow: ".github/workflows/main-provenance-dispatch.yml",
+  provenanceDispatchMode: "post-squash-immediate-with-autonomous-merge-reconciler",
+  provenanceIdempotencyKey: "after",
   incidentFixture: "docs/harness/incidents/2026-08-11-direct-main.json",
 })) {
   requireValue(config.mainProtection?.[field] === expected, `mainProtection.${field} must be ${expected}.`);
@@ -1131,6 +1134,7 @@ for (const workflowPath of [
 
 const autoMerge = await read(".github/workflows/autonomous-merge.yml");
 for (const required of [
+  "run-name: autonomous-merge | source_ci_run=${{ github.event.workflow_run.id }} | source_ci_attempt=${{ github.event.workflow_run.run_attempt }} | source_ci_head=${{ github.event.workflow_run.head_sha }}",
   "github.event.workflow_run.head_repository.full_name == github.repository",
   "run.head_repository?.full_name !== repositoryFullName",
   "pr.head.repo?.full_name !== repositoryFullName",
@@ -1156,21 +1160,56 @@ for (const required of [
   "ready=true",
   "run.display_title !== expectedCiDisplayTitle",
   "Pull request event identity changed after the successful CI run",
+  "async function failPostMergeClosed",
+  "record?.status === \"open\" && record?.after === after",
+  "const after = merge.sha",
+  "lastMergedPrReadError",
+  "mergedPr.merge_commit_sha !== after",
+  "mergedPr.head.sha !== run.head_sha || mergedPr.base.sha !== testedBaseSha",
+  "parents.length !== 1 || parents[0].sha !== testedBaseSha",
+  "github.rest.repos.createDispatchEvent",
+  "event_type: \"main-provenance\"",
+  "source: \"autonomous-merge\"",
+  "reason: \"provenance-dispatch-failed\"",
+  "reason: \"post-merge-commit-read-failed\"",
 ]) {
   requireValue(autoMerge.includes(required), `Autonomous Merge is missing required token: ${required}`);
 }
 
 const provenanceDispatch = await read(".github/workflows/main-provenance-dispatch.yml");
 for (const required of [
-  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
+  "workflows: [\"Autonomous Merge\"]",
+  "github.event.workflow_run.event == 'workflow_run'",
+  "github.event.workflow_run.head_repository.full_name == github.repository",
+  "autonomousMergeRun.name !== \"Autonomous Merge\"",
+  "autonomousMergeRun.path !== \".github/workflows/autonomous-merge.yml\"",
+  "const autonomousMergeIdentityPattern =",
+  "source_ci_run=([1-9][0-9]*)",
+  "source_ci_attempt=([1-9][0-9]*)",
+  "source_ci_head=([0-9a-f]{40})",
+  "github.rest.actions.getWorkflowRunAttempt",
+  "attempt < 3",
+  "async function failSourceCiReadClosed",
+  "autonomousMergeRun.conclusion !== \"success\"",
+  "reason = \"reconciler-source-ci-undetermined\"",
+  "before: ${sourceCiHead}",
+  "after: ${sourceCiHead}",
+  "run_id: sourceCiRunId",
+  "attempt_number: sourceCiAttempt",
+  "sourceCiRun.name !== \"CI\"",
+  "sourceCiRun.path !== \".github/workflows/ci.yml\"",
+  "sourceCiRun.conclusion !== \"success\"",
   "const ciIdentityPattern =",
   "event=pull_request",
   "ready=(true|false)",
-  "ciReady === \"false\"",
-  "Draft pull request CI completed; no provenance dispatch is required.",
   "ciReady !== \"true\"",
-  "ciHeadSha !== run.head_sha",
-  "ciRunId !== String(run.id)",
+  "ciHeadSha !== sourceCiRun.head_sha",
+  "ciRunId !== String(sourceCiRun.id)",
+  "!pr?.merged_at || !pr.merge_commit_sha",
+  "consecutiveTrustedUnmergedReads",
+  "reason: \"reconciler-merge-state-undetermined\"",
+  "record?.status === \"open\" && record?.after === after",
+  "parents.length !== 1 || parents[0].sha !== testedBaseSha",
 ]) {
   requireValue(
     provenanceDispatch.includes(required),
@@ -1178,8 +1217,10 @@ for (const required of [
   );
 }
 requireValue(
-  !provenanceDispatch.includes("updated_at=${pr.updated_at}"),
-  "Post-merge provenance dispatch must not compare CI event time with the merge-updated PR timestamp.",
+  !provenanceDispatch.includes('workflows: ["CI"]') &&
+    !provenanceDispatch.includes("attempt < 45") &&
+    !provenanceDispatch.includes('autonomousMergeRun.conclusion === "success"'),
+  "Main Provenance reconciler must not retain the lossy post-CI merge observation window.",
 );
 
 const mainProvenance = await read(".github/workflows/main-provenance.yml");
@@ -1200,13 +1241,14 @@ for (const required of [
 const dispatchWorkflow = await read(".github/workflows/main-provenance-dispatch.yml");
 for (const required of [
   "workflow_run:",
+  "workflows: [\"Autonomous Merge\"]",
   "github.event.workflow_run.head_repository.full_name == github.repository",
-  "run.head_repository?.full_name !== repositoryFullName",
+  "autonomousMergeRun.head_repository?.full_name !== repositoryFullName",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
   "event_type: \"main-provenance\"",
-  "reason: \"provenance-dispatch-failed\"",
+  "reason: \"provenance-reconciliation-dispatch-failed\"",
 ]) {
   requireValue(dispatchWorkflow.includes(required), `Main Provenance Dispatch is missing required token: ${required}`);
 }
