@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "format": "gzip+base64-parts",
+  "parts": [
+    "part-00-443405699ddd4616c78c6aff8be6c368917cbcb1295fedb862eec98e41e82225.b64",
+    "part-01-1c6d75c4a7e2ed1958aa729037fc7c4e9d785c3739d28d92a11cf3bf20db3a64.b64",
+    "part-02-b1212b1afa8989ef3a8da5e528b70fd160f5ed8382ad3171874f920390e7081f.b64",
+    "part-03-b6da21595679dc47deed3bb2330294d164387f502c5ce75d515bd658114e6060.b64",
+    "part-04-e8a50d04ce2b2252e6c2fba4db603f7977ed2855826e4bb008ef33a20a37a12e.b64",
+    "part-05-30bc6c8157c81bbfc5da609f13431fffac9d445a082ea4e0af46c30d13b1d9e5.b64"
+  ],
+  "partLength": 2400,
+  "base64Length": 13148,
+  "compressedBytes": 9861,
+  "compressedSha256": "44d95e16d8078413c1afe94dd3c7a19bbcdbfad06d82a51a491d0ce8e4b3fbbb",
+  "jsonBytes": 122178,
+  "jsonSha256": "a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda252779603bc9e470034d",
+  "outerContractFingerprint": "c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf",
+  "captureContractFingerprint": "70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7",
+  "source": {
+    "head": "fe4aeb840fa3efed7d881679a78955af470896d9",
+    "workflowRun": 31639460875,
+    "artifactId": 9158276952,
+    "artifactDigest": "sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b"
+  }
+}
