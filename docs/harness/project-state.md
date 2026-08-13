@@ -138,6 +138,13 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-ma
 - owner-authored Issue保留为`owner-input`，一个execution Issue最多一个active branch和一个primary PR；
 - Review、Fixture固化、修复、文档同步与最终化都在同一primary PR完成。
 
+## Work Item 治理连续性
+
+- **Issue #57** 已完成仓库级 `work-item lifecycle` 治理：区分 owner-input、execution、incident、governance 与 research，并限制一个 execution Issue最多一个 active branch和一个开放 primary PR。
+- **Issue #45** 是已完成的 SDK / RPC parity canonical execution Issue；其 Runtime 结果已经进入 main，后续 Issue #32 只扩展真实 RPC Worker生命周期，不重开或复制 #45 的交付。
+- 每个 primary PR 都必须在 **pre-merge** 阶段验证 work item对象类型、开放状态、分支编号、owner-input来源和 supersedes关系；Repository Hygiene只在 exact HEAD、无开放PR且可恢复时回收登记分支。
+- Issue #44 保持 owner-input；Issue #49 与 Issue #56 按严格依赖顺序执行，不把产品输入、候选快照或历史分支误报为已交付工作。
+
 ## Work Item 状态与顺序
 
 当前正常WIP只有 Issue #32 / PR #64。严格依赖顺序：
