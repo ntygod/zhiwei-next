@@ -14,7 +14,7 @@ updated: 2026-08-13
 public-free-ruleset
 ```
 
-仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认没有 bypass actor。服务端要求 `main`只能经最新 base上的 Pull Request、GitHub Actions `check`、线性历史与已解决 Review Thread进入，并且只允许 squash、禁止 force push和删除。正常写入仍必须使用非默认分支和 Pull Request；Main Provenance继续独立审计实际进入默认分支的来源。
+仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认无bypass。服务端要求`main`只能经最新base上的Pull Request、GitHub Actions早注册observer `check`、线性历史与已解决Review Thread进入。observer只在当前run attempt的内部evidence成功后通过；正常写入仍必须使用非默认分支和PR。
 
 仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。2026-08-13 owner/admin读回确认 Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
 
@@ -98,8 +98,10 @@ PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独�
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
 - `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
 - Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；失败必须可见并安全重跑，不能降低来源校验。
+- PR #62的CI Run `31663188980`显示旧`check`静态 Job先于五个CI内动态 Probe成功，服务端 required context当时没有依赖这些 Probe；该次五个CI内 Probe最终均成功且 Autonomous Merge等待整个CI Workflow完成，但路径相关的standalone SDK / RPC parity Workflow失败不在等待范围内，PR仍被合并，构成实际 required-status缺口；
+- #61 follow-up把旧 Job更名为`static-contracts`；内部`CI required evidence`聚合五个CI Probe，并每60秒轮询三套standalone Workflow，success候选ID须quiet 60秒且latest ID变化会重置；唯一`check`是早注册observer，只接受当前run attempt evidence，禁止复用旧attempt。
 
-Issue #61是公开仓库治理前置：服务端设置已落地，当前 primary branch正在把 Ruleset、Actions、Secret scanning、fork / token边界与机器 Checker同步进仓库。#61合并并通过真实 post-merge回读前，Issue #32保持排队而不创建新的 Runtime primary branch。
+PR #62已把Public Ruleset与仓库治理基线合入`main`，但上述 Required Check聚合缺口使Issue #61继续保持开放；当前`chore/61-required-check-aggregation` follow-up收紧CI内聚合、standalone轮询和事实源。该follow-up尚须在真实路径命中的 PR事件上验证，合并且验证前不关闭 #61，Issue #32保持排队而不创建新的 Runtime primary branch。
 
 ### 历史连续性锚点
 
@@ -143,7 +145,7 @@ Issue #57 和 PR #59 建立 work-item lifecycle：
 - Issue #44《后台任务进度获取》保留为所有者产品输入，并完成事件驱动进度订阅的 triage；
 - Issue #45 已由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
 - Issue #31、#37 已作为 #45 的 duplicate关闭；
-- Issue #61 是因仓库转为 Public触发的当前 R3治理前置；
+- Issue #61 的PR #62已合并Public治理基线，当前follow-up正在修复Required Check只等待静态 Job的缺口；
 - Issue #32 是 #61合并后立即恢复的下一项 canonical Runtime execution work item；
 - Issue #49 等待 #32 后冻结 `NormalizedRuntimeEvent v1`；
 - Issue #56 等待 #49 后实现 SQLite Observation Ledger；
@@ -165,9 +167,9 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 - GitHub Connector内容写入前创建并显式指定非默认分支；
 - 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
-- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions `check`、最新 base、线性历史和 Review Thread解决；2026-08-13 owner/admin读回记录 `bypass_actors=[]`，仓库 merge设置也只允许 squash；
+- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions最终`check`、最新 base、线性历史和 Review Thread解决；无`needs`的`check`observer只等待当前run内`CI required evidence`成功，内部evidence才聚合`static-contracts`、五个CI Probe和三套standalone run；2026-08-13 owner/admin读回记录`bypass_actors=[]`，仓库 merge设置也只允许 squash；
 - Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
-- Autonomous Merge与 Main Provenance Dispatch的 `workflow_run`写权限路径同时检查 same-repository source，实时 PR对象还会再次核对 `head.repo`；
+- Autonomous Merge与 Main Provenance Dispatch的`workflow_run`写权限路径同时检查same-repository source和CI机器事件身份；Autonomous Merge只消费仍与实时PR的number、Ready状态、event time、base及head一致的成功CI，Main Provenance Dispatch对Draft正常no-op并以最新成功Ready run去重；
 - 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
@@ -206,8 +208,8 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 严格按依赖推进：
 
-1. **Issue #61**：完成 Public + Free Ruleset、Actions、Secret scanning、fork / Token边界和机器事实源的 R3治理闭环；
-2. **Issue #32**：#61合并后从最新 `main`创建 `spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
+1. **Issue #61**：合并Required Check follow-up，并以真实路径触发验证早注册`check`observer只在同run内部evidence覆盖五个CI Probe和三套standalone run后成功；
+2. **Issue #32**：#61 follow-up合并后从最新`main`创建`spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
 3. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
 4. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
 
@@ -227,6 +229,7 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene持续暴露删除和 Token可读漂移，管理员字段则依赖新的 owner/admin读回或其他治理信号，任何审计都不能让管理员权限变成不可变；
 - 普通 `GITHUB_TOKEN`看不到 bypass actors与 security-and-analysis管理员字段；不保存长期管理员 PAT降低凭证风险，但这些字段的漂移只能靠 revisit trigger后的 owner/admin读回或其他治理信号发现；
 - Required Check名称或 GitHub Actions App身份漂移会 fail closed并阻塞全部合并；修复必须走 R3治理，不能增加 bypass；
+- Required `check`是无`needs`observer，每60秒只读轮询当前`${{ github.run_id }}` / `${{ github.run_attempt }}`内唯一`CI required evidence`；内部evidence负责五个CI Probe和三套standalone Workflow。任一层身份不匹配、非success、重复target、缺失或deadline超时都会fail closed；仅“Re-run failed jobs”不复用旧attempt evidence，恢复需“Re-run all jobs”；
 - Public仓库的源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；公开面审计观察到610条历史 Actions artifact记录，但没有逐字节审计历史 Artifact，现行 Workflow仍必须在上传前脱敏并使用明确的短保留期；
 - 旧 Probe Workflow的 `if: always()`已移除；Capture或脱敏 Checker失败时不再上传 failure JSON，不能把失败诊断冒充公开 Evidence；
 - Secret scanning与 push protection降低误提交风险但不能替代禁止真实记忆、凭证、生产数据和私有仓库内容进入 Commit或 Artifact；validity checks仍未启用；

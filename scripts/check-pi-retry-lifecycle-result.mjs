@@ -70,7 +70,7 @@ requireValue(
 for (const required of [
   "pi-retry-lifecycle-probe:",
   "name: Pi automatic retry lifecycle probe",
-  "needs.check.outputs.pi-lifecycle-probe == 'true'",
+  "needs.static-contracts.outputs.pi-lifecycle-probe == 'true'",
   "packages/pi-adapter/fixtures/pi-lifecycle-retry-success.json",
   "scripts/check-pi-retry-lifecycle-result.mjs",
   "scripts/probes/pi-retry-lifecycle-capture.mjs",

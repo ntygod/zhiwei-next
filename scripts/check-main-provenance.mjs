@@ -363,17 +363,27 @@ for (const token of [
 }
 for (const token of [
   "name: Main Provenance Dispatch",
+  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
   "github.event.workflow_run.head_repository.full_name == github.repository",
   "run.head_repository?.full_name !== repositoryFullName",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
   "reason: \"provenance-dispatch-failed\"",
+  "actions: read",
+  "const ciIdentityPattern =",
+  "ciReady === \"false\"",
+  "Draft pull request CI completed; no provenance dispatch is required.",
+  "github.rest.actions.listWorkflowRuns",
+  "successful-ci-run-selection-unavailable",
+  "successful-ci-run-selection-mismatch",
+  "successfulReadyRuns[0]?.id !== run.id",
 ]) {
   requireValue(dispatchWorkflow.includes(token), `Main Provenance Dispatch is missing token: ${token}`);
 }
 for (const token of [
   "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
   "run.head_repository?.full_name !== repositoryFullName",
   "pr.head.repo?.full_name !== repositoryFullName",
   "readTrustedJson(\"harness.config.json\")",
@@ -381,6 +391,10 @@ for (const token of [
   "zhiwei-main-incident",
   "main-incident-recovery",
   "Recovery PR must reference every required main incident",
+  "const ciIdentityPattern =",
+  "ciReady !== \"true\"",
+  "const expectedCiDisplayTitle =",
+  "run.display_title !== expectedCiDisplayTitle",
 ]) {
   requireValue(autoMerge.includes(token), `Autonomous Merge is missing token: ${token}`);
 }

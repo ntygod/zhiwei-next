@@ -41,7 +41,7 @@
 public-free-ruleset
 ```
 
-仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。无 bypass、Secret Scanning与 Push Protection状态来自 2026-08-13 owner/admin live readback并作为版本化证据静态锁定；普通临时 `GITHUB_TOKEN`只持续回读权限可见子集。机器事实源、无长期管理员 PAT的权衡与残余风险见 `main-protection.md`。
+仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions早注册observer `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。observer只在当前run attempt的内部evidence成功后通过。机器事实源与残余风险见`main-protection.md`。
 
 Harness 提供：
 
@@ -57,7 +57,7 @@ Harness 提供：
 - Branch Cleanup 与 Repository Hygiene；
 - Work Item 生命周期机器检查。
 
-Ruleset不替代可信 Workflow、Main Provenance、Incident和恢复链路；管理员仍可修改服务端配置，Required Check漂移也会安全阻塞合并。详细边界见 `main-protection.md`。
+Ruleset不替代可信 Workflow、Main Provenance、Incident和恢复链路；管理员仍可修改服务端配置，Required Check漂移也会安全阻塞合并。PR #62曾让名为`check`的旧静态 Job先于动态证据成功；当前以内部`CI required evidence`汇总证据，并由无`needs`的唯一`check`observer在同一Workflow run中等待其成功，精确边界见`main-protection.md`。
 
 ## Work Item 生命周期
 
@@ -124,7 +124,7 @@ Branch Cleanup + Repository Hygiene 收敛分支和 Work Item
 
 1. **写入前置协议**：Connector 写入显式指定非默认分支。
 2. **PR门禁**：CI、Work Item合同和当前 HEAD独立审查。
-3. **服务端 Ruleset**：无 bypass，要求 PR、`check`、线性历史和 squash。
+3. **服务端 Ruleset**：无 bypass，要求 PR、早注册observer `check`、线性历史和 squash。
 4. **Main Provenance / Incident**：重新查询真实 PR和 Commit；异常时暂停普通合并。
 
 服务端保护与事后 provenance互补，任何一层都不能因为另一层存在而删除。
@@ -156,6 +156,8 @@ Repository Hygiene 负责：
 - Harness 配置与风险接受；
 - Pi source/runtime 契约；
 - 自动化测试。
+
+CI先由`static-contracts`执行上述静态合同并计算 Probe gate。内部`CI required evidence`通过`needs`聚合CI内五个动态 Job，并按精确路径gate每60秒轮询三套standalone run；success候选ID必须保持60秒不被更新的latest ID替换，变化即重置quiet window。任何失败、取消、缺失、枚举截断或32分钟deadline超时都会使evidence失败。Ruleset要求的唯一`check`没有`needs`、不checkout源码；它只观察当前run attempt内唯一evidence。CI机器标题还绑定event、PR、action、事件时间、Ready状态、base、head和run ID，Autonomous Merge只消费仍与实时PR一致的Ready成功。仅“Re-run failed jobs”可能因本attempt缺evidence而阻断，必须使用“Re-run all jobs”恢复。
 
 PR 还执行 `scripts/check-pr-contract.mjs`，从 GitHub Event Payload 读取 title、head、number，并核对：
 

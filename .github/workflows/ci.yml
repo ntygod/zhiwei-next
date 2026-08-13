@@ -1,4 +1,5 @@
 name: CI
+run-name: ci | event=${{ github.event_name }} | pr=${{ github.event.pull_request.number || 'none' }} | action=${{ github.event.action || 'none' }} | updated_at=${{ github.event.pull_request.updated_at || 'none' }} | ready=${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }} | base=${{ github.event.pull_request.base.sha || 'none' }} | head=${{ github.event.pull_request.head.sha || github.sha }} | run=${{ github.run_id }}
 
 on:
   push:
@@ -30,12 +31,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  static-contracts:
+    name: Static contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       pi-artifact-probe: ${{ steps.probe-gate.outputs.artifact-required }}
       pi-lifecycle-probe: ${{ steps.probe-gate.outputs.lifecycle-required }}
+      pi-parallel-tool-ordering-required: ${{ steps.changed-files.outputs.pi-parallel-tool-ordering-required }}
+      pi-compaction-session-replacement-required: ${{ steps.changed-files.outputs.pi-compaction-session-replacement-required }}
+      pi-sdk-rpc-parity-required: ${{ steps.changed-files.outputs.pi-sdk-rpc-parity-required }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -57,13 +62,32 @@ jobs:
         with:
           result-encoding: string
           script: |
+            const changedFileCount = context.payload.pull_request?.changed_files;
+            if (!Number.isSafeInteger(changedFileCount) || changedFileCount < 0) {
+              throw new Error("Pull request changed_files count is invalid.");
+            }
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
               per_page: 100,
             });
-            const filenames = files.map((file) => file.filename);
+            if (files.length !== changedFileCount) {
+              throw new Error(
+                `Pull request file enumeration is incomplete: event=${changedFileCount}, ` +
+                  `api=${files.length}.`,
+              );
+            }
+            const filenames = [
+              ...new Set(
+                files.flatMap((file) => [
+                  file.filename,
+                  ...(file.status === "renamed" && file.previous_filename
+                    ? [file.previous_filename]
+                    : []),
+                ]),
+              ),
+            ];
             const artifactProbePaths = [
               ".github/workflows/ci.yml",
               "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
@@ -96,6 +120,68 @@ jobs:
               "docs/spikes/pi-runtime-contract/cancel-retry-exhaustion-lifecycle.md",
               "docs/architecture/pi-integration.md",
             ];
+            const parallelToolOrderingPaths = [
+              ".github/workflows/pi-parallel-tool-ordering.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json",
+              "scripts/check-pi-parallel-tool-ordering-result.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-parallel-tool-ordering-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md",
+              "docs/architecture/pi-integration.md",
+            ];
+            const compactionSessionReplacementPaths = [
+              ".github/workflows/pi-compaction-session-replacement.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json",
+              "scripts/check-pi-compaction-session-replacement-result.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-compaction-session-replacement-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/compaction-session-replacement-lifecycle.md",
+              "docs/architecture/pi-integration.md",
+              "docs/harness/project-state.md",
+            ];
+            const sdkRpcParityPaths = [
+              ".github/workflows/pi-sdk-rpc-parity.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**",
+              "scripts/check-pi-sdk-rpc-parity-result.mjs",
+              "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+              "scripts/check-pi-sdk-rpc-parity-provenance.mjs",
+              "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-contract.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-capture.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md",
+              "docs/architecture/pi-integration.md",
+              "docs/harness/project-state.md",
+            ];
+            const matchesWorkflowPaths = (filename, patterns) =>
+              patterns.some((pattern) =>
+                pattern.endsWith("/**")
+                  ? filename.startsWith(pattern.slice(0, -2))
+                  : filename === pattern,
+              );
             core.setOutput(
               "pi-artifact-probe",
               String(filenames.some((filename) => artifactProbePaths.includes(filename))),
@@ -103,6 +189,30 @@ jobs:
             core.setOutput(
               "pi-lifecycle-probe",
               String(filenames.some((filename) => lifecycleProbePaths.includes(filename))),
+            );
+            core.setOutput(
+              "pi-parallel-tool-ordering-required",
+              String(
+                filenames.some((filename) =>
+                  matchesWorkflowPaths(filename, parallelToolOrderingPaths),
+                ),
+              ),
+            );
+            core.setOutput(
+              "pi-compaction-session-replacement-required",
+              String(
+                filenames.some((filename) =>
+                  matchesWorkflowPaths(filename, compactionSessionReplacementPaths),
+                ),
+              ),
+            );
+            core.setOutput(
+              "pi-sdk-rpc-parity-required",
+              String(
+                filenames.some((filename) =>
+                  matchesWorkflowPaths(filename, sdkRpcParityPaths),
+                ),
+              ),
             );
             return JSON.stringify(filenames);
 
@@ -233,8 +343,8 @@ jobs:
 
   pi-artifact-probe:
     name: Pi npm Artifact probe
-    needs: check
-    if: needs.check.outputs.pi-artifact-probe == 'true'
+    needs: static-contracts
+    if: needs.static-contracts.outputs.pi-artifact-probe == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -309,8 +419,8 @@ jobs:
 
   pi-lifecycle-probe:
     name: Pi SDK and Extension lifecycle probe
-    needs: check
-    if: needs.check.outputs.pi-lifecycle-probe == 'true'
+    needs: static-contracts
+    if: needs.static-contracts.outputs.pi-lifecycle-probe == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -397,8 +507,8 @@ jobs:
 
   pi-retry-lifecycle-probe:
     name: Pi automatic retry lifecycle probe
-    needs: check
-    if: needs.check.outputs.pi-lifecycle-probe == 'true'
+    needs: static-contracts
+    if: needs.static-contracts.outputs.pi-lifecycle-probe == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -485,8 +595,8 @@ jobs:
 
   pi-follow-up-lifecycle-probe:
     name: Pi follow-up queue lifecycle probe
-    needs: check
-    if: needs.check.outputs.pi-lifecycle-probe == 'true'
+    needs: static-contracts
+    if: needs.static-contracts.outputs.pi-lifecycle-probe == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -573,8 +683,8 @@ jobs:
 
   pi-cancel-retry-exhaustion-probe:
     name: Pi cancellation and retry exhaustion lifecycle probe
-    needs: check
-    if: needs.check.outputs.pi-lifecycle-probe == 'true'
+    needs: static-contracts
+    if: needs.static-contracts.outputs.pi-lifecycle-probe == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -658,3 +768,461 @@ jobs:
           path: ${{ runner.temp }}/zhiwei-pi-cancel-retry-exhaustion-result/result.json
           if-no-files-found: error
           retention-days: 14
+
+  ci-required-evidence:
+    name: CI required evidence
+    if: always()
+    needs:
+      - static-contracts
+      - pi-artifact-probe
+      - pi-lifecycle-probe
+      - pi-retry-lifecycle-probe
+      - pi-follow-up-lifecycle-probe
+      - pi-cancel-retry-exhaustion-probe
+    permissions:
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Aggregate required CI results
+        env:
+          STATIC_CONTRACTS_RESULT: ${{ needs.static-contracts.result }}
+          ARTIFACT_REQUIRED: ${{ needs.static-contracts.outputs.pi-artifact-probe || 'false' }}
+          ARTIFACT_RESULT: ${{ needs.pi-artifact-probe.result }}
+          LIFECYCLE_REQUIRED: ${{ needs.static-contracts.outputs.pi-lifecycle-probe || 'false' }}
+          LIFECYCLE_RESULT: ${{ needs.pi-lifecycle-probe.result }}
+          RETRY_RESULT: ${{ needs.pi-retry-lifecycle-probe.result }}
+          FOLLOW_UP_RESULT: ${{ needs.pi-follow-up-lifecycle-probe.result }}
+          CANCEL_RETRY_EXHAUSTION_RESULT: ${{ needs.pi-cancel-retry-exhaustion-probe.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gate_allows() {
+            local required="$1"
+            local result="$2"
+            case "${required}:${result}" in
+              true:success|false:skipped) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          assert_gate_case() {
+            local expected="$1"
+            local required="$2"
+            local result="$3"
+            local actual="deny"
+            if gate_allows "$required" "$result"; then
+              actual="allow"
+            fi
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::CI result gate self-test failed: required=${required} result=${result} expected=${expected} actual=${actual}."
+              exit 1
+            fi
+          }
+
+          assert_gate_case allow true success
+          assert_gate_case deny true skipped
+          assert_gate_case deny true failure
+          assert_gate_case deny true cancelled
+          assert_gate_case allow false skipped
+          assert_gate_case deny false success
+          assert_gate_case deny false failure
+          assert_gate_case deny false cancelled
+          assert_gate_case deny unknown success
+
+          failures=0
+          if [[ "$STATIC_CONTRACTS_RESULT" != "success" ]]; then
+            echo "::error::Static contracts did not succeed: ${STATIC_CONTRACTS_RESULT}."
+            failures=$((failures + 1))
+          fi
+
+          require_gated_result() {
+            local label="$1"
+            local required="$2"
+            local result="$3"
+            if gate_allows "$required" "$result"; then
+              echo "${label}: required=${required}, result=${result}"
+            else
+              echo "::error::${label} has an invalid gated result: required=${required}, result=${result}."
+              failures=$((failures + 1))
+            fi
+          }
+
+          require_gated_result "Pi npm Artifact probe" "$ARTIFACT_REQUIRED" "$ARTIFACT_RESULT"
+          require_gated_result "Pi SDK and Extension lifecycle probe" "$LIFECYCLE_REQUIRED" "$LIFECYCLE_RESULT"
+          require_gated_result "Pi automatic retry lifecycle probe" "$LIFECYCLE_REQUIRED" "$RETRY_RESULT"
+          require_gated_result "Pi follow-up queue lifecycle probe" "$LIFECYCLE_REQUIRED" "$FOLLOW_UP_RESULT"
+          require_gated_result "Pi cancellation and retry exhaustion lifecycle probe" "$LIFECYCLE_REQUIRED" "$CANCEL_RETRY_EXHAUSTION_RESULT"
+
+          if (( failures > 0 )); then
+            echo "::error::Required CI aggregation found ${failures} blocking result(s)."
+            exit 1
+          fi
+
+          echo "Required CI aggregation: OK"
+
+      - name: Wait for required standalone workflow runs
+        if: >-
+          success() &&
+          github.event_name == 'pull_request' &&
+          needs.static-contracts.result == 'success' &&
+          (needs.static-contracts.outputs.pi-parallel-tool-ordering-required == 'true' ||
+          needs.static-contracts.outputs.pi-compaction-session-replacement-required == 'true' ||
+          needs.static-contracts.outputs.pi-sdk-rpc-parity-required == 'true')
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PR_ACTION: ${{ github.event.action }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_UPDATED_AT: ${{ github.event.pull_request.updated_at }}
+          PARALLEL_TOOL_ORDERING_REQUIRED: ${{ needs.static-contracts.outputs.pi-parallel-tool-ordering-required || 'false' }}
+          COMPACTION_SESSION_REPLACEMENT_REQUIRED: ${{ needs.static-contracts.outputs.pi-compaction-session-replacement-required || 'false' }}
+          SDK_RPC_PARITY_REQUIRED: ${{ needs.static-contracts.outputs.pi-sdk-rpc-parity-required || 'false' }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const headSha = process.env.PR_HEAD_SHA;
+            const headRepository = process.env.PR_HEAD_REPOSITORY;
+            const headRef = process.env.PR_HEAD_REF;
+            const pullNumber = Number(process.env.PR_NUMBER);
+            const action = process.env.PR_ACTION;
+            const pullUpdatedAtText = process.env.PR_UPDATED_AT;
+            const pullUpdatedAt = Date.parse(pullUpdatedAtText ?? "");
+            const expected = [
+              {
+                required: process.env.PARALLEL_TOOL_ORDERING_REQUIRED,
+                workflowId: "pi-parallel-tool-ordering.yml",
+                path: ".github/workflows/pi-parallel-tool-ordering.yml",
+                name: "Pi parallel Tool ordering contract",
+                runNamePrefix: "parallel-tool-ordering",
+              },
+              {
+                required: process.env.COMPACTION_SESSION_REPLACEMENT_REQUIRED,
+                workflowId: "pi-compaction-session-replacement.yml",
+                path: ".github/workflows/pi-compaction-session-replacement.yml",
+                name: "Pi Compaction and Session Replacement contract",
+                runNamePrefix: "compaction-session-replacement",
+              },
+              {
+                required: process.env.SDK_RPC_PARITY_REQUIRED,
+                workflowId: "pi-sdk-rpc-parity.yml",
+                path: ".github/workflows/pi-sdk-rpc-parity.yml",
+                name: "Pi SDK and RPC parity contract",
+                runNamePrefix: "sdk-rpc-parity",
+              },
+            ];
+
+            if (!/^[0-9a-f]{40}$/.test(headSha ?? "")) {
+              throw new Error("Pull request HEAD must be a full lowercase commit SHA.");
+            }
+            if (!headRepository || !headRef) {
+              throw new Error("Pull request HEAD repository and ref are required.");
+            }
+            if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0) {
+              throw new Error("Pull request number is invalid.");
+            }
+            if (!Number.isFinite(pullUpdatedAt)) {
+              throw new Error("Pull request updated_at is invalid.");
+            }
+            const supportedActions = new Set([
+              "opened",
+              "synchronize",
+              "reopened",
+              "ready_for_review",
+              "edited",
+            ]);
+            if (!supportedActions.has(action)) {
+              throw new Error(`Unsupported pull request action: ${action ?? "<missing>"}.`);
+            }
+            for (const workflow of expected) {
+              if (!new Set(["true", "false"]).has(workflow.required)) {
+                throw new Error(
+                  `${workflow.name} required gate is invalid: ${workflow.required}.`,
+                );
+              }
+            }
+
+            const pending = new Map(
+              expected
+                .filter((workflow) => workflow.required === "true")
+                .map((workflow) => [workflow.workflowId, workflow]),
+            );
+            const deadline = Date.now() + 32 * 60 * 1_000;
+            const observedSuccess = new Map();
+            const delay = (milliseconds) =>
+              new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+            core.info(
+              `Waiting for ${pending.size} standalone workflow(s) for PR #${pullNumber} ` +
+                `at ${headSha}; action=${action}.`,
+            );
+            await delay(10_000);
+
+            while (pending.size > 0) {
+              const observations = await Promise.all(
+                [...pending.values()].map(async (workflow) => {
+                  const expectedDisplayTitle =
+                    `${workflow.runNamePrefix} | event=pull_request | pr=${pullNumber} | ` +
+                    `action=${action} | updated_at=${pullUpdatedAtText} | head=${headSha}`;
+                  const { data } = await github.rest.actions.listWorkflowRuns({
+                    owner,
+                    repo,
+                    workflow_id: workflow.workflowId,
+                    event: "pull_request",
+                    head_sha: headSha,
+                    per_page: 100,
+                  });
+                  const candidates = (data.workflow_runs ?? [])
+                    .filter(
+                      (run) =>
+                        run.event === "pull_request" &&
+                        run.head_sha === headSha &&
+                        run.path === workflow.path &&
+                        run.name === workflow.name &&
+                        run.display_title === expectedDisplayTitle &&
+                        run.head_repository?.full_name === headRepository &&
+                        run.head_branch === headRef &&
+                        Date.parse(run.created_at ?? "") >= pullUpdatedAt,
+                    )
+                    .sort((left, right) => {
+                      const createdDifference =
+                        Date.parse(right.created_at ?? "") -
+                        Date.parse(left.created_at ?? "");
+                      return createdDifference || right.id - left.id;
+                    });
+                  return { workflow, latest: candidates[0] };
+                }),
+              );
+
+              const waiting = [];
+              for (const { workflow, latest } of observations) {
+                if (!latest) {
+                  observedSuccess.delete(workflow.workflowId);
+                  waiting.push(`${workflow.name}: missing`);
+                  continue;
+                }
+                if (latest.status !== "completed") {
+                  observedSuccess.delete(workflow.workflowId);
+                  waiting.push(
+                    `${workflow.name}: run ${latest.id} ${latest.status}`,
+                  );
+                  continue;
+                }
+                if (latest.conclusion !== "success") {
+                  throw new Error(
+                    `${workflow.name} latest run ${latest.id} completed with ` +
+                      `${latest.conclusion ?? "<missing>"}: ${latest.html_url}`,
+                  );
+                }
+                const observedAt = Date.now();
+                const previousObservation = observedSuccess.get(workflow.workflowId);
+                if (!previousObservation || previousObservation.id !== latest.id) {
+                  observedSuccess.set(workflow.workflowId, {
+                    id: latest.id,
+                    stableSince: observedAt,
+                  });
+                  waiting.push(
+                    `${workflow.name}: run ${latest.id} succeeded; starting the ` +
+                      "registration quiet window",
+                  );
+                  continue;
+                }
+                if (observedAt - previousObservation.stableSince < 60_000) {
+                  waiting.push(
+                    `${workflow.name}: run ${latest.id} succeeded; waiting for ` +
+                      "the registration quiet window",
+                  );
+                  continue;
+                }
+                core.notice(
+                  `${workflow.name} run ${latest.id} succeeded for PR #${pullNumber} ` +
+                    `at ${headSha}: ${latest.html_url}`,
+                );
+                pending.delete(workflow.workflowId);
+              }
+
+              if (pending.size === 0) break;
+              if (Date.now() >= deadline) {
+                throw new Error(
+                  `Timed out waiting for standalone workflows: ${waiting.join("; ")}.`,
+                );
+              }
+              core.info(`Still waiting: ${waiting.join("; ")}.`);
+              await delay(60_000);
+            }
+
+            core.info("All required standalone workflow runs succeeded.");
+
+  check:
+    name: check
+    permissions:
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Observe required evidence in this workflow run
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          EVENT_ACTION: ${{ github.event.action || 'none' }}
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha || 'none' }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_READY: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 'none' }}
+          PR_UPDATED_AT: ${{ github.event.pull_request.updated_at || 'none' }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runIdText = process.env.RUN_ID;
+            const runAttemptText = process.env.RUN_ATTEMPT;
+            if (!/^[1-9][0-9]*$/.test(runIdText ?? "")) {
+              throw new Error("Workflow run ID must be an exact positive integer.");
+            }
+            if (!/^[1-9][0-9]*$/.test(runAttemptText ?? "")) {
+              throw new Error("Workflow run attempt must be an exact positive integer.");
+            }
+            const runId = Number(runIdText);
+            const runAttempt = Number(runAttemptText);
+            if (!Number.isSafeInteger(runId) || !Number.isSafeInteger(runAttempt)) {
+              throw new Error("Workflow run ID or attempt exceeds the safe integer range.");
+            }
+
+            const eventName = process.env.EVENT_NAME;
+            const eventAction = process.env.EVENT_ACTION;
+            const pullNumber = process.env.PR_NUMBER;
+            const pullUpdatedAt = process.env.PR_UPDATED_AT;
+            const expectedReady = process.env.EXPECTED_READY;
+            const expectedBaseSha = process.env.EXPECTED_BASE_SHA;
+            const expectedHeadSha = process.env.EXPECTED_HEAD_SHA;
+            if (!eventName || !eventAction || !pullNumber || !pullUpdatedAt) {
+              throw new Error("Workflow event identity fields are required.");
+            }
+            if (!new Set(["true", "false"]).has(expectedReady)) {
+              throw new Error("Workflow ready identity must be true or false.");
+            }
+            if (!/^[0-9a-f]{40}$/.test(expectedHeadSha ?? "")) {
+              throw new Error("Expected workflow HEAD must be a full lowercase commit SHA.");
+            }
+            if (
+              expectedBaseSha !== "none" &&
+              !/^[0-9a-f]{40}$/.test(expectedBaseSha ?? "")
+            ) {
+              throw new Error("Expected workflow base must be none or a full lowercase commit SHA.");
+            }
+            const expectedDisplayTitle =
+              `ci | event=${eventName} | pr=${pullNumber} | action=${eventAction} | ` +
+              `updated_at=${pullUpdatedAt} | ready=${expectedReady} | ` +
+              `base=${expectedBaseSha} | head=${expectedHeadSha} | ` +
+              `run=${runIdText}`;
+
+            const { data: currentRun } =
+              await github.rest.actions.getWorkflowRunAttempt({
+                owner,
+                repo,
+                run_id: runId,
+                attempt_number: runAttempt,
+              });
+            if (
+              currentRun.id !== runId ||
+              currentRun.run_attempt !== runAttempt ||
+              currentRun.event !== eventName ||
+              currentRun.head_sha !== expectedHeadSha ||
+              currentRun.display_title !== expectedDisplayTitle
+            ) {
+              throw new Error("Current workflow run attempt identity does not match the event.");
+            }
+            core.info(
+              "Observing the exact workflow attempt; rerun-all-jobs is required and " +
+                "prior-attempt evidence is never reused.",
+            );
+
+            const targetJobName = "CI required evidence";
+            const observerJobName = "check";
+            if (targetJobName === observerJobName) {
+              throw new Error("The required-evidence target cannot be the observer job.");
+            }
+
+            const deadline = Date.now() + 70 * 60 * 1_000;
+            const delay = (milliseconds) =>
+              new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+            while (true) {
+              const { data } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                owner,
+                repo,
+                run_id: runId,
+                attempt_number: runAttempt,
+                per_page: 100,
+              });
+              const jobs = data.jobs ?? [];
+              const targets = jobs.filter((job) => job.name === targetJobName);
+              if (targets.length > 1) {
+                throw new Error(
+                  `Current workflow run has ${targets.length} jobs named ${targetJobName}.`,
+                );
+              }
+
+              const target = targets[0];
+              if (
+                target &&
+                (target.run_id !== runId ||
+                  target.run_attempt !== runAttempt ||
+                  target.head_sha !== expectedHeadSha)
+              ) {
+                throw new Error(
+                  `${targetJobName} does not belong to the current workflow run attempt.`,
+                );
+              }
+              const observer = jobs.find((job) => job.name === observerJobName);
+              if (
+                observer &&
+                (observer.run_id !== runId ||
+                  observer.run_attempt !== runAttempt ||
+                  observer.head_sha !== expectedHeadSha)
+              ) {
+                throw new Error(
+                  `${observerJobName} does not belong to the current workflow run attempt.`,
+                );
+              }
+              if (target && observer && target.id === observer.id) {
+                throw new Error("The required-evidence target resolved to the observer job.");
+              }
+
+              if (target?.status === "completed") {
+                if (target.conclusion === "success") {
+                  core.notice(
+                    `${targetJobName} job ${target.id} succeeded in workflow run ${runId}.`,
+                  );
+                  break;
+                }
+                throw new Error(
+                  `${targetJobName} job ${target.id} completed with ` +
+                    `${target.conclusion ?? "<missing>"}: ${target.html_url}`,
+                );
+              }
+
+              let waitingReason;
+              if (!target) {
+                waitingReason = `${targetJobName}: missing`;
+              } else if (new Set(["queued", "in_progress"]).has(target.status)) {
+                waitingReason = `${targetJobName}: job ${target.id} ${target.status}`;
+              } else {
+                throw new Error(
+                  `${targetJobName} job ${target.id} has unexpected status ` +
+                    `${target.status ?? "<missing>"}.`,
+                );
+              }
+
+              if (Date.now() >= deadline) {
+                throw new Error(
+                  `Timed out waiting for current workflow run: ${waitingReason}.`,
+                );
+              }
+              core.info(`Still waiting for current workflow run: ${waitingReason}.`);
+              await delay(60_000);
+            }

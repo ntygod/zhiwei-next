@@ -6,6 +6,7 @@ on:
     types: [completed]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: read
   issues: write
@@ -36,7 +37,42 @@ jobs:
               );
               return;
             }
-            let candidates = run.pull_requests ?? [];
+            if (run.name !== "CI" || run.path !== ".github/workflows/ci.yml") {
+              core.setFailed("Refusing provenance dispatch for a non-canonical CI workflow identity.");
+              return;
+            }
+            const ciIdentityPattern =
+              /^ci \| event=pull_request \| pr=([1-9][0-9]*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=([^ |]+) \| ready=(true|false) \| base=([0-9a-f]{40}) \| head=([0-9a-f]{40}) \| run=([1-9][0-9]*)$/;
+            const ciIdentity = ciIdentityPattern.exec(run.display_title ?? "");
+            if (!ciIdentity) {
+              core.setFailed("Successful CI run is missing the exact machine event identity.");
+              return;
+            }
+            const [
+              ,
+              pullNumberText,
+              ciAction,
+              ciUpdatedAt,
+              ciReady,
+              testedBaseSha,
+              ciHeadSha,
+              ciRunId,
+            ] = ciIdentity;
+            const pullNumber = Number(pullNumberText);
+            if (ciReady === "false") {
+              core.info("Draft pull request CI completed; no provenance dispatch is required.");
+              return;
+            }
+            if (
+              !Number.isSafeInteger(pullNumber) ||
+              ciReady !== "true" ||
+              ciHeadSha !== run.head_sha ||
+              ciRunId !== String(run.id) ||
+              !Number.isFinite(Date.parse(ciUpdatedAt))
+            ) {
+              core.setFailed("Successful CI run does not describe a Ready pull request event exactly.");
+              return;
+            }
 
             function parseBlock(text, marker) {
               const source = text ?? "";
@@ -94,26 +130,6 @@ jobs:
               core.setFailed(`Merged PR #${pullNumber}, but Main Provenance failed closed. Incident #${incident.number}: ${reason}.`);
             }
 
-            if (candidates.length === 0) {
-              candidates = await github.paginate(
-                github.rest.repos.listPullRequestsAssociatedWithCommit,
-                { owner, repo, commit_sha: run.head_sha, per_page: 100 },
-              );
-            }
-            const numberedCandidates = candidates.filter((candidate) => candidate.number);
-            if (numberedCandidates.length !== 1) {
-              core.info(`Expected one pull request for CI run, found ${numberedCandidates.length}; no provenance dispatch.`);
-              return;
-            }
-
-            const candidate = numberedCandidates[0];
-            const pullNumber = candidate.number;
-            const testedBaseSha = candidate.base?.sha;
-            if (!testedBaseSha) {
-              core.info("The successful CI run does not expose the tested base SHA; no provenance dispatch.");
-              return;
-            }
-
             let pr;
             for (let attempt = 0; attempt < 45; attempt += 1) {
               ({ data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber }));
@@ -135,6 +151,70 @@ jobs:
             }
 
             const after = pr.merge_commit_sha;
+            let ciRuns;
+            try {
+              ({ data: ciRuns } = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: run.workflow_id,
+                event: "pull_request",
+                head_sha: run.head_sha,
+                per_page: 100,
+              }));
+            } catch (error) {
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "successful-ci-run-selection-unavailable",
+                detail: error.message,
+              });
+              return;
+            }
+            const successfulReadyRuns = (ciRuns.workflow_runs ?? [])
+              .filter((candidateRun) => {
+                const candidateIdentity = ciIdentityPattern.exec(
+                  candidateRun.display_title ?? "",
+                );
+                return (
+                  candidateRun.status === "completed" &&
+                  candidateRun.conclusion === "success" &&
+                  candidateRun.event === "pull_request" &&
+                  candidateRun.workflow_id === run.workflow_id &&
+                  candidateRun.path === run.path &&
+                  candidateRun.name === run.name &&
+                  candidateRun.head_sha === run.head_sha &&
+                  candidateRun.head_branch === run.head_branch &&
+                  candidateRun.head_repository?.full_name === repositoryFullName &&
+                  candidateIdentity?.[1] === pullNumberText &&
+                  candidateIdentity?.[4] === "true" &&
+                  candidateIdentity?.[5] === testedBaseSha &&
+                  candidateIdentity?.[6] === run.head_sha &&
+                  candidateIdentity?.[7] === String(candidateRun.id)
+                );
+              })
+              .sort((left, right) => {
+                const createdDifference =
+                  Date.parse(right.created_at ?? "") - Date.parse(left.created_at ?? "");
+                return createdDifference || right.id - left.id;
+              });
+            if (!successfulReadyRuns.some((candidateRun) => candidateRun.id === run.id)) {
+              await failClosed({
+                pullNumber,
+                before: testedBaseSha,
+                after,
+                reason: "successful-ci-run-selection-mismatch",
+                detail: `completed run ${run.id} was absent from its exact successful Ready set`,
+              });
+              return;
+            }
+            if (successfulReadyRuns[0]?.id !== run.id) {
+              core.info(
+                `CI run ${run.id} is not the latest successful Ready run for PR #${pullNumber}; ` +
+                  "provenance dispatch is left to the latest run.",
+              );
+              return;
+            }
             if (pr.head.sha !== run.head_sha) {
               await failClosed({
                 pullNumber,

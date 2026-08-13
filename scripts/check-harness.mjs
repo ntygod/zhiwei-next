@@ -30,6 +30,98 @@ function jsonEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function readWorkflowJobs(workflow) {
+  const jobsMarker = workflow.match(/^jobs:\s*$/m);
+  if (!jobsMarker || jobsMarker.index === undefined) return new Map();
+  const jobsSource = workflow.slice(jobsMarker.index + jobsMarker[0].length);
+  const matches = [...jobsSource.matchAll(/^  ([a-z0-9-]+):\s*$/gm)];
+  return new Map(
+    matches.map((match, index) => [
+      match[1],
+      jobsSource.slice(
+        match.index,
+        index + 1 < matches.length ? matches[index + 1].index : jobsSource.length,
+      ),
+    ]),
+  );
+}
+
+function readListNeeds(jobBlock) {
+  const match = jobBlock.match(/^    needs:\s*\n((?:      - [a-z0-9-]+\s*\n)+)/m);
+  return match
+    ? [...match[1].matchAll(/^      - ([a-z0-9-]+)\s*$/gm)].map((item) => item[1])
+    : [];
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readJavaScriptStringArray(source, variableName) {
+  const match = source.match(
+    new RegExp(`const ${escapeRegExp(variableName)} = \\[([\\s\\S]*?)\\n\\s*\\];`),
+  );
+  if (!match) return null;
+  const values = [...match[1].matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/g)].map(
+    (item) => JSON.parse(item[0]),
+  );
+  const residue = match[1]
+    .replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, "")
+    .replace(/[\s,]/g, "");
+  return residue === "" ? values : null;
+}
+
+function readWorkflowTriggerBlock(workflow, trigger) {
+  const match = workflow.match(new RegExp(`^  ${escapeRegExp(trigger)}:\\s*$`, "m"));
+  if (!match || match.index === undefined) return "";
+  const start = match.index + match[0].length;
+  const remainder = workflow.slice(start);
+  const endMatch = remainder.match(/^(?:  [a-z_]+:|[^ \n][^\n]*:)\s*$/m);
+  return remainder.slice(0, endMatch?.index ?? remainder.length);
+}
+
+function readInlineYamlList(block, field) {
+  const match = block.match(
+    new RegExp(`^    ${escapeRegExp(field)}: \\[([^\\]]*)\\]\\s*$`, "m"),
+  );
+  return match
+    ? match[1]
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+}
+
+function readYamlList(block, field) {
+  const match = block.match(
+    new RegExp(`^    ${escapeRegExp(field)}:\\s*\\n((?:      - [^\\n]+\\n?)+)`, "m"),
+  );
+  return match
+    ? [...match[1].matchAll(/^      - ([^\n]+)\s*$/gm)].map((item) => item[1])
+    : [];
+}
+
+function readYamlMapping(block, field) {
+  const match = block.match(
+    new RegExp(
+      `^    ${escapeRegExp(field)}:\\s*\\n((?:      [a-z-]+: [^\\n]+\\n?)+)`,
+      "m",
+    ),
+  );
+  return match
+    ? Object.fromEntries(
+        [...match[1].matchAll(/^      ([a-z-]+): ([^\n]+)\s*$/gm)].map(
+          (item) => [item[1], item[2]],
+        ),
+      )
+    : {};
+}
+
+function gatedCiResultAllowed(required, result) {
+  return (required === "true" && result === "success") ||
+    (required === "false" && result === "skipped");
+}
+
 const config = JSON.parse(await read("harness.config.json"));
 const packageJson = JSON.parse(await read("package.json"));
 const historicalRisk = JSON.parse(await read(historicalRiskPath));
@@ -78,6 +170,194 @@ for (const [field, expected] of Object.entries({
   incidentFixture: "docs/harness/incidents/2026-08-11-direct-main.json",
 })) {
   requireValue(config.mainProtection?.[field] === expected, `mainProtection.${field} must be ${expected}.`);
+}
+
+const expectedRequiredStatusCheck = {
+  context: "check",
+  integrationId: 15368,
+  workflow: ".github/workflows/ci.yml",
+  aggregatorJob: "check",
+  aggregatorJobName: "check",
+  aggregatorNeeds: [],
+  aggregatorPermissions: { actions: "read" },
+  aggregatorCheckoutAllowed: false,
+  aggregatorTimeoutMinutes: 75,
+  aggregatorPollDeadlineMinutes: 70,
+  aggregatorPollIntervalSeconds: 60,
+  aggregatorCurrentRunId: "github.run_id",
+  aggregatorCurrentRunAttempt: "github.run_attempt",
+  aggregatorAttemptScoped: true,
+  aggregatorPriorAttemptReuseAllowed: false,
+  aggregatorRerunRecovery: "re-run-all-jobs",
+  workflowRunNamePrefix: "ci",
+  workflowRunNameFields: [
+    "event",
+    "pr",
+    "action",
+    "updated_at",
+    "ready",
+    "base",
+    "head",
+    "run",
+  ],
+  workflowRunIdentityApi: "getWorkflowRunAttempt",
+  evidenceJobsApi: "listJobsForWorkflowRunAttempt",
+  evidenceJob: "ci-required-evidence",
+  evidenceJobName: "CI required evidence",
+  evidenceJobTimeoutMinutes: 35,
+  staticContractsJob: "static-contracts",
+  scope: "ci-five-gated-jobs-plus-three-path-gated-standalone-runs",
+  staticContractsRequiredResult: "success",
+  evidenceNeeds: [
+    "static-contracts",
+    "pi-artifact-probe",
+    "pi-lifecycle-probe",
+    "pi-retry-lifecycle-probe",
+    "pi-follow-up-lifecycle-probe",
+    "pi-cancel-retry-exhaustion-probe",
+  ],
+  gatedJobs: {
+    "pi-artifact-probe": "pi-artifact-probe",
+    "pi-lifecycle-probe": "pi-lifecycle-probe",
+    "pi-retry-lifecycle-probe": "pi-lifecycle-probe",
+    "pi-follow-up-lifecycle-probe": "pi-lifecycle-probe",
+    "pi-cancel-retry-exhaustion-probe": "pi-lifecycle-probe",
+  },
+  allowedGatedResults: [
+    { required: "true", result: "success" },
+    { required: "false", result: "skipped" },
+  ],
+  allOtherGatedResults: "reject",
+  standaloneWorkflowRuns: {
+    permissions: { actions: "read" },
+    checkoutAllowed: false,
+    changedFilesCompleteness: "event-count-equals-paginated-api",
+    jobTimeoutMinutes: 35,
+    waitTimeoutMinutes: 32,
+    initialDelaySeconds: 10,
+    pollIntervalSeconds: 60,
+    successRunQuietWindowSeconds: 60,
+    freshRunRequiredActions: [
+      "opened",
+      "synchronize",
+      "reopened",
+      "ready_for_review",
+      "edited",
+    ],
+    requiredEvent: "pull_request",
+    requiredStatus: "completed",
+    requiredConclusion: "success",
+    match: [
+      "workflow-id",
+      "workflow-path",
+      "workflow-name",
+      "display-title",
+      "pull-request-number",
+      "pull-request-action",
+      "pull-request-updated-at",
+      "head-sha",
+      "head-repository",
+      "head-ref",
+    ],
+    select: "latest-created-at-then-run-id",
+    missingOrTimeout: "reject",
+    allOtherCompletedConclusions: "reject",
+    workflows: [
+      {
+        gateOutput: "pi-parallel-tool-ordering-required",
+        workflowId: "pi-parallel-tool-ordering.yml",
+        path: ".github/workflows/pi-parallel-tool-ordering.yml",
+        name: "Pi parallel Tool ordering contract",
+        runNamePrefix: "parallel-tool-ordering",
+        paths: [
+          ".github/workflows/pi-parallel-tool-ordering.yml",
+          ".github/workflows/ci.yml",
+          "harness.config.json",
+          "scripts/check-harness.mjs",
+          "docs/harness/main-protection.md",
+          "package.json",
+          "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+          "packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json",
+          "scripts/check-pi-parallel-tool-ordering-result.mjs",
+          "scripts/probes/pi-lifecycle-ci.mjs",
+          "scripts/probes/pi-parallel-tool-ordering-capture.mjs",
+          "docs/spikes/pi-runtime-contract/README.md",
+          "docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md",
+          "docs/architecture/pi-integration.md",
+        ],
+      },
+      {
+        gateOutput: "pi-compaction-session-replacement-required",
+        workflowId: "pi-compaction-session-replacement.yml",
+        path: ".github/workflows/pi-compaction-session-replacement.yml",
+        name: "Pi Compaction and Session Replacement contract",
+        runNamePrefix: "compaction-session-replacement",
+        paths: [
+          ".github/workflows/pi-compaction-session-replacement.yml",
+          ".github/workflows/ci.yml",
+          "harness.config.json",
+          "scripts/check-harness.mjs",
+          "docs/harness/main-protection.md",
+          "package.json",
+          "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+          "packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json",
+          "scripts/check-pi-compaction-session-replacement-result.mjs",
+          "scripts/probes/pi-lifecycle-ci.mjs",
+          "scripts/probes/pi-compaction-session-replacement-capture.mjs",
+          "docs/spikes/pi-runtime-contract/README.md",
+          "docs/spikes/pi-runtime-contract/compaction-session-replacement-lifecycle.md",
+          "docs/architecture/pi-integration.md",
+          "docs/harness/project-state.md",
+        ],
+      },
+      {
+        gateOutput: "pi-sdk-rpc-parity-required",
+        workflowId: "pi-sdk-rpc-parity.yml",
+        path: ".github/workflows/pi-sdk-rpc-parity.yml",
+        name: "Pi SDK and RPC parity contract",
+        runNamePrefix: "sdk-rpc-parity",
+        paths: [
+          ".github/workflows/pi-sdk-rpc-parity.yml",
+          ".github/workflows/ci.yml",
+          "harness.config.json",
+          "scripts/check-harness.mjs",
+          "docs/harness/main-protection.md",
+          "package.json",
+          "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+          "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**",
+          "scripts/check-pi-sdk-rpc-parity-result.mjs",
+          "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+          "scripts/check-pi-sdk-rpc-parity-provenance.mjs",
+          "scripts/pi-sdk-rpc-parity-fixture.mjs",
+          "scripts/probes/pi-lifecycle-ci.mjs",
+          "scripts/probes/pi-sdk-rpc-parity-contract.mjs",
+          "scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs",
+          "scripts/probes/pi-sdk-rpc-parity-capture.mjs",
+          "scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs",
+          "docs/spikes/pi-runtime-contract/README.md",
+          "docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md",
+          "docs/architecture/pi-integration.md",
+          "docs/harness/project-state.md",
+        ],
+      },
+    ],
+  },
+};
+requireValue(
+  jsonEqual(config.mainProtection?.requiredStatusCheck, expectedRequiredStatusCheck),
+  "Harness required-status aggregation contract differs from the exact fail-closed configuration.",
+);
+
+for (const required of ["true", "false", "unknown"]) {
+  for (const result of ["success", "skipped", "failure", "cancelled"]) {
+    const configured = expectedRequiredStatusCheck.allowedGatedResults.some(
+      (candidate) => candidate.required === required && candidate.result === result,
+    );
+    requireValue(
+      gatedCiResultAllowed(required, result) === configured,
+      `Required-status truth table drifted for required=${required}, result=${result}.`,
+    );
+  }
 }
 
 requireValue(
@@ -464,6 +744,351 @@ for (const field of [
 }
 
 const ci = await read(".github/workflows/ci.yml");
+const ciJobs = readWorkflowJobs(ci);
+const requiredStatusCheck = config.mainProtection?.requiredStatusCheck;
+const expectedCiJobIds = [
+  ...(requiredStatusCheck?.evidenceNeeds ?? []),
+  requiredStatusCheck?.evidenceJob,
+  requiredStatusCheck?.aggregatorJob,
+];
+requireValue(
+  jsonEqual([...ciJobs.keys()], expectedCiJobIds),
+  "CI jobs must be exactly static contracts, five dynamic Probes, required evidence, and check observer.",
+);
+
+const staticContractsBlock = ciJobs.get(requiredStatusCheck?.staticContractsJob) ?? "";
+const evidenceBlock = ciJobs.get(requiredStatusCheck?.evidenceJob) ?? "";
+const finalCheckBlock = ciJobs.get(requiredStatusCheck?.aggregatorJob) ?? "";
+const standaloneContract = requiredStatusCheck?.standaloneWorkflowRuns;
+const expectedCiRunName =
+  "run-name: ci | event=${{ github.event_name }} | " +
+  "pr=${{ github.event.pull_request.number || 'none' }} | " +
+  "action=${{ github.event.action || 'none' }} | " +
+  "updated_at=${{ github.event.pull_request.updated_at || 'none' }} | " +
+  "ready=${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }} | " +
+  "base=${{ github.event.pull_request.base.sha || 'none' }} | " +
+  "head=${{ github.event.pull_request.head.sha || github.sha }} | " +
+  "run=${{ github.run_id }}";
+requireValue(
+  ci.split(/\r?\n/)[1] === expectedCiRunName &&
+    (ci.match(/^run-name:/gm) ?? []).length === 1,
+  "CI must publish the exact machine-readable run/attempt identity.",
+);
+requireValue(
+  /^  static-contracts:\s*$[\s\S]*?^    name: Static contracts\s*$/m.test(staticContractsBlock),
+  "The former static check job must be renamed to static-contracts / Static contracts.",
+);
+requireValue(
+  !/^    name: check\s*$/m.test(staticContractsBlock),
+  "The static contracts job must not publish the Ruleset-required check context.",
+);
+requireValue(
+  /^  check:\s*$[\s\S]*?^    name: check\s*$/m.test(finalCheckBlock),
+  "Only the early observer job may publish the Ruleset-required check context.",
+);
+requireValue(
+  [...ciJobs.values()].filter((block) => /^    name: check\s*$/m.test(block)).length === 1,
+  "CI must publish exactly one job named check.",
+);
+requireValue(
+  /^  ci-required-evidence:\s*$[\s\S]*?^    name: CI required evidence\s*$/m.test(
+    evidenceBlock,
+  ) && evidenceBlock.includes("    if: always()"),
+  "The required evidence job must retain its exact ID/name and always observe dependency results.",
+);
+requireValue(
+  jsonEqual(readListNeeds(evidenceBlock), requiredStatusCheck?.evidenceNeeds),
+  "The required evidence job must need static contracts and all five governed dynamic Probe jobs.",
+);
+requireValue(
+  jsonEqual(readYamlMapping(evidenceBlock, "permissions"), standaloneContract?.permissions) &&
+    evidenceBlock.includes(
+      `    timeout-minutes: ${requiredStatusCheck?.evidenceJobTimeoutMinutes}`,
+    ),
+  "The required evidence job must retain actions: read and its exact timeout.",
+);
+requireValue(
+  jsonEqual(readListNeeds(finalCheckBlock), requiredStatusCheck?.aggregatorNeeds) &&
+    !/^    needs:/m.test(finalCheckBlock),
+  "The check observer must register without needs.",
+);
+requireValue(
+  !/^    if:/m.test(finalCheckBlock) &&
+    jsonEqual(
+      readYamlMapping(finalCheckBlock, "permissions"),
+      requiredStatusCheck?.aggregatorPermissions,
+    ) &&
+    finalCheckBlock.includes(
+      `    timeout-minutes: ${requiredStatusCheck?.aggregatorTimeoutMinutes}`,
+    ) &&
+    !finalCheckBlock.includes("actions/checkout@"),
+  "The check observer must start eagerly with only actions: read, no checkout, and exact timeout.",
+);
+for (const token of [
+  "const changedFileCount = context.payload.pull_request?.changed_files",
+  "Number.isSafeInteger(changedFileCount)",
+  "github.paginate(github.rest.pulls.listFiles",
+  "files.length !== changedFileCount",
+  "Pull request file enumeration is incomplete",
+  "file.status === \"renamed\" && file.previous_filename",
+]) {
+  requireValue(
+    staticContractsBlock.includes(token),
+    `Static contracts changed-file completeness check is missing token: ${token}`,
+  );
+}
+
+const ciPullRequestBlock = readWorkflowTriggerBlock(ci, "pull_request");
+requireValue(
+  jsonEqual(
+    readInlineYamlList(ciPullRequestBlock, "types"),
+    standaloneContract?.freshRunRequiredActions,
+  ),
+  "CI pull_request actions must exactly match the five fresh standalone-run actions.",
+);
+
+const standalonePathVariables = {
+  "pi-parallel-tool-ordering-required": "parallelToolOrderingPaths",
+  "pi-compaction-session-replacement-required": "compactionSessionReplacementPaths",
+  "pi-sdk-rpc-parity-required": "sdkRpcParityPaths",
+};
+for (const workflowContract of standaloneContract?.workflows ?? []) {
+  const pathVariable = standalonePathVariables[workflowContract.gateOutput];
+  requireValue(
+    pathVariable !== undefined &&
+      jsonEqual(readJavaScriptStringArray(staticContractsBlock, pathVariable), workflowContract.paths),
+    `CI changed-file array for ${workflowContract.gateOutput} differs from the standalone workflow contract.`,
+  );
+  requireValue(
+    staticContractsBlock.includes(`      ${workflowContract.gateOutput}: \${{ steps.changed-files.outputs.${workflowContract.gateOutput} }}`) &&
+      staticContractsBlock.includes(`              "${workflowContract.gateOutput}",`),
+    `Static contracts must expose and set exact path gate ${workflowContract.gateOutput}.`,
+  );
+
+  const standaloneWorkflow = await read(workflowContract.path);
+  const pullRequestBlock = readWorkflowTriggerBlock(standaloneWorkflow, "pull_request");
+  const pushBlock = readWorkflowTriggerBlock(standaloneWorkflow, "push");
+  requireValue(
+    standaloneWorkflow.startsWith(`name: ${workflowContract.name}\n`),
+    `${workflowContract.path} workflow name differs from the polling identity.`,
+  );
+  const expectedRunName =
+    `run-name: ${workflowContract.runNamePrefix} | event=\${{ github.event_name }} | ` +
+    `pr=\${{ github.event.pull_request.number || 'none' }} | ` +
+    `action=\${{ github.event.action || 'none' }} | ` +
+    `updated_at=\${{ github.event.pull_request.updated_at || 'none' }} | ` +
+    `head=\${{ github.event.pull_request.head.sha || github.sha }}`;
+  requireValue(
+    standaloneWorkflow.split(/\r?\n/)[1] === expectedRunName &&
+      (standaloneWorkflow.match(/^run-name:/gm) ?? []).length === 1,
+    `${workflowContract.path} must publish the exact machine-readable run-name identity.`,
+  );
+  requireValue(
+    jsonEqual(
+      readInlineYamlList(pullRequestBlock, "types"),
+      standaloneContract.freshRunRequiredActions,
+    ),
+    `${workflowContract.path} pull_request actions must create fresh runs for all five CI actions.`,
+  );
+  requireValue(
+    jsonEqual(readYamlList(pullRequestBlock, "paths"), workflowContract.paths) &&
+      jsonEqual(readYamlList(pushBlock, "paths"), workflowContract.paths),
+    `${workflowContract.path} pull_request/push path filters must exactly match the CI path gate.`,
+  );
+  requireValue(
+    jsonEqual(readInlineYamlList(pushBlock, "branches"), ["main"]),
+    `${workflowContract.path} push trigger must remain limited to main.`,
+  );
+}
+
+const standaloneExpectedEntries = standaloneContract?.workflows ?? [];
+for (const workflowContract of standaloneExpectedEntries) {
+  for (const token of [
+    `required: process.env.${workflowContract.gateOutput
+      .replace(/^pi-/, "")
+      .replace(/-/g, "_")
+      .toUpperCase()}`,
+    `workflowId: "${workflowContract.workflowId}"`,
+    `path: "${workflowContract.path}"`,
+    `name: "${workflowContract.name}"`,
+    `runNamePrefix: "${workflowContract.runNamePrefix}"`,
+  ]) {
+    requireValue(
+      evidenceBlock.includes(token),
+      `Required evidence polling identity for ${workflowContract.workflowId} is missing token: ${token}`,
+    );
+  }
+  requireValue(
+    evidenceBlock.includes(
+      `needs.static-contracts.outputs.${workflowContract.gateOutput} == 'true'`,
+    ) &&
+      evidenceBlock.includes(
+        `needs.static-contracts.outputs.${workflowContract.gateOutput} || 'false'`,
+      ),
+    `Required evidence must condition and environment-gate ${workflowContract.workflowId}.`,
+  );
+}
+
+for (const token of [
+  "      - name: Wait for required standalone workflow runs",
+  "success() &&",
+  "github.event_name == 'pull_request'",
+  "needs.static-contracts.result == 'success'",
+  "uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b",
+  'PR_ACTION: ${{ github.event.action }}',
+  'PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}',
+  'PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}',
+  'PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}',
+  'PR_NUMBER: ${{ github.event.pull_request.number }}',
+  'PR_UPDATED_AT: ${{ github.event.pull_request.updated_at }}',
+  "const pullUpdatedAtText = process.env.PR_UPDATED_AT",
+  'if (!/^[0-9a-f]{40}$/.test(headSha ?? ""))',
+  'if (!headRepository || !headRef)',
+  "const supportedActions = new Set([",
+  "if (!supportedActions.has(action))",
+  `const deadline = Date.now() + ${standaloneContract?.waitTimeoutMinutes} * 60 * 1_000`,
+  "const observedSuccess = new Map()",
+  `await delay(${standaloneContract?.initialDelaySeconds}_000)`,
+  `await delay(${standaloneContract?.pollIntervalSeconds}_000)`,
+  "github.rest.actions.listWorkflowRuns",
+  "const expectedDisplayTitle =",
+  "`${workflow.runNamePrefix} | event=pull_request | pr=${pullNumber} | `",
+  "`action=${action} | updated_at=${pullUpdatedAtText} | head=${headSha}`",
+  "workflow_id: workflow.workflowId",
+  'event: "pull_request"',
+  "head_sha: headSha",
+  'run.event === "pull_request"',
+  "run.head_sha === headSha",
+  "run.path === workflow.path",
+  "run.name === workflow.name",
+  "run.display_title === expectedDisplayTitle",
+  "run.head_repository?.full_name === headRepository",
+  "run.head_branch === headRef",
+  "Date.parse(run.created_at ?? \"\") >= pullUpdatedAt",
+  "return createdDifference || right.id - left.id",
+  "return { workflow, latest: candidates[0] }",
+  'latest.status !== "completed"',
+  'latest.conclusion !== "success"',
+  "observedSuccess.delete(workflow.workflowId)",
+  "const previousObservation = observedSuccess.get(workflow.workflowId)",
+  "previousObservation.id !== latest.id",
+  "stableSince: observedAt",
+  `observedAt - previousObservation.stableSince < ${standaloneContract?.successRunQuietWindowSeconds}_000`,
+  "registration quiet window",
+  "waiting.push(`${workflow.name}: missing`)",
+  "if (Date.now() >= deadline)",
+  "Timed out waiting for standalone workflows",
+  "All required standalone workflow runs succeeded.",
+]) {
+  requireValue(
+    evidenceBlock.includes(token),
+    `Required evidence standalone polling contract is missing token: ${token}`,
+  );
+}
+requireValue(
+  !evidenceBlock.includes("allowExistingSameHead"),
+  "Required evidence must never reuse an older same-HEAD standalone run, including for edited.",
+);
+
+for (const [jobId, gateOutput] of Object.entries(requiredStatusCheck?.gatedJobs ?? {})) {
+  const block = ciJobs.get(jobId) ?? "";
+  requireValue(
+    block.includes("    needs: static-contracts") &&
+      block.includes(`    if: needs.static-contracts.outputs.${gateOutput} == 'true'`),
+    `${jobId} must be gated only by static-contracts output ${gateOutput}.`,
+  );
+  requireValue(
+    block.includes("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02") &&
+      block.includes("        if: success()") &&
+      !block.includes("        if: always()"),
+    `${jobId} must upload evidence only after successful capture and validation.`,
+  );
+}
+
+for (const required of [
+  'STATIC_CONTRACTS_RESULT: ${{ needs.static-contracts.result }}',
+  "if [[ \"$STATIC_CONTRACTS_RESULT\" != \"success\" ]]",
+  'case "${required}:${result}" in',
+  "true:success|false:skipped) return 0",
+  "assert_gate_case allow true success",
+  "assert_gate_case deny true skipped",
+  "assert_gate_case deny true failure",
+  "assert_gate_case deny true cancelled",
+  "assert_gate_case allow false skipped",
+  "assert_gate_case deny false success",
+  "assert_gate_case deny false failure",
+  "assert_gate_case deny false cancelled",
+  "assert_gate_case deny unknown success",
+  'require_gated_result "Pi npm Artifact probe" "$ARTIFACT_REQUIRED" "$ARTIFACT_RESULT"',
+  'require_gated_result "Pi SDK and Extension lifecycle probe" "$LIFECYCLE_REQUIRED" "$LIFECYCLE_RESULT"',
+  'require_gated_result "Pi automatic retry lifecycle probe" "$LIFECYCLE_REQUIRED" "$RETRY_RESULT"',
+  'require_gated_result "Pi follow-up queue lifecycle probe" "$LIFECYCLE_REQUIRED" "$FOLLOW_UP_RESULT"',
+  'require_gated_result "Pi cancellation and retry exhaustion lifecycle probe" "$LIFECYCLE_REQUIRED" "$CANCEL_RETRY_EXHAUSTION_RESULT"',
+  "if (( failures > 0 )); then",
+  "Required CI aggregation: OK",
+]) {
+  requireValue(
+    evidenceBlock.includes(required),
+    `Required evidence aggregation is missing truth-table token: ${required}`,
+  );
+}
+
+for (const token of [
+  "      - name: Observe required evidence in this workflow run",
+  "uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b",
+  'RUN_ID: ${{ github.run_id }}',
+  'RUN_ATTEMPT: ${{ github.run_attempt }}',
+  "const runAttemptText = process.env.RUN_ATTEMPT",
+  "const runIdText = process.env.RUN_ID",
+  'if (!/^[1-9][0-9]*$/.test(runIdText ?? ""))',
+  'if (!/^[1-9][0-9]*$/.test(runAttemptText ?? ""))',
+  "const runId = Number(runIdText)",
+  "const runAttempt = Number(runAttemptText)",
+  "!Number.isSafeInteger(runId) || !Number.isSafeInteger(runAttempt)",
+  'EVENT_NAME: ${{ github.event_name }}',
+  "const expectedDisplayTitle =",
+  "`ci | event=${eventName} | pr=${pullNumber} | action=${eventAction} | `",
+  "`updated_at=${pullUpdatedAt} | ready=${expectedReady} | `",
+  "`base=${expectedBaseSha} | head=${expectedHeadSha} | `",
+  "`run=${runIdText}`",
+  "github.rest.actions.getWorkflowRunAttempt",
+  "attempt_number: runAttempt",
+  "currentRun.id !== runId",
+  "currentRun.run_attempt !== runAttempt",
+  "currentRun.event !== eventName",
+  "currentRun.head_sha !== expectedHeadSha",
+  "currentRun.display_title !== expectedDisplayTitle",
+  `const targetJobName = "${requiredStatusCheck?.evidenceJobName}"`,
+  `const observerJobName = "${requiredStatusCheck?.aggregatorJobName}"`,
+  "if (targetJobName === observerJobName)",
+  `const deadline = Date.now() + ${requiredStatusCheck?.aggregatorPollDeadlineMinutes} * 60 * 1_000`,
+  "github.rest.actions.listJobsForWorkflowRunAttempt",
+  "run_id: runId",
+  "attempt_number: runAttempt",
+  "per_page: 100",
+  "job.name === targetJobName",
+  "if (targets.length > 1)",
+  "target.run_id !== runId",
+  "target.run_attempt !== runAttempt",
+  "target.head_sha !== expectedHeadSha",
+  "job.name === observerJobName",
+  "observer.run_id !== runId",
+  "observer.run_attempt !== runAttempt",
+  "observer.head_sha !== expectedHeadSha",
+  "target && observer && target.id === observer.id",
+  'target?.status === "completed"',
+  'target.conclusion === "success"',
+  'new Set(["queued", "in_progress"]).has(target.status)',
+  "has unexpected status",
+  "Timed out waiting for current workflow run",
+  `await delay(${requiredStatusCheck?.aggregatorPollIntervalSeconds}_000)`,
+]) {
+  requireValue(
+    finalCheckBlock.includes(token),
+    `Check observer current-run polling contract is missing token: ${token}`,
+  );
+}
+
 for (const required of [
   "pull_request:",
   "edited",
@@ -490,7 +1115,10 @@ for (const required of [
 }
 requireValue(!ci.includes("pull_request_target:"), "CI must not use pull_request_target.");
 requireValue(!/\$\{\{\s*secrets\./.test(ci), "CI must not inject repository secrets into the Pi Artifact probe.");
-requireValue(!ci.includes("if: always()"), "CI must never upload failed or unvalidated probe output with if: always().");
+requireValue(
+  (ci.match(/if: always\(\)/g) ?? []).length === 1 && evidenceBlock.includes("if: always()"),
+  "CI may use if: always() only for required evidence, never for Probe uploads or check observer.",
+);
 
 for (const workflowPath of [
   ".github/workflows/pi-compaction-session-replacement.yml",
@@ -516,9 +1144,55 @@ for (const required of [
   "merge_method: \"squash\"",
   "pr.base.sha !== testedBaseSha",
   "metadata[\"independent-review\"] !== \"complete\"",
+  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
+  "const ciIdentityPattern =",
+  "event=pull_request",
+  "ready=(true|false)",
+  "ciReady !== \"true\"",
+  "ciHeadSha !== run.head_sha",
+  "ciRunId !== String(run.id)",
+  "const expectedCiDisplayTitle =",
+  "updated_at=${pr.updated_at}",
+  "ready=true",
+  "run.display_title !== expectedCiDisplayTitle",
+  "Pull request event identity changed after the successful CI run",
 ]) {
   requireValue(autoMerge.includes(required), `Autonomous Merge is missing required token: ${required}`);
 }
+
+const provenanceDispatch = await read(".github/workflows/main-provenance-dispatch.yml");
+for (const required of [
+  "actions: read",
+  "run.name !== \"CI\" || run.path !== \".github/workflows/ci.yml\"",
+  "const ciIdentityPattern =",
+  "event=pull_request",
+  "ready=(true|false)",
+  "ciReady === \"false\"",
+  "Draft pull request CI completed; no provenance dispatch is required.",
+  "ciReady !== \"true\"",
+  "ciHeadSha !== run.head_sha",
+  "ciRunId !== String(run.id)",
+  "github.rest.actions.listWorkflowRuns",
+  "candidateRun.head_repository?.full_name === repositoryFullName",
+  "candidateIdentity?.[1] === pullNumberText",
+  "candidateIdentity?.[4] === \"true\"",
+  "candidateIdentity?.[5] === testedBaseSha",
+  "candidateIdentity?.[6] === run.head_sha",
+  "candidateIdentity?.[7] === String(candidateRun.id)",
+  "successful-ci-run-selection-unavailable",
+  "successful-ci-run-selection-mismatch",
+  "successfulReadyRuns[0]?.id !== run.id",
+  "provenance dispatch is left to the latest run",
+]) {
+  requireValue(
+    provenanceDispatch.includes(required),
+    `Main Provenance Dispatch CI identity contract is missing token: ${required}`,
+  );
+}
+requireValue(
+  !provenanceDispatch.includes("updated_at=${pr.updated_at}"),
+  "Post-merge provenance dispatch must not compare CI event time with the merge-updated PR timestamp.",
+);
 
 const mainProvenance = await read(".github/workflows/main-provenance.yml");
 for (const required of [

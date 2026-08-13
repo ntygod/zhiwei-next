@@ -31,7 +31,7 @@ docs/harness/risk-acceptance/2026-08-13-public-free.json
 docs/harness/rulesets/2026-08-13-main-public-free.json
 ```
 
-此前 Private + Free风险记录保留为历史。Ruleset提供 pre-receive保护，仓库级 merge设置只允许 squash；2026-08-13 owner/admin live readback确认没有 bypass actor且 Secret Scanning与 Push Protection已启用。普通 `GITHUB_TOKEN`只能持续核验权限可读子集，项目不保存 PAT或长期管理员 Secret来伪装完整持续监控；这些控制仍不替代 PR合同、独立审查、Fork隔离、Main Provenance或 Incident恢复。
+此前 Private + Free风险记录保留为历史。Required context `check`是早注册、无`needs`的只读observer，只接受当前Workflow run attempt内唯一`CI required evidence`成功。内部evidence直接`needs`聚合五个CI Probe并每60秒轮询三套path-gated standalone run；standalone success ID必须保持60秒quiet window稳定，latest ID变化即重置。CI机器标题绑定PR事件身份，Autonomous Merge只消费仍与实时PR一致的Ready成功；Draft或已被后续编辑取代的旧CI不能触发合并。observer不复用先前attempt；仅重跑失败Job不足以恢复缺失evidence，必须重跑全部Job。两层都必须fail closed。
 
 ## 默认工作方式
 

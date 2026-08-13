@@ -36,27 +36,38 @@ jobs:
               );
               return;
             }
-
-            let candidates = run.pull_requests ?? [];
-
-            if (candidates.length === 0) {
-              candidates = await github.paginate(
-                github.rest.repos.listPullRequestsAssociatedWithCommit,
-                { owner, repo, commit_sha: run.head_sha, per_page: 100 },
-              );
-            }
-
-            const numberedCandidates = candidates.filter((candidate) => candidate.number);
-            if (numberedCandidates.length !== 1) {
-              core.info(`Expected one pull request for CI run, found ${numberedCandidates.length}.`);
+            if (run.name !== "CI" || run.path !== ".github/workflows/ci.yml") {
+              core.warning("Refusing autonomous merge for a non-canonical CI workflow identity.");
               return;
             }
 
-            const candidate = numberedCandidates[0];
-            const pullNumber = candidate.number;
-            const testedBaseSha = candidate.base?.sha;
-            if (!testedBaseSha) {
-              core.info("The successful CI run does not expose the tested base SHA.");
+            const ciIdentityPattern =
+              /^ci \| event=pull_request \| pr=([1-9][0-9]*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=([^ |]+) \| ready=(true|false) \| base=([0-9a-f]{40}) \| head=([0-9a-f]{40}) \| run=([1-9][0-9]*)$/;
+            const ciIdentity = ciIdentityPattern.exec(run.display_title ?? "");
+            if (!ciIdentity) {
+              core.warning("Successful CI run is missing the exact machine event identity.");
+              return;
+            }
+
+            const [
+              ,
+              pullNumberText,
+              ciAction,
+              ciUpdatedAt,
+              ciReady,
+              testedBaseSha,
+              ciHeadSha,
+              ciRunId,
+            ] = ciIdentity;
+            const pullNumber = Number(pullNumberText);
+            if (
+              !Number.isSafeInteger(pullNumber) ||
+              ciReady !== "true" ||
+              ciHeadSha !== run.head_sha ||
+              ciRunId !== String(run.id) ||
+              !Number.isFinite(Date.parse(ciUpdatedAt))
+            ) {
+              core.info("Successful CI run does not describe a Ready pull request event exactly.");
               return;
             }
 
@@ -79,6 +90,16 @@ jobs:
             }
             if (pr.state !== "open" || pr.draft) {
               core.info("Pull request is closed or still draft; autonomous merge is skipped.");
+              return;
+            }
+            const expectedCiDisplayTitle =
+              `ci | event=pull_request | pr=${pullNumber} | action=${ciAction} | ` +
+              `updated_at=${pr.updated_at} | ready=true | base=${pr.base.sha} | ` +
+              `head=${pr.head.sha} | run=${run.id}`;
+            if (run.display_title !== expectedCiDisplayTitle) {
+              core.info(
+                "Pull request event identity changed after the successful CI run; a fresh run is required.",
+              );
               return;
             }
             if (pr.base.ref !== defaultBranch) {
