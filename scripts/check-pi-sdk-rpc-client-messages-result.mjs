@@ -37,6 +37,12 @@ const RPC_WORKER_DEFAULT_FIXTURE =
   "packages/pi-adapter/fixtures/pi-lifecycle-rpc-worker.json";
 const PINNED_CONTAINER_IMAGE =
   "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3";
+const RPC_WORKER_PREFLIGHT_ERROR_PREFIX =
+  "No API key found for the selected model.";
+const RPC_WORKER_PREFLIGHT_DOC_PATHS = Object.freeze([
+  "<pi-install-dir>/node_modules/@earendil-works/pi-coding-agent/docs/providers.md",
+  "<pi-install-dir>/node_modules/@earendil-works/pi-coding-agent/docs/models.md",
+]);
 
 const rpcWorkerMode = process.argv[2] === "--rpc-worker-lifecycle";
 const suppliedPath = rpcWorkerMode ? process.argv[3] : process.argv[2];
@@ -76,6 +82,21 @@ function fingerprint(value) {
   const clone = structuredClone(value);
   delete clone.contractFingerprint;
   return sha256(JSON.stringify(clone));
+}
+
+function collectStrings(value, output = []) {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, output);
+    return output;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectStrings(item, output);
+  }
+  return output;
 }
 
 function contiguous(records, label) {
@@ -672,6 +693,27 @@ function validateRpcWorkerLifecycle(result, rawText) {
   contiguous(transcript(preflight?.worker), "Preflight RPC Worker transcript");
   requireValue(preflight?.worker?.stderr?.present === false && preflight?.worker?.stderr?.length === 0, "Preflight Worker wrote stderr.");
   requireValue(preflight?.response?.success === false && preflight?.response?.responseCount === 1, "Preflight Prompt must return one failure response.");
+  const preflightPromptResponses = responses(
+    preflight?.worker,
+    "preflight-prompt",
+    "prompt",
+  );
+  requireValue(
+    preflightPromptResponses.length === 1 &&
+      preflightPromptResponses[0]?.success === false &&
+      preflightPromptResponses[0]?.error === preflight?.response?.error,
+    "Preflight transcript/summary failure response drifted.",
+  );
+  requireValue(
+    preflight?.response?.error?.startsWith(RPC_WORKER_PREFLIGHT_ERROR_PREFIX) === true,
+    "Preflight rejection category drifted.",
+  );
+  for (const path of RPC_WORKER_PREFLIGHT_DOC_PATHS) {
+    requireValue(
+      preflight?.response?.error?.includes(path) === true,
+      `Preflight rejection is missing sanitized documentation path: ${path}`,
+    );
+  }
   requireValue(preflight?.agentStartCount === 0 && events(preflight?.worker, "agent_start").length === 0, "Preflight rejection must not start an Agent Run.");
   requireValue(preflight?.workerRemainedUsable === true, "Preflight rejection made the Worker unusable.");
   requireValue(preflight?.stateBefore?.isStreaming === false && preflight?.stateAfter?.isStreaming === false, "Preflight State streaming boundary drifted.");
@@ -720,7 +762,27 @@ function validateRpcWorkerLifecycle(result, rawText) {
   }
   requireValue(!rawText.includes('"runIdentity"'), "RPC Worker evidence must not contain an Extension run identity.");
   requireValue(!rawText.includes('"pid"'), "RPC Worker evidence must not contain process PIDs.");
-  requireValue(!rawText.includes("<pi-install-dir>"), "RPC Worker evidence must not retain redacted absolute path placeholders.");
+  for (const placeholder of [
+    "<workspace-dir>",
+    "<agent-dir>",
+    "<output-dir>",
+    "<capture-extension>",
+  ]) {
+    requireValue(
+      !rawText.includes(placeholder),
+      `RPC Worker evidence contains unexpected path placeholder: ${placeholder}`,
+    );
+  }
+  const piInstallPlaceholderStrings = collectStrings(result).filter((value) =>
+    value.includes("<pi-install-dir>"),
+  );
+  requireValue(
+    piInstallPlaceholderStrings.length === 2 &&
+      piInstallPlaceholderStrings.every(
+        (value) => value === preflight?.response?.error,
+      ),
+    "The Pi install path placeholder must be confined to the duplicated sanitized preflight error.",
+  );
 }
 
 const maximumBytes = rpcWorkerMode
