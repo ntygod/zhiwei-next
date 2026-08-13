@@ -1,42 +1,69 @@
 name: Main Provenance Dispatch
+run-name: main-provenance-reconcile | autonomous_merge_run=${{ github.event.workflow_run.id }} | autonomous_merge_conclusion=${{ github.event.workflow_run.conclusion }}
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Autonomous Merge"]
     types: [completed]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: read
   issues: write
 
 jobs:
-  dispatch:
+  reconcile:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.event == 'workflow_run' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      - name: Dispatch provenance after an autonomous merge
+      - name: Reconcile provenance after Autonomous Merge completion
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { owner, repo } = context.repo;
-            const run = context.payload.workflow_run;
+            const autonomousMergeRun = context.payload.workflow_run;
             const defaultBranch = context.payload.repository.default_branch;
             const repositoryFullName = `${owner}/${repo}`;
 
-            if (run.head_repository?.full_name !== repositoryFullName) {
+            if (autonomousMergeRun.head_repository?.full_name !== repositoryFullName) {
               core.setFailed(
-                `Refusing provenance dispatch for CI source ` +
-                  `${run.head_repository?.full_name ?? "<missing>"}; ` +
+                `Refusing provenance reconciliation for Autonomous Merge source ` +
+                  `${autonomousMergeRun.head_repository?.full_name ?? "<missing>"}; ` +
                   `expected ${repositoryFullName}.`,
               );
               return;
             }
-            let candidates = run.pull_requests ?? [];
+            if (
+              autonomousMergeRun.path !== ".github/workflows/autonomous-merge.yml" ||
+              autonomousMergeRun.event !== "workflow_run"
+            ) {
+              core.setFailed("Refusing provenance reconciliation for a non-canonical workflow identity.");
+              return;
+            }
+            const autonomousMergeIdentityPattern =
+              /^autonomous-merge \| source_ci_run=([1-9][0-9]*) \| source_ci_attempt=([1-9][0-9]*) \| source_ci_head=([0-9a-f]{40})$/;
+            const autonomousMergeIdentity = autonomousMergeIdentityPattern.exec(
+              autonomousMergeRun.display_title ?? "",
+            );
+            if (!autonomousMergeIdentity) {
+              core.setFailed("Autonomous Merge run is missing its exact source CI identity.");
+              return;
+            }
+            const [, sourceCiRunIdText, sourceCiAttemptText, sourceCiHead] =
+              autonomousMergeIdentity;
+            const sourceCiRunId = Number(sourceCiRunIdText);
+            const sourceCiAttempt = Number(sourceCiAttemptText);
+            if (
+              !Number.isSafeInteger(sourceCiRunId) ||
+              !Number.isSafeInteger(sourceCiAttempt)
+            ) {
+              core.setFailed("Autonomous Merge source CI run identity exceeds the safe integer range.");
+              return;
+            }
 
             function parseBlock(text, marker) {
               const source = text ?? "";
@@ -55,7 +82,137 @@ jobs:
               return result;
             }
 
-            async function failClosed({ pullNumber, before, after, reason, detail }) {
+            async function failSourceCiReadClosed(error) {
+              const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+              });
+              let incident = openIssues.find((issue) => {
+                const record = parseBlock(issue.body, "zhiwei-main-incident");
+                return record?.status === "open" && record?.after === sourceCiHead;
+              });
+              const reason = "reconciler-source-ci-undetermined";
+              const body = `## Autonomous Merge 来源 CI 无法持久核验\n\n` +
+                `Autonomous Merge run ${autonomousMergeRun.id} 以非成功结论结束，` +
+                `reconciler 无法读取其精确来源 CI attempt，因此无法排除 merge 已发生但 ` +
+                `Main Provenance 未派发。\n\n` +
+                `- source CI run: \`${sourceCiRunId}\`\n` +
+                `- source CI attempt: \`${sourceCiAttempt}\`\n` +
+                `- source CI head: \`${sourceCiHead}\`\n` +
+                `- Autonomous Merge conclusion: \`${autonomousMergeRun.conclusion ?? "<missing>"}\`\n` +
+                `- detail: \`${String(error?.message ?? error ?? "GitHub API unavailable").slice(0, 500)}\`\n` +
+                `- Autonomous Merge workflow run: ${autonomousMergeRun.html_url}\n` +
+                `- reconciler workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
+                `merge 状态需要人工或后续可信自动化核验；确认前普通自动合并保持停机。\n\n` +
+                `<!--\nzhiwei-main-incident\nstatus: open\nkind: unauthorized-main-write\nreason: ${reason}\nbefore: ${sourceCiHead}\nafter: ${sourceCiHead}\nsource-ci-run: ${sourceCiRunId}\n-->`;
+              if (!incident) {
+                ({ data: incident } = await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title: `incident(r3): source CI unavailable for ${sourceCiHead.slice(0, 12)}`,
+                  body,
+                }));
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: incident.number,
+                  body: `Source CI read failed again for Autonomous Merge run ` +
+                    `${autonomousMergeRun.id}.\n\n- source CI run: \`${sourceCiRunId}\`\n` +
+                    `- reconciler: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                });
+              }
+              core.setFailed(
+                `Unable to read source CI run ${sourceCiRunId} after a non-successful ` +
+                  `Autonomous Merge. Incident #${incident.number}.`,
+              );
+            }
+
+            let sourceCiRun;
+            let sourceCiReadError;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              try {
+                ({ data: sourceCiRun } = await github.rest.actions.getWorkflowRunAttempt({
+                  owner,
+                  repo,
+                  run_id: sourceCiRunId,
+                  attempt_number: sourceCiAttempt,
+                }));
+                sourceCiReadError = undefined;
+                break;
+              } catch (error) {
+                sourceCiReadError = error;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+            if (!sourceCiRun) {
+              if (autonomousMergeRun.conclusion !== "success") {
+                await failSourceCiReadClosed(sourceCiReadError);
+                return;
+              }
+              core.setFailed(
+                `Unable to read exact source CI run attempt; merge state may require ` +
+                  `manual reconciliation: ` +
+                  `${sourceCiReadError?.message ?? sourceCiReadError ?? "GitHub API unavailable"}.`,
+              );
+              return;
+            }
+            if (
+              sourceCiRun.id !== sourceCiRunId ||
+              sourceCiRun.run_attempt !== sourceCiAttempt ||
+              sourceCiRun.path !== ".github/workflows/ci.yml" ||
+              sourceCiRun.head_sha !== sourceCiHead
+            ) {
+              core.setFailed("Exact source CI run attempt does not match the Autonomous Merge identity.");
+              return;
+            }
+            if (sourceCiRun.event !== "pull_request") {
+              core.info(`Source CI event ${sourceCiRun.event} is not a pull request; no reconciliation.`);
+              return;
+            }
+            if (sourceCiRun.conclusion !== "success") {
+              core.info(`Source CI conclusion ${sourceCiRun.conclusion} is not successful; no reconciliation.`);
+              return;
+            }
+            if (sourceCiRun.head_repository?.full_name !== repositoryFullName) {
+              core.info(
+                `Source CI repository ${sourceCiRun.head_repository?.full_name ?? "<missing>"} ` +
+                  `is not ${repositoryFullName}; no reconciliation.`,
+              );
+              return;
+            }
+            const ciIdentityPattern =
+              /^ci \| event=pull_request \| pr=([1-9][0-9]*) \| action=(opened|synchronize|reopened|ready_for_review|edited) \| updated_at=([^ |]+) \| ready=(true|false) \| base=([0-9a-f]{40}) \| head=([0-9a-f]{40}) \| run=([1-9][0-9]*)$/;
+            const ciIdentity = ciIdentityPattern.exec(sourceCiRun.display_title ?? "");
+            if (!ciIdentity) {
+              core.setFailed("Source CI run is missing the exact machine event identity.");
+              return;
+            }
+            const [
+              ,
+              pullNumberText,
+              ,
+              ciUpdatedAt,
+              ciReady,
+              testedBaseSha,
+              ciHeadSha,
+              ciRunId,
+            ] = ciIdentity;
+            const pullNumber = Number(pullNumberText);
+            if (
+              !Number.isSafeInteger(pullNumber) ||
+              ciReady !== "true" ||
+              ciHeadSha !== sourceCiRun.head_sha ||
+              ciRunId !== String(sourceCiRun.id) ||
+              !Number.isFinite(Date.parse(ciUpdatedAt))
+            ) {
+              core.info("Source CI does not describe an exact Ready pull request candidate.");
+              return;
+            }
+
+            async function failClosed({ before, after, reason, detail }) {
               const openIssues = await github.paginate(github.rest.issues.listForRepo, {
                 owner,
                 repo,
@@ -66,14 +223,15 @@ jobs:
                 const record = parseBlock(issue.body, "zhiwei-main-incident");
                 return record?.status === "open" && record?.after === after;
               });
-              const body = `## 自动合并后的 provenance 审计链失败\n\n` +
-                `PR #${pullNumber} 已合并，但无法建立可信的 Main Provenance 审计事件。\n\n` +
+              const body = `## 自动合并后的 provenance 审计链补偿失败\n\n` +
+                `PR #${pullNumber} 可能已合并或已确认合并，但 Main Provenance reconciler 无法补齐可信审计事件。\n\n` +
                 `- before: \`${before}\`\n` +
                 `- after: \`${after}\`\n` +
                 `- reason: \`${reason}\`\n` +
                 `- detail: \`${String(detail ?? "").slice(0, 500)}\`\n` +
-                `- CI workflow run: ${run.html_url}\n` +
-                `- dispatch workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
+                `- source CI workflow run: ${sourceCiRun.html_url}\n` +
+                `- Autonomous Merge workflow run: ${autonomousMergeRun.html_url}\n` +
+                `- reconciler workflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\n` +
                 `该更新来自已合并 PR，但 provenance 链不完整，因此按 fail-closed 方式进入 Main Incident 安全停机。\n\n` +
                 `<!--\nzhiwei-main-incident\nstatus: open\nkind: unauthorized-main-write\nreason: ${reason}\nbefore: ${before}\nafter: ${after}\n-->`;
               if (!incident) {
@@ -88,83 +246,86 @@ jobs:
                   owner,
                   repo,
                   issue_number: incident.number,
-                  body: `Main Provenance dispatch retry failed again.\n\n- reason: \`${reason}\`\n- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                  body: `Main Provenance reconciliation failed again.\n\n` +
+                    `- reason: \`${reason}\`\n` +
+                    `- run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
                 });
               }
-              core.setFailed(`Merged PR #${pullNumber}, but Main Provenance failed closed. Incident #${incident.number}: ${reason}.`);
-            }
-
-            if (candidates.length === 0) {
-              candidates = await github.paginate(
-                github.rest.repos.listPullRequestsAssociatedWithCommit,
-                { owner, repo, commit_sha: run.head_sha, per_page: 100 },
+              core.setFailed(
+                `PR #${pullNumber} Main Provenance reconciliation failed closed. ` +
+                  `Incident #${incident.number}: ${reason}.`,
               );
-            }
-            const numberedCandidates = candidates.filter((candidate) => candidate.number);
-            if (numberedCandidates.length !== 1) {
-              core.info(`Expected one pull request for CI run, found ${numberedCandidates.length}; no provenance dispatch.`);
-              return;
-            }
-
-            const candidate = numberedCandidates[0];
-            const pullNumber = candidate.number;
-            const testedBaseSha = candidate.base?.sha;
-            if (!testedBaseSha) {
-              core.info("The successful CI run does not expose the tested base SHA; no provenance dispatch.");
-              return;
             }
 
             let pr;
-            for (let attempt = 0; attempt < 45; attempt += 1) {
-              ({ data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber }));
-              if (pr.merged_at && pr.merge_commit_sha) break;
-              if (pr.state === "closed") {
-                core.info(`PR #${pullNumber} closed without merge; no provenance dispatch.`);
-                return;
+            let lastPullReadError;
+            let consecutiveTrustedUnmergedReads = 0;
+            for (let attempt = 0; attempt < 15; attempt += 1) {
+              try {
+                ({ data: pr } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                }));
+                lastPullReadError = undefined;
+                if (pr.merged_at && pr.merge_commit_sha) break;
+                consecutiveTrustedUnmergedReads += 1;
+              } catch (error) {
+                lastPullReadError = error;
+                consecutiveTrustedUnmergedReads = 0;
               }
               await new Promise((resolve) => setTimeout(resolve, 2000));
             }
-
             if (!pr?.merged_at || !pr.merge_commit_sha) {
-              core.info(`PR #${pullNumber} was not merged during the provenance observation window.`);
+              if (lastPullReadError || consecutiveTrustedUnmergedReads < 3) {
+                await failClosed({
+                  before: testedBaseSha,
+                  after: sourceCiHead,
+                  reason: "reconciler-merge-state-undetermined",
+                  detail: lastPullReadError?.message ?? lastPullReadError ??
+                    `only ${consecutiveTrustedUnmergedReads} consecutive trusted unmerged reads`,
+                });
+                return;
+              }
+              core.info(`PR #${pullNumber} was not merged by this Autonomous Merge run; no reconciliation.`);
               return;
             }
             if (pr.base.ref !== defaultBranch) {
-              core.info(`PR #${pullNumber} targets ${pr.base.ref}, not ${defaultBranch}; no provenance dispatch.`);
+              core.info(`PR #${pullNumber} targets ${pr.base.ref}, not ${defaultBranch}; no reconciliation.`);
               return;
             }
 
             const after = pr.merge_commit_sha;
-            if (pr.head.sha !== run.head_sha) {
+            if (pr.head.sha !== sourceCiRun.head_sha || pr.base.sha !== testedBaseSha) {
               await failClosed({
-                pullNumber,
                 before: testedBaseSha,
                 after,
-                reason: "successful-ci-head-mismatch",
-                detail: `merged head ${pr.head.sha} differs from CI head ${run.head_sha}`,
-              });
-              return;
-            }
-            if (pr.base.sha !== testedBaseSha) {
-              await failClosed({
-                pullNumber,
-                before: testedBaseSha,
-                after,
-                reason: "successful-ci-base-mismatch",
-                detail: `merged base ${pr.base.sha} differs from CI base ${testedBaseSha}`,
+                reason: "reconciler-source-mismatch",
+                detail: `head=${pr.head.sha}, expectedHead=${sourceCiRun.head_sha}, ` +
+                  `base=${pr.base.sha}, expectedBase=${testedBaseSha}`,
               });
               return;
             }
 
-            const { data: mergeCommit } = await github.rest.git.getCommit({
-              owner,
-              repo,
-              commit_sha: after,
-            });
+            let mergeCommit;
+            try {
+              ({ data: mergeCommit } = await github.rest.git.getCommit({
+                owner,
+                repo,
+                commit_sha: after,
+              }));
+            } catch (error) {
+              await failClosed({
+                before: testedBaseSha,
+                after,
+                reason: "reconciler-commit-read-failed",
+                detail: error.message ?? error,
+              });
+              return;
+            }
             const parents = mergeCommit.parents ?? [];
             if (parents.length !== 1 || parents[0].sha !== testedBaseSha) {
               await failClosed({
-                pullNumber,
                 before: testedBaseSha,
                 after,
                 reason: "squash-parent-contract-mismatch",
@@ -186,13 +347,12 @@ jobs:
                   source: "autonomous-merge",
                 },
               });
-              core.notice(`Dispatched Main Provenance for PR #${pullNumber} at ${after}.`);
+              core.notice(`Reconciled Main Provenance for PR #${pullNumber} at ${after}.`);
             } catch (error) {
               await failClosed({
-                pullNumber,
                 before: testedBaseSha,
                 after,
-                reason: "provenance-dispatch-failed",
+                reason: "provenance-reconciliation-dispatch-failed",
                 detail: error.message ?? error,
               });
             }

@@ -31,7 +31,7 @@ docs/harness/risk-acceptance/2026-08-13-public-free.json
 docs/harness/rulesets/2026-08-13-main-public-free.json
 ```
 
-此前 Private + Free风险记录保留为历史。Ruleset提供 pre-receive保护，仓库级 merge设置只允许 squash；2026-08-13 owner/admin live readback确认没有 bypass actor且 Secret Scanning与 Push Protection已启用。普通 `GITHUB_TOKEN`只能持续核验权限可读子集，项目不保存 PAT或长期管理员 Secret来伪装完整持续监控；这些控制仍不替代 PR合同、独立审查、Fork隔离、Main Provenance或 Incident恢复。
+此前 Private + Free风险记录保留为历史。Required context `check`是早注册、无`needs`的只读observer，只接受当前run attempt内唯一`CI required evidence`成功。内部evidence以workflow filename endpoint、`run.path`、机器`display_title`、repo/ref/SHA和时间戳识别三套standalone run；不依赖会等于自定义显示标题的Actions `run.name`。所有必需success ID须共同quiet 60秒，latest变化即重置。observer不复用先前attempt；仅重跑失败Job不足，必须重跑全部Job。
 
 ## 默认工作方式
 
@@ -86,7 +86,7 @@ docs/harness/rulesets/2026-08-13-main-public-free.json
 2. 普通自动合并立即停机；
 3. 只有可信真实 push 事件能提供自动恢复 tree；
 4. 若当前 main 仍指向该 push 且 tree 发生变化，只创建 Draft 恢复 PR，不直接重置分支；
-5. `repository_dispatch` 失败或无效时只登记 Incident，不从 payload 构造恢复提交；
+5. Autonomous Merge在确认squash commit和单一parent后立即发送`repository_dispatch`；post-merge确认或发送失败按`after`登记 Incident，完成后 reconciler只用精确来源CI attempt复验所有已确认同源merge并按相同`after`幂等补发，覆盖失败、取消或响应丢失；API无法确定merge状态也必须持久登记Incident，且不从 payload构造恢复提交；
 6. 恢复 PR 必须是 R3、引用全部要求事故并完成当前 HEAD 独立审查；
 7. 只有技术缓解、live provenance proof 和明确风险处置完成后才可解除停机。
 

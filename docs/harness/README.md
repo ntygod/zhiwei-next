@@ -41,7 +41,7 @@
 public-free-ruleset
 ```
 
-仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。无 bypass、Secret Scanning与 Push Protection状态来自 2026-08-13 owner/admin live readback并作为版本化证据静态锁定；普通临时 `GITHUB_TOKEN`只持续回读权限可见子集。机器事实源、无长期管理员 PAT的权衡与残余风险见 `main-protection.md`。
+仓库为 Public + GitHub Free。默认分支由 active、无 bypass 的服务端 Ruleset保护：必须通过 Pull Request、GitHub Actions早注册observer `check`、线性历史与 Review Thread解决；只允许 squash，禁止 force push和删除。observer只在当前run attempt的内部evidence成功后通过。机器事实源与残余风险见`main-protection.md`。
 
 Harness 提供：
 
@@ -52,12 +52,12 @@ Harness 提供：
 - Public仓库 fork / Token隔离；
 - 默认分支服务端 Ruleset；
 - 自主 squash merge；
-- 外部 push 与 token-driven merge 双路径 provenance；
+- 外部 push与 Autonomous Merge即时 dispatch / 完成后 reconciler双路径 provenance；
 - 未验证 main 更新的 R3 Incident 停机；
 - Branch Cleanup 与 Repository Hygiene；
 - Work Item 生命周期机器检查。
 
-Ruleset不替代可信 Workflow、Main Provenance、Incident和恢复链路；管理员仍可修改服务端配置，Required Check漂移也会安全阻塞合并。详细边界见 `main-protection.md`。
+Ruleset不替代可信 Workflow、Main Provenance、Incident和恢复链路；管理员仍可修改服务端配置，Required Check漂移也会安全阻塞合并。PR #62曾让名为`check`的旧静态 Job先于动态证据成功；当前以内部`CI required evidence`汇总证据，并由无`needs`的唯一`check`observer在同一Workflow run中等待其成功，精确边界见`main-protection.md`。
 
 ## Work Item 生命周期
 
@@ -124,8 +124,8 @@ Branch Cleanup + Repository Hygiene 收敛分支和 Work Item
 
 1. **写入前置协议**：Connector 写入显式指定非默认分支。
 2. **PR门禁**：CI、Work Item合同和当前 HEAD独立审查。
-3. **服务端 Ruleset**：无 bypass，要求 PR、`check`、线性历史和 squash。
-4. **Main Provenance / Incident**：重新查询真实 PR和 Commit；异常时暂停普通合并。
+3. **服务端 Ruleset**：无 bypass，要求 PR、早注册observer `check`、线性历史和 squash。
+4. **Main Provenance / Incident**：Autonomous Merge在 squash成功后立即核验并dispatch，完成事件上的 reconciler补偿 runner取消或响应丢失；receiver重新查询真实 PR和 Commit，异常时暂停普通合并。
 
 服务端保护与事后 provenance互补，任何一层都不能因为另一层存在而删除。
 
@@ -151,11 +151,15 @@ Repository Hygiene 负责：
 - 架构边界；
 - `AGENTS.md` 层级与引用；
 - `check:work-items` Work Item Policy 和治理一致性；
-- Main Provenance 和 dispatch；
+- Main Provenance、Autonomous Merge即时 dispatch和完成后 reconciler；
 - Branch Cleanup（`check:branch-cleanup`）；
 - Harness 配置与风险接受；
 - Pi source/runtime 契约；
 - 自动化测试。
+
+CI先由`static-contracts`执行上述静态合同并计算Probe gate。内部`CI required evidence`通过`needs`聚合CI内五个动态Job，并以workflow filename endpoint、`run.path`、机器`display_title`、repo/ref/SHA和时间戳匹配三套standalone run；不比较会映射为自定义显示标题的Actions `run.name`。三套success候选ID都须连续quiet 60秒才整体通过，任一latest变化或pending都会清除对应稳定候选。Ruleset要求的唯一`check`只观察当前run attempt内evidence；仅“Re-run failed jobs”可能缺evidence，恢复需“Re-run all jobs”。
+
+Autonomous Merge的机器标题绑定来源 CI run ID、attempt和HEAD。`pulls.merge`确认成功后，同一可信 Job立即复查merged PR、来源HEAD/base及单一squash parent，再发送以`after`为重放身份的`main-provenance`事件；任何 post-merge确认或dispatch失败都会创建按`after`去重的 Main Incident。`Main Provenance Dispatch`不再从CI完成事件猜测90秒内是否会合并，而监听 Autonomous Merge完成：它以只读Actions API最多三次重取精确来源CI attempt；非成功Autonomous Merge若始终无法读回来源，就用source CI HEAD同时作为before/after登记`reconciler-source-ci-undetermined`持久Incident，成功主路径则显式失败等待重试但不重复登记。来源可读后正常忽略非PR、非success和fork；短时重试合并可见性，只有连续可信的未合并读回才no-op，API无法确定则持久登记Incident；已确认同源merge无论主路径结论如何都复验来源与parent并按相同`after`幂等补发。
 
 PR 还执行 `scripts/check-pr-contract.mjs`，从 GitHub Event Payload 读取 title、head、number，并核对：
 

@@ -201,6 +201,16 @@ requireValue(
   "Current Harness main-protection facts are incorrect.",
 );
 requireValue(
+  config.mainProtection?.provenanceDispatchWorkflow ===
+    ".github/workflows/autonomous-merge.yml" &&
+    config.mainProtection?.provenanceReconcilerWorkflow ===
+      ".github/workflows/main-provenance-dispatch.yml" &&
+    config.mainProtection?.provenanceDispatchMode ===
+      "post-squash-immediate-with-autonomous-merge-reconciler" &&
+    config.mainProtection?.provenanceIdempotencyKey === "after",
+  "Current Harness provenance dispatch ownership or replay identity is incorrect.",
+);
+requireValue(
   currentRisk.schemaVersion === 1 &&
     currentRisk.status === "accepted" &&
     currentRisk.repositoryVisibility === "public" &&
@@ -363,17 +373,33 @@ for (const token of [
 }
 for (const token of [
   "name: Main Provenance Dispatch",
+  "workflows: [\"Autonomous Merge\"]",
   "github.event.workflow_run.head_repository.full_name == github.repository",
-  "run.head_repository?.full_name !== repositoryFullName",
+  "autonomousMergeRun.head_repository?.full_name !== repositoryFullName",
+  "autonomousMergeRun.path !== \".github/workflows/autonomous-merge.yml\"",
+  "const autonomousMergeIdentityPattern =",
+  "github.rest.actions.getWorkflowRunAttempt",
+  "attempt < 3",
+  "async function failSourceCiReadClosed",
+  "reason = \"reconciler-source-ci-undetermined\"",
+  "sourceCiRun.path !== \".github/workflows/ci.yml\"",
+  "sourceCiRun.conclusion !== \"success\"",
   "async function failClosed",
   "squash-parent-contract-mismatch",
   "github.rest.repos.createDispatchEvent",
-  "reason: \"provenance-dispatch-failed\"",
+  "consecutiveTrustedUnmergedReads",
+  "reason: \"reconciler-merge-state-undetermined\"",
+  "reason: \"provenance-reconciliation-dispatch-failed\"",
+  "const ciIdentityPattern =",
+  "ciReady !== \"true\"",
+  "record?.status === \"open\" && record?.after === after",
 ]) {
-  requireValue(dispatchWorkflow.includes(token), `Main Provenance Dispatch is missing token: ${token}`);
+  requireValue(dispatchWorkflow.includes(token), `Main Provenance reconciler is missing token: ${token}`);
 }
 for (const token of [
+  "run-name: autonomous-merge | source_ci_run=${{ github.event.workflow_run.id }} | source_ci_attempt=${{ github.event.workflow_run.run_attempt }} | source_ci_head=${{ github.event.workflow_run.head_sha }}",
   "github.event.workflow_run.head_repository.full_name == github.repository",
+  "run.path !== \".github/workflows/ci.yml\"",
   "run.head_repository?.full_name !== repositoryFullName",
   "pr.head.repo?.full_name !== repositoryFullName",
   "readTrustedJson(\"harness.config.json\")",
@@ -381,15 +407,39 @@ for (const token of [
   "zhiwei-main-incident",
   "main-incident-recovery",
   "Recovery PR must reference every required main incident",
+  "const ciIdentityPattern =",
+  "ciReady !== \"true\"",
+  "const expectedCiDisplayTitle =",
+  "run.display_title !== expectedCiDisplayTitle",
+  "async function failPostMergeClosed",
+  "const after = merge.sha",
+  "mergedPr.merge_commit_sha !== after",
+  "mergedPr.head.sha !== run.head_sha || mergedPr.base.sha !== testedBaseSha",
+  "parents.length !== 1 || parents[0].sha !== testedBaseSha",
+  "github.rest.repos.createDispatchEvent",
+  "event_type: \"main-provenance\"",
+  "reason: \"provenance-dispatch-failed\"",
+  "record?.status === \"open\" && record?.after === after",
 ]) {
   requireValue(autoMerge.includes(token), `Autonomous Merge is missing token: ${token}`);
 }
 for (const [name, source] of [
   ["Main Provenance", workflow],
+  ["Autonomous Merge", autoMerge],
   ["Main Provenance Dispatch", dispatchWorkflow],
 ]) {
   requireValue(!source.includes("pull_request_target:"), `${name} must not use pull_request_target.`);
   requireValue(!/\$\{\{\s*secrets\./.test(source), `${name} must not inject repository secrets.`);
+}
+for (const [name, source, forbidden] of [
+  ["Autonomous Merge", autoMerge, 'run.name !== "CI"'],
+  ["Main Provenance reconciler", dispatchWorkflow, 'autonomousMergeRun.name !== "Autonomous Merge"'],
+  ["Main Provenance reconciler", dispatchWorkflow, 'sourceCiRun.name !== "CI"'],
+]) {
+  requireValue(
+    !source.includes(forbidden),
+    `${name} must not rely on custom run-name presentation: ${forbidden}`,
+  );
 }
 requireValue(template.includes("main-incident-recovery: no"), "PR template must default main-incident-recovery to no.");
 

@@ -251,7 +251,7 @@ RpcClient:  stop()
 
 Manifest `source` 只允许两态：`candidate` 保留完整 `head`，但 `workflowRun`、`artifactId`、`artifactDigest`必须全部为 `null`，只允许 Draft PR恢复；`verified`要求三项全部有效，是 Ready 与 Merge Gate。部分填写会失败，`candidate`也不能被当成最终 provenance。
 
-Workflow 使用 fresh-first recovery：固定容器先生成 Fresh Capture并通过两个脱敏 Checker，再校验 committed Fixture和完整对象；合格 Fresh Artifact的上传不受随后旧 Fixture漂移失败影响，未通过 Fresh Checker的失败 JSON则不会上传。PR运行显式 checkout事件中的 `pull_request.head.sha`并核对实际 Git HEAD，不把默认 synthetic merge ref当作来源。Draft中收敛 candidate后，必须引用真实 Workflow Run / Artifact升为 verified；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。Ready触发的非 Draft运行还执行 live provenance检查，要求来源 HEAD是当前 PR HEAD的真实祖先，并下载对应 Artifact ZIP，把 ZIP Digest、其中唯一 `result.json`的 SHA与 committed Fixture完整字节同时绑定。
+Workflow 使用 fresh-first recovery：固定容器先生成 Fresh Capture并通过两个脱敏 Checker，再校验 committed Fixture和完整对象；合格 Fresh Artifact的上传不受随后旧 Fixture漂移失败影响。Ready live provenance用run ID和`run.workflow_id`端点绑定canonical workflow ID/path，解析机器`display_title`绑定PR/action/updated_at/head，并继续核对run attempt、PR关联、Artifact和下载内容；不把自定义标题化的Actions `run.name`误当YAML workflow name。来源 HEAD还必须是当前PR HEAD的真实祖先，ZIP中唯一`result.json`须与Manifest SHA和committed Fixture一致。
 
 `jsonSha256`绑定解压后的规范 JSON字节，`compressedSha256`绑定仓库中的 gzip字节，`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive；三者作用域不同，不能互相替代。最终合并还要求 Fresh / committed完整相等、两个结果 Checker、live Run / Artifact provenance、当前 HEAD CI和 R3独立 AI审查全部通过。
 
@@ -266,14 +266,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 fe4aeb840fa3efed7d881679a78955af470896d9
-capture workflow             31639460875
-capture artifact             9158276952
-capture artifact digest      sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b
+capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
+capture workflow             31666316897
+capture artifact             9168052320
+capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
 external Provider prompts    0
 ```
 
-固定容器 Run `31639460875`整体成功；Artifact `9158276952`的 ZIP Digest与上面的 `artifactDigest`一致，其中唯一 `result.json`的 SHA-256为 `a3f47e34…`，并与 committed Fixture逐字节相同。Manifest 是 provenance 的机器事实源。
+固定容器 Run `31666316897`整体成功；Artifact `9168052320`的 ZIP Digest与上面的 `artifactDigest`一致，其中唯一 `result.json`的 SHA-256为 `a3f47e34…`，并与 committed Fixture逐字节相同。该 Run来自当前 PR #63，供 Ready live provenance做PR关联与ancestry核验；Manifest 是 provenance 的机器事实源。
 
 ## 隔离与验证
 

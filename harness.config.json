@@ -27,12 +27,204 @@
     "adminReadbackEvidence": "docs/harness/rulesets/2026-08-13-main-public-free.json",
     "continuousReadbackScope": "token-readable-subset",
     "longLivedAdminCredentialStored": false,
+    "requiredStatusCheck": {
+      "context": "check",
+      "integrationId": 15368,
+      "workflow": ".github/workflows/ci.yml",
+      "aggregatorJob": "check",
+      "aggregatorJobName": "check",
+      "aggregatorNeeds": [],
+      "aggregatorPermissions": {
+        "actions": "read"
+      },
+      "aggregatorCheckoutAllowed": false,
+      "aggregatorTimeoutMinutes": 75,
+      "aggregatorPollDeadlineMinutes": 70,
+      "aggregatorPollIntervalSeconds": 60,
+      "aggregatorCurrentRunId": "github.run_id",
+      "aggregatorCurrentRunAttempt": "github.run_attempt",
+      "aggregatorAttemptScoped": true,
+      "aggregatorPriorAttemptReuseAllowed": false,
+      "aggregatorRerunRecovery": "re-run-all-jobs",
+      "workflowRunNamePrefix": "ci",
+      "workflowRunNameFields": [
+        "event",
+        "pr",
+        "action",
+        "updated_at",
+        "ready",
+        "base",
+        "head",
+        "run"
+      ],
+      "workflowRunIdentityApi": "getWorkflowRunAttempt",
+      "evidenceJobsApi": "listJobsForWorkflowRunAttempt",
+      "evidenceJob": "ci-required-evidence",
+      "evidenceJobName": "CI required evidence",
+      "evidenceJobTimeoutMinutes": 35,
+      "staticContractsJob": "static-contracts",
+      "scope": "ci-five-gated-jobs-plus-three-path-gated-standalone-runs",
+      "staticContractsRequiredResult": "success",
+      "evidenceNeeds": [
+        "static-contracts",
+        "pi-artifact-probe",
+        "pi-lifecycle-probe",
+        "pi-retry-lifecycle-probe",
+        "pi-follow-up-lifecycle-probe",
+        "pi-cancel-retry-exhaustion-probe"
+      ],
+      "gatedJobs": {
+        "pi-artifact-probe": "pi-artifact-probe",
+        "pi-lifecycle-probe": "pi-lifecycle-probe",
+        "pi-retry-lifecycle-probe": "pi-lifecycle-probe",
+        "pi-follow-up-lifecycle-probe": "pi-lifecycle-probe",
+        "pi-cancel-retry-exhaustion-probe": "pi-lifecycle-probe"
+      },
+      "allowedGatedResults": [
+        {
+          "required": "true",
+          "result": "success"
+        },
+        {
+          "required": "false",
+          "result": "skipped"
+        }
+      ],
+      "allOtherGatedResults": "reject",
+      "standaloneWorkflowRuns": {
+        "permissions": {
+          "actions": "read"
+        },
+        "checkoutAllowed": false,
+        "changedFilesCompleteness": "event-count-equals-paginated-api",
+        "jobTimeoutMinutes": 35,
+        "waitTimeoutMinutes": 32,
+        "initialDelaySeconds": 10,
+        "pollIntervalSeconds": 60,
+        "successRunQuietWindowSeconds": 60,
+        "freshRunRequiredActions": [
+          "opened",
+          "synchronize",
+          "reopened",
+          "ready_for_review",
+          "edited"
+        ],
+        "requiredEvent": "pull_request",
+        "requiredStatus": "completed",
+        "requiredConclusion": "success",
+        "match": [
+          "workflow-id",
+          "workflow-path",
+          "display-title",
+          "pull-request-number",
+          "pull-request-action",
+          "pull-request-updated-at",
+          "head-sha",
+          "head-repository",
+          "head-ref"
+        ],
+        "select": "latest-created-at-then-run-id",
+        "missingOrTimeout": "reject",
+        "allOtherCompletedConclusions": "reject",
+        "workflows": [
+          {
+            "gateOutput": "pi-parallel-tool-ordering-required",
+            "workflowId": "pi-parallel-tool-ordering.yml",
+            "path": ".github/workflows/pi-parallel-tool-ordering.yml",
+            "name": "Pi parallel Tool ordering contract",
+            "runNamePrefix": "parallel-tool-ordering",
+            "paths": [
+              ".github/workflows/pi-parallel-tool-ordering.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-parallel-tool-ordering.json",
+              "scripts/check-pi-parallel-tool-ordering-result.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-parallel-tool-ordering-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md",
+              "docs/architecture/pi-integration.md"
+            ]
+          },
+          {
+            "gateOutput": "pi-compaction-session-replacement-required",
+            "workflowId": "pi-compaction-session-replacement.yml",
+            "path": ".github/workflows/pi-compaction-session-replacement.yml",
+            "name": "Pi Compaction and Session Replacement contract",
+            "runNamePrefix": "compaction-session-replacement",
+            "paths": [
+              ".github/workflows/pi-compaction-session-replacement.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-compaction-session-replacement.json",
+              "scripts/check-pi-compaction-session-replacement-result.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-compaction-session-replacement-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/compaction-session-replacement-lifecycle.md",
+              "docs/architecture/pi-integration.md",
+              "docs/harness/project-state.md"
+            ]
+          },
+          {
+            "gateOutput": "pi-sdk-rpc-parity-required",
+            "workflowId": "pi-sdk-rpc-parity.yml",
+            "path": ".github/workflows/pi-sdk-rpc-parity.yml",
+            "name": "Pi SDK and RPC parity contract",
+            "runNamePrefix": "sdk-rpc-parity",
+            "liveProvenance": {
+              "runtimeRunNameCompared": false,
+              "workflowMetadataEndpoint": "run.workflow_id",
+              "workflowMetadataNameRequired": true,
+              "workflowPathRequired": true,
+              "displayTitleIdentityRequired": true,
+              "pullRequestRunHeadAttemptRequired": true,
+              "artifactContentBindingRequired": true
+            },
+            "paths": [
+              ".github/workflows/pi-sdk-rpc-parity.yml",
+              ".github/workflows/ci.yml",
+              "harness.config.json",
+              "scripts/check-harness.mjs",
+              "docs/harness/main-protection.md",
+              "package.json",
+              "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**",
+              "scripts/check-pi-sdk-rpc-parity-result.mjs",
+              "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+              "scripts/check-pi-sdk-rpc-parity-provenance.mjs",
+              "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "scripts/probes/pi-lifecycle-ci.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-contract.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-capture.mjs",
+              "scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs",
+              "docs/spikes/pi-runtime-contract/README.md",
+              "docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md",
+              "docs/architecture/pi-integration.md",
+              "docs/harness/project-state.md"
+            ]
+          }
+        ]
+      }
+    },
     "liveProofVerified": true,
     "liveProofRecord": "docs/harness/provenance-proofs/2026-08-11-pr-12.json",
     "incidentClosureProofRecord": "docs/harness/provenance-proofs/2026-08-11-pr-13.json",
     "instructions": "docs/harness/main-protection.md",
     "provenanceWorkflow": ".github/workflows/main-provenance.yml",
-    "provenanceDispatchWorkflow": ".github/workflows/main-provenance-dispatch.yml",
+    "provenanceDispatchWorkflow": ".github/workflows/autonomous-merge.yml",
+    "provenanceReconcilerWorkflow": ".github/workflows/main-provenance-dispatch.yml",
+    "provenanceDispatchMode": "post-squash-immediate-with-autonomous-merge-reconciler",
+    "provenanceIdempotencyKey": "after",
     "incidentFixture": "docs/harness/incidents/2026-08-11-direct-main.json"
   },
   "branchLifecycle": {

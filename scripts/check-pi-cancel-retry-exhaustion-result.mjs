@@ -248,7 +248,7 @@ requireValue(
 for (const required of [
   "pi-cancel-retry-exhaustion-probe:",
   "name: Pi cancellation and retry exhaustion lifecycle probe",
-  "needs.check.outputs.pi-lifecycle-probe == 'true'",
+  "needs.static-contracts.outputs.pi-lifecycle-probe == 'true'",
   "packages/pi-adapter/fixtures/pi-lifecycle-cancel-retry-exhaustion.json",
   "scripts/check-pi-cancel-retry-exhaustion-result.mjs",
   "scripts/probes/pi-cancel-retry-exhaustion-capture.mjs",

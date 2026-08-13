@@ -1,10 +1,15 @@
 name: Pi SDK and RPC parity contract
+run-name: sdk-rpc-parity | event=${{ github.event_name }} | pr=${{ github.event.pull_request.number || 'none' }} | action=${{ github.event.action || 'none' }} | updated_at=${{ github.event.pull_request.updated_at || 'none' }} | head=${{ github.event.pull_request.head.sha || github.sha }}
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     paths:
       - .github/workflows/pi-sdk-rpc-parity.yml
+      - .github/workflows/ci.yml
+      - harness.config.json
+      - scripts/check-harness.mjs
+      - docs/harness/main-protection.md
       - package.json
       - packages/pi-adapter/fixtures/pi-upstream-baseline.json
       - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**
@@ -25,6 +30,10 @@ on:
     branches: [main]
     paths:
       - .github/workflows/pi-sdk-rpc-parity.yml
+      - .github/workflows/ci.yml
+      - harness.config.json
+      - scripts/check-harness.mjs
+      - docs/harness/main-protection.md
       - package.json
       - packages/pi-adapter/fixtures/pi-upstream-baseline.json
       - packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**

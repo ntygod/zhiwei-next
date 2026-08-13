@@ -224,10 +224,11 @@ HEAD 变化后旧批准自动失效。审查直接留在 primary PR，不创建 
 
 ### Token-driven autonomous merge
 
-- 成功 PR CI 同时触发 Autonomous Merge 和 Main Provenance Dispatch；
-- Dispatch sender等待 PR 合并，核对 CI HEAD、base和 squash parent；
+- 成功 PR CI触发 Autonomous Merge；该Job的机器标题绑定来源CI run/attempt/head；
+- squash成功后同一Job立即确认真实merged PR、CI HEAD、base和单一parent，再发送Main Provenance事件；
+- Main Provenance Dispatch监听Autonomous Merge完成，以精确来源CI attempt复验所有已确认同源merge并按`after`幂等补发，覆盖merge后失败、取消或响应丢失；正常非PR、非success和fork是no-op，只有连续可信读回未合并才no-op，API状态无法确定则登记Incident；
 - receiver重新查询真实 merged PR、base和 Git parent；
-- 任一无法证明合同，登记 Main Incident并停机；
+- post-merge任一无法证明合同或dispatch失败，按`after`登记 Main Incident并停机；
 - dispatch payload永远不是自动恢复 tree 的可信来源。
 
 两条路径都不会直接 reset 或 force-push默认分支。它们是 post-merge / 异常 push的检测与恢复提案层，与服务端 Ruleset互补。
@@ -237,7 +238,7 @@ HEAD 变化后旧批准自动失效。审查直接留在 primary PR，不创建 
 合并后：
 
 - 检查合并 Commit 与关联 primary PR；
-- 对治理/高风险 PR 检查 Main Provenance Dispatch 和 receiver；
+- 对治理/高风险 PR 检查 Autonomous Merge即时dispatch、完成后reconciler和receiver；
 - Repository Hygiene 审计 WIP、canonical work item、孤立 helper 和对象类型；
 - Branch Cleanup 回收关闭 PR 的工作分支；
 - 关闭或更新 execution Issue；owner-input 只有用户结果真正交付后才关闭；

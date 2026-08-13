@@ -59,7 +59,7 @@ for (const required of [
   "pi-lifecycle-probe: ${{ steps.probe-gate.outputs.lifecycle-required }}",
   "pi-lifecycle-probe:",
   "name: Pi SDK and Extension lifecycle probe",
-  "needs.check.outputs.pi-lifecycle-probe == 'true'",
+  "needs.static-contracts.outputs.pi-lifecycle-probe == 'true'",
   "packages/pi-adapter/fixtures/pi-lifecycle-normal-tool.json",
   "scripts/check-pi-lifecycle-result.mjs",
   "scripts/probes/pi-lifecycle-ci.mjs",

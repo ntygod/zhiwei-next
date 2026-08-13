@@ -14,7 +14,7 @@ updated: 2026-08-13
 public-free-ruleset
 ```
 
-仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认没有 bypass actor。服务端要求 `main`只能经最新 base上的 Pull Request、GitHub Actions `check`、线性历史与已解决 Review Thread进入，并且只允许 squash、禁止 force push和删除。正常写入仍必须使用非默认分支和 Pull Request；Main Provenance继续独立审计实际进入默认分支的来源。
+仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认无bypass。服务端要求`main`只能经最新base上的Pull Request、GitHub Actions早注册observer `check`、线性历史与已解决Review Thread进入。observer只在当前run attempt的内部evidence成功后通过；正常写入仍必须使用非默认分支和PR。
 
 仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。2026-08-13 owner/admin读回确认 Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
 
@@ -35,7 +35,7 @@ public-free-ruleset
 - 原始 RPC State变化为 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；stdin EOF后 Extension `session_shutdown(reason=quit)`，Worker `exit=0 → close=0`；
 - 发布 `RpcClient`在 Prompt前返回 `getMessages()=[]`，`prompt()`返回时可观察 `isStreaming=true / messageCount=1`，`agent_settled`后返回 `user → assistant`；
 - 固定容器 verified Capture中，`RpcClient.stop()`的实现层 instrumentation真实观察到一次被接受的 `SIGTERM`请求、Extension Evidence在 Process Boundary前已落盘，以及 `exit(code=143, signal=null) → close(code=143, signal=null)`；请求列表没有 `SIGKILL`，但发布源码保留超时后的 `SIGKILL` fallback；
-- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。成功 Run `31639460875`已把 committed Fixture与 Artifact完整绑定；PR #60已合并，squash commit为 `e71f44fce5022a520a1cc3c081659cb7819cb77d`。
+- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。当前成功 Run `31666316897`已把 committed Fixture与 PR #63 的 Artifact完整绑定；原始能力交付 PR #60已合并，squash commit为 `e71f44fce5022a520a1cc3c081659cb7819cb77d`。
 
 ### Runtime 合同连续性
 
@@ -69,10 +69,10 @@ capture fingerprint          70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 final Assistant sha256       5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
 external Provider prompts    0
 source state                 verified
-capture head                 fe4aeb840fa3efed7d881679a78955af470896d9
-capture workflow             31639460875
-capture artifact             9158276952
-capture artifact digest      sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b
+capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
+capture workflow             31666316897
+capture artifact             9168052320
+capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
 ```
 
 该 verified来源的固定容器 Fresh Capture、两个 Checker、committed Fixture校验与完整对象比较全部成功。Artifact ZIP只有一个 `122178`字节的 `result.json`；ZIP Digest、JSON SHA与 committed Fixture字节均已核对一致。
@@ -82,7 +82,7 @@ Manifest 是 Capture provenance 的机器事实源，并只允许两态：
 - `candidate`：`head`为完整 Commit SHA，`workflowRun`、`artifactId`、`artifactDigest`全部为 `null`；只允许 Draft PR恢复，不满足 Ready或合并条件；
 - `verified`：三项 provenance全部有效；非 Draft PR、`push main`、手动运行和定时 Gate强制 `--require-verified-source`，非 Draft PR再以 live provenance Checker绑定真实 Run / Artifact、证明来源 HEAD是当前 PR HEAD的真实祖先，并下载 ZIP确认其中唯一 `result.json`与 Manifest SHA及 committed Fixture完整字节相同。
 
-SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生 Fresh Capture并通过两个脱敏 Checker，再验证 committed Fixture和完整对象相等性；只有合格 Fresh Evidence会上传，且其上传不受随后旧 Fixture漂移失败影响。PR运行显式 checkout并核对事件中的 head SHA，不使用默认 synthetic merge ref作为 Capture来源。旧 Fixture漂移因此会安全失败，但不会阻止下载本次合格 Evidence重建 candidate；未通过 Fresh Checker的失败 JSON不会冒充脱敏 Artifact。`jsonSha256`绑定解压后的规范 JSON字节；`artifactDigest`绑定 GitHub Actions `upload-artifact`生成的 ZIP Archive，二者不是同一摘要。
+SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生Fresh Capture并通过两个脱敏Checker，再验证committed Fixture和完整对象相等性。Ready live provenance以run ID/`workflow_id`端点、canonical path和机器`display_title`绑定PR/action/updated_at/head，同时保留run attempt、PR关联、Artifact ZIP与committed字节绑定；不再把自定义标题化的Actions `run.name`与YAML name比较。
 
 恢复 Packer对 Fresh JSON与解压输出使用同一个 8 MiB有界读取上限，以仓库绝对位置运行 Checker，并用 Fixture父目录排他锁、父目录 / Fixture目录身份句柄、内容寻址不可变分片、完整 staging回读与单 Manifest原子切换避免失败时混写活动 Fixture；目录替换、符号链接、非普通文件和并发 Packer均 fail closed。旧分片保留给已读取旧 Manifest的并发 Reader，显式 GC需先增加 Reader lease或版本保留协议；崩溃或目录身份异常残留锁需要先确认没有运行中的 Packer并检查 Fixture树后人工清理。
 
@@ -97,9 +97,11 @@ PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独�
 - 历史 `best-effort-private-free` 风险接受和两条 live provenance proof继续保留，但不再描述当前保护能力；
 - Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
 - `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
-- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；失败必须可见并安全重跑，不能降低来源校验。
+- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；当前由Autonomous Merge即时provenance dispatch和完成后reconciler共同闭环：post-merge失败必须按`after`登记Incident，reconciler短时重试可见性并使用精确来源CI attempt安全补发，不能降低来源校验。
+- PR #62的CI Run `31663188980`显示旧`check`静态 Job先于五个CI内动态 Probe成功，服务端 required context当时没有依赖这些 Probe；该次五个CI内 Probe最终均成功且 Autonomous Merge等待整个CI Workflow完成，但路径相关的standalone SDK / RPC parity Workflow失败不在等待范围内，PR仍被合并，构成实际 required-status缺口；
+- #61 follow-up的内部`CI required evidence`以workflow endpoint/path、机器`display_title`、repo/ref/SHA和时间戳识别standalone run，不比较会等于自定义标题的Actions `run.name`；三套success候选须共同quiet 60秒。唯一`check`只接受当前run attempt evidence。
 
-Issue #61是公开仓库治理前置：服务端设置已落地，当前 primary branch正在把 Ruleset、Actions、Secret scanning、fork / token边界与机器 Checker同步进仓库。#61合并并通过真实 post-merge回读前，Issue #32保持排队而不创建新的 Runtime primary branch。
+PR #62已把Public Ruleset与仓库治理基线合入`main`，但上述 Required Check聚合缺口使Issue #61继续保持开放；当前`chore/61-required-check-aggregation` follow-up收紧CI内聚合、standalone轮询和事实源。该follow-up尚须在真实路径命中的 PR事件上验证，合并且验证前不关闭 #61，Issue #32保持排队而不创建新的 Runtime primary branch。
 
 ### 历史连续性锚点
 
@@ -143,7 +145,7 @@ Issue #57 和 PR #59 建立 work-item lifecycle：
 - Issue #44《后台任务进度获取》保留为所有者产品输入，并完成事件驱动进度订阅的 triage；
 - Issue #45 已由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
 - Issue #31、#37 已作为 #45 的 duplicate关闭；
-- Issue #61 是因仓库转为 Public触发的当前 R3治理前置；
+- Issue #61 的PR #62已合并Public治理基线，当前follow-up正在修复Required Check只等待静态 Job的缺口；
 - Issue #32 是 #61合并后立即恢复的下一项 canonical Runtime execution work item；
 - Issue #49 等待 #32 后冻结 `NormalizedRuntimeEvent v1`；
 - Issue #56 等待 #49 后实现 SQLite Observation Ledger；
@@ -165,9 +167,9 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 - GitHub Connector内容写入前创建并显式指定非默认分支；
 - 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
-- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions `check`、最新 base、线性历史和 Review Thread解决；2026-08-13 owner/admin读回记录 `bypass_actors=[]`，仓库 merge设置也只允许 squash；
+- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions最终`check`、最新 base、线性历史和 Review Thread解决；无`needs`的`check`observer只等待当前run内`CI required evidence`成功，内部evidence才聚合`static-contracts`、五个CI Probe和三套standalone run；2026-08-13 owner/admin读回记录`bypass_actors=[]`，仓库 merge设置也只允许 squash；
 - Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
-- Autonomous Merge与 Main Provenance Dispatch的 `workflow_run`写权限路径同时检查 same-repository source，实时 PR对象还会再次核对 `head.repo`；
+- Autonomous Merge的`workflow_run`写权限路径检查same-repository source和CI机器事件身份，只消费仍与实时PR的number、Ready状态、event time、base及head一致的成功CI；合并成功后同一Job验证真实merge SHA、来源和单一parent并立即dispatch。Main Provenance Dispatch改为监听Autonomous Merge完成的reconciler，以机器标题和只读Actions API绑定精确来源CI run/attempt/head；非PR、非success和fork正常no-op，连续可信未合并才no-op，API状态不确定登记持久Incident；已确认同源merge无论主路径结论都按`after`复验并幂等补发；
 - 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
 - `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
 - PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
@@ -206,8 +208,8 @@ docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
 
 严格按依赖推进：
 
-1. **Issue #61**：完成 Public + Free Ruleset、Actions、Secret scanning、fork / Token边界和机器事实源的 R3治理闭环；
-2. **Issue #32**：#61合并后从最新 `main`创建 `spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
+1. **Issue #61**：合并Required Check follow-up，并以真实路径触发验证早注册`check`observer只在同run内部evidence覆盖五个CI Probe和三套standalone run后成功；
+2. **Issue #32**：#61 follow-up合并后从最新`main`创建`spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
 3. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
 4. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
 
@@ -227,6 +229,7 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene持续暴露删除和 Token可读漂移，管理员字段则依赖新的 owner/admin读回或其他治理信号，任何审计都不能让管理员权限变成不可变；
 - 普通 `GITHUB_TOKEN`看不到 bypass actors与 security-and-analysis管理员字段；不保存长期管理员 PAT降低凭证风险，但这些字段的漂移只能靠 revisit trigger后的 owner/admin读回或其他治理信号发现；
 - Required Check名称或 GitHub Actions App身份漂移会 fail closed并阻塞全部合并；修复必须走 R3治理，不能增加 bypass；
+- Required `check`是无`needs`observer，每60秒只读轮询当前`${{ github.run_id }}` / `${{ github.run_attempt }}`内唯一`CI required evidence`；内部evidence负责五个CI Probe和三套standalone Workflow。任一层身份不匹配、非success、重复target、缺失或deadline超时都会fail closed；仅“Re-run failed jobs”不复用旧attempt evidence，恢复需“Re-run all jobs”；
 - Public仓库的源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；公开面审计观察到610条历史 Actions artifact记录，但没有逐字节审计历史 Artifact，现行 Workflow仍必须在上传前脱敏并使用明确的短保留期；
 - 旧 Probe Workflow的 `if: always()`已移除；Capture或脱敏 Checker失败时不再上传 failure JSON，不能把失败诊断冒充公开 Evidence；
 - Secret scanning与 push protection降低误提交风险但不能替代禁止真实记忆、凭证、生产数据和私有仓库内容进入 Commit或 Artifact；validity checks仍未启用；
@@ -234,7 +237,7 @@ Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；
 - Branch Cleanup与Repository Hygiene的 `deleteRef`没有原子 compare-and-delete，最终复核和删除间有极短可恢复竞态；
 - Repository Hygiene只删除 exact-head allowlist或合规 helper，不猜测删除来源不明分支；
 - 独立 AI审查仍使用同一仓库身份下的 cold-read评论协议，尚无独立Reviewer Bot；
-- 同一最终 HEAD多次成功 CI可能产生重复但幂等 provenance dispatch，Issue #15跟踪；
+- merge后API响应丢失可能让即时sender与reconciler都产生相同`after`的安全重复dispatch；receiver按`after`串行复验，Issue #15继续跟踪更强的外部去重；
 - Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
 - RPC成功路径、正常 EOF与 `RpcClient.stop()`实现层 SIGTERM / `exit(143) → close(143)`已有固定容器 verified Evidence。发布源码中的 `SIGKILL` fallback、Restart / Resume / Error仍必须按各自场景保留来源，其中 Worker恢复与错误语义由 #32独立冻结，不能从当前成功 Fixture外推；
 - 在仓库转回 Private、方案或默认分支变化、Ruleset / Secret scanning漂移、管理员字段相关变更后读回证据未刷新、提议引入长期管理员 PAT、真实用户记忆、生产凭证、多人写入、生产发布或 active Ruleset下仍出现未经授权的 direct-main更新时，必须重新评估风险接受。

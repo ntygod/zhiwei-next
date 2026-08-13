@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Run `31639460875`已经成功完成 Fresh Capture、两个 Checker、committed Fixture校验和完整对象比较；其 Artifact `9158276952`与 committed Fixture逐字节绑定，当前 Manifest因此处于 `verified`状态。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Run `31666316897`已经成功完成 Fresh Capture、两个 Checker、committed Fixture校验和完整对象比较；其 Artifact `9168052320`与 committed Fixture逐字节绑定，当前 Manifest因此处于 `verified`状态。
 
 Committed Fixture：
 
@@ -298,7 +298,7 @@ Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生�
 - `compressedSha256`：提交到仓库的 gzip 字节 SHA-256；
 - `artifactDigest`：GitHub Actions `upload-artifact` 生成的 ZIP Archive SHA-256，用于把 Workflow Run / Artifact 与下载来源绑定；它不是内层 `result.json` 的 `jsonSha256`。
 
-Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker，核对 Workflow、事件类型、成功结论、Run HEAD、PR关联、Artifact所属 Run、按 `run_attempt`派生的 Artifact名称、未过期状态与 ZIP Digest，并要求 `source.head`是当前 PR HEAD的真实 Git祖先；Checker还下载对应 ZIP，严格要求其中唯一条目为 `result.json`，把下载 ZIP摘要、`result.json`字节摘要与 committed Fixture完整字节同时绑定。无法用真实 Compare或内容绑定证明时 fail closed，不使用 synthetic merge parent fallback。只有 Fresh Capture 与 committed Fixture完整相等、两个结果 Checker、Manifest / Artifact live provenance、当前 HEAD CI与独立审查全部通过，PR才满足合并条件。
+Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker：用Manifest中的run ID读取Run，再以`run.workflow_id`查询canonical Workflow元数据，核对workflow ID/path、事件类型、机器`display_title`中的PR/action/updated_at/head、成功结论、Run HEAD与attempt、PR关联及Artifact所属Run。自定义`run-name`会让Actions API的`run.name`等于显示标题，因此Checker不再把它与YAML workflow name比较；YAML name仍在workflow元数据响应上验证。Checker还绑定Artifact名称/有效期/ZIP Digest，下载唯一`result.json`并与committed Fixture逐字节核对。任何身份或内容无法证明时fail closed。
 
 下面是当前 `verified` Manifest已记录的内容身份：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     fe4aeb840fa3efed7d881679a78955af470896d9
-workflow run     31639460875
-artifact id      9158276952
-artifact digest  sha256:0dbb2550690830b22d836fce9b48845ea4fd79c3661b05f5a73b9918c251429b
+capture head     822a8100c04895dc6c20f50996dec30a73ac816f
+workflow run     31666316897
+artifact id      9168052320
+artifact digest  sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
 ```
 
-Artifact ZIP内只有一个 `122178`字节的 `result.json`；ZIP摘要与上面的 `artifactDigest`一致，`result.json`摘要与 `jsonSha256`一致，并与 Loader从 committed分片还原的 JSON逐字节相同。此前 Run `31638606535`只作为旧 Fixture恢复时的 candidate输入，其整体失败结论与 Artifact身份没有写入 `source`。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
+Artifact ZIP内只有一个 `122178`字节的 `result.json`；ZIP摘要与上面的 `artifactDigest`一致，`result.json`摘要与 `jsonSha256`一致，并与 Loader从 committed分片还原的 JSON逐字节相同。Run `31666316897`来自当前治理 PR #63 的 Draft head，因此后续 Ready gate可以把这份成功 Evidence与当前 PR ancestry、Workflow和 Artifact实时绑定。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
 
 ## 安全与脱敏
 
