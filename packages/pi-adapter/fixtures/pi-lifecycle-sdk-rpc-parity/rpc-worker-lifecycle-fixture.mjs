@@ -4,60 +4,71 @@ import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
 
 const fixtureDir = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(fixtureDir, "../../../../");
-const manifestPath = join(fixtureDir, "rpc-worker-lifecycle-manifest.json");
+const manifestPath = join(fixtureDir, "rpc-worker-lifecycle-manifest-v2.json");
+const baseLoaderPath = join(fixtureDir, "rpc-worker-lifecycle-base-fixture.mjs");
 const checkerPath = join(
   repositoryRoot,
   "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
 );
-const MAX_MANIFEST_BYTES = 64 * 1024;
-const MAX_PART_BYTES = 1024 * 1024;
-const MAX_COMPRESSED_BYTES = 4 * 1024 * 1024;
+const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
-const PART_PATTERN =
-  /^rpc-worker-lifecycle-part-(\d{2})-([0-9a-f]{64})\.b64$/;
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
-
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
 }
-
 function fingerprint(value) {
   const clone = structuredClone(value);
   delete clone.contractFingerprint;
   return sha256(JSON.stringify(clone));
 }
+function exactKeys(value, expected, label) {
+  requireValue(
+    value && typeof value === "object" && !Array.isArray(value),
+    `${label} must be an object.`,
+  );
+  requireValue(
+    JSON.stringify(Object.keys(value).sort()) ===
+      JSON.stringify([...expected].sort()),
+    `${label} keys drifted.`,
+  );
+}
 
-async function readBoundedRegular(path, maxBytes, label) {
+async function readBoundedRegular(path, maximumBytes, label) {
   const before = await lstat(path, { bigint: true });
   requireValue(
     before.isFile() && !before.isSymbolicLink(),
     `${label} must be a regular file.`,
   );
-  requireValue(before.size <= BigInt(maxBytes), `${label} exceeds its byte limit.`);
+  requireValue(
+    before.size <= BigInt(maximumBytes),
+    `${label} exceeds its byte limit.`,
+  );
   const handle = await open(path, "r");
   try {
     const opened = await handle.stat({ bigint: true });
     requireValue(
-      opened.isFile() && opened.dev === before.dev && opened.ino === before.ino,
+      opened.isFile() &&
+        opened.dev === before.dev &&
+        opened.ino === before.ino &&
+        opened.size <= BigInt(maximumBytes),
       `${label} changed while it was opened.`,
     );
     const chunks = [];
     let total = 0;
     while (true) {
       const buffer = Buffer.allocUnsafe(
-        Math.min(64 * 1024, maxBytes + 1 - total),
+        Math.min(64 * 1024, maximumBytes + 1 - total),
       );
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
       if (bytesRead === 0) break;
       total += bytesRead;
-      requireValue(total <= maxBytes, `${label} exceeds its byte limit.`);
+      requireValue(total <= maximumBytes, `${label} exceeds its byte limit.`);
       chunks.push(buffer.subarray(0, bytesRead));
     }
     const after = await handle.stat({ bigint: true });
@@ -72,183 +83,33 @@ async function readBoundedRegular(path, maxBytes, label) {
     await handle.close();
   }
 }
-
-function exactKeys(value, expected, label) {
+function parseUtf8Json(bytes, label) {
+  const text = bytes.toString("utf8");
   requireValue(
-    value && typeof value === "object" && !Array.isArray(value),
-    `${label} must be an object.`,
+    Buffer.from(text, "utf8").equals(bytes),
+    `${label} must be UTF-8.`,
   );
+  return JSON.parse(text);
+}
+function runNode(path, args) {
+  const result = spawnSync(process.execPath, [path, ...args], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    timeout: 60_000,
+    maxBuffer: MAX_JSON_BYTES,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) throw result.error;
   requireValue(
-    JSON.stringify(Object.keys(value).sort()) ===
-      JSON.stringify([...expected].sort()),
-    `${label} keys drifted.`,
+    result.status === 0,
+    `${basename(path)} failed (${result.status}): ${(
+      result.stderr || result.stdout || ""
+    ).trim()}`,
   );
+  return result.stdout;
 }
 
-async function loadFixture() {
-  const manifestBytes = await readBoundedRegular(
-    manifestPath,
-    MAX_MANIFEST_BYTES,
-    "RPC Worker manifest",
-  );
-  const manifestText = manifestBytes.toString("utf8");
-  requireValue(
-    Buffer.from(manifestText, "utf8").equals(manifestBytes),
-    "RPC Worker manifest must be UTF-8.",
-  );
-  const manifest = JSON.parse(manifestText);
-  exactKeys(
-    manifest,
-    [
-      "schemaVersion",
-      "format",
-      "parts",
-      "partLength",
-      "base64Length",
-      "compressedBytes",
-      "compressedSha256",
-      "jsonBytes",
-      "jsonSha256",
-      "outerContractFingerprint",
-      "captureContractFingerprint",
-      "source",
-      "stability",
-    ],
-    "RPC Worker manifest",
-  );
-  requireValue(
-    manifest.schemaVersion === 1,
-    "RPC Worker manifest schemaVersion must be 1.",
-  );
-  requireValue(
-    manifest.format === "gzip+base64-parts",
-    "RPC Worker manifest format drifted.",
-  );
-  requireValue(
-    Array.isArray(manifest.parts) && manifest.parts.length === 1,
-    "RPC Worker manifest must reference one part.",
-  );
-  requireValue(
-    Number.isSafeInteger(manifest.partLength) && manifest.partLength > 0,
-    "RPC Worker partLength is invalid.",
-  );
-  requireValue(
-    Number.isSafeInteger(manifest.base64Length) && manifest.base64Length > 0,
-    "RPC Worker base64Length is invalid.",
-  );
-  requireValue(
-    Number.isSafeInteger(manifest.compressedBytes) &&
-      manifest.compressedBytes > 0,
-    "RPC Worker compressedBytes is invalid.",
-  );
-  requireValue(
-    manifest.compressedBytes <= MAX_COMPRESSED_BYTES,
-    "RPC Worker compressed bytes exceed the limit.",
-  );
-  requireValue(
-    Number.isSafeInteger(manifest.jsonBytes) && manifest.jsonBytes > 0,
-    "RPC Worker jsonBytes is invalid.",
-  );
-  requireValue(
-    manifest.jsonBytes <= MAX_JSON_BYTES,
-    "RPC Worker JSON bytes exceed the limit.",
-  );
-  requireValue(
-    /^[0-9a-f]{64}$/.test(manifest.compressedSha256),
-    "RPC Worker compressed SHA-256 is invalid.",
-  );
-  requireValue(
-    /^[0-9a-f]{64}$/.test(manifest.jsonSha256),
-    "RPC Worker JSON SHA-256 is invalid.",
-  );
-  requireValue(
-    /^[0-9a-f]{64}$/.test(manifest.outerContractFingerprint),
-    "RPC Worker outer fingerprint is invalid.",
-  );
-  requireValue(
-    /^[0-9a-f]{64}$/.test(manifest.captureContractFingerprint),
-    "RPC Worker capture fingerprint is invalid.",
-  );
-
-  const partName = manifest.parts[0];
-  requireValue(
-    basename(partName) === partName,
-    "RPC Worker part path must be a basename.",
-  );
-  const partMatch = PART_PATTERN.exec(partName);
-  requireValue(
-    Boolean(partMatch) && partMatch[1] === "00",
-    "RPC Worker part name is invalid.",
-  );
-  const partBytes = await readBoundedRegular(
-    join(fixtureDir, partName),
-    MAX_PART_BYTES,
-    "RPC Worker fixture part",
-  );
-  requireValue(
-    partBytes.length === manifest.partLength,
-    "RPC Worker part length drifted.",
-  );
-  requireValue(
-    sha256(partBytes) === partMatch[2],
-    "RPC Worker part content hash differs from its name.",
-  );
-  const base64 = partBytes.toString("ascii");
-  requireValue(
-    Buffer.from(base64, "ascii").equals(partBytes),
-    "RPC Worker part must be ASCII.",
-  );
-  requireValue(
-    base64.length === manifest.base64Length,
-    "RPC Worker base64 length drifted.",
-  );
-  requireValue(
-    base64.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(base64),
-    "RPC Worker base64 is malformed.",
-  );
-  const compressed = Buffer.from(base64, "base64");
-  requireValue(
-    compressed.length === manifest.compressedBytes,
-    "RPC Worker compressed byte length drifted.",
-  );
-  requireValue(
-    sha256(compressed) === manifest.compressedSha256,
-    "RPC Worker compressed SHA-256 drifted.",
-  );
-  const jsonBytes = gunzipSync(compressed, {
-    maxOutputLength: MAX_JSON_BYTES,
-  });
-  requireValue(
-    jsonBytes.length === manifest.jsonBytes,
-    "RPC Worker JSON byte length drifted.",
-  );
-  requireValue(
-    sha256(jsonBytes) === manifest.jsonSha256,
-    "RPC Worker JSON SHA-256 drifted.",
-  );
-  const jsonText = jsonBytes.toString("utf8");
-  requireValue(
-    Buffer.from(jsonText, "utf8").equals(jsonBytes),
-    "RPC Worker JSON must be UTF-8.",
-  );
-  const result = JSON.parse(jsonText);
-  requireValue(
-    result.contractFingerprint === manifest.outerContractFingerprint,
-    "RPC Worker outer fingerprint differs from manifest.",
-  );
-  requireValue(
-    result.contractFingerprint === fingerprint(result),
-    "RPC Worker outer fingerprint is invalid.",
-  );
-  requireValue(
-    result.capture?.contractFingerprint === manifest.captureContractFingerprint,
-    "RPC Worker capture fingerprint differs from manifest.",
-  );
-  requireValue(
-    result.capture?.contractFingerprint === fingerprint(result.capture),
-    "RPC Worker capture fingerprint is invalid.",
-  );
-
+function validateProvenance(manifest) {
   exactKeys(
     manifest.source,
     [
@@ -259,27 +120,20 @@ async function loadFixture() {
       "artifactId",
       "artifactDigest",
     ],
-    "RPC Worker source",
+    "RPC Worker v2 source",
   );
-  requireValue(
-    manifest.source.state === "captured",
-    "RPC Worker source state must be captured.",
-  );
-  requireValue(
-    /^[0-9a-f]{40}$/.test(manifest.source.head),
-    "RPC Worker source HEAD is invalid.",
-  );
+  requireValue(manifest.source.state === "captured", "Source state drifted.");
+  requireValue(/^[0-9a-f]{40}$/.test(manifest.source.head), "Source HEAD is invalid.");
   for (const key of ["workflowRun", "runAttempt", "artifactId"]) {
     requireValue(
       Number.isSafeInteger(manifest.source[key]) && manifest.source[key] > 0,
-      `RPC Worker source ${key} is invalid.`,
+      `Source ${key} is invalid.`,
     );
   }
   requireValue(
     /^sha256:[0-9a-f]{64}$/.test(manifest.source.artifactDigest),
-    "RPC Worker Artifact digest is invalid.",
+    "Source Artifact digest is invalid.",
   );
-
   exactKeys(
     manifest.stability,
     [
@@ -289,73 +143,172 @@ async function loadFixture() {
       "artifactResultJsonSha256",
       "byteIdenticalAcrossAttempts",
     ],
-    "RPC Worker stability",
+    "RPC Worker v2 stability",
   );
   requireValue(
     Number.isSafeInteger(manifest.stability.comparisonArtifactId) &&
       manifest.stability.comparisonArtifactId > 0 &&
       manifest.stability.comparisonArtifactId !== manifest.source.artifactId,
-    "RPC Worker comparison Artifact ID is invalid.",
+    "Comparison Artifact ID is invalid.",
   );
   requireValue(
     /^sha256:[0-9a-f]{64}$/.test(
       manifest.stability.comparisonArtifactDigest,
     ),
-    "RPC Worker comparison Artifact digest is invalid.",
+    "Comparison Artifact digest is invalid.",
   );
   requireValue(
     Number.isSafeInteger(manifest.stability.artifactResultJsonBytes) &&
-      manifest.stability.artifactResultJsonBytes > 0,
-    "RPC Worker Artifact JSON byte count is invalid.",
+      manifest.stability.artifactResultJsonBytes > 0 &&
+      /^[0-9a-f]{64}$/.test(
+        manifest.stability.artifactResultJsonSha256,
+      ) &&
+      manifest.stability.byteIdenticalAcrossAttempts === true,
+    "Repeated Artifact identity is invalid.",
   );
-  requireValue(
-    /^[0-9a-f]{64}$/.test(
-      manifest.stability.artifactResultJsonSha256,
+}
+
+async function loadFixture() {
+  const manifest = parseUtf8Json(
+    await readBoundedRegular(
+      manifestPath,
+      MAX_METADATA_BYTES,
+      "RPC Worker v2 Manifest",
     ),
-    "RPC Worker Artifact JSON SHA-256 is invalid.",
+    "RPC Worker v2 Manifest",
+  );
+  exactKeys(
+    manifest,
+    [
+      "schemaVersion",
+      "format",
+      "baseManifest",
+      "replacement",
+      "replacementSha256",
+      "jsonBytes",
+      "jsonSha256",
+      "outerContractFingerprint",
+      "captureContractFingerprint",
+      "source",
+      "stability",
+    ],
+    "RPC Worker v2 Manifest",
+  );
+  requireValue(manifest.schemaVersion === 2, "Manifest schemaVersion drifted.");
+  requireValue(
+    manifest.format === "gzip-plus-readable-case-replacement",
+    "Manifest format drifted.",
   );
   requireValue(
-    manifest.stability.byteIdenticalAcrossAttempts === true,
-    "RPC Worker repeated captures must be byte-identical.",
+    manifest.baseManifest === "rpc-worker-lifecycle-manifest.json",
+    "Base Manifest identity drifted.",
+  );
+  for (const field of [
+    "replacementSha256",
+    "jsonSha256",
+    "outerContractFingerprint",
+    "captureContractFingerprint",
+  ]) {
+    requireValue(/^[0-9a-f]{64}$/.test(manifest[field]), `${field} is invalid.`);
+  }
+  requireValue(
+    Number.isSafeInteger(manifest.jsonBytes) &&
+      manifest.jsonBytes > 0 &&
+      manifest.jsonBytes <= MAX_JSON_BYTES,
+    "Final JSON byte count is invalid.",
+  );
+  validateProvenance(manifest);
+
+  requireValue(
+    basename(manifest.replacement) === manifest.replacement,
+    "Replacement path must be a basename.",
+  );
+  const replacementBytes = await readBoundedRegular(
+    join(fixtureDir, manifest.replacement),
+    MAX_METADATA_BYTES,
+    "RPC Worker readable Replacement",
+  );
+  requireValue(
+    sha256(replacementBytes) === manifest.replacementSha256,
+    "Readable Replacement hash drifted.",
+  );
+  const replacement = parseUtf8Json(
+    replacementBytes,
+    "RPC Worker readable Replacement",
+  );
+  exactKeys(
+    replacement,
+    [
+      "schemaVersion",
+      "baseOuterContractFingerprint",
+      "baseCaptureContractFingerprint",
+      "caseName",
+      "replacement",
+    ],
+    "RPC Worker readable Replacement",
+  );
+  requireValue(replacement.schemaVersion === 1, "Replacement schemaVersion drifted.");
+  requireValue(
+    replacement.caseName === "acceptedProviderError",
+    "Replacement case identity drifted.",
   );
 
-  return { manifest, jsonBytes, result };
+  const tempRoot = await mkdtemp(join(tmpdir(), "zhiwei-rpc-worker-base-"));
+  const basePath = join(tempRoot, "base.json");
+  try {
+    runNode(baseLoaderPath, ["--output", basePath]);
+    const result = parseUtf8Json(
+      await readBoundedRegular(
+        basePath,
+        MAX_JSON_BYTES,
+        "RPC Worker base Fixture",
+      ),
+      "RPC Worker base Fixture",
+    );
+    requireValue(
+      result.contractFingerprint ===
+          replacement.baseOuterContractFingerprint &&
+        result.capture?.contractFingerprint ===
+          replacement.baseCaptureContractFingerprint,
+      "Replacement base identity drifted.",
+    );
+    requireValue(
+      result.capture?.cases?.acceptedProviderError,
+      "Base Provider-error case is missing.",
+    );
+    result.capture.cases.acceptedProviderError = replacement.replacement;
+    result.capture.contractFingerprint = manifest.captureContractFingerprint;
+    result.contractFingerprint = manifest.outerContractFingerprint;
+    const jsonBytes = Buffer.from(JSON.stringify(result), "utf8");
+    requireValue(jsonBytes.length === manifest.jsonBytes, "Final JSON length drifted.");
+    requireValue(sha256(jsonBytes) === manifest.jsonSha256, "Final JSON hash drifted.");
+    requireValue(
+      result.contractFingerprint === fingerprint(result),
+      "Final outer fingerprint is invalid.",
+    );
+    requireValue(
+      result.capture.contractFingerprint === fingerprint(result.capture),
+      "Final capture fingerprint is invalid.",
+    );
+    return { manifest, result, jsonBytes };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 }
 
 function runRuntimeChecker(path) {
-  const checked = spawnSync(
-    process.execPath,
-    [checkerPath, "--rpc-worker-lifecycle", path],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      timeout: 60_000,
-      maxBuffer: 4 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+  process.stdout.write(
+    runNode(checkerPath, ["--rpc-worker-lifecycle", path]),
   );
-  if (checked.error) throw checked.error;
-  if (checked.status !== 0) {
-    throw new Error(
-      `RPC Worker runtime checker failed (${checked.status}): ${(
-        checked.stderr ||
-        checked.stdout ||
-        ""
-      ).trim()}`,
-    );
-  }
-  process.stdout.write(checked.stdout);
 }
 
 async function withMaterializedFixture(callback) {
-  const { jsonBytes, result, manifest } = await loadFixture();
-  const tempRoot = await mkdtemp(
-    join(tmpdir(), "zhiwei-rpc-worker-fixture-"),
-  );
+  const fixture = await loadFixture();
+  const tempRoot = await mkdtemp(join(tmpdir(), "zhiwei-rpc-worker-v2-"));
   const path = join(tempRoot, "result.json");
   try {
-    await writeFile(path, jsonBytes, { flag: "wx", mode: 0o600 });
-    return await callback({ path, result, manifest, jsonBytes });
+    await writeFile(path, fixture.jsonBytes, { flag: "wx", mode: 0o600 });
+    return await callback({ ...fixture, path });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -367,65 +320,53 @@ async function main() {
   const outputIndex = args.indexOf("--output");
   const verifyOnly = args.includes("--verify-only");
   requireValue(
-    [compareIndex >= 0, outputIndex >= 0, verifyOnly].filter(Boolean).length <=
-      1,
-    "Choose at most one of --compare, --output, or --verify-only.",
+    [compareIndex >= 0, outputIndex >= 0, verifyOnly].filter(Boolean).length <= 1,
+    "Choose at most one Fixture mode.",
   );
-
   if (compareIndex >= 0) {
     const freshPath = args[compareIndex + 1];
     requireValue(Boolean(freshPath), "--compare requires a fresh result path.");
-    await withMaterializedFixture(async ({ path, result, manifest }) => {
+    await withMaterializedFixture(async ({ path, result }) => {
       runRuntimeChecker(path);
       runRuntimeChecker(resolve(freshPath));
-      const freshBytes = await readBoundedRegular(
-        resolve(freshPath),
-        MAX_JSON_BYTES,
+      const fresh = parseUtf8Json(
+        await readBoundedRegular(
+          resolve(freshPath),
+          MAX_JSON_BYTES,
+          "Fresh RPC Worker result",
+        ),
         "Fresh RPC Worker result",
       );
-      const fresh = JSON.parse(freshBytes.toString("utf8"));
       requireValue(
         JSON.stringify(fresh) === JSON.stringify(result),
-        `Fresh RPC Worker result differs from committed fixture: committed=${manifest.outerContractFingerprint}, fresh=${fresh.contractFingerprint ?? "<missing>"}.`,
+        `Fresh result differs from committed v2 Fixture: committed=${result.contractFingerprint}, fresh=${fresh.contractFingerprint ?? "<missing>"}.`,
       );
     });
-    console.log(
-      "Fresh RPC Worker result matches the complete committed Fixture object.",
-    );
+    console.log("Fresh RPC Worker result matches the complete committed v2 Fixture object.");
     return;
   }
-
   if (outputIndex >= 0) {
     const outputPath = args[outputIndex + 1];
     requireValue(Boolean(outputPath), "--output requires a destination path.");
     const { jsonBytes } = await loadFixture();
-    await writeFile(resolve(outputPath), jsonBytes, {
-      flag: "wx",
-      mode: 0o600,
-    });
-    console.log(`Materialized RPC Worker Fixture at ${resolve(outputPath)}.`);
+    await writeFile(resolve(outputPath), jsonBytes, { flag: "wx", mode: 0o600 });
+    console.log(`Materialized RPC Worker v2 Fixture at ${resolve(outputPath)}.`);
     return;
   }
-
   if (verifyOnly) {
     const { manifest } = await loadFixture();
-    console.log(
-      `RPC Worker Fixture content: OK (${manifest.outerContractFingerprint}).`,
-    );
+    console.log(`RPC Worker v2 Fixture content: OK (${manifest.outerContractFingerprint}).`);
     return;
   }
-
   await withMaterializedFixture(async ({ path, manifest }) => {
     runRuntimeChecker(path);
-    console.log(
-      `RPC Worker committed Fixture: OK (${manifest.outerContractFingerprint}).`,
-    );
+    console.log(`RPC Worker committed v2 Fixture: OK (${manifest.outerContractFingerprint}).`);
   });
 }
 
 try {
   await main();
 } catch (error) {
-  console.error(`RPC Worker Fixture validation failed: ${error.message}`);
+  console.error(`RPC Worker v2 Fixture validation failed: ${error.message}`);
   process.exitCode = 1;
 }
