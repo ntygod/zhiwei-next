@@ -2,43 +2,58 @@
 
 ## 状态
 
-Issue #32 / PR #64 在固定 `@earendil-works/pi-coding-agent@0.84.1` 发布 Artifact 上，以真实 `pi --mode rpc` 子进程、严格 LF-only JSONL 客户端和零真实凭证 Faux Provider，冻结了 Worker Prompt、退出、重启、Session恢复和错误边界。
+Issue #32 / PR #64 在固定 `@earendil-works/pi-coding-agent@0.84.1`发布 Artifact 上，以真实 `pi --mode rpc`子进程、LF-only JSONL客户端和零真实凭证 Faux Provider冻结 Worker Prompt、协议错误、退出、重启、Session恢复和执行失败边界。
 
-机器事实源：
+当前机器事实源：
 
 ```text
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest-v2.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provider-error-replacement.json
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
-packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-part-00-bfcc1561e9cc08585e2675ecce0a2ccea0b2a14900a63a242f9884ab3286300f.b64
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
 ```
 
-## 四类不能互相替代的边界
+历史 `rpc-worker-lifecycle-manifest.json`、base loader和内容寻址Part只保留 schema v1来源连续性，不再表示当前协议。
+
+## 五类不能互相替代的边界
 
 RPC Adapter和未来 Worker Supervisor必须分别持久化：
 
-1. **Command Response**：带 Request ID，表达命令是否被接受或在预检阶段失败；
-2. **Runtime Event**：无 Command ID，表达 Agent、Turn、Message和稳定边界；
-3. **Session State / Messages**：命令时点快照，不替代中间事件；
-4. **Process Boundary**：stdin EOF、宿主 Signal请求、Extension Shutdown、`exit`和`close`。
+1. **Command Response**：带 Request ID，表达命令接受或Preflight拒绝；
+2. **Runtime Event**：表达Agent、Turn、Message、Tool和稳定边界；
+3. **State / Messages Snapshot**：命令时点快照，不替代中间事件；
+4. **Host Action**：发送Command、stdin EOF和Signal Request；
+5. **Process Boundary**：spawn、Extension Shutdown、exit和close。
 
-`prompt response(success=true)`只表示 Prompt通过预检并被接受。它不能替代 `agent_start`、`agent_end`、`agent_settled`、最终 State/Messages或进程关闭。
+`prompt response(success=true)`只表示Prompt通过预检并被接受，不能替代`agent_start`、`agent_end`、`agent_settled`、最终State/Messages或进程关闭。
 
-## 正常 Prompt 与运行中状态
+## 两个序列域
 
-首个持久化 Prompt的固定顺序：
+当前v2合同冻结：
 
 ```text
-prompt Response              sequence 11
-agent_start                  sequence 13
-turn_start                   sequence 14
-user message start/end       sequence 15 / 16
-assistant message start      sequence 17
-running State Response       sequence 19
-assistant message end        sequence 22
-turn_end                     sequence 23
-agent_end                    sequence 24
-agent_settled                sequence 25
+workerTranscript       worker-output-and-process-boundaries
+clientActions          host-local-actions
+crossDomainTotalOrder  false
+```
+
+`workerTranscript`只保存Worker JSONL输出和Process Boundary；Host send、stdin end和signal保存在独立连续的`clientActions`。跨进程调度不存在可证明的全序，因此Adapter不能把两个序列号拼接成单一因果链。
+
+可以保存显式相关键，例如Command Request ID、Session alias和Worker instance，但不能把Host“先调用”机械等同为Worker“先观察”。
+
+## 正常 Prompt 与稳定状态
+
+首个持久化Prompt的稳定边界为：
+
+```text
+Prompt success Response
+→ agent_start
+→ turn_start
+→ user Message
+→ assistant streaming Message
+→ turn_end
+→ agent_end(willRetry=false)
+→ agent_settled
 ```
 
 状态变化：
@@ -49,57 +64,57 @@ accepted     isStreaming=true,  messageCount=1
 after settle isStreaming=false, messageCount=2
 ```
 
-因此 Ledger不能把 Prompt Response写成“任务完成”，也不能只保留最终 `get_state`而丢失接受后仍在运行的中间状态。
+Ledger不能把Prompt Response写成任务完成，也不能只保留最终`get_state`而丢失接受后仍在运行的Observation。
 
-## JSONL与协议错误
+## JSONL 与协议错误
 
-- framing只按 `LF`切分；JSON字符串中的 `U+2028`和`U+2029`不是记录边界；
-- malformed JSON产生一次 `command=parse, success=false` Response；
+- framing只按`LF`切分，JSON字符串中的`U+2028`和`U+2029`不是记录边界；
+- malformed JSON产生一次`command=parse, success=false` Response；
 - unknown command产生一次与原Request ID关联的失败Response；
-- 两类错误后同一个Worker仍能执行有效的`get_state`；
-- Runtime Event不携带Command Request ID，不能与Response混为一种记录。
+- 两类错误后同一个Worker仍能执行有效`get_state`；
+- Runtime Event不携带Command Request ID，不能与Response合并为一种记录。
 
-未知或非法输入必须作为可审计协议事实保存，但不能让客户端Reader失去后续记录同步。
+Reader必须在非法输入后恢复下一条LF记录，未知或非法输入仍作为可审计协议事实保存。
 
 ## EOF、Signal、Exit与Close
 
 ### stdin EOF
 
 ```text
-host stdin end
+Host stdin end
 → Extension session_shutdown(reason=quit)
 → process exit(code=0, signal=null)
 → process close(code=0, signal=null)
 ```
 
-Extension shutdown证据在`exit`和`close`被观察前已经持久化。EOF不等于直接杀进程，也不允许忽略stdout尾部；Worker必须以完整LF终止记录关闭。
+Extension shutdown证据在exit和close前已经持久化。EOF不等于直接杀进程，Worker必须以完整LF终止记录关闭。
 
 ### idle SIGTERM
 
 ```text
-host kill(SIGTERM), accepted=true
+Host signal(SIGTERM), accepted=true
 → Extension session_shutdown(reason=quit)
 → process exit(code=143, signal=null)
 → process close(code=143, signal=null)
 ```
 
-发布实现把SIGTERM处理为退出码143而不是Node的`signal=SIGTERM`字段。Adapter必须保存实际观测值，不能按宿主请求反推Process结果。
+发布实现把SIGTERM处理为退出码143，而不是Node的`signal=SIGTERM`字段。Adapter保存实际观测值，不能按Host请求反推Process结果。
 
-SIGKILL、OOM、宿主崩溃和Windows信号差异仍未由本Fixture覆盖，不能从上述两条成功关闭路径外推。
+SIGKILL、OOM、Host崩溃和Windows信号差异未由当前Fixture覆盖。
 
 ## Worker重启与Session恢复
 
-第一个Worker持久化Session后，第二个真实RPC Worker用该Session File启动：
+第一个Worker持久化Session后，第二个真实Worker用该Session File启动：
 
-- 初始`get_state`恢复相同的Session ID/File稳定别名；
-- 初始`get_messages`恢复`user → assistant`；
-- 新Prompt接受后`messageCount=2 → 3`，稳定后为`4`；
+- `get_state`恢复相同Session ID/File稳定别名；
+- `get_messages`恢复`user → assistant`；
+- 新Prompt使`messageCount=2 → 3 → 4`；
 - 最终消息为`user → assistant → user → assistant`；
-- 第二个Worker的Runtime Event与Process Boundary属于新的Worker实例，但仍关联同一Runtime Session。
+- 新Worker的Event与Process Boundary属于新Worker Instance，但仍关联同一Runtime Session。
 
-未来协议需要同时拥有`workerInstanceId`和`runtimeSessionId`，不能把进程身份与Session身份合并。
+未来协议必须同时表达`workerInstanceId`和`runtimeSessionId`，不能合并进程身份与Session身份。
 
-## Preflight拒绝与已接受后的Provider Error
+## Preflight拒绝与已接受后的 Provider Error
 
 ### Preflight拒绝
 
@@ -110,51 +125,68 @@ SIGKILL、OOM、宿主崩溃和Windows信号差异仍未由本Fixture覆盖，�
 - Messages保持空；
 - Worker仍可读取State并通过EOF正常关闭。
 
-这是Command级拒绝，没有Agent Run可供标记失败。
+这是Command级拒绝，没有Agent Run可标记失败。
 
 ### 已接受后的Provider Error
 
-Faux Provider固定返回`stopReason=error`后：
-
-- 原Prompt先返回一次`success=true`接受Response；
-- 随后产生Assistant error Message；
-- `agent_end(willRetry=false)`后出现`agent_settled`；
-- Assistant保留`errorMessage=ZHIWEI_RPC_FIXED_PROVIDER_ERROR`；
-- `get_last_assistant_text`为空；
-- 不补造第二个相关Prompt Response。
-
-这是执行阶段失败。Command Response、Assistant Message、Agent结尾和最终稳定边界必须共同保留。
-
-## Fixture与重复性
-
-两次成功Workflow attempt的Artifact各只有一个`result.json`，74,588字节且逐字节一致：
+Faux Provider固定返回`stopReason=error`：
 
 ```text
-artifact JSON sha256         a3bffda1548cd0619b28d89f389edf8ca7a0cb797ffb3f035195d4d03bc65946
-outer fingerprint            cea0a302391a2e072a7a1767b0ed0115458e49e228c3ee57607a8e58f8c114ba
-capture fingerprint          a30add6e0834c3cdc52ea198997d3ccd7bc3bebfaced456e47891bfafdf17631
+Prompt success Response
+→ agent_start
+→ Assistant message_end(stopReason=error)
+→ agent_end(willRetry=false)
+→ agent_settled
 ```
 
-Committed Fixture使用确定性gzip/base64和Manifest锁定完整对象。CI执行Fresh Checker、Committed Checker以及Fresh/Committed完整对象相等比较；不能只比较选定字段或指纹字符串。
+Assistant保留`errorMessage=ZHIWEI_RPC_FIXED_PROVIDER_ERROR`，`get_last_assistant_text`为空，且不会补造第二个相关Prompt Response。
 
-## 隐私与信任边界
+接受后立即请求的`get_state`可能合法观察：
 
-- 不向Worker传宿主Secret或真实Provider Credential；
-- Provider调用只使用发布包内Faux Provider，外部Provider Prompt数为零；
-- 不保存原始Session ID/File、Provider Response ID、PID、Extension nonce、绝对宿主路径、环境转储或模型原始思维链；
-- curated source bundle和容器rootfs只读，非root，`cap-drop=ALL`，`no-new-privileges`；
-- 合格Fresh Artifact只在Capture和脱敏Checker成功后上传。
+```text
+running   isStreaming=true,  messageCount=1
+settled   isStreaming=false, messageCount=2
+```
+
+Capture先验证结果只在这两个相位内，再从冻结Fixture删除竞态Response和相关sequence；Host请求仍保留在`clientActions`。协议必须披露该负证据，不能任选一次调度结果冒充固定顺序。
+
+## v2 Fixture与重复性
+
+两次成功Normalized Workflow attempt的Artifact各有一个74,587字节`result.json`并逐字节一致：
+
+```text
+artifact JSON sha256         8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62
+canonical JSON bytes         36265
+canonical JSON sha256        1b2fd8aabbc3d76f0c9538db9f4c9cdd47a717ee9610d3cd564bb9d36531638a
+outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d6305127ebe0053c
+capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
+```
+
+v2 loader先验证历史Base，再验证可读Provider Error replacement的哈希、精确键和完整对象重建。CI执行Fresh Checker、Committed Checker和Fresh/Committed完整对象相等比较，不能只比较选定字段或指纹字符串。
+
+## Capture源码信任边界
+
+- curated仓库bundle以只读挂载进入容器；
+- normalizer只在tmpfs创建精确、fail-closed的兼容副本；
+- 复制的两个源码文件设为`0400`，目录设为`0500`后才执行；
+- 只在清理时恢复目录权限并递归删除；
+- 可写Artifact输出目录不作为可执行源码目录；
+- 容器rootfs只读、非root、`cap-drop=ALL`、`no-new-privileges`。
+
+## 隐私边界
+
+Fixture不保存原始Session ID/File、Provider Response ID、PID、Extension nonce、凭证、Host环境转储、绝对Host路径或模型原始思维链。Provider调用只使用发布包内Faux Provider，外部Provider Prompt数为零；只有Capture与脱敏Checker同时成功的Fresh Artifact才上传。
 
 ## 对后续工作的约束
 
-`NormalizedRuntimeEvent v1`至少要能表达：
+`NormalizedRuntimeEvent v1`至少要表达：
 
-- RPC Request / Response与相关ID；
+- RPC Request / Response和相关ID；
 - Agent / Turn / Message Runtime Event；
 - State / Messages Snapshot；
 - Worker Instance、Runtime Session与Session File别名关系；
-- stdin EOF、Signal Request、Extension Shutdown、Exit和Close；
+- Host Action、Extension Shutdown、Exit和Close；
 - Preflight拒绝与已接受后的执行失败；
-- 来源Surface、观测顺序、稳定性和负证据。
+- `sourceSurface`、序列域、稳定边界和负证据。
 
-SQLite Observation Ledger不得用最终Messages或进程退出状态覆盖上述原始Observation。
+SQLite Observation Ledger不得用最终Messages或Process结果覆盖上述原始Observation。
