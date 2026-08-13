@@ -26,7 +26,7 @@
     "check:pi-parallel-tool-ordering": "node scripts/check-pi-parallel-tool-ordering-result.mjs",
     "check:pi-compaction-session-replacement": "node scripts/check-pi-compaction-session-replacement-result.mjs",
     "check:pi-sdk-rpc-parity": "node scripts/pi-sdk-rpc-parity-fixture.mjs --check",
-    "check:pi-rpc-worker-lifecycle": "node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle/fixture.mjs",
+    "check:pi-rpc-worker-lifecycle": "node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
     "check:pr": "node scripts/check-pr-contract.mjs",
     "probe:pi:sdk": "node scripts/probes/pi-sdk-surface.mjs",
     "probe:pi:rpc": "node scripts/probes/pi-rpc-state.mjs",
