@@ -38,7 +38,7 @@
     "probe:pi:parallel-tool-ordering": "PI_LIFECYCLE_SCENARIO=parallel-tool-ordering PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-parallel-tool-ordering-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "probe:pi:compaction-session-replacement": "PI_LIFECYCLE_SCENARIO=compaction-session-replacement PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-compaction-session-replacement-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "probe:pi:sdk-rpc-parity": "PI_LIFECYCLE_SCENARIO=sdk-rpc-parity PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
-    "probe:pi:rpc-worker-lifecycle": "PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-rpc-worker-lifecycle-normalized-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
+    "probe:pi:rpc-worker-lifecycle": "PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle PI_LIFECYCLE_CAPTURE_SCRIPT=packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
   }
