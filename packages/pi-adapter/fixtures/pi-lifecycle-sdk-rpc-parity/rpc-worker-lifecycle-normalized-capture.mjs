@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -11,6 +11,8 @@ const rawCapturePath = fileURLToPath(
   ),
 );
 const outputPath = resolveRequiredPath("PI_LIFECYCLE_OUTPUT");
+const RAW_CAPTURE_TIMEOUT_MS = 150_000;
+const MAX_DIAGNOSTIC_BYTES = 256 * 1024;
 
 function resolveRequiredPath(name) {
   const value = process.env[name];
@@ -162,23 +164,71 @@ function normalizeResult(result) {
   return result;
 }
 
-const child = spawnSync(process.execPath, [rawCapturePath], {
-  cwd: process.cwd(),
-  env: process.env,
-  encoding: "utf8",
-  timeout: 240_000,
-  maxBuffer: 16 * 1024 * 1024,
-  stdio: ["ignore", "pipe", "pipe"],
-});
-
-if (child.error) throw child.error;
-if (child.status !== 0) {
-  const diagnostic = (child.stderr || child.stdout || "").trim();
-  throw new Error(
-    `Raw RPC Worker capture exited ${child.status}: ${diagnostic}`,
-  );
+function appendDiagnostic(current, chunk) {
+  const combined = Buffer.concat([current, chunk]);
+  return combined.length <= MAX_DIAGNOSTIC_BYTES
+    ? combined
+    : combined.subarray(combined.length - MAX_DIAGNOSTIC_BYTES);
 }
 
+async function runRawCapture() {
+  const child = spawn(process.execPath, [rawCapturePath], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = Buffer.alloc(0);
+  child.stderr.on("data", (chunk) => {
+    stderr = appendDiagnostic(stderr, chunk);
+  });
+
+  return await new Promise((resolveRun, rejectRun) => {
+    let settled = false;
+    let timer;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      callback();
+    };
+
+    timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Preserve the timeout as the primary failure.
+      }
+      finish(() =>
+        rejectRun(
+          new Error(
+            `Raw RPC Worker capture exceeded ${RAW_CAPTURE_TIMEOUT_MS}ms.`,
+          ),
+        ),
+      );
+    }, RAW_CAPTURE_TIMEOUT_MS);
+    timer.unref?.();
+
+    child.once("error", (error) => finish(() => rejectRun(error)));
+    child.once("close", (code, signal) => {
+      finish(() => {
+        if (code === 0 && signal === null) {
+          resolveRun();
+          return;
+        }
+        const diagnostic = stderr.toString("utf8").trim();
+        rejectRun(
+          new Error(
+            `Raw RPC Worker capture closed with code=${code ?? "null"}, ` +
+              `signal=${signal ?? "null"}` +
+              (diagnostic ? `: ${diagnostic}` : "."),
+          ),
+        );
+      });
+    });
+  });
+}
+
+await runRawCapture();
 const raw = JSON.parse(await readFile(outputPath, "utf8"));
 const normalized = normalizeResult(raw);
 await writeFile(
