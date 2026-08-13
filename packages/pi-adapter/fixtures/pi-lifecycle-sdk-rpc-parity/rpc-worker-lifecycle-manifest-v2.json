@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "format": "gzip-plus-readable-case-replacement",
+  "baseManifest": "rpc-worker-lifecycle-manifest.json",
+  "replacement": "rpc-worker-lifecycle-provider-error-replacement.json",
+  "replacementSha256": "a5505b9c86b86af3a78068eb8440158361866600f41f922fb39d5ece840b3811",
+  "jsonBytes": 37220,
+  "jsonSha256": "d65aafbc2df10b553e5b60e1cae4c1cf9ead97c89e0678f261946fea9f82ed10",
+  "outerContractFingerprint": "9ae5d378c242721d69dd98cb3fff631104e088dfbf3e7d588e1936822169d52b",
+  "captureContractFingerprint": "8f1fba3d13ffa33f7e40dd404e6b20f35065eb7793e6a05732b08874a0b95b53",
+  "source": {
+    "state": "captured",
+    "head": "19f3e93a2bdf4f6b66e4abef00509e9549b22f6b",
+    "workflowRun": 31701880114,
+    "runAttempt": 2,
+    "artifactId": 9181642601,
+    "artifactDigest": "sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09"
+  },
+  "stability": {
+    "comparisonArtifactId": 9181575920,
+    "comparisonArtifactDigest": "sha256:f7a531198586c023d37b4a9b24b34197465c2945389431bc3fc14c7d402fd1cc",
+    "artifactResultJsonBytes": 74587,
+    "artifactResultJsonSha256": "8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62",
+    "byteIdenticalAcrossAttempts": true
+  }
+}
