@@ -31,8 +31,8 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function stableResult(value) {
-  const clone = structuredClone(value);
+function stableResult(result) {
+  const clone = structuredClone(result);
   delete clone.contractFingerprint;
   return JSON.stringify(clone);
 }
@@ -213,8 +213,7 @@ function normalizeProviderErrorStateRace(caseResult) {
   };
 }
 
-function normalizeResult(result) {
-  const capture = result?.capture;
+function normalizeCapture(capture) {
   requireValue(
     capture?.scenario === "rpc-worker-lifecycle",
     "Raw capture scenario must be rpc-worker-lifecycle.",
@@ -255,9 +254,7 @@ function normalizeResult(result) {
 
   delete capture.contractFingerprint;
   capture.contractFingerprint = fingerprint(capture);
-  delete result.contractFingerprint;
-  result.contractFingerprint = fingerprint(result);
-  return result;
+  return capture;
 }
 
 function appendDiagnostic(current, chunk) {
@@ -330,8 +327,8 @@ async function runRawCapture() {
 }
 
 await runRawCapture();
-const raw = JSON.parse(await readFile(outputPath, "utf8"));
-const normalized = normalizeResult(raw);
+const rawCapture = JSON.parse(await readFile(outputPath, "utf8"));
+const normalized = normalizeCapture(rawCapture);
 await writeFile(
   outputPath,
   `${JSON.stringify(normalized, null, 2)}\n`,
