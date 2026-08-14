@@ -18,6 +18,23 @@ const basePath = resolve(
   "../packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs",
 );
 const BASE_GIT_BLOB_SHA = "b07b9ab33efc36bd10325acb9bb8f07783ea5982";
+const SDK_RPC_PARITY_PROVENANCE_BASE_CONTRACT_TOKENS = Object.freeze([
+  "run.path === SDK_RPC_PARITY_WORKFLOW_PATH",
+  "SDK_RPC_PARITY_DISPLAY_TITLE_PATTERN.exec(",
+  'run.display_title ?? ""',
+  "displayPullNumber === eventPullRequest.number",
+  "displayTitleMatch[4] === source.head",
+  "runCreatedAt >= displayUpdatedAt",
+  "run.id === source.workflowRun",
+  "run.head_sha === source.head",
+  "isPositiveSafeInteger(run.workflow_id) && isPositiveSafeInteger(run.run_attempt)",
+  "candidate?.number === eventPullRequest.number",
+  "workflow.id === run.workflow_id",
+  "workflow.name === SDK_RPC_PARITY_WORKFLOW_NAME && workflow.path === SDK_RPC_PARITY_WORKFLOW_PATH",
+  'request(`/actions/workflows/${run.workflow_id}`, "Workflow")',
+  "artifact.workflow_run?.id === source.workflowRun",
+  "validateSdkRpcParityArtifactContent",
+]);
 const API_VERSION = "2022-11-28";
 const REQUEST_TIMEOUT_MS = 20_000;
 const WORKER_WAIT_MS = 4 * 60_000;
@@ -41,6 +58,12 @@ export async function verifySdkRpcParityProvenanceBase() {
     gitBlobSha(text) === BASE_GIT_BLOB_SHA,
     "SDK/RPC provenance base Git blob identity drifted.",
   );
+  for (const token of SDK_RPC_PARITY_PROVENANCE_BASE_CONTRACT_TOKENS) {
+    requireValue(
+      text.includes(token),
+      `SDK/RPC provenance base is missing contract token: ${token}`,
+    );
+  }
   return BASE_GIT_BLOB_SHA;
 }
 
