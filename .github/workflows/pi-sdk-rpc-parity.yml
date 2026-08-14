@@ -96,13 +96,30 @@ jobs:
           set -euo pipefail
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-capture.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs
           node --check scripts/check-pi-sdk-rpc-parity-result.mjs
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
           node --check scripts/check-pi-sdk-rpc-parity-provenance.mjs
           node --check scripts/pi-sdk-rpc-parity-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs
+          node scripts/check-pi-sdk-rpc-parity-provenance.mjs --verify-base
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
 
       - name: Capture fresh Pi SDK and RPC parity lifecycle in sandbox
         id: capture
@@ -121,6 +138,9 @@ jobs:
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs \
             | tar -xf - -C "$BUNDLE"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
@@ -235,9 +255,23 @@ jobs:
           node --check scripts/probes/pi-lifecycle-ci.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
           node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
-          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs
           node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
 
       - name: Capture fresh Pi RPC Worker lifecycle in sandbox
         id: capture_rpc_worker
@@ -254,6 +288,10 @@ jobs:
             scripts/probes/pi-lifecycle-ci.mjs \
             scripts/probes/pi-sdk-rpc-parity-contract.mjs \
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs \
             packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs \
             | tar -xf - -C "$BUNDLE"
           chmod -R a-w "$BUNDLE"
@@ -327,7 +365,9 @@ jobs:
   pi-sdk-rpc-parity-provenance:
     name: Pi SDK and RPC parity live provenance
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
-    needs: pi-sdk-rpc-parity-probe
+    needs:
+      - pi-sdk-rpc-parity-probe
+      - pi-rpc-worker-lifecycle-probe
     permissions:
       actions: read
       contents: read
