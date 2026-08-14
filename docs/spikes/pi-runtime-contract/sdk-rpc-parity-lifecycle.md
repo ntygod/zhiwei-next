@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。固定容器 Run `31666316897`已经成功完成 Fresh Capture、两个 Checker、committed Fixture校验和完整对象比较；其 Artifact `9168052320`与 committed Fixture逐字节绑定，当前 Manifest因此处于 `verified`状态。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #64固定容器Run `31781721009`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `9211959728`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `32287c7d33482ca58bd65b46438f3cc8552a3df3`是本次来源重绑提交的直接祖先。
 
 Committed Fixture：
 
@@ -290,7 +290,7 @@ Manifest 的 `source` 必须精确包含 `head`、`workflowRun`、`artifactId`�
 
 不允许部分填写 provenance。`candidate` 只表示“候选 Fixture 的内容和来源 Commit 已明确，但 GitHub Artifact 身份尚未固定”，不是最终验证结论，也不能进入 Ready 或合并。
 
-Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生并通过两个 Fresh Checker，再读取、校验并与 committed Fixture 比较完整对象；只有 Capture和Fresh校验都成功时才上传脱敏 Artifact，但其上传仍使用 `always()`语义，不受随后旧 Fixture或完整对象比较失败影响。因此 committed漂移不会阻止本次运行留下可下载的合格 Fresh Evidence，而未通过脱敏 Checker的失败 JSON不会被当作 Evidence上传。`pull_request` 运行显式 checkout 事件中的 `pull_request.head.sha`，并立即用 `git rev-parse HEAD` 精确核对；不使用 Actions 默认的 synthetic merge ref 冒充 Capture 来源。恢复时在 Draft PR 中用该 Evidence 重建 JSON、分片和 Manifest，先以 `candidate` 收敛内容，再把真实 Run / Artifact 身份补齐为 `verified`。
+Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生并通过两个 Fresh Checker，再读取、校验并与 committed Fixture 比较完整对象；只有 Capture和Fresh校验都成功时才上传脱敏 Artifact，但其上传仍使用`always()`语义，不受随后旧Fixture或完整对象比较失败影响。因此committed漂移不会阻止本次运行留下可下载的合格Fresh Evidence，而未通过脱敏Checker的失败JSON不会被当作Evidence上传。`pull_request`运行显式checkout事件中的`pull_request.head.sha`，并立即用`git rev-parse HEAD`精确核对；不使用Actions默认的synthetic merge ref冒充Capture来源。恢复时在Draft PR中用该Evidence重建JSON、分片和Manifest，先以`candidate`收敛内容，再把真实Run / Artifact身份补齐为`verified`。
 
 三个摘要不能混用：
 
@@ -298,7 +298,7 @@ Workflow 采用 **fresh-first recovery**：先在 digest-pinned 容器中产生�
 - `compressedSha256`：提交到仓库的 gzip 字节 SHA-256；
 - `artifactDigest`：GitHub Actions `upload-artifact` 生成的 ZIP Archive SHA-256，用于把 Workflow Run / Artifact 与下载来源绑定；它不是内层 `result.json` 的 `jsonSha256`。
 
-Ready 前必须完成最终 HEAD 的 R3 独立 AI 审查，并把 Manifest 升级为 `verified`。`ready_for_review` 会重新触发固定容器 Capture；非 Draft PR、`push main`、手动运行与定时运行都强制 `--require-verified-source`。非 Draft PR还运行 live provenance Checker：用Manifest中的run ID读取Run，再以`run.workflow_id`查询canonical Workflow元数据，核对workflow ID/path、事件类型、机器`display_title`中的PR/action/updated_at/head、成功结论、Run HEAD与attempt、PR关联及Artifact所属Run。自定义`run-name`会让Actions API的`run.name`等于显示标题，因此Checker不再把它与YAML workflow name比较；YAML name仍在workflow元数据响应上验证。Checker还绑定Artifact名称/有效期/ZIP Digest，下载唯一`result.json`并与committed Fixture逐字节核对。任何身份或内容无法证明时fail closed。
+Ready前必须完成最终HEAD的R3独立AI审查，并把Manifest升级为`verified`。`ready_for_review`会重新触发固定容器Capture；非Draft PR、`push main`、手动运行与定时运行都强制`--require-verified-source`。非Draft PR还运行live provenance Checker：用Manifest中的run ID读取Run，再以`run.workflow_id`查询canonical Workflow元数据，核对workflow ID/path、事件类型、机器`display_title`中的PR/action/updated_at/head、成功结论、Run HEAD与attempt、PR关联及Artifact所属Run。自定义`run-name`会让Actions API的`run.name`等于显示标题，因此Checker不再把它与YAML workflow name比较；YAML name仍在workflow元数据响应上验证。Checker还绑定Artifact名称/有效期/ZIP Digest，下载唯一`result.json`并与committed Fixture逐字节核对。任何身份或内容无法证明时fail closed。
 
 下面是当前 `verified` Manifest已记录的内容身份：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     822a8100c04895dc6c20f50996dec30a73ac816f
-workflow run     31666316897
-artifact id      9168052320
-artifact digest  sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
+capture head     32287c7d33482ca58bd65b46438f3cc8552a3df3
+workflow run     31781721009
+artifact id      9211959728
+artifact digest  sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
 ```
 
-Artifact ZIP内只有一个 `122178`字节的 `result.json`；ZIP摘要与上面的 `artifactDigest`一致，`result.json`摘要与 `jsonSha256`一致，并与 Loader从 committed分片还原的 JSON逐字节相同。Run `31666316897`来自当前治理 PR #63 的 Draft head，因此后续 Ready gate可以把这份成功 Evidence与当前 PR ancestry、Workflow和 Artifact实时绑定。Manifest 是 provenance 的机器事实源；叙述性文档不能覆盖其 `candidate` / `verified` 状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `31781721009`属于PR #64，机器`display_title`绑定`action=edited`、PR更新时间与Capture HEAD；本次来源重绑提交以该HEAD为直接父提交，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和严格祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

@@ -32,7 +32,9 @@ public-free-ruleset
 
 Issue #32当前唯一active branch为`spike/32-rpc-worker-lifecycle`，唯一primary PR为#64。PR仍为Draft，尚未进入main。
 
-对HEAD `47cdbbd0b735ee0a2abbf44b950567eae63e4cbf`的独立R3 cold review返回`BLOCKED`。该审查正确发现：Provider Error竞态State验证有损、comparison Artifact digest错误、JSONL Reader按String chunk解码并忽略空行/CR、legacy Checker路径门禁遗漏、Spike索引仍把schema v1 mixed sequence描述为当前合同。当前修复产生新HEAD后，旧审查自动失效，必须重新做exact-HEAD R3审查。
+对HEAD `47cdbbd0b735ee0a2abbf44b950567eae63e4cbf`的独立R3 cold review返回`BLOCKED`。该审查正确发现：Provider Error竞态State验证有损、comparison Artifact digest错误、JSONL Reader按String chunk解码并忽略空行/CR、legacy Checker路径门禁遗漏、Spike索引仍把schema v1 mixed sequence描述为当前合同。
+
+对HEAD `32287c7d33482ca58bd65b46438f3cc8552a3df3`的后续独立R3 cold review确认上述B1–B5已关闭，但发现旧SDK/RPC verified来源绑定到squash前分支提交`822a8100c04895dc6c20f50996dec30a73ac816f`，无法满足当前PR归属与祖先关系的Ready live provenance断言。当前修复把SDK/RPC来源重绑到PR #64的成功Run `31781721009`及Artifact `9211959728`；修复产生新HEAD后，两份旧审查都自动失效，必须重新做exact-HEAD R3审查。
 
 候选合同当前要求：
 
@@ -99,14 +101,14 @@ JSON sha256                  a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer fingerprint            c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture fingerprint          70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
-capture workflow             31666316897
-capture artifact             9168052320
-capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
+capture head                 32287c7d33482ca58bd65b46438f3cc8552a3df3
+capture workflow             31781721009
+capture artifact             9211959728
+capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
 external Provider prompts    0
 ```
 
-该verified来源继续由Fresh Capture、两个结果Checker、committed Fixture完整对象比较和live provenance Gate保护；Worker Fixture不能降低这套既有门禁。
+该verified来源来自PR #64的成功Draft Capture，Artifact内唯一`result.json`与committed Fixture逐字节相同。来源HEAD是本次重绑提交的直接祖先；Ready live provenance仍须在同一新exact HEAD上实际成功，Worker Fixture不能降低这套既有门禁。
 
 ## Runtime 合同连续性
 
@@ -160,7 +162,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
 
 当前正常WIP只有Issue #32 / PR #64：
 
-1. 修复B1–B5，完成新HEAD四套Draft Workflow和Fresh/committed完整对象比较；
+1. 完成SDK/RPC verified来源重绑、新HEAD四套Draft Workflow和Fresh/committed完整对象比较；
 2. 对新完整SHA执行独立R3 cold review；
 3. APPROVED后同步PR metadata，转Ready并完成Ready CI、Worker v2 live provenance、自动merge和Main Provenance；
 4. Issue #49从最新main创建`feat/49-normalized-runtime-event-v1`；

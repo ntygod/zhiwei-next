@@ -29,7 +29,7 @@ PR #27  source-and-runtime-verified-parallel-tool-ordering
 阶段 8  source-and-runtime-verified-compaction-session-replacement
 PR #60  source-and-runtime-verified-sdk-rpc-parity
 PR #64  source-and-runtime-verified-rpc-worker-lifecycle（候选交付，尚未合并）
-当前    RPC Worker schema v2已修复冷审阻塞项；等待新HEAD门禁与独立R3复审
+当前    SDK/RPC来源已重绑到PR #64的成功Capture；等待新HEAD门禁与独立R3复审
 ```
 
 历史标签只说明当时的证据强度，不代表当前能力回退。PR #64合并前，Issue #32的Runtime事实已由真实Artifact、重复Capture、committed Fixture、负向mutation和Ready live provenance合同固定，但用户结果仍处于候选交付状态。
@@ -174,12 +174,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
-capture workflow             31666316897
-capture artifact             9168052320
-capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
+capture head                 32287c7d33482ca58bd65b46438f3cc8552a3df3
+capture workflow             31781721009
+capture artifact             9211959728
+capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
 external Provider prompts    0
 ```
+
+该来源Run属于PR #64，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD将在本次重绑提交后成为当前HEAD的严格祖先。Ready live provenance仍必须在新exact HEAD上实际运行并成功。
 
 ## RPC Worker schema v2 当前合同
 
