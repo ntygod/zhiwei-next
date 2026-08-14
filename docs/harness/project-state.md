@@ -18,7 +18,7 @@ public-free-ruleset
 
 唯一required `check`是无`needs`、无checkout、仅`actions: read`的observer。它只接受当前`github.run_id + github.run_attempt`内的`CI required evidence`；内部evidence聚合五个CI Probe和三套路径相关standalone Workflow。仅重跑失败Job不能复用prior-attempt evidence，安全恢复必须使用 **Re-run all jobs**。
 
-普通临时`GITHUB_TOKEN`不能读取Ruleset `bypass_actors`或Repository `security_and_analysis`。管理员字段使用版本化owner/admin读回；仓库不保存PAT或其他长期管理员Secret。
+普通临时 `GITHUB_TOKEN`不能读取Ruleset `bypass_actors`或Repository `security_and_analysis`。管理员字段使用版本化owner/admin读回；仓库不保存 PAT或其他长期管理员 Secret。历史 `best-effort-private-free` 记录只作为连续性证据。
 
 ## 已进入 main 的 Runtime 基线
 
@@ -87,7 +87,7 @@ legacy Checker已移入`packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity
 
 ## SDK / RPC verified Fixture连续性
 
-SDK / RPC parity当前`verified` Fixture身份：
+SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 manifest                     packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
@@ -141,13 +141,13 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
 - **Follow-up队列 Fixture**：一个公共Agent Run包含两个Turn；Extension没有`queue_update`；初始`session.prompt()`会等到Follow-up完成、Queue排空和Session idle后返回。
 - 已验证用户取消、`abortRetry()`和retry exhaustion；**取消、abortRetry与 Retry exhaustion Fixture**中，部分Assistant消息以`stopReason=aborted`保留，存在willRetry=true但没有后续Agent Run，Retry exhaustion最终保留最后一次失败Assistant。
 - **并行 Tool ordering Fixture**：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
-- **Compaction 与 Session Replacement Fixture**：模型Context为`compactionSummary → assistant`；Session对象为`session-object-1 → session-object-2 → session-object-3`；旧Public Listener不会自动迁移。验证 Compaction与 Session Replacement后，原始Entry、派生Summary、Session Object与Listener Rebind仍保持不同来源。
+- **Compaction 与 Session Replacement Fixture**：模型Context为`compactionSummary → assistant`；Session对象为`session-object-1 → session-object-2 → session-object-3`；旧 Public Listener不会自动迁移。验证 Compaction与 Session Replacement后，原始Entry、派生Summary、Session Object与Listener Rebind仍保持不同来源。
 - **RPC真实 Prompt**：Command Response、Runtime Event、State / Messages、Extension Shutdown与Process Boundary分别保存。
 - Main Provenance Dispatch可能遭遇GitHub API瞬时故障；当前由即时dispatch与reconciler闭环，不能通过降低来源校验解决。
 
 ## Harness 与 Work Item治理
 
-- `developmentPause.active=false`，Issue #9已关闭，事故历史继续保留；
+- `developmentPause.active=false`，Issue #9 已关闭，事故历史继续保留；
 - Issue #61已由PR #63完成Public Ruleset、required evidence聚合与post-merge provenance闭环；
 - **Issue #57** 已完成仓库级`work-item lifecycle`治理；
 - **Issue #45** 是已完成的SDK / RPC parity canonical execution Issue；Issue #32只扩展真实RPC Worker生命周期；
