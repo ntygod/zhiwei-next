@@ -17,8 +17,9 @@
     "artifactDigest": "sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09"
   },
   "stability": {
+    "comparisonRunAttempt": 1,
     "comparisonArtifactId": 9181575920,
-    "comparisonArtifactDigest": "sha256:f7a531198586c023d37b4a9b24b34197465c2945389431bc3fc14c7d402fd1cc",
+    "comparisonArtifactDigest": "sha256:b7c415e360338f562d3384d22f4c786d845bb78dddaf7b8b10447def94f4b73f",
     "artifactResultJsonBytes": 74587,
     "artifactResultJsonSha256": "8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62",
     "byteIdenticalAcrossAttempts": true

@@ -35,6 +35,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
 scripts/pi-sdk-rpc-parity-fixture.mjs
 scripts/check-pi-sdk-rpc-parity-result.mjs
 scripts/check-pi-sdk-rpc-client-messages-result.mjs
+scripts/check-pi-sdk-rpc-parity-provenance.mjs
 ```
 
 当前 RPC Worker v2：
@@ -42,11 +43,13 @@ scripts/check-pi-sdk-rpc-client-messages-result.mjs
 ```text
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest-v2.json
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provider-error-replacement.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
 packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
 ```
 
-历史 `rpc-worker-lifecycle-manifest.json` 与内容寻址 Part 只保留 schema v1 Base 来源，不再表示当前协议。
+历史 `rpc-worker-lifecycle-manifest.json`、base loader、legacy Checker blob和内容寻址Part只保留 schema v1 Base来源，不再表示当前协议。
 
 ## 四个来源表面
 
@@ -57,7 +60,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
 | RPC JSONL | Command/Response、Runtime Event、Snapshot、framing |
 | Host / Process | send、EOF、Signal Request、spawn、shutdown、exit、close |
 
-`pi-adapter` 必须显式保存 `sourceSurface`。同名事件可以投影为相同语义，但不能因此删除来源、Request ID、Snapshot、Host Action 或 Process Boundary。
+`pi-adapter`必须显式保存`sourceSurface`。同名事件可以投影为相同语义，但不能因此删除来源、Request ID、Snapshot、Host Action或Process Boundary。
 
 ## 共同生命周期模型
 
@@ -73,29 +76,29 @@ Session shutdown
 Worker exit / close
 ```
 
-一个 Prompt可包含多个 Agent Run；一个 Agent Run也可能包含多个 Turn。`agent_end(willRetry=true)`只表达当时计划，Prompt Promise或RPC Prompt Response返回不表示任务成功。
+一个Prompt可包含多个Agent Run；一个Agent Run也可能包含多个Turn。`agent_end(willRetry=true)`只表达当时计划，Prompt Promise或RPC Prompt Response返回不表示任务成功。
 
 ## SDK 与 Extension 连续性锚点
 
 ### Retry success
 
-`source-and-runtime-verified-retry-success`：**Public SDK与 Extension差异**必须保留。Extension没有收到 Public Session的`auto_retry_start/end`，但事件流仍保存被 Retry替代的失败Assistant；一个 Prompt可包含多个 Agent Run。
+`source-and-runtime-verified-retry-success`：**Public SDK与 Extension差异**必须保留。Extension没有收到 Public Session 的 `auto_retry_start/end`，但事件流仍保存被 Retry替代的失败 Assistant。一个 Prompt可包含多个 Agent Run。
 
 ### Follow-up queue
 
-`source-and-runtime-verified-follow-up-queue`：一个 Prompt可包含多个 Agent Run，一个 Agent Run也可能包含多个 Turn。Host应显式注册 `queue_update` Listener；队列为空不等于 Prompt完成，不能把 Follow-up固定映射成新 Agent Run。
+`source-and-runtime-verified-follow-up-queue`：一个 Prompt可包含多个 Agent Run，一个 Agent Run也可能包含多个 Turn。Host 应显式注册 `queue_update` Listener；队列为空不等于 Prompt完成，不能把 Follow-up固定映射成新 Agent Run。
 
 ### Cancel / abortRetry / exhaustion
 
-`source-and-runtime-verified-cancel-retry-exhaustion`：被取消的部分 Assistant仍是Observation；willRetry=true 不保证后续 Agent Run。Retry exhaustion结束时Prompt Promise仍正常 resolve，而Extension仍不提供 `auto_retry_start/end`。
+`source-and-runtime-verified-cancel-retry-exhaustion`：被取消的部分 Assistant仍是 Observation；willRetry=true 不保证后续 Agent Run。Retry exhaustion结束时，Prompt Promise仍正常 resolve，而 Extension仍不提供 `auto_retry_start/end`。
 
 ### Parallel Tool ordering
 
-`source-and-runtime-verified-parallel-tool-ordering`：声明顺序为`alpha → beta → gamma`，真实完成顺序为`beta → gamma → alpha`，Tool Result消息顺序恢复为`alpha → beta → gamma`。不能仅凭 `tool_execution_end`推断最终持久化顺序。
+`source-and-runtime-verified-parallel-tool-ordering`：声明顺序为 `alpha → beta → gamma`，真实完成顺序为 `beta → gamma → alpha`，Tool Result消息顺序恢复为 `alpha → beta → gamma`。不能仅凭 `tool_execution_end` 推断最终持久化顺序。
 
 ### Compaction / Session Replacement
 
-`source-and-runtime-verified-compaction-session-replacement`：Compaction Summary是派生上下文，不覆盖原始Entry；Session File Identity与内存 Session Object Identity分开。旧 Public Listener不会自动迁移；固定手动Compaction的Public `entry_appended`没有出现。
+`source-and-runtime-verified-compaction-session-replacement`：Compaction Summary是派生上下文，不覆盖原始 Entry；Session File Identity与内存 Session Object Identity分开。旧 Public Listener不会自动迁移；固定手动 Compaction 的 Public `entry_appended`没有出现。
 
 ## SDK / RPC 同任务
 
@@ -125,11 +128,12 @@ RPC `message_update`只保存delta、不含累计`partial`，不能跨Surface机
 
 ## RPC Worker v2
 
-Issue #32在真实 `pi --mode rpc`子进程上冻结Command Response、Runtime Event、State/Messages Snapshot、Host Action和Process Boundary。
+Issue #32在真实`pi --mode rpc`子进程上冻结Command Response、Runtime Event、State/Messages Snapshot、Host Action和Process Boundary。
 
-### 协议与恢复
+### 严格字节协议
 
-- 只按LF分隔记录，JSON字符串中的`U+2028` / `U+2029`不是换行；
+RPC stdout由 **strict byte LF reader** 处理：先在Buffer中按`0x0a`切分，再做fatal UTF-8解码和字节往返校验。空record、CRLF、非法UTF-8、跨chunk损坏和未LF终止尾片都fail closed；JSON字符串中的`U+2028` / `U+2029`仍属于同一record。
+
 - malformed JSON产生一次`command=parse, success=false` Response；
 - unknown command产生一次与Request ID关联的失败Response；
 - 两类错误后同一Worker仍能执行有效`get_state`。
@@ -174,13 +178,21 @@ Prompt success Response
 → agent_settled
 ```
 
-接受后的`get_state`可能观察running(`true/1`)或settled(`false/2`)。Capture验证只允许这两个相位，再从冻结Fixture排除竞态Response；Host请求仍保留在`clientActions`。执行失败不补造第二个相关Prompt Response。
+接受后的`get_state`可能观察running或settled，但当前Capture先验证实际Response、`stateDuring`和ordering summary一致，并验证两个 **complete running/settled State object**：running必须与final State除`isStreaming=true/messageCount=1`外完全相同且位于`agent_settled`前；settled必须与完整final State相等。Provider、Model/API、Session identity、pending count、thinking、compacting和queue mode都不能漂移。只有完整验证通过后才排除竞态Response；Host请求仍保留在`clientActions`。
 
-### 当前 Fixture
+Provider/Session/pending count和late-running mutation均必须被拒绝。执行失败不补造第二个相关Prompt Response。
+
+### 当前 Fixture 与 live provenance
 
 ```text
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
+source run attempt           2
+source artifact              9181642601
+source artifact digest       sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09
+comparison run attempt       1
+comparison artifact          9181575920
+comparison artifact digest   sha256:b7c415e360338f562d3384d22f4c786d845bb78dddaf7b8b10447def94f4b73f
 artifact result bytes        74587
 artifact result sha256       8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62
 canonical JSON bytes         36265
@@ -189,7 +201,24 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-v2 loader先执行历史Base legacy校验，再应用可读Provider Error replacement，验证精确键、哈希、双层指纹和完整对象。Fresh Capture必须与Committed对象完全相等。
+两个历史attempt的capture、Fresh validation和upload步骤成功，但当时 **historical compare step failed**，所以旧Workflow/Worker Job整体为failure。当前代码不改写这条历史：v2 loader在当前HEAD完成完整归一化、负向mutation和committed-object比较；Ready **live provenance**再实时验证run/attempt/HEAD、Worker Job步骤、Artifact ID/name/GitHub digest、ZIP、唯一`result.json`和完整归一化对象。该检查与旧SDK/RPC provenance共用Ready gate，并等待当前Fresh Worker Job成功。
+
+## npm Artifact 信任边界
+
+第三方Pi Artifact只在隔离CI中动态执行：
+
+- 精确版本、registry integrity与shasum；
+- install scripts禁用；
+- digest-pinned Node容器；
+- curated source bundle与容器rootfs只读；
+- 非root、`cap-drop=ALL`、`no-new-privileges`；
+- 不挂载Host checkout；
+- 不传GitHub Secret、真实Provider Credential、用户数据或完整环境；
+- Runtime只使用发布包内Faux Provider，外部Provider Prompt数为零；
+- Capture和脱敏Checker成功后才上传公开Artifact；
+- Fresh Capture、Committed Fixture、结果Checker、完整对象比较和live provenance共同门禁。
+
+Capture launcher以Git blob SHA固定历史源码，在tmpfs创建只读hardened副本，并在执行后重新验证source hash。
 
 ## Adapter 规则
 
