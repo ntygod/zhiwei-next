@@ -163,6 +163,8 @@ published RpcClient.stop():
 
 Manifest的SDK / RPC parity `source`继续只允许`candidate`与`verified`两态。当前状态必须保持`verified`，Ready live provenance继续绑定真实Workflow、PR、HEAD ancestry、Artifact ZIP和唯一`result.json`内容。
 
+以下数字是当前 `verified` Manifest记录的内容身份与来源状态：
+
 ```text
 parts                        6
 compressedBytes              9861
