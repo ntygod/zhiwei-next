@@ -76,29 +76,29 @@ Session shutdown / invalidation / replacement / rebind
 Worker exit / close
 ```
 
-一个 Prompt 可包含多个 Agent Run；一个 Agent Run 也可能包含多个 Turn。`agent_end(willRetry=true)` 只表达当时计划，Prompt Promise 或 RPC Prompt Response 返回不表示任务成功。
+一个 Prompt可包含多个 Agent Run；一个 Agent Run也可能包含多个 Turn。`agent_end(willRetry=true)` 只表达当时计划，Prompt Promise 或 RPC Prompt Response 返回不表示任务成功。
 
 ## SDK 与 Extension 连续性锚点
 
 ### Retry success
 
-`source-and-runtime-verified-retry-success`：**Public SDK与 Extension差异**必须保留。Extension 没有收到 Public Session 的 `auto_retry_start/end`，但事件流仍保存被 Retry 替代的失败 Assistant。一个 Prompt 可包含多个 Agent Run。
+`source-and-runtime-verified-retry-success`：**Public SDK与 Extension差异**必须保留。Extension没有收到 Public Session 的 `auto_retry_start/end`，但事件流仍保存被 Retry替代的失败 Assistant。一个 Prompt可包含多个 Agent Run。
 
 ### Follow-up queue
 
-`source-and-runtime-verified-follow-up-queue`：一个 Prompt 可包含多个 Agent Run，一个 Agent Run 也可能包含多个 Turn。Host 应显式注册 `queue_update` Listener；队列为空不等于 Prompt 完成，不能把 Follow-up 固定映射成新 Agent Run。
+`source-and-runtime-verified-follow-up-queue`：一个 Prompt可包含多个 Agent Run，一个 Agent Run也可能包含多个 Turn。Host 应显式注册 `queue_update` Listener；队列为空不等于 Prompt完成，不能把 Follow-up固定映射成新 Agent Run。
 
 ### Cancel / abortRetry / exhaustion
 
-`source-and-runtime-verified-cancel-retry-exhaustion`：被取消的部分 Assistant 仍是 Observation；willRetry=true 不保证后续 Agent Run。Retry exhaustion 结束时，Prompt Promise 仍正常 resolve，而 Extension 仍不提供 `auto_retry_start/end`。
+`source-and-runtime-verified-cancel-retry-exhaustion`：被取消的部分 Assistant仍是 Observation；willRetry=true 不保证后续 Agent Run。Retry exhaustion结束时，Prompt Promise仍正常 resolve，而 Extension仍不提供 `auto_retry_start/end`。
 
 ### Parallel Tool ordering
 
-`source-and-runtime-verified-parallel-tool-ordering`：声明顺序为 `alpha → beta → gamma`，真实完成顺序为 `beta → gamma → alpha`，Tool Result 消息顺序恢复为 `alpha → beta → gamma`。不能仅凭 `tool_execution_end` 推断最终持久化顺序。
+`source-and-runtime-verified-parallel-tool-ordering`：声明顺序为 `alpha → beta → gamma`，真实完成顺序为 `beta → gamma → alpha`，Tool Result消息顺序恢复为 `alpha → beta → gamma`。不能仅凭 `tool_execution_end` 推断最终持久化顺序。
 
 ### Compaction / Session Replacement
 
-`source-and-runtime-verified-compaction-session-replacement`：Compaction Summary 是派生上下文，不覆盖原始 Entry；Session File Identity 与内存 Session Object Identity 分开。旧 Public Listener 不会自动迁移；固定手动 Compaction 的 Public `entry_appended` 没有出现。
+`source-and-runtime-verified-compaction-session-replacement`：Compaction Summary是派生上下文，不覆盖原始 Entry；Session File Identity与内存 Session Object Identity分开。旧 Public Listener不会自动迁移；固定手动 Compaction 的 Public `entry_appended`没有出现。
 
 真实 Replacement 证据是 Extension `session_shutdown/session_start` 与 Host orchestration phases，而不是 Extension 原生 `session_replaced`。正式协议因此分开保存 old shutdown、Host invalidation、new start、可选 source-linked Host replacement aggregate 与 Host listener rebind。
 
@@ -118,7 +118,7 @@ agent_start
 
 SDK preflight、Public/Extension Event、RPC Command ID、State/Messages Snapshot、Host 关闭动作、Extension Shutdown、Exit 与 Close 仍分别保存。
 
-真实 RPC 证明 Prompt success Response 先于 `agent_start` 和 `agent_settled`，State 为：
+真实RPC证明Prompt success Response先于`agent_start`和`agent_settled`，State为：
 
 ```text
 before  isStreaming=false  messageCount=0
@@ -126,11 +126,11 @@ during  isStreaming=true   messageCount=1
 after   isStreaming=false  messageCount=2
 ```
 
-RPC `message_update` 只保存 delta、不含累计 `partial`，不能跨 Surface 机械统一。
+RPC `message_update`只保存delta、不含累计`partial`，不能跨Surface机械统一。
 
 ## RPC Worker v2
 
-Issue #32 在真实 `pi --mode rpc` 子进程上冻结 Command Response、Runtime Event、State/Messages Snapshot、Host Action 和 Process Boundary。
+Issue #32在真实`pi --mode rpc`子进程上冻结Command Response、Runtime Event、State/Messages Snapshot、Host Action和Process Boundary。
 
 ### 严格字节协议
 
@@ -148,7 +148,7 @@ clientActions          host-local-actions
 crossDomainTotalOrder  false
 ```
 
-Worker 输出/Process 与 Host send/EOF/signal 各自连续，但不能拼成跨进程全序。协议保存显式关联键，不编造因果顺序。
+Worker输出/Process与Host send/EOF/signal各自连续，但不能拼成跨进程全序。协议保存显式关联键，不编造因果顺序。
 
 ### EOF、Signal 与 Session 恢复
 
@@ -170,7 +170,7 @@ Host signal(SIGTERM), accepted=true
 
 ### Preflight 与 Provider Error
 
-Preflight 拒绝只有一次 `success=false` Response，不出现 `agent_start`。已接受 Provider Error 稳定链为：
+Preflight拒绝只有一次`success=false` Response，不出现`agent_start`。已接受Provider Error稳定链为：
 
 ```text
 Prompt success Response
@@ -242,16 +242,16 @@ Capture launcher 以 Git blob SHA 固定历史源码，在 tmpfs 创建只读 ha
 
 ## Adapter 规则
 
-1. 只有 `packages/pi-adapter` 可以导入 Pi SDK 类型。
-2. Pi Session 是执行状态，不是长期记忆真源。
-3. Prompt、Agent Run、Turn、Message、Tool、RPC Request、Worker Instance 与 Runtime Session 分开建模。
-4. SDK、Extension、RPC 与 Host 保留 `sourceSurface` 和各自序列域。
-5. Prompt success 只规范化为接受，不替代 `agent_settled` 或最终结果。
+1. 只有`packages/pi-adapter`可以导入Pi SDK类型。
+2. Pi Session是执行状态，不是长期记忆真源。
+3. Prompt、Agent Run、Turn、Message、Tool、RPC Request、Worker Instance与Runtime Session分开建模。
+4. SDK、Extension、RPC与Host保留`sourceSurface`和各自序列域。
+5. Prompt success只规范化为接受，不替代`agent_settled`或最终结果。
 6. Adapter 对 Message、State 与 Messages Snapshot 做字段级投影；不能把任意 Pi JSON 先 snapshot 后原样写入协议。
-7. Compaction Summary、最终 Messages 和 Process 结果都不能覆盖原始 Observation。
+7. Compaction Summary、最终Messages和Process结果都不能覆盖原始Observation。
 8. Session Shutdown、Invalidation、Replacement Aggregate 与 Listener Rebind 保持不同来源和 provenance。
 9. 缺失 correlation 保持缺失；不得生成随机 Run/Turn/Message/Tool ID。
-10. 未知事件保留可诊断 hash 信息并安全失败。
+10. 未知事件保留可诊断信息并安全失败。
 
 ## 后续顺序
 
