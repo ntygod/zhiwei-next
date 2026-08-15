@@ -51,10 +51,10 @@ export function normalizePiEvent(
     return { ...shared, type: "input.observed", observation: { actor: "user", kind: "user_input", payload: { text: event.text } } };
   }
   if (event.type === "tool_call") {
-    return { ...shared, type: "tool.called", observation: { actor: "tool", kind: "tool_call", payload: { toolName: event.toolName, input: event.input } };
+    return { ...shared, type: "tool.called", observation: { actor: "tool", kind: "tool_call", payload: { toolName: event.toolName, input: event.input } } };
   }
   if (event.type === "tool_result") {
-    return { ...shared, type: "tool.completed", observation: { actor: "tool", kind: "tool_result", payload: { toolName: event.toolName, result: event.result } };
+    return { ...shared, type: "tool.completed", observation: { actor: "tool", kind: "tool_result", payload: { toolName: event.toolName, result: event.result } } };
   }
   if (event.type === "agent_settled") {
     return { ...shared, type: "session.settled", observation: { actor: "assistant", kind: "session_event", payload: event.outcome ?? {} } };
