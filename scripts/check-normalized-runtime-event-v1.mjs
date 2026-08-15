@@ -13,6 +13,8 @@ import {
   NORMALIZED_RUNTIME_EVENT_V1_FIXTURE_SOURCE,
 } from "../packages/protocol/fixtures/normalized-runtime-event-v1.fixture.ts";
 
+const EXPECTED_EVENT_COUNT = 60;
+const EXPECTED_FIXTURE_HASH = "8147f73a7bb74d4518f46c5f7f4cfccc7bd2760728f81bdd115f31f6e82a5b44";
 const violations = [];
 
 function requireValue(condition, message) {
@@ -41,7 +43,27 @@ requireValue(
   NORMALIZED_RUNTIME_EVENT_V1_FIXTURE_SOURCE.runtimeVersion === "0.84.1",
   "Fixture Pi version drifted.",
 );
-requireValue(events.length === 41, `Fixture event count drifted: ${events.length}.`);
+requireValue(
+  events.length === EXPECTED_EVENT_COUNT,
+  `Fixture event count drifted: expected ${EXPECTED_EVENT_COUNT}, got ${events.length}.`,
+);
+const fixtureHash = canonicalJsonSha256V1(events);
+requireValue(
+  fixtureHash === EXPECTED_FIXTURE_HASH,
+  `Fixture canonical hash drifted: expected ${EXPECTED_FIXTURE_HASH}, got ${fixtureHash}.`,
+);
+
+for (const evidence of Object.values(NORMALIZED_RUNTIME_EVENT_V1_FIXTURE_SOURCE.evidence)) {
+  try {
+    const value = JSON.parse(await readFile(evidence.path, "utf8"));
+    requireValue(
+      value[evidence.field] === evidence.value,
+      `${evidence.path} ${evidence.field} drifted.`,
+    );
+  } catch (error) {
+    violations.push(`Could not validate Runtime evidence ${evidence.path}: ${error.message}`);
+  }
+}
 
 const surfaces = new Set(events.map((event) => event.source.surface));
 for (const surface of ["sdk", "extension", "rpc", "host"]) {
@@ -73,19 +95,44 @@ const promptResponses = events.filter(
 );
 requireValue(promptResponses.length === 2, "Fixture must cover accepted and rejected Prompt Responses.");
 requireValue(
-  promptResponses.every(
-    (event) => event.data.kind === "command.response" && event.data.phase === "preflight-result",
-  ),
+  promptResponses.every((event) => event.data.kind === "command.response" && event.data.phase === "preflight-result"),
   "Prompt Responses must remain preflight results.",
 );
 requireValue(
-  promptResponses.some(
-    (event) => event.data.kind === "command.response" && event.data.success === true,
-  ) &&
-    promptResponses.some(
-      (event) => event.data.kind === "command.response" && event.data.success === false,
-    ),
+  promptResponses.some((event) => event.data.kind === "command.response" && event.data.success) &&
+    promptResponses.some((event) => event.data.kind === "command.response" && !event.data.success),
   "Fixture must preserve Prompt acceptance and rejection separately.",
+);
+
+const toolCompletions = events
+  .filter((event) => event.data.kind === "tool.lifecycle" && event.data.phase === "completed")
+  .map((event) => event.data.kind === "tool.lifecycle" ? event.data.toolName : "");
+requireValue(
+  JSON.stringify(toolCompletions) === JSON.stringify(["beta", "gamma", "alpha"]),
+  `Parallel Tool completion order drifted: ${JSON.stringify(toolCompletions)}.`,
+);
+const messagesSnapshot = events.find((event) => event.data.kind === "snapshot.messages");
+const toolResultOrder = messagesSnapshot?.data.kind === "snapshot.messages"
+  ? messagesSnapshot.data.messages
+    .filter((message) => message.role === "tool")
+    .map((message) => message.text)
+  : [];
+requireValue(
+  JSON.stringify(toolResultOrder) === JSON.stringify(["alpha", "beta", "gamma"]),
+  `Tool Result Message order drifted: ${JSON.stringify(toolResultOrder)}.`,
+);
+
+const queueStates = events
+  .filter((event) => event.data.kind === "queue.changed" && event.data.queue === "follow-up")
+  .map((event) => event.data.kind === "queue.changed" ? event.data.pending : -1);
+requireValue(
+  JSON.stringify(queueStates) === JSON.stringify([1, 0]),
+  `Follow-up queue boundaries drifted: ${JSON.stringify(queueStates)}.`,
+);
+requireValue(
+  events.some((event) => event.data.kind === "retry.lifecycle" && event.data.phase === "aborted") &&
+    events.some((event) => event.data.kind === "retry.lifecycle" && event.data.phase === "exhausted"),
+  "Fixture must preserve Retry aborted and exhausted facts.",
 );
 
 const compaction = events.find(
@@ -96,19 +143,49 @@ requireValue(
   "Compaction Fixture must retain source/replacement lineage.",
 );
 
+const replacementStart = events.find(
+  (event) =>
+    event.data.kind === "session.identity" &&
+    event.data.action === "started" &&
+    event.data.previousSessionIdentity !== undefined,
+);
+const invalidated = events.find(
+  (event) => event.data.kind === "session.identity" && event.data.action === "invalidated",
+);
+const replacement = events.find(
+  (event) => event.data.kind === "session.identity" && event.data.action === "replaced",
+);
+const rebound = events.find(
+  (event) => event.data.kind === "session.identity" && event.data.action === "listener-rebound",
+);
+requireValue(
+  replacementStart?.source.surface === "extension" && replacementStart.provenance === "observed",
+  "Replacement session start must remain an observed Extension fact.",
+);
+requireValue(
+  invalidated?.source.surface === "host" && invalidated.provenance === "host-synthesized",
+  "Session invalidation must remain a Host-synthesized fact.",
+);
+requireValue(
+  replacement?.source.surface === "host" &&
+    replacement.provenance === "host-synthesized" &&
+    Boolean(replacement.links?.sourceEventIds?.length),
+  "Session replacement aggregate must be Host-synthesized and source-linked.",
+);
+requireValue(
+  rebound?.source.surface === "host" && rebound.provenance === "host-synthesized",
+  "Listener rebind must remain a Host-synthesized fact.",
+);
+
 const hostActions = events.filter((event) => event.data.kind === "host.action");
 for (const action of ["send-command", "close-stdin", "request-signal"]) {
   requireValue(
-    hostActions.some(
-      (event) => event.data.kind === "host.action" && event.data.action === action,
-    ),
+    hostActions.some((event) => event.data.kind === "host.action" && event.data.action === action),
     `Fixture must preserve ${action} as a Host action.`,
   );
 }
 requireValue(
-  hostActions.every(
-    (event) => event.source.surface === "host" && event.provenance === "host-synthesized",
-  ),
+  hostActions.every((event) => event.source.surface === "host" && event.provenance === "host-synthesized"),
   "Host actions must remain Host-synthesized facts.",
 );
 
@@ -116,27 +193,14 @@ const processBoundaries = events.filter((event) => event.data.kind === "process.
 for (const boundary of ["spawn", "exit", "close"]) {
   requireValue(
     processBoundaries.some(
-      (event) =>
-        event.data.kind === "process.boundary" && event.data.boundary === boundary,
+      (event) => event.data.kind === "process.boundary" && event.data.boundary === boundary,
     ),
     `Fixture must preserve ${boundary} as a Process boundary.`,
   );
 }
 requireValue(
-  processBoundaries.every(
-    (event) => event.source.surface === "host" && event.provenance === "observed",
-  ),
+  processBoundaries.every((event) => event.source.surface === "host" && event.provenance === "observed"),
   "Process boundaries must remain Host-observed facts.",
-);
-
-requireValue(
-  events.some(
-    (event) =>
-      event.source.eventType === "extension_shutdown" &&
-      event.data.kind === "session.identity" &&
-      event.data.action === "shutdown",
-  ),
-  "Extension shutdown must remain Session identity, not a Process boundary.",
 );
 
 const unknown = events.find((event) => event.data.kind === "runtime.unknown");
@@ -145,6 +209,13 @@ requireValue(
     unknown.data.canonicalization === "zhiwei-json-v1" &&
     unknown.compatibility === "ignorable",
   "Unknown event diagnostic is missing or not explicitly ignorable.",
+);
+requireValue(
+  events.every((event) =>
+    event.data.kind === "runtime.unknown" ||
+    (event.data.kind === "message.lifecycle" && event.data.phase === "updated") ||
+    event.compatibility === "required"),
+  "Known stable vocabulary must remain compatibility=required.",
 );
 
 const sourceSlot = events.find(
@@ -161,8 +232,7 @@ if (sourceSlot) {
     "Source vocabulary drift must occupy the same source-slot eventId.",
   );
   requireValue(
-    classifyNormalizedRuntimeReplayV1(sourceSlot, sourceVocabularyConflict) ===
-      "source-slot-conflict",
+    classifyNormalizedRuntimeReplayV1(sourceSlot, sourceVocabularyConflict) === "source-slot-conflict",
     "Source vocabulary drift must classify as a source-slot conflict.",
   );
 }
@@ -172,6 +242,7 @@ for (const [index, event] of events.entries()) {
   requireValue(!canonical.includes("globalSequence"), `Event ${index} contains globalSequence.`);
   requireValue(!canonical.includes("taskSucceeded"), `Event ${index} contains inferred task success.`);
   requireValue(!canonical.includes("sdkEvent"), `Event ${index} contains a raw SDK object.`);
+  requireValue(!canonical.includes("rawSdk"), `Event ${index} contains a raw SDK field.`);
 }
 
 for (const path of [
@@ -188,12 +259,28 @@ for (const path of [
   requireValue(!/Math\.random/.test(source), `${path} must not generate random identity.`);
 }
 
+const payloadSource = await readFile(
+  "packages/protocol/src/runtime-event-payload-v1.ts",
+  "utf8",
+);
+for (const token of [
+  "RuntimeStateProjectionV1",
+  "RuntimeMessageSnapshotItemV1",
+  "RuntimeMessageContentV1",
+]) {
+  requireValue(payloadSource.includes(token), `Protocol payload projection is missing ${token}.`);
+}
+
 const adapterSource = await readFile(
   "packages/pi-adapter/src/normalized-runtime-event-v1.ts",
   "utf8",
 );
 requireValue(!/\bDate\s*\./.test(adapterSource), "Pi Adapter must not read the system clock.");
 requireValue(!/Math\.random/.test(adapterSource), "Pi Adapter must not generate random IDs.");
+requireValue(!/readonly\s+body\?\s*:\s*unknown/.test(adapterSource), "Message body must not be raw unknown.");
+requireValue(!/readonly\s+state\s*:\s*unknown/.test(adapterSource), "State Snapshot must not be raw unknown.");
+requireValue(!/messages\s*:\s*readonly\s+unknown\[\]/.test(adapterSource), "Messages Snapshot must not be raw unknown[].");
+requireValue(!/snapshotJsonValue\(event\.(state|messages)\)/.test(adapterSource), "State/Messages must be field-projected.");
 
 const architecture = await readFile(
   "docs/architecture/normalized-runtime-event-v1.md",
@@ -207,6 +294,9 @@ for (const token of [
   "Process Boundary",
   "required unknown",
   "cross-domain",
+  "字段级投影",
+  "Session Invalidation",
+  EXPECTED_FIXTURE_HASH,
 ]) {
   requireValue(architecture.includes(token), `Architecture document is missing token: ${token}.`);
 }
@@ -219,7 +309,6 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-const fixtureHash = canonicalJsonSha256V1(events);
 console.log(
   `NormalizedRuntimeEvent v1 contract: OK (${events.length} events, ${fixtureHash})`,
 );

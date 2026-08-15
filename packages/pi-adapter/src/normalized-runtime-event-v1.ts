@@ -11,7 +11,28 @@ import {
   type NormalizedRuntimePayloadV1,
   type NormalizedRuntimeProvenanceV1,
   type NormalizedRuntimeSourceSurfaceV1,
+  type RuntimeMessageRoleV1,
+  type RuntimeMessageSnapshotItemV1,
+  type RuntimeSnapshotMessageRoleV1,
+  type RuntimeStateProjectionV1,
 } from "../../protocol/src/index.ts";
+
+export interface PiRuntimeStateSnapshotInputV1 {
+  readonly isStreaming: boolean;
+  readonly messageCount: number;
+  readonly pendingMessageCount: number;
+  readonly isCompacting?: boolean;
+  readonly isIdle?: boolean;
+  readonly steeringQueueCount?: number;
+  readonly followUpQueueCount?: number;
+}
+export interface PiRuntimeMessageSnapshotInputV1 {
+  readonly role: RuntimeSnapshotMessageRoleV1;
+  readonly contentKinds?: readonly string[];
+  readonly stopReason?: string;
+  readonly errorMessage?: string;
+  readonly text?: string;
+}
 
 export type PiRuntimeEventInputV1 =
   | {
@@ -26,19 +47,36 @@ export type PiRuntimeEventInputV1 =
   | { readonly type: "turn_start" }
   | { readonly type: "turn_end"; readonly toolResultCount?: number }
   | {
-      readonly type: "message_start" | "message_update" | "message_end";
-      readonly role: "user" | "assistant" | "tool" | "system";
+      readonly type: "message_start";
+      readonly role: RuntimeMessageRoleV1;
+      readonly contentKinds?: readonly string[];
+    }
+  | {
+      readonly type: "message_update";
+      readonly role: RuntimeMessageRoleV1;
+      readonly delta: string;
+    }
+  | {
+      readonly type: "message_end";
+      readonly role: RuntimeMessageRoleV1;
       readonly contentKinds?: readonly string[];
       readonly stopReason?: string;
       readonly errorMessage?: string;
-      readonly delta?: string;
-      readonly body?: unknown;
+      readonly body?: { readonly text: string };
     }
   | {
-      readonly type: "tool_declared" | "tool_started" | "tool_completed";
+      readonly type: "tool_declared";
       readonly toolName: string;
-      readonly success?: boolean;
       readonly input?: unknown;
+    }
+  | {
+      readonly type: "tool_started";
+      readonly toolName: string;
+    }
+  | {
+      readonly type: "tool_completed";
+      readonly toolName: string;
+      readonly success: boolean;
       readonly result?: unknown;
     }
   | {
@@ -48,34 +86,53 @@ export type PiRuntimeEventInputV1 =
       readonly mode?: string;
     }
   | {
-      readonly type: "retry_scheduled" | "retry_started" | "retry_aborted" | "retry_exhausted";
+      readonly type: "retry_scheduled";
       readonly attempt?: number;
       readonly delayMs?: number;
       readonly reason?: string;
     }
+  | { readonly type: "retry_started"; readonly attempt?: number }
+  | { readonly type: "retry_aborted"; readonly attempt?: number; readonly reason: string }
+  | { readonly type: "retry_exhausted"; readonly attempt?: number; readonly reason?: string }
+  | { readonly type: "compaction_start"; readonly reason?: string }
+  | { readonly type: "compaction_end"; readonly summaryKind?: string }
   | {
-      readonly type: "compaction_start" | "compaction_end";
-      readonly summaryKind?: string;
+      readonly type: "session_start";
+      readonly nextSessionIdentity: string;
+      readonly previousSessionIdentity?: string;
     }
   | {
-      readonly type:
-        | "session_start"
-        | "session_resume"
-        | "session_replaced"
-        | "session_shutdown"
-        | "extension_shutdown"
-        | "session_invalidated"
-        | "listener_rebound";
-      readonly reason?: string;
-      readonly previousSessionIdentity?: string;
-      readonly nextSessionIdentity?: string;
+      readonly type: "session_resume";
+      readonly previousSessionIdentity: string;
+      readonly nextSessionIdentity: string;
+    }
+  | {
+      readonly type: "session_replaced";
+      readonly previousSessionIdentity: string;
+      readonly nextSessionIdentity: string;
       readonly previousRuntimeInstanceId?: string;
       readonly nextRuntimeInstanceId?: string;
     }
-  | { readonly type: "state_snapshot"; readonly state: unknown }
-  | { readonly type: "messages_snapshot"; readonly messages: readonly unknown[] }
   | {
-      readonly type: "process_spawn" | "process_exit" | "process_close";
+      readonly type: "session_shutdown" | "extension_shutdown";
+      readonly reason: string;
+      readonly previousSessionIdentity: string;
+    }
+  | {
+      readonly type: "session_invalidated";
+      readonly reason: string;
+      readonly previousSessionIdentity: string;
+    }
+  | {
+      readonly type: "listener_rebound";
+      readonly previousSessionIdentity: string;
+      readonly nextSessionIdentity: string;
+    }
+  | { readonly type: "state_snapshot"; readonly state: PiRuntimeStateSnapshotInputV1 }
+  | { readonly type: "messages_snapshot"; readonly messages: readonly PiRuntimeMessageSnapshotInputV1[] }
+  | { readonly type: "process_spawn" }
+  | {
+      readonly type: "process_exit" | "process_close";
       readonly code?: number | null;
       readonly signal?: string | null;
     }
@@ -114,11 +171,28 @@ export interface PiRuntimeNormalizationInputV1 {
 }
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
-
+function projectState(state: PiRuntimeStateSnapshotInputV1): RuntimeStateProjectionV1 {
+  return compactObject({
+    isStreaming: state.isStreaming,
+    messageCount: state.messageCount,
+    pendingMessageCount: state.pendingMessageCount,
+    isCompacting: state.isCompacting,
+    isIdle: state.isIdle,
+    steeringQueueCount: state.steeringQueueCount,
+    followUpQueueCount: state.followUpQueueCount,
+  }) as RuntimeStateProjectionV1;
+}
+function projectMessage(message: PiRuntimeMessageSnapshotInputV1): RuntimeMessageSnapshotItemV1 {
+  return compactObject({
+    role: message.role,
+    contentKinds: message.contentKinds === undefined ? undefined : [...message.contentKinds],
+    stopReason: message.stopReason,
+    errorMessage: message.errorMessage,
+    text: message.text,
+  }) as RuntimeMessageSnapshotItemV1;
+}
 function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
   if (event.type === "command_response") {
     return compactObject({
@@ -129,18 +203,12 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       error: event.error,
     });
   }
-  if (event.type === "agent_start") {
-    return { kind: "agent.lifecycle", phase: "started" };
-  }
+  if (event.type === "agent_start") return { kind: "agent.lifecycle", phase: "started" };
   if (event.type === "agent_end") {
     return { kind: "agent.lifecycle", phase: "ended", willRetry: event.willRetry };
   }
-  if (event.type === "agent_settled") {
-    return { kind: "agent.lifecycle", phase: "settled" };
-  }
-  if (event.type === "turn_start") {
-    return { kind: "turn.lifecycle", phase: "started" };
-  }
+  if (event.type === "agent_settled") return { kind: "agent.lifecycle", phase: "settled" };
+  if (event.type === "turn_start") return { kind: "turn.lifecycle", phase: "started" };
   if (event.type === "turn_end") {
     return compactObject({
       kind: "turn.lifecycle" as const,
@@ -148,45 +216,52 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       toolResultCount: event.toolResultCount,
     });
   }
-  if (["message_start", "message_update", "message_end"].includes(event.type)) {
-    const message = event as Extract<
-      PiRuntimeEventInputV1,
-      { type: "message_start" | "message_update" | "message_end" }
-    >;
-    const phase = message.type === "message_start"
-      ? "started"
-      : message.type === "message_update"
-        ? "updated"
-        : "ended";
+  if (event.type === "message_start") {
     return compactObject({
       kind: "message.lifecycle" as const,
-      phase,
-      role: message.role,
-      contentKinds: message.contentKinds,
-      stopReason: message.stopReason,
-      errorMessage: message.errorMessage,
-      delta: message.delta,
-      body: message.body === undefined ? undefined : snapshotJsonValue(message.body),
-    }) as NormalizedRuntimePayloadV1;
+      phase: "started" as const,
+      role: event.role,
+      contentKinds: event.contentKinds === undefined ? undefined : [...event.contentKinds],
+    });
   }
-  if (["tool_declared", "tool_started", "tool_completed"].includes(event.type)) {
-    const tool = event as Extract<
-      PiRuntimeEventInputV1,
-      { type: "tool_declared" | "tool_started" | "tool_completed" }
-    >;
-    const phase = tool.type === "tool_declared"
-      ? "declared"
-      : tool.type === "tool_started"
-        ? "started"
-        : "completed";
+  if (event.type === "message_update") {
+    return {
+      kind: "message.lifecycle",
+      phase: "updated",
+      role: event.role,
+      delta: event.delta,
+    };
+  }
+  if (event.type === "message_end") {
+    return compactObject({
+      kind: "message.lifecycle" as const,
+      phase: "ended" as const,
+      role: event.role,
+      contentKinds: event.contentKinds === undefined ? undefined : [...event.contentKinds],
+      stopReason: event.stopReason,
+      errorMessage: event.errorMessage,
+      body: event.body === undefined ? undefined : { text: event.body.text },
+    });
+  }
+  if (event.type === "tool_declared") {
     return compactObject({
       kind: "tool.lifecycle" as const,
-      phase,
-      toolName: tool.toolName,
-      success: tool.success,
-      input: tool.input === undefined ? undefined : snapshotJsonValue(tool.input),
-      result: tool.result === undefined ? undefined : snapshotJsonValue(tool.result),
-    }) as NormalizedRuntimePayloadV1;
+      phase: "declared" as const,
+      toolName: event.toolName,
+      input: event.input === undefined ? undefined : snapshotJsonValue(event.input),
+    });
+  }
+  if (event.type === "tool_started") {
+    return { kind: "tool.lifecycle", phase: "started", toolName: event.toolName };
+  }
+  if (event.type === "tool_completed") {
+    return compactObject({
+      kind: "tool.lifecycle" as const,
+      phase: "completed" as const,
+      toolName: event.toolName,
+      success: event.success,
+      result: event.result === undefined ? undefined : snapshotJsonValue(event.result),
+    });
   }
   if (event.type === "queue_state") {
     return compactObject({
@@ -196,99 +271,111 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       mode: event.mode,
     });
   }
-  if (["retry_scheduled", "retry_started", "retry_aborted", "retry_exhausted"].includes(event.type)) {
-    const retry = event as Extract<
-      PiRuntimeEventInputV1,
-      { type: "retry_scheduled" | "retry_started" | "retry_aborted" | "retry_exhausted" }
-    >;
-    const phases = {
-      retry_scheduled: "scheduled",
-      retry_started: "started",
-      retry_aborted: "aborted",
-      retry_exhausted: "exhausted",
-    } as const;
+  if (event.type === "retry_scheduled") {
     return compactObject({
       kind: "retry.lifecycle" as const,
-      phase: phases[retry.type],
-      attempt: retry.attempt,
-      delayMs: retry.delayMs,
-      reason: retry.reason,
+      phase: "scheduled" as const,
+      attempt: event.attempt,
+      delayMs: event.delayMs,
+      reason: event.reason,
     });
   }
-  if (event.type === "compaction_start" || event.type === "compaction_end") {
+  if (event.type === "retry_started") {
+    return compactObject({ kind: "retry.lifecycle" as const, phase: "started" as const, attempt: event.attempt });
+  }
+  if (event.type === "retry_aborted") {
+    return compactObject({
+      kind: "retry.lifecycle" as const,
+      phase: "aborted" as const,
+      attempt: event.attempt,
+      reason: event.reason,
+    });
+  }
+  if (event.type === "retry_exhausted") {
+    return compactObject({
+      kind: "retry.lifecycle" as const,
+      phase: "exhausted" as const,
+      attempt: event.attempt,
+      reason: event.reason,
+    });
+  }
+  if (event.type === "compaction_start") {
     return compactObject({
       kind: "compaction.lifecycle" as const,
-      phase: event.type === "compaction_start" ? "started" as const : "completed" as const,
+      phase: "started" as const,
+      reason: event.reason,
+    });
+  }
+  if (event.type === "compaction_end") {
+    return compactObject({
+      kind: "compaction.lifecycle" as const,
+      phase: "completed" as const,
       summaryKind: event.summaryKind,
     });
   }
-  if (
-    [
-      "session_start",
-      "session_resume",
-      "session_replaced",
-      "session_shutdown",
-      "extension_shutdown",
-      "session_invalidated",
-      "listener_rebound",
-    ].includes(event.type)
-  ) {
-    const session = event as Extract<
-      PiRuntimeEventInputV1,
-      {
-        type:
-          | "session_start"
-          | "session_resume"
-          | "session_replaced"
-          | "session_shutdown"
-          | "extension_shutdown"
-          | "session_invalidated"
-          | "listener_rebound";
-      }
-    >;
-    const actions = {
-      session_start: "started",
-      session_resume: "resumed",
-      session_replaced: "replaced",
-      session_shutdown: "shutdown",
-      extension_shutdown: "shutdown",
-      session_invalidated: "invalidated",
-      listener_rebound: "listener-rebound",
-    } as const;
+  if (event.type === "session_start") {
     return compactObject({
       kind: "session.identity" as const,
-      action: actions[session.type],
-      reason: session.reason,
-      previousSessionIdentity: session.previousSessionIdentity,
-      nextSessionIdentity: session.nextSessionIdentity,
-      previousRuntimeInstanceId: session.previousRuntimeInstanceId,
-      nextRuntimeInstanceId: session.nextRuntimeInstanceId,
+      action: "started" as const,
+      nextSessionIdentity: event.nextSessionIdentity,
+      previousSessionIdentity: event.previousSessionIdentity,
     });
   }
-  if (event.type === "state_snapshot") {
-    return { kind: "snapshot.state", state: snapshotJsonValue(event.state) };
-  }
-  if (event.type === "messages_snapshot") {
+  if (event.type === "session_resume") {
     return {
-      kind: "snapshot.messages",
-      messages: snapshotJsonValue(event.messages) as readonly JsonValue[],
+      kind: "session.identity",
+      action: "resumed",
+      previousSessionIdentity: event.previousSessionIdentity,
+      nextSessionIdentity: event.nextSessionIdentity,
     };
   }
-  if (["process_spawn", "process_exit", "process_close"].includes(event.type)) {
-    const process = event as Extract<
-      PiRuntimeEventInputV1,
-      { type: "process_spawn" | "process_exit" | "process_close" }
-    >;
-    const boundaries = {
-      process_spawn: "spawn",
-      process_exit: "exit",
-      process_close: "close",
-    } as const;
+  if (event.type === "session_replaced") {
+    return compactObject({
+      kind: "session.identity" as const,
+      action: "replaced" as const,
+      previousSessionIdentity: event.previousSessionIdentity,
+      nextSessionIdentity: event.nextSessionIdentity,
+      previousRuntimeInstanceId: event.previousRuntimeInstanceId,
+      nextRuntimeInstanceId: event.nextRuntimeInstanceId,
+    });
+  }
+  if (event.type === "session_shutdown" || event.type === "extension_shutdown") {
+    return {
+      kind: "session.identity",
+      action: "shutdown",
+      reason: event.reason,
+      previousSessionIdentity: event.previousSessionIdentity,
+    };
+  }
+  if (event.type === "session_invalidated") {
+    return {
+      kind: "session.identity",
+      action: "invalidated",
+      reason: event.reason,
+      previousSessionIdentity: event.previousSessionIdentity,
+    };
+  }
+  if (event.type === "listener_rebound") {
+    return {
+      kind: "session.identity",
+      action: "listener-rebound",
+      previousSessionIdentity: event.previousSessionIdentity,
+      nextSessionIdentity: event.nextSessionIdentity,
+    };
+  }
+  if (event.type === "state_snapshot") {
+    return { kind: "snapshot.state", state: projectState(event.state) };
+  }
+  if (event.type === "messages_snapshot") {
+    return { kind: "snapshot.messages", messages: event.messages.map(projectMessage) };
+  }
+  if (event.type === "process_spawn") return { kind: "process.boundary", boundary: "spawn" };
+  if (event.type === "process_exit" || event.type === "process_close") {
     return compactObject({
       kind: "process.boundary" as const,
-      boundary: boundaries[process.type],
-      code: process.code,
-      signal: process.signal,
+      boundary: event.type === "process_exit" ? "exit" as const : "close" as const,
+      code: event.code,
+      signal: event.signal,
     });
   }
   if (event.type === "host_send_command") {
@@ -299,9 +386,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       requestId: event.requestId,
     });
   }
-  if (event.type === "host_close_stdin") {
-    return { kind: "host.action", action: "close-stdin" };
-  }
+  if (event.type === "host_close_stdin") return { kind: "host.action", action: "close-stdin" };
   if (event.type === "host_request_signal") {
     return {
       kind: "host.action",
@@ -312,10 +397,9 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
   }
 
   const snapshot = snapshotJsonValue(event.payload);
-  const keys =
-    snapshot !== null && typeof snapshot === "object" && !Array.isArray(snapshot)
-      ? Object.keys(snapshot).sort()
-      : [];
+  const keys = snapshot !== null && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? Object.keys(snapshot).sort()
+    : [];
   return {
     kind: "runtime.unknown",
     sourceType: event.sourceType,
@@ -324,7 +408,6 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     canonicalization: "zhiwei-json-v1",
   };
 }
-
 function semantics(event: PiRuntimeEventInputV1): {
   persistence: "durable" | "ephemeral";
   stability: "update" | "boundary" | "settled";
@@ -360,10 +443,7 @@ export function normalizePiRuntimeEventV1(
       surface: input.surface,
       eventType: input.event.type === "unknown" ? input.event.sourceType : input.sourceEventType,
     },
-    sequence: {
-      domain: input.sequenceDomain,
-      value: input.sourceSequence,
-    },
+    sequence: { domain: input.sequenceDomain, value: input.sourceSequence },
     observedAt: input.observedAt,
     provenance: input.provenance,
     ...eventSemantics,

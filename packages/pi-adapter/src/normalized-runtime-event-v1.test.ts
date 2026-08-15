@@ -94,9 +94,6 @@ test("Preflight rejection and accepted Provider failure retain different facts",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ promptId: "prompt-rejected", rpcRequestId: "rpc-rejected" }, { requestId: "request-rejected" }),
   });
-  assert.equal(rejected.data.kind, "command.response");
-  assert.equal(rejected.data.success, false);
-
   const accepted = normalize(2, {
     type: "command_response",
     command: "prompt",
@@ -142,6 +139,7 @@ test("Preflight rejection and accepted Provider failure retain different facts",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ agentRunId: "run-error" }),
   });
+  assert.equal(rejected.data.kind, "command.response");
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([
     rejected,
     accepted,
@@ -200,10 +198,12 @@ test("Retry and Follow-up preserve Agent Run and Turn boundaries without invente
     turn2End,
     run1End,
   ]));
-  assert.equal((run1End.data as { willRetry: boolean }).willRetry, true);
+  assert.equal(run1End.data.kind, "agent.lifecycle");
+  assert.equal(run1End.data.phase, "ended");
+  if (run1End.data.phase === "ended") assert.equal(run1End.data.willRetry, true);
 });
 
-test("Cancellation preserves the partial aborted Assistant fact and can abort a planned Retry", () => {
+test("Cancellation preserves partial Assistant text and can abort a planned Retry", () => {
   const start = normalize(1, { type: "agent_start" }, {
     correlation: correlation({ agentRunId: "cancel-run" }),
   });
@@ -228,6 +228,8 @@ test("Cancellation preserves the partial aborted Assistant fact and can abort a 
     correlation: correlation({ agentRunId: "cancel-run" }),
   });
   const aborted = normalize(7, { type: "retry_aborted", reason: "user-cancel" }, {
+    surface: "extension",
+    sequenceDomain: "extension-events",
     correlation: correlation({ agentRunId: "cancel-run" }),
   });
   const settled = normalize(8, { type: "agent_settled" }, {
@@ -244,8 +246,13 @@ test("Cancellation preserves the partial aborted Assistant fact and can abort a 
     aborted,
     settled,
   ]));
-  assert.equal(messageEnd.data.kind, "message.lifecycle");
-  assert.equal(messageEnd.data.stopReason, "aborted");
+  assert.deepEqual(messageEnd.data, {
+    kind: "message.lifecycle",
+    phase: "ended",
+    role: "assistant",
+    stopReason: "aborted",
+    body: { text: "partial" },
+  });
 });
 
 test("Parallel Tool completion cites declarations instead of borrowing array order", () => {
@@ -276,12 +283,12 @@ test("Parallel Tool completion cites declarations instead of borrowing array ord
 
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([...declared, ...completed]));
   assert.deepEqual(
-    completed.map((item) => (item.data as { toolName: string }).toolName),
+    completed.map((item) => item.data.kind === "tool.lifecycle" ? item.data.toolName : ""),
     completionOrder,
   );
 });
 
-test("Compaction and Session Replacement keep derivation and identities explicit", () => {
+test("Compaction and Session Replacement preserve real Extension/Host ownership", () => {
   const messageStart = normalize(1, {
     type: "message_start",
     role: "assistant",
@@ -304,27 +311,70 @@ test("Compaction and Session Replacement keep derivation and identities explicit
       replacesEventIds: [original.eventId],
     },
   });
-  const replacement = normalize(4, {
+  const oldShutdown = normalize(1, {
+    type: "extension_shutdown",
+    reason: "new",
+    previousSessionIdentity: "session-object-1",
+  }, {
+    surface: "extension",
+    sequenceDomain: "extension-events",
+  });
+  const invalidated = normalize(1, {
+    type: "session_invalidated",
+    reason: "new",
+    previousSessionIdentity: "session-object-1",
+  }, {
+    surface: "host",
+    sequenceDomain: "session-orchestration",
+    provenance: "host-synthesized",
+  });
+  const newStart = normalize(1, {
+    type: "session_start",
+    previousSessionIdentity: "session-object-1",
+    nextSessionIdentity: "session-object-2",
+  }, {
+    runtimeInstanceId: "worker-2",
+    surface: "extension",
+    sequenceDomain: "extension-events",
+  });
+  const replacement = normalize(1, {
     type: "session_replaced",
     previousSessionIdentity: "session-object-1",
     nextSessionIdentity: "session-object-2",
     previousRuntimeInstanceId: "worker-1",
     nextRuntimeInstanceId: "worker-2",
+  }, {
+    runtimeInstanceId: "worker-2",
+    surface: "host",
+    sequenceDomain: "session-orchestration",
+    provenance: "host-synthesized",
+    links: { sourceEventIds: [oldShutdown.eventId, newStart.eventId] },
   });
-  const rebound = normalize(5, {
+  const rebound = normalize(2, {
     type: "listener_rebound",
     previousSessionIdentity: "session-object-1",
     nextSessionIdentity: "session-object-2",
+  }, {
+    runtimeInstanceId: "worker-2",
+    surface: "host",
+    sequenceDomain: "session-orchestration",
+    provenance: "host-synthesized",
   });
 
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([
     messageStart,
     original,
     compaction,
+    oldShutdown,
+    invalidated,
+    newStart,
     replacement,
     rebound,
   ]));
-  assert.equal(replacement.data.kind, "session.identity");
+  assert.equal(oldShutdown.source.surface, "extension");
+  assert.equal(invalidated.provenance, "host-synthesized");
+  assert.equal(replacement.source.surface, "host");
+  assert.equal(rebound.source.surface, "host");
 });
 
 test("Extension shutdown remains Session identity and is not collapsed into Process exit", () => {
@@ -342,6 +392,33 @@ test("Extension shutdown remains Session identity and is not collapsed into Proc
     reason: "quit",
     previousSessionIdentity: "session-object-1",
   });
+});
+
+test("State and Messages snapshots are projected field-by-field instead of passing raw Pi objects", () => {
+  const state = normalize(1, {
+    type: "state_snapshot",
+    state: {
+      isStreaming: false,
+      messageCount: 2,
+      pendingMessageCount: 0,
+      isIdle: true,
+      provider: { raw: true },
+    } as any,
+  });
+  const messages = normalize(2, {
+    type: "messages_snapshot",
+    messages: [
+      {
+        role: "assistant",
+        contentKinds: ["text"],
+        stopReason: "stop",
+        text: "answer",
+        rawSdkMessage: { hidden: true },
+      } as any,
+    ],
+  });
+  assert.equal(JSON.stringify(state.data).includes("provider"), false);
+  assert.equal(JSON.stringify(messages.data).includes("rawSdkMessage"), false);
 });
 
 test("Unknown Pi payload is reduced to a canonical diagnostic, not passed through", () => {

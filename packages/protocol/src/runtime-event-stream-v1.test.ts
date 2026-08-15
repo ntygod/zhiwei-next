@@ -102,21 +102,56 @@ test("tool start and completion require one matching declaration link", () => {
     correlation: { observed: {}, normalized: { toolCallId: "tool-1" } },
     links: { sourceEventIds: [declaration.eventId] },
   });
-  assert.throws(
-    () => parseNormalizedRuntimeEventTraceV1([declaration, wrongName]),
-    /matching declaration/,
-  );
+  assert.throws(() => parseNormalizedRuntimeEventTraceV1([declaration, wrongName]), /matching declaration/);
+});
 
-  const unlinked = event(5, {
+test("Tool links cannot borrow a declaration from another Agent Run or Runtime instance", () => {
+  const run1 = event(1, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  const declaration = event(2, {
+    kind: "tool.lifecycle",
+    phase: "declared",
+    toolName: "read",
+  }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1", toolCallId: "tool-shared" } },
+  });
+  const run2 = event(3, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-2" } },
+  });
+  const crossRun = event(4, {
     kind: "tool.lifecycle",
     phase: "completed",
     toolName: "read",
     success: true,
   }, {
-    correlation: { observed: {}, normalized: { toolCallId: "tool-1" } },
+    correlation: { observed: {}, normalized: { agentRunId: "run-2", toolCallId: "tool-shared" } },
+    links: { sourceEventIds: [declaration.eventId] },
   });
   assert.throws(
-    () => parseNormalizedRuntimeEventTraceV1([declaration, unlinked]),
+    () => parseNormalizedRuntimeEventTraceV1([run1, declaration, run2, crossRun]),
+    /changed normalized.agentRunId/,
+  );
+
+  const declarationWithoutRun = event(5, {
+    kind: "tool.lifecycle",
+    phase: "declared",
+    toolName: "read",
+  }, {
+    correlation: { observed: {}, normalized: { toolCallId: "tool-instance" } },
+  });
+  const crossInstance = event(1, {
+    kind: "tool.lifecycle",
+    phase: "completed",
+    toolName: "read",
+    success: true,
+  }, {
+    runtimeInstanceId: "worker-2",
+    correlation: { observed: {}, normalized: { toolCallId: "tool-instance" } },
+    links: { sourceEventIds: [declarationWithoutRun.eventId] },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([declarationWithoutRun, crossInstance]),
     /matching declaration/,
   );
 });
@@ -133,12 +168,65 @@ test("Agent, Turn and Message correlations reject endings without starts", () =>
   const turnEnd = event(2, { kind: "turn.lifecycle", phase: "ended" }, {
     correlation: { observed: {}, normalized: { agentRunId: "run-1", turnId: "turn-1" } },
   });
-  assert.throws(() => parseNormalizedRuntimeEventTraceV1([agentStart, turnEnd]), /Turn start|turn end/);
+  assert.throws(() => parseNormalizedRuntimeEventTraceV1([agentStart, turnEnd]), /turn end/);
 
   const messageEnd = event(2, { kind: "message.lifecycle", phase: "ended", role: "assistant" }, {
     correlation: { observed: {}, normalized: { agentRunId: "run-1", messageId: "message-1" } },
   });
   assert.throws(() => parseNormalizedRuntimeEventTraceV1([agentStart, messageEnd]), /no earlier start/);
+});
+
+test("Message IDs cannot borrow a start from another Agent Run or cross Runtime instances", () => {
+  const run1 = event(1, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  const messageStart = event(2, { kind: "message.lifecycle", phase: "started", role: "assistant" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1", messageId: "message-1" } },
+  });
+  const run2 = event(3, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-2" } },
+  });
+  const wrongRunEnd = event(4, { kind: "message.lifecycle", phase: "ended", role: "assistant" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-2", messageId: "message-1" } },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([run1, messageStart, run2, wrongRunEnd]),
+    /changed normalized.agentRunId/,
+  );
+
+  const messageStartWithoutRun = event(5, {
+    kind: "message.lifecycle",
+    phase: "started",
+    role: "assistant",
+  }, {
+    correlation: { observed: {}, normalized: { messageId: "message-instance" } },
+  });
+  const crossInstanceEnd = event(1, { kind: "message.lifecycle", phase: "ended", role: "assistant" }, {
+    runtimeInstanceId: "worker-2",
+    correlation: { observed: {}, normalized: { messageId: "message-instance" } },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([messageStartWithoutRun, crossInstanceEnd]),
+    /one Runtime instance/,
+  );
+});
+
+test("duplicate correlated lifecycle starts and endings are rejected", () => {
+  const start = event(1, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  const duplicateStart = event(2, { kind: "agent.lifecycle", phase: "started" }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  assert.throws(() => parseNormalizedRuntimeEventTraceV1([start, duplicateStart]), /duplicate agent start/);
+
+  const end = event(2, { kind: "agent.lifecycle", phase: "ended", willRetry: false }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  const duplicateEnd = event(3, { kind: "agent.lifecycle", phase: "ended", willRetry: false }, {
+    correlation: { observed: {}, normalized: { agentRunId: "run-1" } },
+  });
+  assert.throws(() => parseNormalizedRuntimeEventTraceV1([start, end, duplicateEnd]), /duplicate agent end/);
 });
 
 test("willRetry=true remains an observed plan, not a promise of another Agent Run", () => {
@@ -195,29 +283,7 @@ test("completed compaction retains same-session source and replacement lineage",
   );
 });
 
-test("explicit links cannot point forward or borrow declarations from another Runtime Session", () => {
-  const declaration = event(1, {
-    kind: "tool.lifecycle",
-    phase: "declared",
-    toolName: "read",
-  }, {
-    correlation: { observed: {}, normalized: { toolCallId: "tool-shared" } },
-  });
-  const completion = event(2, {
-    kind: "tool.lifecycle",
-    phase: "completed",
-    toolName: "read",
-    success: true,
-  }, {
-    runtimeSessionId: ids.session("session-2"),
-    correlation: { observed: {}, normalized: { toolCallId: "tool-shared" } },
-    links: { sourceEventIds: [declaration.eventId] },
-  });
-  assert.throws(
-    () => parseNormalizedRuntimeEventTraceV1([declaration, completion]),
-    /matching declaration/,
-  );
-
+test("explicit links cannot point forward", () => {
   const source = event(3, { kind: "message.lifecycle", phase: "ended", role: "assistant" });
   const derived = event(2, { kind: "compaction.lifecycle", phase: "completed" }, {
     links: { sourceEventIds: [source.eventId], replacesEventIds: [source.eventId] },
@@ -258,8 +324,5 @@ test("complete replay fails closed on required unknown vocabulary", () => {
     },
     compatibility: "required",
   });
-  assert.throws(
-    () => assertReplayableNormalizedRuntimeEventTraceV1([required]),
-    /blocks replay/,
-  );
+  assert.throws(() => assertReplayableNormalizedRuntimeEventTraceV1([required]), /blocks replay/);
 });
