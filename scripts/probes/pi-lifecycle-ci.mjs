@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -31,6 +31,316 @@ function sha256(value) {
 
 function sha512Integrity(bytes) {
   return `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
+}
+
+const DIRECT_INTERNAL_PI_PACKAGES = Object.freeze([
+  "@earendil-works/pi-agent-core",
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-client",
+  "@earendil-works/pi-protocol",
+  "@earendil-works/pi-tui",
+]);
+const LOCKED_INTERNAL_PI_PACKAGES = Object.freeze([
+  ...DIRECT_INTERNAL_PI_PACKAGES,
+  "@earendil-works/pi-telemetry",
+]);
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function registryTarballUrl(packageName, version) {
+  const tarballName = packageName.startsWith("@") ? packageName.split("/")[1] : packageName;
+  return `https://registry.npmjs.org/${packageName}/-/${tarballName}-${version}.tgz`;
+}
+
+function validatePublishedShrinkwrap(manifest, shrinkwrap, packageName, packageVersion) {
+  if (!isRecord(manifest) || manifest.name !== packageName || manifest.version !== packageVersion) {
+    throw new Error(
+      `Verified tarball manifest identity drift: expected ${packageName}@${packageVersion}.`,
+    );
+  }
+  if (
+    !isRecord(shrinkwrap) ||
+    shrinkwrap.name !== packageName ||
+    shrinkwrap.version !== packageVersion ||
+    shrinkwrap.lockfileVersion !== 3 ||
+    shrinkwrap.requires !== true ||
+    !isRecord(shrinkwrap.packages)
+  ) {
+    throw new Error("Verified tarball npm-shrinkwrap root contract is invalid.");
+  }
+
+  const root = shrinkwrap.packages[""];
+  if (
+    !isRecord(root) ||
+    root.name !== packageName ||
+    root.version !== packageVersion ||
+    !isRecord(root.dependencies)
+  ) {
+    throw new Error("Verified tarball npm-shrinkwrap root package entry is invalid.");
+  }
+
+  for (const [lockPath, entry] of Object.entries(shrinkwrap.packages)) {
+    if (!isRecord(entry)) {
+      throw new Error(`Verified tarball npm-shrinkwrap entry is invalid: ${lockPath || "<root>"}.`);
+    }
+    if (entry.link === true) {
+      throw new Error(`Verified tarball npm-shrinkwrap contains a link entry: ${lockPath}.`);
+    }
+    if (
+      typeof entry.resolved === "string" &&
+      /^(?:file:|link:|workspace:|\.{0,2}\/|\/)/.test(entry.resolved)
+    ) {
+      throw new Error(
+        `Verified tarball npm-shrinkwrap contains a local resolved value: ${lockPath}.`,
+      );
+    }
+  }
+
+  for (const internalPackage of DIRECT_INTERNAL_PI_PACKAGES) {
+    const expectedRange = `^${packageVersion}`;
+    if (
+      manifest.dependencies?.[internalPackage] !== expectedRange ||
+      root.dependencies[internalPackage] !== expectedRange
+    ) {
+      throw new Error(
+        `Verified tarball internal dependency range drift: ${internalPackage}.`,
+      );
+    }
+  }
+
+  for (const internalPackage of LOCKED_INTERNAL_PI_PACKAGES) {
+    const entry = shrinkwrap.packages[`node_modules/${internalPackage}`];
+    if (
+      !isRecord(entry) ||
+      entry.version !== packageVersion ||
+      entry.resolved !== registryTarballUrl(internalPackage, packageVersion)
+    ) {
+      throw new Error(
+        `Verified tarball locked internal dependency drift: ${internalPackage}.`,
+      );
+    }
+  }
+}
+
+function verifyShrinkwrapValidator() {
+  const packageName = "@earendil-works/pi-coding-agent";
+  const packageVersion = "0.84.1";
+  const dependencies = Object.fromEntries(
+    DIRECT_INTERNAL_PI_PACKAGES.map((name) => [name, `^${packageVersion}`]),
+  );
+  const packages = {
+    "": { name: packageName, version: packageVersion, dependencies },
+    ...Object.fromEntries(
+      LOCKED_INTERNAL_PI_PACKAGES.map((name) => [
+        `node_modules/${name}`,
+        {
+          version: packageVersion,
+          resolved: registryTarballUrl(name, packageVersion),
+        },
+      ]),
+    ),
+  };
+  const manifest = { name: packageName, version: packageVersion, dependencies };
+  const shrinkwrap = {
+    name: packageName,
+    version: packageVersion,
+    lockfileVersion: 3,
+    requires: true,
+    packages,
+  };
+
+  validatePublishedShrinkwrap(manifest, shrinkwrap, packageName, packageVersion);
+  for (const mutate of [
+    (value) => {
+      value.packages["node_modules/@earendil-works/pi-ai"].version = "0.84.2";
+    },
+    (value) => {
+      value.packages["node_modules/@earendil-works/pi-ai"].resolved = "file:../pi-ai";
+    },
+    (value) => {
+      value.packages["node_modules/@earendil-works/pi-ai"].link = true;
+    },
+    (value) => {
+      delete value.packages["node_modules/@earendil-works/pi-ai"];
+    },
+  ]) {
+    const candidate = structuredClone(shrinkwrap);
+    mutate(candidate);
+    let rejected = false;
+    try {
+      validatePublishedShrinkwrap(manifest, candidate, packageName, packageVersion);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error("Published shrinkwrap validator accepted an invalid mutation.");
+    }
+  }
+}
+
+async function assertPathMissing(path, label) {
+  try {
+    await lstat(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error(`${label} already exists before the verified package view is created.`);
+}
+
+async function installPublishedPackageGraph({
+  tarballPath,
+  installDir,
+  packageName,
+  packageVersion,
+  environment,
+}) {
+  stage = "extract-verified-artifact";
+  const listing = run("tar", ["-tzf", tarballPath], {
+    cwd: installDir,
+    env: environment,
+  }).stdout
+    .split("\n")
+    .filter(Boolean);
+  if (
+    listing.length === 0 ||
+    !listing.includes("package/package.json") ||
+    !listing.includes("package/npm-shrinkwrap.json") ||
+    listing.some((entry) => {
+      if (!entry.startsWith("package/")) return true;
+      const normalizedEntry = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+      const segments = normalizedEntry.split("/");
+      return segments.includes("..") || segments.includes("");
+    })
+  ) {
+    throw new Error("Verified tarball has an unsafe or incomplete package entry set.");
+  }
+  const packageDir = join(installDir, "package");
+  await mkdir(packageDir, { recursive: false });
+  run(
+    "tar",
+    [
+      "--extract",
+      "--gzip",
+      "--file",
+      tarballPath,
+      "--directory",
+      packageDir,
+      "--strip-components=1",
+      "--no-same-owner",
+      "--no-same-permissions",
+    ],
+    { cwd: packageDir, env: environment },
+  );
+
+  stage = "validate-published-shrinkwrap";
+  const packageJsonPath = join(packageDir, "package.json");
+  const publishedShrinkwrapPath = join(packageDir, "npm-shrinkwrap.json");
+  const [packageJsonBefore, shrinkwrapBefore] = await Promise.all([
+    readFile(packageJsonPath, "utf8"),
+    readFile(publishedShrinkwrapPath, "utf8"),
+  ]);
+  const manifest = JSON.parse(packageJsonBefore);
+  const shrinkwrap = JSON.parse(shrinkwrapBefore);
+  validatePublishedShrinkwrap(manifest, shrinkwrap, packageName, packageVersion);
+
+  const root = shrinkwrap.packages[""];
+  const installManifest = {
+    name: root.name,
+    version: root.version,
+    private: true,
+    ...(root.dependencies ? { dependencies: root.dependencies } : {}),
+    ...(root.optionalDependencies
+      ? { optionalDependencies: root.optionalDependencies }
+      : {}),
+  };
+  const installManifestText = `${JSON.stringify(installManifest, null, 2)}\n`;
+  const installShrinkwrapPath = join(installDir, "npm-shrinkwrap.json");
+  await Promise.all([
+    writeFile(join(installDir, "package.json"), installManifestText, "utf8"),
+    writeFile(installShrinkwrapPath, shrinkwrapBefore, "utf8"),
+  ]);
+
+  stage = "install-published-shrinkwrap";
+  run(
+    "npm",
+    [
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--omit=dev",
+      "--install-strategy=hoisted",
+    ],
+    {
+      cwd: installDir,
+      timeout: 240_000,
+      env: {
+        ...environment,
+        npm_config_ignore_scripts: "true",
+        npm_config_audit: "false",
+        npm_config_fund: "false",
+        npm_config_omit: "dev",
+      },
+    },
+  );
+
+  stage = "verify-installed-package-graph";
+  const [packageJsonAfter, publishedShrinkwrapAfter, installManifestAfter, installShrinkwrapAfter] =
+    await Promise.all([
+      readFile(packageJsonPath, "utf8"),
+      readFile(publishedShrinkwrapPath, "utf8"),
+      readFile(join(installDir, "package.json"), "utf8"),
+      readFile(installShrinkwrapPath, "utf8"),
+    ]);
+  if (packageJsonAfter !== packageJsonBefore) {
+    throw new Error("Installing the published dependency graph changed package.json.");
+  }
+  if (publishedShrinkwrapAfter !== shrinkwrapBefore) {
+    throw new Error("Installing the dependency graph changed the published npm-shrinkwrap.json.");
+  }
+  if (installManifestAfter !== installManifestText) {
+    throw new Error("Installing the dependency graph changed the isolated root package.json.");
+  }
+  if (installShrinkwrapAfter !== shrinkwrapBefore) {
+    throw new Error("Installing the dependency graph changed the isolated npm-shrinkwrap.json.");
+  }
+
+  for (const internalPackage of LOCKED_INTERNAL_PI_PACKAGES) {
+    const installedManifest = JSON.parse(
+      await readFile(
+        join(installDir, "node_modules", ...internalPackage.split("/"), "package.json"),
+        "utf8",
+      ),
+    );
+    if (
+      installedManifest.name !== internalPackage ||
+      installedManifest.version !== packageVersion
+    ) {
+      throw new Error(
+        `Installed internal Pi dependency drift: ${installedManifest.name}@${installedManifest.version}.`,
+      );
+    }
+  }
+
+  const packageSegments = packageName.split("/");
+  const packageView = join(installDir, "node_modules", ...packageSegments);
+  await assertPathMissing(packageView, "Verified package view");
+  await mkdir(dirname(packageView), { recursive: true });
+
+  const binPath = manifest.bin?.pi;
+  if (typeof binPath !== "string" || !binPath) {
+    throw new Error("Verified package manifest is missing the pi executable.");
+  }
+  await chmod(join(packageDir, binPath), 0o755);
+  run("mv", [packageDir, packageView], { cwd: installDir, env: environment });
+
+  const executable = join(installDir, "node_modules", ".bin", "pi");
+  await mkdir(dirname(executable), { recursive: true });
+  await assertPathMissing(executable, "Verified package executable");
+  await symlink(`../${packageName}/${binPath}`, executable, "file");
 }
 
 function stableFingerprintValue(result) {
@@ -155,36 +465,21 @@ async function main() {
     throw new Error(`Pi tarball shasum drift: expected ${expectedShasum}, got ${actualShasum}`);
   }
 
-  stage = "install-verified-artifact";
-  await writeFile(
-    join(installDir, "package.json"),
-    `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
-    "utf8",
-  );
-  run(
-    "npm",
-    [
-      "install",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      "--package-lock=false",
-      "--save=false",
-      tarballPath,
-    ],
-    {
-      cwd: installDir,
-      timeout: 240_000,
-      env: cleanEnvironment({
-        HOME: join(tempRoot, "home-install"),
-        npm_config_cache: join(tempRoot, "npm-cache-install"),
-        npm_config_userconfig: join(tempRoot, "npmrc-install"),
-        npm_config_ignore_scripts: "true",
-        npm_config_audit: "false",
-        npm_config_fund: "false",
-      }),
-    },
-  );
+  verifyShrinkwrapValidator();
+  await installPublishedPackageGraph({
+    tarballPath,
+    installDir,
+    packageName,
+    packageVersion,
+    environment: cleanEnvironment({
+      HOME: join(tempRoot, "home-install"),
+      npm_config_cache: join(tempRoot, "npm-cache-install"),
+      npm_config_userconfig: join(tempRoot, "npmrc-install"),
+      npm_config_ignore_scripts: "true",
+      npm_config_audit: "false",
+      npm_config_fund: "false",
+    }),
+  });
 
   stage = "capture-lifecycle";
   run(process.execPath, [captureScript], {

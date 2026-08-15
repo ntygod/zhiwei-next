@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run test",
+    "check": "npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run check:pi-rpc-worker-lifecycle && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
@@ -26,6 +26,7 @@
     "check:pi-parallel-tool-ordering": "node scripts/check-pi-parallel-tool-ordering-result.mjs",
     "check:pi-compaction-session-replacement": "node scripts/check-pi-compaction-session-replacement-result.mjs",
     "check:pi-sdk-rpc-parity": "node scripts/pi-sdk-rpc-parity-fixture.mjs --check",
+    "check:pi-rpc-worker-lifecycle": "node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs && node scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs --verify-transform && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs && node scripts/check-pi-sdk-rpc-parity-provenance.mjs --verify-base && node scripts/check-pi-sdk-rpc-client-messages-result.mjs --verify-transform && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs --verify-transform && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs --verify-transform && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-base-fixture.mjs && node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
     "check:pr": "node scripts/check-pr-contract.mjs",
     "probe:pi:sdk": "node scripts/probes/pi-sdk-surface.mjs",
     "probe:pi:rpc": "node scripts/probes/pi-rpc-state.mjs",
@@ -37,6 +38,7 @@
     "probe:pi:parallel-tool-ordering": "PI_LIFECYCLE_SCENARIO=parallel-tool-ordering PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-parallel-tool-ordering-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "probe:pi:compaction-session-replacement": "PI_LIFECYCLE_SCENARIO=compaction-session-replacement PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-compaction-session-replacement-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "probe:pi:sdk-rpc-parity": "PI_LIFECYCLE_SCENARIO=sdk-rpc-parity PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
+    "probe:pi:rpc-worker-lifecycle": "PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle PI_LIFECYCLE_CAPTURE_SCRIPT=packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
   }

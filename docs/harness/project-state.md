@@ -3,57 +3,91 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-13
+updated: 2026-08-14
 -->
 
 ## 当前定位
 
-知微处于 **M0：能观察**。AI-primary 自主开发运行模式为：
+知微处于 **M0：能观察**，AI-primary自主开发模式为：
 
 ```text
 public-free-ruleset
 ```
 
-仓库当前为 Public + GitHub Free。Ruleset `20776157`已 active；2026-08-13 owner/admin live readback确认无bypass。服务端要求`main`只能经最新base上的Pull Request、GitHub Actions早注册observer `check`、线性历史与已解决Review Thread进入。observer只在当前run attempt的内部evidence成功后通过；正常写入仍必须使用非默认分支和PR。
+仓库为 **Public + GitHub Free**。Ruleset `20776157`处于active；2026-08-13的owner/admin live readback确认没有bypass。正常写入只能经非默认分支、Pull Request、最新base、GitHub Actions required `check`、线性历史和已解决Review Thread进入`main`。
 
-仓库级 Actions只允许运行固定完整 SHA的 GitHub-owned Action；所有 external contributor的 fork运行都要求维护者批准，默认 Workflow Token为 read-only且不能批准 Pull Request。2026-08-13 owner/admin读回确认 Secret scanning和 push protection已启用；validity checks保持禁用，因为外部 credential issuer查询的副作用尚未纳入本次治理授权。
+唯一required `check`是无`needs`、无checkout、仅`actions: read`的observer。它只接受当前`github.run_id + github.run_attempt`内的`CI required evidence`；内部evidence聚合五个CI Probe和三套路径相关standalone Workflow。仅重跑失败Job不能复用prior-attempt evidence，安全恢复必须使用 **Re-run all jobs**。
 
-普通临时 `GITHUB_TOKEN`不能读取 Ruleset `bypass_actors`或 Repository `security_and_analysis`。这两类管理员字段以版本化 owner/admin读回作为当前证据；Repository Hygiene只持续核验 Token可读子集。仓库不保存 PAT或其他长期管理员 Secret，降低凭证暴露面的代价是管理员字段漂移要到新的 owner/admin读回或其他治理信号才会被发现。
+普通临时 `GITHUB_TOKEN`不能读取Ruleset `bypass_actors`或Repository `security_and_analysis`。管理员字段使用版本化owner/admin读回；仓库不保存 PAT或其他长期管理员 Secret。历史 `best-effort-private-free` 记录只作为连续性证据。
 
-## 最近完成
+## 已进入 main 的 Runtime 基线
 
-### Runtime 证据
+- Pi `v0.84.1` Release、npm Artifact identity、SDK动态导入与无凭证RPC空Session；
+- Pi SDK / Extension正常Tool、自动Retry、Follow-up队列、取消、Retry exhaustion、并行Tool、Compaction和Session Replacement；
+- SDK / RPC同任务的Prompt接受、运行中State、最终Messages、`agent_settled`与关闭边界；
+- `RpcClient.stop()`的SIGTERM请求及`exit(143) → close(143)`；原始JSONL stdin EOF为`exit(0) → close(0)`；
+- PR #60已合并，SDK / RPC parity squash commit为`e71f44fce5022a520a1cc3c081659cb7819cb77d`。
 
-- Pi `v0.84.1` Release Tag、npm Artifact identity、SDK动态导入和无凭证 RPC空 Session；
-- Pi SDK / Extension正常单 Tool生命周期与真实 `toolCallId`关联；
-- 自动 Retry恢复、Follow-up队列、流式取消、`abortRetry()`、Retry exhaustion；
-- 并行 Tool声明、真实完成顺序和 Tool Result消息顺序分离；
-- Manual Compaction：原始 Entry树、派生 Summary和当前模型上下文分层；
-- Session Replacement：Shutdown、Invalidate、Rebind、Extension Start、Public Listener Attach和 `withSession()`边界；
-- SDK / RPC同任务对照：发布 Artifact根导出 `runRpcMode`和 `RpcClient`，同一无工具 Prompt的核心事件投影、最终消息与正文一致；
-- RPC真实 Prompt success Response是接受边界：wire index `4`，先于 `agent_start=5`、运行中 State Response `11`和 `agent_settled=35`，其后仍有29条 Runtime Event；
-- 原始 RPC State变化为 `isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；stdin EOF后 Extension `session_shutdown(reason=quit)`，Worker `exit=0 → close=0`；
-- 发布 `RpcClient`在 Prompt前返回 `getMessages()=[]`，`prompt()`返回时可观察 `isStreaming=true / messageCount=1`，`agent_settled`后返回 `user → assistant`；
-- 固定容器 verified Capture中，`RpcClient.stop()`的实现层 instrumentation真实观察到一次被接受的 `SIGTERM`请求、Extension Evidence在 Process Boundary前已落盘，以及 `exit(code=143, signal=null) → close(code=143, signal=null)`；请求列表没有 `SIGKILL`，但发布源码保留超时后的 `SIGKILL` fallback；
-- 该关闭面和原始 JSONL宿主关闭 stdin EOF后的 `exit(0) → close(0)`必须分开；固定 Artifact、隔离 Probe、完整对象比较、两个精确 Checker和双层指纹是正式门禁。当前成功 Run `31666316897`已把 committed Fixture与 PR #63 的 Artifact完整绑定；原始能力交付 PR #60已合并，squash commit为 `e71f44fce5022a520a1cc3c081659cb7819cb77d`。
+## Issue #32 / PR #64 候选交付
 
-### Runtime 合同连续性
+Issue #32当前唯一active branch为`spike/32-rpc-worker-lifecycle`，唯一primary PR为#64。PR仍为Draft，尚未进入main。
 
-下面的精确结论继续作为 committed Fixture 与 Checker 的文档锚点：
+对HEAD `47cdbbd0b735ee0a2abbf44b950567eae63e4cbf`的独立R3 cold review返回`BLOCKED`。该审查正确发现：Provider Error竞态State验证有损、comparison Artifact digest错误、JSONL Reader按String chunk解码并忽略空行/CR、legacy Checker路径门禁遗漏、Spike索引仍把schema v1 mixed sequence描述为当前合同。
 
-- 自动重试恢复成功 Fixture：公共 `agent_end.willRetry=[true,false]`；Extension没有 `auto_retry_start/end`，被替代失败消息仍须从事件流持久化。
-- Follow-up队列 Fixture：一个公共 Agent Run包含两个 Turn；Extension没有 `queue_update`；初始 `session.prompt()`会等到 Follow-up完成、队列排空和 Session idle 后返回。
-- 下一层已验证用户取消、`abortRetry()`和 retry exhaustion。
-- 取消、abortRetry与 Retry exhaustion Fixture：部分 Assistant消息以 `stopReason=aborted`保留；存在 willRetry=true 但没有后续 Agent Run；Retry exhaustion最终保留最后一次失败 Assistant。
-- 并行 Tool ordering Fixture：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
-- Compaction 与 Session Replacement Fixture：模型上下文变为 `compactionSummary → assistant`；Session对象按 `session-object-1 → session-object-2 → session-object-3`替换；旧 Public Listener不会自动迁移。
-- 验证 Compaction与 Session Replacement 后，原始 Entry、派生 Summary、Session Object与 Listener Rebind仍保持不同来源。
-- SDK / RPC parity Fixture：SDK Public与 RPC Runtime的语义投影均为 `agent_start → turn_start → user message → assistant message → turn_end → agent_end(willRetry=false) → agent_settled`；Command Response、State Snapshot、Extension和 Process Boundary仍分别保留来源。
-- RPC JSONL `message_update`只保留 delta、不含累计 `partial`；SDK / Extension内部事件仍可能携带 `partial`，不能跨 Surface机械统一。
-- 发布 `RpcClient`的 `prompt()` Promise和底层 Prompt Response同样只表达接受；Prompt前后 `get_messages`与运行中 State必须分别持久化。
-- 本场景冻结的只是公开 `RpcClient`必需方法子集，不是全部公开 Surface；子集包含 `collectEvents`与 `getStderr`。动态原型枚举可见 TypeScript私有实现方法 `send`，但运行时可枚举不等同支持合同。
-- 发布 `.d.ts`把 `process`声明为 `private`；Probe只用发布 JavaScript对应字段观测 `stop()`的 Signal请求与 Process Boundary，不把私有字段提升为公开 API或生产 Adapter依赖。
-- 下一项 Runtime 证据为 Issue #32：RPC Worker异常退出、重启、Session恢复、非法 JSON、未知命令、Preflight拒绝和已接受后的 Provider Error。
+对HEAD `32287c7d33482ca58bd65b46438f3cc8552a3df3`的后续独立R3 cold review确认上述B1–B5已关闭，但发现旧SDK/RPC verified来源绑定到squash前分支提交`822a8100c04895dc6c20f50996dec30a73ac816f`，无法满足当前PR归属与祖先关系的Ready live provenance断言。当前修复把SDK/RPC来源重绑到PR #64的成功Run `31781721009`及Artifact `9211959728`；修复产生新HEAD后，两份旧审查都自动失效，必须重新做exact-HEAD R3审查。
+
+候选合同当前要求：
+
+- malformed JSON和unknown command后Worker继续可用；
+- stdout使用 **strict byte LF reader**，拒绝空record、CRLF、非法UTF-8和未LF终止尾片；
+- JSON字符串内`U+2028` / `U+2029`不会破坏LF framing；
+- Prompt success Response只代表接受，先于`agent_start`和稳定`agent_settled`；
+- 正常路径State为`isStreaming=false → true → false`、`messageCount=0 → 1 → 2`；
+- stdin EOF后Extension `session_shutdown(reason=quit)`，再`exit(0) → close(0)`；
+- 第二个真实Worker恢复相同Session稳定别名与先前Messages；
+- idle SIGTERM前Extension shutdown证据已持久化，再`exit(143) → close(143)`；
+- Preflight拒绝只产生一次失败Response，不启动Agent Run；
+- 已接受Provider Error不生成第二个Prompt Response，失败由Assistant error Message、`agent_end(willRetry=false)`和`agent_settled`表达；
+- Worker输出/Process与Host `clientActions`使用不同连续序列，`crossDomainTotalOrder=false`；
+- Provider Error后的`get_state`只允许两个 **完整 running / settled State object**，Provider、model/API、Session identity、pending count、thinking/compacting和queue mode都必须与final State合同一致；
+- running State必须在Prompt acceptance之后、Worker-output `agent_settled`之前；settled State允许delivery竞态；
+- 只有完整对象和顺序验证成功后，竞态Snapshot才不进入冻结Fixture；
+- Provider/Session/pending count漂移和late-running State有负向mutation测试。
+
+### 当前规范化 Worker Fixture
+
+```text
+manifest                     packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest-v2.json
+loader                       packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+normalizer                   packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
+provenance                   packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
+format                       gzip-plus-readable-case-replacement
+source head                  19f3e93a2bdf4f6b66e4abef00509e9549b22f6b
+workflow run                 31701880114
+source run attempt           2
+source artifact              9181642601
+source artifact digest       sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09
+comparison run attempt       1
+comparison artifact          9181575920
+comparison artifact digest   sha256:b7c415e360338f562d3384d22f4c786d845bb78dddaf7b8b10447def94f4b73f
+artifact result bytes        74587
+artifact result sha256       8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62
+canonical JSON bytes         36265
+canonical JSON sha256        1b2fd8aabbc3d76f0c9538db9f4c9cdd47a717ee9610d3cd564bb9d36531638a
+outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d6305127ebe0053c
+capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
+external Provider prompts    0
+```
+
+两个历史attempt的Worker capture、Fresh validation、base validation和Artifact upload步骤成功；旧historical compare step失败，因此旧Workflow/Worker Job整体为failure。当前代码不把它们写成成功attempt。Ready **Worker v2 live provenance** 将实时验证run/attempt/HEAD、Worker Job步骤、Artifact ID/name/GitHub digest、ZIP、唯一`result.json`、source ancestry，以及两个Artifact归一化后与committed完整对象相等。该provenance与旧SDK/RPC provenance进入同一Ready gate，并等待当前Fresh Worker Job成功。
+
+### 历史 schema v1 Base
+
+`rpc-worker-lifecycle-manifest.json`、内容寻址Part和`rpc-worker-lifecycle-base-fixture.mjs`保留为不可变历史输入，不再表示当前协议。历史Base来源为head`c0d782ce074e770d39876600feef3554d0471756`、workflow`31677138404`、Artifact`9172023070 / 9171976965`、outer fingerprint`cea0a302391a2e072a7a1767b0ed0115458e49e228c3ee57607a8e58f8c114ba`。
+
+legacy Checker已移入`packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/**`路径门禁；standalone Workflow与CI `sdkRpcParityPaths`都通过既有Fixture glob触发，并对launcher与immutable base执行source syntax/hash检查。
+
+## SDK / RPC verified Fixture连续性
 
 SDK / RPC parity当前 `verified` Fixture身份：
 
@@ -66,46 +100,96 @@ compressed sha256            44d95e16d8078413c1afe94dd3c7a19bbcdbfad06d82a51a491
 JSON sha256                  a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda252779603bc9e470034d
 outer fingerprint            c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture fingerprint          70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
-final Assistant sha256       5604485dabc1a8b5d71db37611b23b7ddcc761238cd3621a309934d0fdf9c1f9
-external Provider prompts    0
 source state                 verified
-capture head                 822a8100c04895dc6c20f50996dec30a73ac816f
-capture workflow             31666316897
-capture artifact             9168052320
-capture artifact digest      sha256:7ba326de0b6e3d616d6bd0d1e1650d3609f31fc6f591df1004ff1d2ae6d5821e
+capture head                 32287c7d33482ca58bd65b46438f3cc8552a3df3
+capture workflow             31781721009
+capture artifact             9211959728
+capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
+external Provider prompts    0
 ```
 
-该 verified来源的固定容器 Fresh Capture、两个 Checker、committed Fixture校验与完整对象比较全部成功。Artifact ZIP只有一个 `122178`字节的 `result.json`；ZIP Digest、JSON SHA与 committed Fixture字节均已核对一致。
+该verified来源来自PR #64的成功Draft Capture，Artifact内唯一`result.json`与committed Fixture逐字节相同。来源HEAD是本次重绑提交的直接祖先；Ready live provenance仍须在同一新exact HEAD上实际成功，Worker Fixture不能降低这套既有门禁。
 
-Manifest 是 Capture provenance 的机器事实源，并只允许两态：
+## Runtime 合同连续性
 
-- `candidate`：`head`为完整 Commit SHA，`workflowRun`、`artifactId`、`artifactDigest`全部为 `null`；只允许 Draft PR恢复，不满足 Ready或合并条件；
-- `verified`：三项 provenance全部有效；非 Draft PR、`push main`、手动运行和定时 Gate强制 `--require-verified-source`，非 Draft PR再以 live provenance Checker绑定真实 Run / Artifact、证明来源 HEAD是当前 PR HEAD的真实祖先，并下载 ZIP确认其中唯一 `result.json`与 Manifest SHA及 committed Fixture完整字节相同。
+后续协议必须保留：
 
-SDK / RPC Workflow采用 fresh-first recovery：先在固定容器产生Fresh Capture并通过两个脱敏Checker，再验证committed Fixture和完整对象相等性。Ready live provenance以run ID/`workflow_id`端点、canonical path和机器`display_title`绑定PR/action/updated_at/head，同时保留run attempt、PR关联、Artifact ZIP与committed字节绑定；不再把自定义标题化的Actions `run.name`与YAML name比较。
+- SDK、Extension、RPC与Host的`sourceSurface`；
+- Prompt Request、Command Response、Agent Run、Turn、Message、Tool Call与稳定边界；
+- RPC Request ID、Runtime Event、State / Messages Snapshot；
+- Worker Instance、Runtime Session、Session File / Object与Replacement Generation；
+- stdin EOF、Signal Request、Extension Shutdown、Exit与Close；
+- Preflight拒绝与已接受后的执行失败；
+- Retry计划、Queue状态、取消、Compaction派生Context和原始Observation。
 
-恢复 Packer对 Fresh JSON与解压输出使用同一个 8 MiB有界读取上限，以仓库绝对位置运行 Checker，并用 Fixture父目录排他锁、父目录 / Fixture目录身份句柄、内容寻址不可变分片、完整 staging回读与单 Manifest原子切换避免失败时混写活动 Fixture；目录替换、符号链接、非普通文件和并发 Packer均 fail closed。旧分片保留给已读取旧 Manifest的并发 Reader，显式 GC需先增加 Reader lease或版本保留协议；崩溃或目录身份异常残留锁需要先确认没有运行中的 Packer并检查 Fixture树后人工清理。
+禁止从最终Messages、Promise返回、Prompt success Response、Queue清空、Compaction Summary或Process退出码单独推断任务成功。
 
-PR #60已完成 candidate收敛、真实 Artifact绑定、最终 HEAD的 R3独立审查和 verified来源 Gate，并已 squash合并。后续 Runtime工作必须继承其 Fresh / committed完整相等、双结果 Checker和来源 provenance边界，不能把历史 candidate状态重新描述为当前状态。
+机器事实源：
 
-### Harness 与默认分支
+```text
+docs/architecture/pi-integration.md
+docs/architecture/pi-rpc-worker-lifecycle.md
+docs/spikes/pi-runtime-contract/README.md
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest-v2.json
+packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md
+```
 
-- 渐进式 `AGENTS.md` 与 AI-primary Harness；
-- Main Provenance、token-driven dispatch、Incident停机与恢复提案；
-- 当前 `public-free-ruleset`模式、active Ruleset、Actions限制、Secret scanning / push protection与公开面审计；
-- 2026-08-13 owner/admin字段版本化证据、临时 `GITHUB_TOKEN`持续读回子集和无长期管理员 PAT边界；
-- 历史 `best-effort-private-free` 风险接受和两条 live provenance proof继续保留，但不再描述当前保护能力；
-- Branch Cleanup按关闭 PR `head.sha`、开放 PR、默认分支、protection和当前 HEAD安全回收；
-- `developmentPause.active=false`，Issue #9 已关闭且审计历史保留；
-- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；当前由Autonomous Merge即时provenance dispatch和完成后reconciler共同闭环：post-merge失败必须按`after`登记Incident，reconciler短时重试可见性并使用精确来源CI attempt安全补发，不能降低来源校验。
-- PR #62的CI Run `31663188980`显示旧`check`静态 Job先于五个CI内动态 Probe成功，服务端 required context当时没有依赖这些 Probe；该次五个CI内 Probe最终均成功且 Autonomous Merge等待整个CI Workflow完成，但路径相关的standalone SDK / RPC parity Workflow失败不在等待范围内，PR仍被合并，构成实际 required-status缺口；
-- #61 follow-up的内部`CI required evidence`以workflow endpoint/path、机器`display_title`、repo/ref/SHA和时间戳识别standalone run，不比较会等于自定义标题的Actions `run.name`；三套success候选须共同quiet 60秒。唯一`check`只接受当前run attempt evidence。
+## committed Runtime 连续性锚点
 
-PR #62已把Public Ruleset与仓库治理基线合入`main`，但上述 Required Check聚合缺口使Issue #61继续保持开放；当前`chore/61-required-check-aggregation` follow-up收紧CI内聚合、standalone轮询和事实源。该follow-up尚须在真实路径命中的 PR事件上验证，合并且验证前不关闭 #61，Issue #32保持排队而不创建新的 Runtime primary branch。
+以下句子由历史Checker机械读取，项目状态压缩不得删除：
 
-### 历史连续性锚点
+- **自动重试恢复成功 Fixture**：公共`agent_end.willRetry=[true,false]`；Extension没有 `auto_retry_start/end`，失败Message仍从事件流持久化。
+- **Follow-up队列 Fixture**：一个公共 Agent Run包含两个 Turn；Extension没有 `queue_update`；初始 `session.prompt()`会等到 Follow-up完成、Queue排空和Session idle后返回。
+- 已验证用户取消、`abortRetry()`和 retry exhaustion；**取消、abortRetry与 Retry exhaustion Fixture**中，部分 Assistant消息以 `stopReason=aborted`保留，存在willRetry=true 但没有后续 Agent Run，Retry exhaustion最终保留最后一次失败 Assistant。
+- **并行 Tool ordering Fixture**：完成顺序为 `beta → gamma → alpha`，消息顺序恢复为 `alpha → beta → gamma`。
+- **Compaction 与 Session Replacement Fixture**：模型Context为`compactionSummary → assistant`；Session对象为`session-object-1 → session-object-2 → session-object-3`；旧 Public Listener不会自动迁移。验证 Compaction与 Session Replacement后，原始Entry、派生Summary、Session Object与Listener Rebind仍保持不同来源。
+- **RPC真实 Prompt**：Command Response、Runtime Event、State / Messages、Extension Shutdown与Process Boundary分别保存。
+- Main Provenance Dispatch可能遭遇 GitHub API瞬时故障；当前由即时dispatch与reconciler闭环，不能通过降低来源校验解决。
 
-这些值是已经验证的自主交付链，不因后续项目状态压缩而删除：
+## Harness 与 Work Item治理
+
+- `developmentPause.active=false`，Issue #9 已关闭，事故历史继续保留；
+- Issue #61已由PR #63完成Public Ruleset、required evidence聚合与post-merge provenance闭环；
+- **Issue #57** 已完成仓库级`work-item lifecycle`治理；
+- **Issue #45** 是已完成的SDK / RPC parity canonical execution Issue；Issue #32只扩展真实RPC Worker生命周期；
+- Issue #44保持owner-input；Issue #56等待正式协议；
+- 每个primary PR必须在pre-merge验证work item对象类型、开放状态、分支编号、owner-input来源和supersedes关系；
+- 一个execution Issue最多一个active branch和一个开放primary PR；
+- `R2/R3`要求当前最终HEAD绑定的独立AI cold review，作者自审不能替代。
+
+## Work Item 状态与顺序
+
+当前正常WIP只有Issue #32 / PR #64：
+
+1. 完成SDK/RPC verified来源重绑、新HEAD四套Draft Workflow和Fresh/committed完整对象比较；
+2. 对新完整SHA执行独立R3 cold review；
+3. APPROVED后同步PR metadata，转Ready并完成Ready CI、Worker v2 live provenance、自动merge和Main Provenance；
+4. Issue #49从最新main创建`feat/49-normalized-runtime-event-v1`；
+5. Issue #56在#49后创建合规分支，实现append-only SQLite Observation Ledger；
+6. 后续Daemon / Worker Supervisor消费已冻结协议。
+
+Issue #56的pre-governance snapshot：
+
+```text
+branch feat/m0-sqlite-observation-ledger-v1
+head   0da4e97e5cac42add96a55285976a93afd992495
+```
+
+该快照冻结、未审查、未交付，正式Ledger实现必须重新从最新main创建合规分支。
+
+## 当前 M0 能力
+
+已验证Pi源码与Artifact身份、SDK/RPC公开面、Tool/Retry/Queue/Cancel/Compaction/Replacement边界，以及RPC Worker协议错误恢复、EOF、SIGTERM、Restart / Resume、Preflight拒绝和已接受Provider Error。
+
+尚未交付：
+
+- PR #64对应的main交付与Issue #32关闭；
+- 正式`NormalizedRuntimeEvent v1`；
+- SQLite Observation Ledger；
+- 真实Daemon / Worker Supervisor链路。
+
+## 历史连续性锚点
 
 ```text
 PR #12 final CI                 31498003965
@@ -127,124 +211,11 @@ docs/harness/provenance-proofs/2026-08-11-pr-12.json
 docs/harness/provenance-proofs/2026-08-11-pr-13.json
 ```
 
-### Work Item 生命周期治理
-
-Issue #57 和 PR #59 建立 work-item lifecycle：
-
-- 所有者直接创建的 Issue视为 `owner-input`，原始正文不改写、不因未排期关闭、不接收无关诊断；
-- GitHub Issue 与 PR共用编号，任何自动写入前验证对象类型、标题、work item和必要的 HEAD；
-- 一个 execution Issue最多一个 active branch和一个 primary PR；
-- 分支必须包含 Issue编号；
-- Review、Finalize和Integrate在同一 primary PR完成；
-- 禁止 retirement、no-op、capability-test、integrator、finalizer和reviewer PR；
-- PR CI 在 **pre-merge** 阶段实时验证 `work-item`、`owner-input` 和 `supersedes-pr` 的 GitHub对象类型；
-- Repository Hygiene审计 WIP、对象类型和孤立 helper，并只按 exact-head reconciliation allowlist删除 legacy helper branch。
-
-当前收敛结果：
-
-- Issue #44《后台任务进度获取》保留为所有者产品输入，并完成事件驱动进度订阅的 triage；
-- Issue #45 已由唯一 primary PR #60完成 SDK / RPC同任务对照；旧 PR #33只保留为未合并历史种子；
-- Issue #31、#37 已作为 #45 的 duplicate关闭；
-- Issue #61 的PR #62已合并Public治理基线，当前follow-up正在修复Required Check只等待静态 Job的缺口；
-- Issue #32 是 #61合并后立即恢复的下一项 canonical Runtime execution work item；
-- Issue #49 等待 #32 后冻结 `NormalizedRuntimeEvent v1`；
-- Issue #56 等待 #49 后实现 SQLite Observation Ledger；
-- PR #33、#34 未完成 Draft已明确未交付并关闭；
-- PR #48、#54、#55 retirement PR已关闭；
-- 误创建的 no-op Issue #58 已标记 invalid并关闭，保留为真实仓库 capability-test反例。
-
-机器事实源：
-
-```text
-docs/harness/work-item-lifecycle.md
-scripts/work-item-policy.mjs
-scripts/check-work-item-governance.mjs
-.github/workflows/repository-hygiene.yml
-docs/harness/reconciliation/2026-08-12-work-item-cleanup.json
-```
-
-## 当前治理能力
-
-- GitHub Connector内容写入前创建并显式指定非默认分支；
-- 普通变更通过 canonical Issue、包含编号的 branch、唯一 primary PR、CI和 squash merge进入 `main`；
-- active默认分支 Ruleset在服务端要求 Pull Request、GitHub Actions最终`check`、最新 base、线性历史和 Review Thread解决；无`needs`的`check`observer只等待当前run内`CI required evidence`成功，内部evidence才聚合`static-contracts`、五个CI Probe和三套standalone run；2026-08-13 owner/admin读回记录`bypass_actors=[]`，仓库 merge设置也只允许 squash；
-- Actions限制为固定 SHA的 GitHub-owned Action，external fork运行需批准，默认 Token为 read-only且不能批准 PR；
-- Autonomous Merge的`workflow_run`写权限路径检查same-repository source和CI机器事件身份，只消费仍与实时PR的number、Ready状态、event time、base及head一致的成功CI；合并成功后同一Job验证真实merge SHA、来源和单一parent并立即dispatch。Main Provenance Dispatch改为监听Autonomous Merge完成的reconciler，以机器标题和只读Actions API绑定精确来源CI run/attempt/head；非PR、非success和fork正常no-op，连续可信未合并才no-op，API状态不确定登记持久Incident；已确认同源merge无论主路径结论都按`after`复验并幂等补发；
-- 2026-08-13 owner/admin读回记录 Secret scanning和 push protection已启用；validity checks因 issuer外部查询副作用保持禁用并记录原因；
-- `R2/R3`要求绑定当前 HEAD的 cold-read AI审查；
-- PR合同包含 `work-item`、`pr-role`、`owner-input`、`supersedes-pr`和既有风险字段；
-- PR Checker从 GitHub Event Payload读取 title、branch和PR number；
-- pre-merge PR CI通过只读 GitHub API确认 work-item是开放Issue、owner-input由仓库所有者创建、supersedes-pr是真实PR；
-- Repository Hygiene在可信默认分支上下文中再次验证 Issue / PR对象类型；
-- 外部 direct push由 Main Provenance的 `push`路径审计；
-- `GITHUB_TOKEN`自动合并由 Dispatch / Receiver路径审计；
-- 未验证 main更新创建 R3 Incident并阻断普通自动合并；
-- Branch Cleanup处理关闭 PR分支；Repository Hygiene处理 exact-head legacy helper和仓库级WIP漂移；
-- Repository Hygiene使用临时 `GITHUB_TOKEN`持续回读 Public visibility、merge methods、`main.protected`以及可见的 Ruleset身份、enforcement、条件与规则参数；它不声称在线验证 `bypass_actors`或 `security_and_analysis`。Main Provenance继续作为服务端 pre-receive规则之后的来源审计与恢复层。
-
-## 当前 M0能力
-
-已验证：
-
-- Pi源码契约与发布 Artifact身份；
-- SDK Root Exports、`runRpcMode`、公开 `RpcClient`必需方法子集（包含 `collectEvents`、`getStderr`）和无凭证 RPC空 Session；
-- Prompt、Agent Run、Turn、Tool、Retry、Queue、Cancel、Compaction和Session Replacement关键边界；
-- SDK与 RPC对同一无工具任务的 Prompt接受、运行中、最终消息、稳定和关闭边界；
-- 发布 `RpcClient`的 Prompt前空消息、接受时运行中 State和完成后 `user → assistant`消息；
-- Public SDK、Extension、RPC Command Response、RPC Runtime Event、State Snapshot、stdin EOF、Host `RpcClient.stop()`调用和 Process Boundary的来源差异；实际 ChildProcess Signal请求与 `exit(143) → close(143)`已有固定容器 verified Evidence；
-- Tool真实完成顺序与消息持久化顺序不能合并；
-- 被 Retry替代或取消的证据不能只从最终 `session.messages`重建；
-- Compaction Summary不能覆盖原始 Session Entry或未来 Observation；
-- Session Replacement后旧 Listener不会自动迁移；
-- Runtime Fixture、隔离 Probe、Harness、架构边界和基础测试由 CI持续检查。
-
-尚未冻结：
-
-- RPC Worker异常退出、重启、Session恢复和协议 / Provider错误边界；
-- 正式 `NormalizedRuntimeEvent v1`；
-- SQLite Observation Ledger Schema与实现。
-
-## 当前队列与顺序
-
-严格按依赖推进：
-
-1. **Issue #61**：合并Required Check follow-up，并以真实路径触发验证早注册`check`observer只在同run内部evidence覆盖五个CI Probe和三套standalone run后成功；
-2. **Issue #32**：#61 follow-up合并后从最新`main`创建`spike/32-rpc-worker-lifecycle`，验证异常 EOF / 退出、重启、Session恢复和错误边界；
-3. **Issue #49**：创建 `feat/49-normalized-runtime-event-v1`，消费全部真实Fixture冻结协议；
-4. **Issue #56**：创建 `feat/56-sqlite-observation-ledger-v1`，实现append-only SQLite Ledger。
-
-Issue #56已有 pre-governance snapshot：
-
-```text
-branch feat/m0-sqlite-observation-ledger-v1
-head   0da4e97e5cac42add96a55285976a93afd992495
-```
-
-该分支是冻结、未审查、未交付的代码快照，不是完成结果。解锁后从最新 main创建符合新规则的 #56分支，逐项审查是否复用，不直接合并旧快照。
-
-Issue #44 是跨 M0 Runtime、未来 Delegation和桌面体验的 owner-input；#45只提供底层事件驱动证据，不代表后台任务进度体验已经交付。
-
 ## 已知风险
 
-- 仓库管理员仍可修改、禁用或删除 Ruleset以及仓库安全设置；Repository Hygiene持续暴露删除和 Token可读漂移，管理员字段则依赖新的 owner/admin读回或其他治理信号，任何审计都不能让管理员权限变成不可变；
-- 普通 `GITHUB_TOKEN`看不到 bypass actors与 security-and-analysis管理员字段；不保存长期管理员 PAT降低凭证风险，但这些字段的漂移只能靠 revisit trigger后的 owner/admin读回或其他治理信号发现；
-- Required Check名称或 GitHub Actions App身份漂移会 fail closed并阻塞全部合并；修复必须走 R3治理，不能增加 bypass；
-- Required `check`是无`needs`observer，每60秒只读轮询当前`${{ github.run_id }}` / `${{ github.run_attempt }}`内唯一`CI required evidence`；内部evidence负责五个CI Probe和三套standalone Workflow。任一层身份不匹配、非success、重复target、缺失或deadline超时都会fail closed；仅“Re-run failed jobs”不复用旧attempt evidence，恢复需“Re-run all jobs”；
-- Public仓库的源码、Issue、PR历史和有意上传的脱敏 Artifact公开可读；公开面审计观察到610条历史 Actions artifact记录，但没有逐字节审计历史 Artifact，现行 Workflow仍必须在上传前脱敏并使用明确的短保留期；
-- 旧 Probe Workflow的 `if: always()`已移除；Capture或脱敏 Checker失败时不再上传 failure JSON，不能把失败诊断冒充公开 Evidence；
-- Secret scanning与 push protection降低误提交风险但不能替代禁止真实记忆、凭证、生产数据和私有仓库内容进入 Commit或 Artifact；validity checks仍未启用；
-- External fork的只读 CI仍执行不受信任代码；same-repository `workflow_run`门禁、无 Secret和最小 Token必须保持，不能依赖运行批准本身建立信任；
-- Branch Cleanup与Repository Hygiene的 `deleteRef`没有原子 compare-and-delete，最终复核和删除间有极短可恢复竞态；
-- Repository Hygiene只删除 exact-head allowlist或合规 helper，不猜测删除来源不明分支；
-- 独立 AI审查仍使用同一仓库身份下的 cold-read评论协议，尚无独立Reviewer Bot；
-- merge后API响应丢失可能让即时sender与reconciler都产生相同`after`的安全重复dispatch；receiver按`after`串行复验，Issue #15继续跟踪更强的外部去重；
-- Pi Runtime获取与执行目前位于同一联网容器；未来可拆为联网获取和断网执行；
-- RPC成功路径、正常 EOF与 `RpcClient.stop()`实现层 SIGTERM / `exit(143) → close(143)`已有固定容器 verified Evidence。发布源码中的 `SIGKILL` fallback、Restart / Resume / Error仍必须按各自场景保留来源，其中 Worker恢复与错误语义由 #32独立冻结，不能从当前成功 Fixture外推；
-- 在仓库转回 Private、方案或默认分支变化、Ruleset / Secret scanning漂移、管理员字段相关变更后读回证据未刷新、提议引入长期管理员 PAT、真实用户记忆、生产凭证、多人写入、生产发布或 active Ruleset下仍出现未经授权的 direct-main更新时，必须重新评估风险接受。
-
-## 产品能力状态
-
-- Pi source-and-runtime baseline已验证到正常Tool、Retry、Follow-up、Cancel、并行Tool、Compaction、Session Replacement和 SDK / RPC同任务对照；
-- owner-input与自主开发Work Item治理已建立；
-- 真实Observation持久化、记忆、Context、Attention、后台委托和桌面端尚未进入产品实现；
-- M0继续以 #32 → #49 → #56 的依赖链推进，不提前把旧分支或未审查代码声明为完成。
+- 管理员仍可修改Ruleset与安全设置，漂移触发R3重评；
+- 普通Token看不到管理员字段，不保存长期PAT降低凭证风险但增加读回延迟；
+- external fork只读CI仍执行不受信代码，same-repository`workflow_run`、无Secret与最小Token必须保持；
+- Public仓库源码、Issue、PR历史和有意上传的脱敏Artifact公开可读，未脱敏失败结果不得上传；
+- 当前Fixture不覆盖RPC Tool、Steering、Follow-up、Compaction / Replacement命令、SIGKILL、OOM、Host崩溃或Windows信号差异；
+- PR #64在新HEAD独立审查完成前保持Draft。

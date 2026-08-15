@@ -102,6 +102,24 @@ jobs:
           node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
           node --check scripts/check-pi-sdk-rpc-parity-provenance.mjs
           node --check scripts/pi-sdk-rpc-parity-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs
+          node scripts/check-pi-sdk-rpc-parity-provenance.mjs --verify-base
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
 
       - name: Capture fresh Pi SDK and RPC parity lifecycle in sandbox
         id: capture
@@ -120,6 +138,9 @@ jobs:
             scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
             scripts/probes/pi-sdk-rpc-parity-capture.mjs \
             scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs \
             | tar -xf - -C "$BUNDLE"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"
@@ -199,10 +220,154 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  pi-rpc-worker-lifecycle-probe:
+    name: Pi RPC Worker lifecycle probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify checked-out source identity
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SOURCE_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SOURCE_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "::error::Checked-out source differs from the event source: expected=$EXPECTED_SOURCE_SHA actual=$ACTUAL_SOURCE_SHA."
+            exit 1
+          fi
+
+      - name: Setup exact Node.js runtime for host validation
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.1
+
+      - name: Validate RPC Worker lifecycle probe sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/probes/pi-lifecycle-ci.mjs
+          node --check scripts/probes/pi-sdk-rpc-parity-contract.mjs
+          node --check scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs
+          node --check scripts/check-pi-sdk-rpc-client-messages-result.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
+          node --check packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs
+
+      - name: Capture fresh Pi RPC Worker lifecycle in sandbox
+        id: capture_rpc_worker
+        env:
+          PI_PROBE_IMAGE: node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/zhiwei-pi-rpc-worker-lifecycle-bundle"
+          RESULT_DIR="$RUNNER_TEMP/zhiwei-pi-rpc-worker-lifecycle-result"
+          mkdir -p "$BUNDLE/packages/pi-adapter/fixtures" "$RESULT_DIR"
+          tar -cf - \
+            packages/pi-adapter/fixtures/pi-upstream-baseline.json \
+            scripts/probes/pi-lifecycle-ci.mjs \
+            scripts/probes/pi-sdk-rpc-parity-contract.mjs \
+            scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs \
+            | tar -xf - -C "$BUNDLE"
+          chmod -R a-w "$BUNDLE"
+          chmod 0777 "$RESULT_DIR"
+
+          docker run --rm \
+            --network=bridge \
+            --read-only \
+            --user=1000:1000 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --pids-limit=256 \
+            --memory=2g \
+            --cpus=2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1536m,uid=1000,gid=1000,mode=1777 \
+            --mount type=bind,src="$BUNDLE",dst=/probe,readonly \
+            --mount type=bind,src="$RESULT_DIR",dst=/output \
+            --workdir /probe \
+            --env HOME=/tmp/home \
+            --env CI=true \
+            --env GITHUB_ACTIONS=true \
+            --env PI_LIFECYCLE_OUTPUT=/output/result.json \
+            --env PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle \
+            --env PI_LIFECYCLE_CAPTURE_SCRIPT=/probe/packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs \
+            --env PI_PROBE_SOURCE_READ_ONLY=true \
+            --env PI_PROBE_HOST_WORKSPACE_MOUNTED=false \
+            --env PI_PROBE_CONTAINER_ROOT_READ_ONLY=true \
+            --env PI_PROBE_CAPABILITIES_DROPPED=true \
+            --env PI_PROBE_NO_NEW_PRIVILEGES=true \
+            --env PI_PROBE_CONTAINER_IMAGE="$PI_PROBE_IMAGE" \
+            "$PI_PROBE_IMAGE" \
+            node scripts/probes/pi-lifecycle-ci.mjs
+
+      - name: Validate fresh sanitized RPC Worker lifecycle evidence
+        id: validate_rpc_worker_fresh
+        env:
+          PI_RPC_WORKER_LIFECYCLE_OUTPUT: ${{ runner.temp }}/zhiwei-pi-rpc-worker-lifecycle-result/result.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-pi-sdk-rpc-client-messages-result.mjs \
+            --rpc-worker-lifecycle \
+            "$PI_RPC_WORKER_LIFECYCLE_OUTPUT"
+
+      - name: Validate committed RPC Worker lifecycle Fixture
+        if: always() && !cancelled()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs
+
+      - name: Compare committed RPC Worker Fixture with fresh evidence
+        if: always() && !cancelled() && steps.capture_rpc_worker.outcome == 'success' && steps.validate_rpc_worker_fresh.outcome == 'success'
+        env:
+          PI_RPC_WORKER_LIFECYCLE_OUTPUT: ${{ runner.temp }}/zhiwei-pi-rpc-worker-lifecycle-result/result.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs \
+            --compare "$PI_RPC_WORKER_LIFECYCLE_OUTPUT"
+
+      - name: Upload fresh sanitized RPC Worker lifecycle evidence
+        if: always() && steps.capture_rpc_worker.outcome == 'success' && steps.validate_rpc_worker_fresh.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pi-rpc-worker-lifecycle-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zhiwei-pi-rpc-worker-lifecycle-result/result.json
+          if-no-files-found: error
+          retention-days: 14
+
   pi-sdk-rpc-parity-provenance:
     name: Pi SDK and RPC parity live provenance
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
-    needs: pi-sdk-rpc-parity-probe
+    needs:
+      - pi-sdk-rpc-parity-probe
+      - pi-rpc-worker-lifecycle-probe
     permissions:
       actions: read
       contents: read
