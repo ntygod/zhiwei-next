@@ -564,7 +564,7 @@ try {
       sourceBundleReadOnly: process.env.PI_PROBE_SOURCE_READ_ONLY === "true",
       containerRootFilesystemReadOnly: process.env.PI_PROBE_CONTAINER_ROOT_READ_ONLY === "true",
       containerCapabilitiesDropped: process.env.PI_PROBE_CAPABILITIES_DROPPED === "true",
-      containerNoNewPrivileges: process.env.PI_PROBE_NO_NEW_PRIVileges === "true",
+      containerNoNewPrivileges: process.env.PI_PROBE_NO_NEW_PRIVILEGES === "true",
     },
   };
   await persist(failure);
