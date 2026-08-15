@@ -165,7 +165,7 @@ packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-ma
 - **Issue #57** 已完成仓库级`work-item lifecycle`治理；
 - **Issue #45** 是已完成的SDK / RPC parity canonical execution Issue；
 - Issue #44保持owner-input；Issue #56等待Issue #49正式协议；
-- 每个primary PR必须验证work item对象、开放状态、分支编号、owner-input来源与supersedes关系；
+- 每个primary PR在pre-merge阶段执行work-item lifecycle对象校验，并验证开放状态、分支编号、owner-input来源与supersedes关系；
 - 一个execution Issue最多一个active branch和一个开放primary PR；
 - `R2/R3`要求当前最终HEAD绑定的独立AI cold review，作者自审不能替代。
 
