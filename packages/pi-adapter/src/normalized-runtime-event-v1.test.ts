@@ -111,7 +111,16 @@ test("Preflight rejection and accepted Provider failure retain different facts",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ promptId: "prompt-error", agentRunId: "run-error" }),
   });
-  const messageEnd = normalize(4, {
+  const messageStart = normalize(4, {
+    type: "message_start",
+    role: "assistant",
+    contentKinds: [],
+  }, {
+    surface: "rpc",
+    sequenceDomain: "rpc-worker-output",
+    correlation: correlation({ agentRunId: "run-error", messageId: "message-error" }),
+  });
+  const messageEnd = normalize(5, {
     type: "message_end",
     role: "assistant",
     contentKinds: ["text"],
@@ -123,12 +132,12 @@ test("Preflight rejection and accepted Provider failure retain different facts",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ agentRunId: "run-error", messageId: "message-error" }),
   });
-  const end = normalize(5, { type: "agent_end", willRetry: false }, {
+  const end = normalize(6, { type: "agent_end", willRetry: false }, {
     surface: "rpc",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ agentRunId: "run-error" }),
   });
-  const settled = normalize(6, { type: "agent_settled" }, {
+  const settled = normalize(7, { type: "agent_settled" }, {
     surface: "rpc",
     sequenceDomain: "rpc-worker-output",
     correlation: correlation({ agentRunId: "run-error" }),
@@ -137,6 +146,7 @@ test("Preflight rejection and accepted Provider failure retain different facts",
     rejected,
     accepted,
     start,
+    messageStart,
     messageEnd,
     end,
     settled,
@@ -173,7 +183,10 @@ test("Retry and Follow-up preserve Agent Run and Turn boundaries without invente
   }, {
     correlation: correlation({ agentRunId: "run-1" }),
   });
-  const run1End = normalize(7, { type: "agent_end", willRetry: true }, {
+  const turn2End = normalize(7, { type: "turn_end", toolResultCount: 0 }, {
+    correlation: correlation({ agentRunId: "run-1", turnId: "turn-2" }),
+  });
+  const run1End = normalize(8, { type: "agent_end", willRetry: true }, {
     correlation: correlation({ agentRunId: "run-1" }),
   });
 
@@ -184,9 +197,55 @@ test("Retry and Follow-up preserve Agent Run and Turn boundaries without invente
     followUpQueued,
     turn2Start,
     queueEmpty,
+    turn2End,
     run1End,
   ]));
   assert.equal((run1End.data as { willRetry: boolean }).willRetry, true);
+});
+
+test("Cancellation preserves the partial aborted Assistant fact and can abort a planned Retry", () => {
+  const start = normalize(1, { type: "agent_start" }, {
+    correlation: correlation({ agentRunId: "cancel-run" }),
+  });
+  const turnStart = normalize(2, { type: "turn_start" }, {
+    correlation: correlation({ agentRunId: "cancel-run", turnId: "cancel-turn" }),
+  });
+  const messageStart = normalize(3, { type: "message_start", role: "assistant" }, {
+    correlation: correlation({ agentRunId: "cancel-run", turnId: "cancel-turn", messageId: "cancel-message" }),
+  });
+  const messageEnd = normalize(4, {
+    type: "message_end",
+    role: "assistant",
+    stopReason: "aborted",
+    body: { text: "partial" },
+  }, {
+    correlation: correlation({ agentRunId: "cancel-run", turnId: "cancel-turn", messageId: "cancel-message" }),
+  });
+  const turnEnd = normalize(5, { type: "turn_end", toolResultCount: 0 }, {
+    correlation: correlation({ agentRunId: "cancel-run", turnId: "cancel-turn" }),
+  });
+  const end = normalize(6, { type: "agent_end", willRetry: true }, {
+    correlation: correlation({ agentRunId: "cancel-run" }),
+  });
+  const aborted = normalize(7, { type: "retry_aborted", reason: "user-cancel" }, {
+    correlation: correlation({ agentRunId: "cancel-run" }),
+  });
+  const settled = normalize(8, { type: "agent_settled" }, {
+    correlation: correlation({ agentRunId: "cancel-run" }),
+  });
+
+  assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([
+    start,
+    turnStart,
+    messageStart,
+    messageEnd,
+    turnEnd,
+    end,
+    aborted,
+    settled,
+  ]));
+  assert.equal(messageEnd.data.kind, "message.lifecycle");
+  assert.equal(messageEnd.data.stopReason, "aborted");
 });
 
 test("Parallel Tool completion cites declarations instead of borrowing array order", () => {
@@ -223,14 +282,20 @@ test("Parallel Tool completion cites declarations instead of borrowing array ord
 });
 
 test("Compaction and Session Replacement keep derivation and identities explicit", () => {
-  const original = normalize(1, {
+  const messageStart = normalize(1, {
+    type: "message_start",
+    role: "assistant",
+  }, {
+    correlation: correlation({ messageId: "message-1" }),
+  });
+  const original = normalize(2, {
     type: "message_end",
     role: "assistant",
     body: { text: "raw observation" },
   }, {
     correlation: correlation({ messageId: "message-1" }),
   });
-  const compaction = normalize(2, {
+  const compaction = normalize(3, {
     type: "compaction_end",
     summaryKind: "context-summary",
   }, {
@@ -239,26 +304,44 @@ test("Compaction and Session Replacement keep derivation and identities explicit
       replacesEventIds: [original.eventId],
     },
   });
-  const replacement = normalize(3, {
+  const replacement = normalize(4, {
     type: "session_replaced",
     previousSessionIdentity: "session-object-1",
     nextSessionIdentity: "session-object-2",
     previousRuntimeInstanceId: "worker-1",
     nextRuntimeInstanceId: "worker-2",
   });
-  const rebound = normalize(4, {
+  const rebound = normalize(5, {
     type: "listener_rebound",
     previousSessionIdentity: "session-object-1",
     nextSessionIdentity: "session-object-2",
   });
 
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([
+    messageStart,
     original,
     compaction,
     replacement,
     rebound,
   ]));
   assert.equal(replacement.data.kind, "session.identity");
+});
+
+test("Extension shutdown remains Session identity and is not collapsed into Process exit", () => {
+  const shutdown = normalize(1, {
+    type: "extension_shutdown",
+    reason: "quit",
+    previousSessionIdentity: "session-object-1",
+  }, {
+    surface: "extension",
+    sequenceDomain: "extension-events",
+  });
+  assert.deepEqual(shutdown.data, {
+    kind: "session.identity",
+    action: "shutdown",
+    reason: "quit",
+    previousSessionIdentity: "session-object-1",
+  });
 });
 
 test("Unknown Pi payload is reduced to a canonical diagnostic, not passed through", () => {
@@ -283,7 +366,6 @@ test("Adapter does not invent missing correlation IDs", () => {
   const event = normalize(1, { type: "agent_start" });
   assert.deepEqual(event.correlation, { observed: {}, normalized: {} });
 });
-
 
 test("Host EOF and signal requests remain actions while exit and close remain observed boundaries", () => {
   const eof = normalize(1, { type: "host_close_stdin" }, {

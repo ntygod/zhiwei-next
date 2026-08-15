@@ -63,6 +63,7 @@ export type PiRuntimeEventInputV1 =
         | "session_resume"
         | "session_replaced"
         | "session_shutdown"
+        | "extension_shutdown"
         | "session_invalidated"
         | "listener_rebound";
       readonly reason?: string;
@@ -74,14 +75,9 @@ export type PiRuntimeEventInputV1 =
   | { readonly type: "state_snapshot"; readonly state: unknown }
   | { readonly type: "messages_snapshot"; readonly messages: readonly unknown[] }
   | {
-      readonly type:
-        | "process_spawn"
-        | "extension_shutdown"
-        | "process_exit"
-        | "process_close";
+      readonly type: "process_spawn" | "process_exit" | "process_close";
       readonly code?: number | null;
       readonly signal?: string | null;
-      readonly reason?: string;
     }
   | {
       readonly type: "host_send_command";
@@ -92,7 +88,7 @@ export type PiRuntimeEventInputV1 =
   | {
       readonly type: "host_request_signal";
       readonly signal: string;
-      readonly accepted?: boolean;
+      readonly accepted: boolean;
     }
   | {
       readonly type: "unknown";
@@ -232,6 +228,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       "session_resume",
       "session_replaced",
       "session_shutdown",
+      "extension_shutdown",
       "session_invalidated",
       "listener_rebound",
     ].includes(event.type)
@@ -244,6 +241,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
           | "session_resume"
           | "session_replaced"
           | "session_shutdown"
+          | "extension_shutdown"
           | "session_invalidated"
           | "listener_rebound";
       }
@@ -253,6 +251,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       session_resume: "resumed",
       session_replaced: "replaced",
       session_shutdown: "shutdown",
+      extension_shutdown: "shutdown",
       session_invalidated: "invalidated",
       listener_rebound: "listener-rebound",
     } as const;
@@ -275,27 +274,13 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       messages: snapshotJsonValue(event.messages) as readonly JsonValue[],
     };
   }
-  if (
-    [
-      "process_spawn",
-      "extension_shutdown",
-      "process_exit",
-      "process_close",
-    ].includes(event.type)
-  ) {
+  if (["process_spawn", "process_exit", "process_close"].includes(event.type)) {
     const process = event as Extract<
       PiRuntimeEventInputV1,
-      {
-        type:
-          | "process_spawn"
-          | "extension_shutdown"
-          | "process_exit"
-          | "process_close";
-      }
+      { type: "process_spawn" | "process_exit" | "process_close" }
     >;
     const boundaries = {
       process_spawn: "spawn",
-      extension_shutdown: "extension-shutdown",
       process_exit: "exit",
       process_close: "close",
     } as const;
@@ -304,7 +289,6 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
       boundary: boundaries[process.type],
       code: process.code,
       signal: process.signal,
-      reason: process.reason,
     });
   }
   if (event.type === "host_send_command") {
@@ -319,12 +303,12 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     return { kind: "host.action", action: "close-stdin" };
   }
   if (event.type === "host_request_signal") {
-    return compactObject({
-      kind: "host.action" as const,
-      action: "request-signal" as const,
+    return {
+      kind: "host.action",
+      action: "request-signal",
       signal: event.signal,
       accepted: event.accepted,
-    });
+    };
   }
 
   const snapshot = snapshotJsonValue(event.payload);
