@@ -6,8 +6,14 @@ import type {
   WorkspaceId,
 } from "../../domain/src/index.ts";
 
+export * from "./lossless-json.ts";
+export * from "./runtime-event-v1.ts";
+export * from "./runtime-event-stream-v1.ts";
+
+/** @deprecated Bootstrap-only contract. Use NormalizedRuntimeEventV1. */
 export const cognitionProtocolVersion = 1 as const;
 
+/** @deprecated Bootstrap-only event vocabulary. */
 export type NormalizedRuntimeEventType =
   | "session.started"
   | "input.observed"
@@ -16,6 +22,7 @@ export type NormalizedRuntimeEventType =
   | "session.settled"
   | "session.closed";
 
+/** @deprecated Bootstrap-only event. It is not the durable v1 Runtime protocol. */
 export interface NormalizedRuntimeEvent {
   readonly protocolVersion: typeof cognitionProtocolVersion;
   readonly eventId: string;

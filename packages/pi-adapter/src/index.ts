@@ -8,9 +8,11 @@ import type {
   WorkspaceId,
 } from "../../domain/src/index.ts";
 
+export * from "./normalized-runtime-event-v1.ts";
+
 /**
- * Bootstrap contract used before the concrete Pi SDK version is pinned.
- * Only this package may later import Pi SDK types.
+ * @deprecated Bootstrap contract retained for callers that have not moved to
+ * normalizePiRuntimeEventV1. It is not the durable Runtime protocol.
  */
 export type PiBootstrapEvent =
   | { readonly type: "session_start"; readonly payload?: unknown }
@@ -27,6 +29,7 @@ export interface PiNormalizationContext {
   readonly occurredAt: IsoTimestamp;
 }
 
+/** @deprecated Use normalizePiRuntimeEventV1. */
 export function normalizePiEvent(
   event: PiBootstrapEvent,
   context: PiNormalizationContext,
@@ -48,10 +51,10 @@ export function normalizePiEvent(
     return { ...shared, type: "input.observed", observation: { actor: "user", kind: "user_input", payload: { text: event.text } } };
   }
   if (event.type === "tool_call") {
-    return { ...shared, type: "tool.called", observation: { actor: "tool", kind: "tool_call", payload: { toolName: event.toolName, input: event.input } } };
+    return { ...shared, type: "tool.called", observation: { actor: "tool", kind: "tool_call", payload: { toolName: event.toolName, input: event.input } };
   }
   if (event.type === "tool_result") {
-    return { ...shared, type: "tool.completed", observation: { actor: "tool", kind: "tool_result", payload: { toolName: event.toolName, result: event.result } } };
+    return { ...shared, type: "tool.completed", observation: { actor: "tool", kind: "tool_result", payload: { toolName: event.toolName, result: event.result } };
   }
   if (event.type === "agent_settled") {
     return { ...shared, type: "session.settled", observation: { actor: "assistant", kind: "session_event", payload: event.outcome ?? {} } };
