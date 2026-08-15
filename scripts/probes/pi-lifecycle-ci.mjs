@@ -329,17 +329,14 @@ async function installPublishedPackageGraph({
   const packageView = join(installDir, "node_modules", ...packageSegments);
   await assertPathMissing(packageView, "Verified package view");
   await mkdir(dirname(packageView), { recursive: true });
-  await symlink(
-    `${Array.from({ length: packageSegments.length }, () => "..").join("/")}/package`,
-    packageView,
-    "dir",
-  );
 
   const binPath = manifest.bin?.pi;
   if (typeof binPath !== "string" || !binPath) {
     throw new Error("Verified package manifest is missing the pi executable.");
   }
   await chmod(join(packageDir, binPath), 0o755);
+  run("mv", [packageDir, packageView], { cwd: installDir, env: environment });
+
   const executable = join(installDir, "node_modules", ".bin", "pi");
   await mkdir(dirname(executable), { recursive: true });
   await assertPathMissing(executable, "Verified package executable");
@@ -567,7 +564,7 @@ try {
       sourceBundleReadOnly: process.env.PI_PROBE_SOURCE_READ_ONLY === "true",
       containerRootFilesystemReadOnly: process.env.PI_PROBE_CONTAINER_ROOT_READ_ONLY === "true",
       containerCapabilitiesDropped: process.env.PI_PROBE_CAPABILITIES_DROPPED === "true",
-      containerNoNewPrivileges: process.env.PI_PROBE_NO_NEW_PRIVILEGES === "true",
+      containerNoNewPrivileges: process.env.PI_PROBE_NO_NEW_PRIVileges === "true",
     },
   };
   await persist(failure);
