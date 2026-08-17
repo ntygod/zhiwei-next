@@ -238,9 +238,26 @@ export function parseNormalizedRuntimeEventTraceV1(
     }
 
     if (event.data.kind === "compaction.lifecycle" && event.data.phase === "completed") {
-      const lineage = linkedEvents(eventLinks(event), byId);
+      const sourceLineage = linkedEvents(event.links?.sourceEventIds, byId);
+      const replacementLineage = linkedEvents(event.links?.replacesEventIds, byId);
+      const lineage = [...sourceLineage, ...replacementLineage];
       if (lineage.some((candidate) => candidate.runtimeSessionId !== event.runtimeSessionId)) {
         throw new TypeError("compaction lineage must remain in one Runtime Session");
+      }
+      const compactionStarts = sourceLineage.filter(
+        (candidate) =>
+          candidate.data.kind === "compaction.lifecycle" &&
+          candidate.data.phase === "started",
+      );
+      if (compactionStarts.length !== 1) {
+        throw new TypeError(
+          "compaction completion must link exactly one earlier Compaction start in sourceEventIds",
+        );
+      }
+      if (streamKey(compactionStarts[0]) !== streamKey(event)) {
+        throw new TypeError(
+          "compaction start must match completion Workspace, Runtime scope, and source stream",
+        );
       }
     }
   }

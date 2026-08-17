@@ -119,6 +119,8 @@ Host close-stdin/request-signal, Extension session shutdown, and observed proces
 
 Compaction completion retains both derived source lineage (`sourceEventIds`, including the earlier Compaction start) and original observations that are replaced for context (`replacesEventIds`). Original facts are never deleted or overwritten.
 
+Trace validation requires `sourceEventIds` to contain exactly one earlier `compaction.lifecycle/started` fact. That start must match the completion's Workspace, Runtime Session, Runtime Instance, Adapter/Runtime/Surface and sequence domain; unrelated derived sources may remain alongside it, while `replacesEventIds` continues to identify original observations replaced only in the derived context.
+
 ## JSON and validation layers
 
 `zhiwei-json-v1` rejects accessors, exotic prototypes, sparse arrays, alias/cycle, Symbol, non-finite numbers and `-0`. IDs use deterministic pure TypeScript SHA-256.

@@ -239,7 +239,7 @@ test("willRetry=true remains an observed plan, not a promise of another Agent Ru
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([start, end]));
 });
 
-test("completed compaction retains same-session source and replacement lineage", () => {
+function compactionSources() {
   const messageStart = event(1, {
     kind: "message.lifecycle",
     phase: "started",
@@ -255,7 +255,34 @@ test("completed compaction retains same-session source and replacement lineage",
   }, {
     correlation: { observed: {}, normalized: { messageId: "message-1" } },
   });
-  const completed = event(3, {
+  return { messageStart, original };
+}
+
+test("completed compaction links one earlier matching start while retaining source and replacement lineage", () => {
+  const { messageStart, original } = compactionSources();
+  const compactionStart = event(3, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+    reason: "manual",
+  });
+  const completed = event(4, {
+    kind: "compaction.lifecycle",
+    phase: "completed",
+    summaryKind: "context-summary",
+  }, {
+    links: {
+      sourceEventIds: [compactionStart.eventId, original.eventId],
+      replacesEventIds: [original.eventId],
+    },
+  });
+  assert.doesNotThrow(() =>
+    parseNormalizedRuntimeEventTraceV1([messageStart, original, compactionStart, completed])
+  );
+});
+
+test("completed compaction rejects a missing or misplaced Compaction start", () => {
+  const { messageStart, original } = compactionSources();
+  const noStart = event(3, {
     kind: "compaction.lifecycle",
     phase: "completed",
     summaryKind: "context-summary",
@@ -265,21 +292,180 @@ test("completed compaction retains same-session source and replacement lineage",
       replacesEventIds: [original.eventId],
     },
   });
-  assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([messageStart, original, completed]));
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([messageStart, original, noStart]),
+    /exactly one earlier Compaction start/,
+  );
 
-  const crossSession = event(4, {
+  const compactionStart = event(3, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+    reason: "manual",
+  });
+  const startOnlyInReplacements = event(4, {
+    kind: "compaction.lifecycle",
+    phase: "completed",
+    summaryKind: "context-summary",
+  }, {
+    links: {
+      sourceEventIds: [original.eventId],
+      replacesEventIds: [compactionStart.eventId, original.eventId],
+    },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([
+      messageStart,
+      original,
+      compactionStart,
+      startOnlyInReplacements,
+    ]),
+    /exactly one earlier Compaction start/,
+  );
+});
+
+test("completed compaction rejects cross-Instance and cross-source-stream starts", () => {
+  const { messageStart, original } = compactionSources();
+  const crossInstanceStart = event(1, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+  }, {
+    runtimeInstanceId: "worker-2",
+  });
+  const crossInstanceCompletion = event(3, {
     kind: "compaction.lifecycle",
     phase: "completed",
   }, {
-    runtimeSessionId: ids.session("session-2"),
     links: {
-      sourceEventIds: [original.eventId],
+      sourceEventIds: [crossInstanceStart.eventId, original.eventId],
       replacesEventIds: [original.eventId],
     },
   });
   assert.throws(
-    () => parseNormalizedRuntimeEventTraceV1([messageStart, original, crossSession]),
+    () => parseNormalizedRuntimeEventTraceV1([
+      messageStart,
+      original,
+      crossInstanceStart,
+      crossInstanceCompletion,
+    ]),
+    /Runtime scope, and source stream/,
+  );
+
+  const sourceStreamMismatches: readonly Partial<NormalizedRuntimeEventDraftV1>[] = [
+    {
+      source: {
+        adapter: "other-adapter",
+        runtime: { implementation: "pi", version: "0.84.1" },
+        surface: "sdk",
+        eventType: "compaction_start",
+      },
+    },
+    {
+      source: {
+        adapter: "pi",
+        runtime: { implementation: "other-runtime", version: "0.84.1" },
+        surface: "sdk",
+        eventType: "compaction_start",
+      },
+    },
+    {
+      source: {
+        adapter: "pi",
+        runtime: { implementation: "pi", version: "0.85.0" },
+        surface: "sdk",
+        eventType: "compaction_start",
+      },
+    },
+    {
+      source: {
+        adapter: "pi",
+        runtime: { implementation: "pi", version: "0.84.1" },
+        surface: "rpc",
+        eventType: "compaction_start",
+      },
+    },
+    { sequence: { domain: "other-sdk-stream", value: 1 } },
+  ];
+  for (const overrides of sourceStreamMismatches) {
+    const crossStreamStart = event(1, {
+      kind: "compaction.lifecycle",
+      phase: "started",
+    }, overrides);
+    const crossStreamCompletion = event(3, {
+      kind: "compaction.lifecycle",
+      phase: "completed",
+    }, {
+      links: {
+        sourceEventIds: [crossStreamStart.eventId, original.eventId],
+        replacesEventIds: [original.eventId],
+      },
+    });
+    assert.throws(
+      () => parseNormalizedRuntimeEventTraceV1([
+        messageStart,
+        original,
+        crossStreamStart,
+        crossStreamCompletion,
+      ]),
+      /Runtime scope, and source stream/,
+    );
+  }
+
+  const crossSessionStart = event(1, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+  }, {
+    runtimeSessionId: ids.session("session-2"),
+  });
+  const crossSessionCompletion = event(3, {
+    kind: "compaction.lifecycle",
+    phase: "completed",
+  }, {
+    links: {
+      sourceEventIds: [crossSessionStart.eventId, original.eventId],
+      replacesEventIds: [original.eventId],
+    },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([
+      messageStart,
+      original,
+      crossSessionStart,
+      crossSessionCompletion,
+    ]),
     /one Runtime Session/,
+  );
+});
+
+test("completed compaction rejects multiple Compaction starts", () => {
+  const { messageStart, original } = compactionSources();
+  const firstStart = event(3, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+    reason: "automatic",
+  });
+  const secondStart = event(4, {
+    kind: "compaction.lifecycle",
+    phase: "started",
+    reason: "manual",
+  });
+  const completed = event(5, {
+    kind: "compaction.lifecycle",
+    phase: "completed",
+  }, {
+    links: {
+      sourceEventIds: [firstStart.eventId, secondStart.eventId, original.eventId],
+      replacesEventIds: [original.eventId],
+    },
+  });
+  assert.throws(
+    () => parseNormalizedRuntimeEventTraceV1([
+      messageStart,
+      original,
+      firstStart,
+      secondStart,
+      completed,
+    ]),
+    /exactly one earlier Compaction start/,
   );
 });
 
