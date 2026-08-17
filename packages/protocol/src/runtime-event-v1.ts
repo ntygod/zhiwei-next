@@ -36,9 +36,22 @@ function validateToolResultMessageLinks(event: NormalizedRuntimeEventV1): void {
   }
 }
 
+function validateRetryCompletedCorrelation(event: NormalizedRuntimeEventV1): void {
+  if (event.data.kind !== "retry.lifecycle" || event.data.phase !== "completed") return;
+  if (
+    event.correlation.normalized.agentRunId !== undefined ||
+    event.correlation.normalized.turnId !== undefined
+  ) {
+    throw new TypeError(
+      "retry completion must not contain normalized.agentRunId or normalized.turnId",
+    );
+  }
+}
+
 function validateExtendedLocalRelationships(event: NormalizedRuntimeEventV1): void {
   validateSessionReplacementLinks(event);
   validateToolResultMessageLinks(event);
+  validateRetryCompletedCorrelation(event);
 }
 
 export function createNormalizedRuntimeEventV1(

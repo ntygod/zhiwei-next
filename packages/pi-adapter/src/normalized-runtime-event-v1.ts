@@ -162,6 +162,19 @@ function semantics(event: PiRuntimeEventInputV1): {
   return { persistence: "durable", stability: "boundary", compatibility: "required" };
 }
 
+function validateRetryCompletedCorrelation(
+  input: PiRuntimeNormalizationInputV1,
+): void {
+  if (
+    input.correlation.normalized.agentRunId !== undefined ||
+    input.correlation.normalized.turnId !== undefined
+  ) {
+    throw new TypeError(
+      "Pi retry_completed must not contain normalized.agentRunId or normalized.turnId",
+    );
+  }
+}
+
 function normalizeExtended(
   input: PiRuntimeNormalizationInputV1,
   data: NormalizedRuntimePayloadV1,
@@ -203,6 +216,7 @@ export function normalizePiRuntimeEventV1(
     });
   }
   if (event.type === "retry_completed") {
+    validateRetryCompletedCorrelation(input);
     return normalizeExtended(input, {
       kind: "retry.lifecycle",
       phase: "completed",
@@ -248,4 +262,3 @@ export function normalizePiRuntimeEventV1(
 
   return normalizeCore(input as CorePiRuntimeNormalizationInputV1);
 }
-
