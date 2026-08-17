@@ -5,6 +5,9 @@ import type {
   NormalizedRuntimeEventV1,
   RuntimeSessionShutdownV1,
   RuntimeSessionStartedV1,
+  RuntimeToolCompletedV1,
+  RuntimeToolResultMessageEndedV1,
+  RuntimeToolResultMessageStartedV1,
 } from "./runtime-event-v1.ts";
 
 export * from "./runtime-event-stream-v1-core.ts";
@@ -14,6 +17,12 @@ type ExtensionShutdown = NormalizedRuntimeEventV1 & {
 };
 type ExtensionStart = NormalizedRuntimeEventV1 & {
   readonly data: RuntimeSessionStartedV1;
+};
+type CompletedTool = NormalizedRuntimeEventV1 & {
+  readonly data: RuntimeToolCompletedV1;
+};
+type ToolResultMessage = NormalizedRuntimeEventV1 & {
+  readonly data: RuntimeToolResultMessageStartedV1 | RuntimeToolResultMessageEndedV1;
 };
 
 function isExtensionShutdown(event: NormalizedRuntimeEventV1): event is ExtensionShutdown {
@@ -28,6 +37,28 @@ function isExtensionStart(event: NormalizedRuntimeEventV1): event is ExtensionSt
     event.provenance === "observed" &&
     event.data.kind === "session.identity" &&
     event.data.action === "started";
+}
+
+function isCompletedTool(event: NormalizedRuntimeEventV1): event is CompletedTool {
+  return event.data.kind === "tool.lifecycle" && event.data.phase === "completed";
+}
+
+function isToolResultMessage(event: NormalizedRuntimeEventV1): event is ToolResultMessage {
+  return event.data.kind === "message.lifecycle" && event.data.role === "tool";
+}
+
+function assertCompatibleParents(
+  source: NormalizedRuntimeEventV1,
+  current: NormalizedRuntimeEventV1,
+  label: string,
+): void {
+  for (const key of ["agentRunId", "turnId"] as const) {
+    const left = source.correlation.normalized[key];
+    const right = current.correlation.normalized[key];
+    if (left !== undefined && right !== undefined && left !== right) {
+      throw new TypeError(`${label} changed normalized.${key}`);
+    }
+  }
 }
 
 function validateSessionReplacementLineage(
@@ -84,11 +115,108 @@ function validateSessionReplacementLineage(
   }
 }
 
+
+function validateRetryCompletionLineage(
+  events: readonly NormalizedRuntimeEventV1[],
+): void {
+  for (const [index, event] of events.entries()) {
+    if (event.data.kind !== "retry.lifecycle" || event.data.phase !== "completed") continue;
+    let matchingStart: NormalizedRuntimeEventV1 | undefined;
+    for (let candidateIndex = index - 1; candidateIndex >= 0; candidateIndex -= 1) {
+      const candidate = events[candidateIndex];
+      if (
+        candidate.workspaceId === event.workspaceId &&
+        candidate.runtimeSessionId === event.runtimeSessionId &&
+        candidate.runtimeInstanceId === event.runtimeInstanceId &&
+        candidate.source.adapter === event.source.adapter &&
+        candidate.source.runtime.implementation === event.source.runtime.implementation &&
+        candidate.source.runtime.version === event.source.runtime.version &&
+        candidate.source.surface === event.source.surface &&
+        candidate.sequence.domain === event.sequence.domain &&
+        candidate.data.kind === "retry.lifecycle" &&
+        candidate.data.phase === "started" &&
+        candidate.data.attempt === event.data.attempt &&
+        (
+          candidate.correlation.normalized.promptId === undefined ||
+          event.correlation.normalized.promptId === undefined ||
+          candidate.correlation.normalized.promptId === event.correlation.normalized.promptId
+        )
+      ) {
+        matchingStart = candidate;
+        break;
+      }
+    }
+    if (matchingStart === undefined) {
+      throw new TypeError(
+        `retry completion has no earlier matching start for attempt ${event.data.attempt}`,
+      );
+    }
+  }
+}
+
+function toolMessageKey(event: ToolResultMessage): string | undefined {
+  const messageId = event.correlation.normalized.messageId;
+  return messageId === undefined
+    ? undefined
+    : JSON.stringify([event.workspaceId, event.runtimeSessionId, messageId]);
+}
+
+function validateToolResultMessageLineage(
+  events: readonly NormalizedRuntimeEventV1[],
+): void {
+  const byId = new Map(events.map((event) => [event.eventId, event]));
+  const starts = new Map<string, ToolResultMessage>();
+
+  for (const event of events) {
+    if (!isToolResultMessage(event)) continue;
+    const linked = byId.get(event.links!.sourceEventIds![0])!;
+    if (
+      linked.runtimeSessionId !== event.runtimeSessionId ||
+      linked.runtimeInstanceId !== event.runtimeInstanceId
+    ) {
+      throw new TypeError(
+        "tool result message lineage must remain in one Runtime Session and Runtime instance",
+      );
+    }
+    if (!isCompletedTool(linked)) {
+      throw new TypeError("tool result message must link one completed Tool event");
+    }
+    const toolCallId = event.correlation.normalized.toolCallId!;
+    if (
+      linked.correlation.normalized.toolCallId !== toolCallId ||
+      linked.data.toolName !== event.data.toolName ||
+      linked.data.success !== event.data.success
+    ) {
+      throw new TypeError("tool result message does not match its completed Tool event");
+    }
+    assertCompatibleParents(linked, event, `tool result message ${toolCallId}`);
+
+    const key = toolMessageKey(event);
+    if (key === undefined) continue;
+    if (event.data.phase === "started") {
+      starts.set(key, event);
+      continue;
+    }
+    const started = starts.get(key);
+    if (started === undefined) continue;
+    if (
+      started.correlation.normalized.toolCallId !== toolCallId ||
+      started.data.toolName !== event.data.toolName ||
+      started.data.success !== event.data.success ||
+      started.links!.sourceEventIds![0] !== event.links!.sourceEventIds![0]
+    ) {
+      throw new TypeError("tool result message metadata changed after start");
+    }
+  }
+}
+
 export function parseNormalizedRuntimeEventTraceV1(
   inputs: readonly unknown[],
 ): readonly NormalizedRuntimeEventV1[] {
   const events = parseTraceCore(inputs);
   validateSessionReplacementLineage(events);
+  validateRetryCompletionLineage(events);
+  validateToolResultMessageLineage(events);
   return events;
 }
 

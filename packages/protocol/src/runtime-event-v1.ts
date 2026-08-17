@@ -21,11 +21,31 @@ function validateSessionReplacementLinks(event: NormalizedRuntimeEventV1): void 
   }
 }
 
+function validateToolResultMessageLinks(event: NormalizedRuntimeEventV1): void {
+  if (event.data.kind !== "message.lifecycle" || event.data.role !== "tool") return;
+  if (!event.correlation.normalized.toolCallId) {
+    throw new TypeError("tool result message requires normalized.toolCallId");
+  }
+  if (
+    event.links?.sourceEventIds?.length !== 1 ||
+    event.links.replacesEventIds !== undefined
+  ) {
+    throw new TypeError(
+      "tool result message must link exactly one completed Tool event and must not replace events",
+    );
+  }
+}
+
+function validateExtendedLocalRelationships(event: NormalizedRuntimeEventV1): void {
+  validateSessionReplacementLinks(event);
+  validateToolResultMessageLinks(event);
+}
+
 export function createNormalizedRuntimeEventV1(
   input: NormalizedRuntimeEventDraftV1,
 ): NormalizedRuntimeEventV1 {
   const event = createCore(input);
-  validateSessionReplacementLinks(event);
+  validateExtendedLocalRelationships(event);
   return event;
 }
 
@@ -37,7 +57,7 @@ export function assertNormalizedRuntimeEventV1(
 
 export function parseNormalizedRuntimeEventV1(input: unknown): NormalizedRuntimeEventV1 {
   const event = parseCore(input);
-  validateSessionReplacementLinks(event);
+  validateExtendedLocalRelationships(event);
   return event;
 }
 

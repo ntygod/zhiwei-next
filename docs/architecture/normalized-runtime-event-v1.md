@@ -1,10 +1,10 @@
 # NormalizedRuntimeEvent v1
 
-`NormalizedRuntimeEvent v1` 是 M0 Runtime 事实进入 Observation 链路前的稳定协议边界。Pi Adapter 把已经验证的 SDK、Extension、RPC 与 Host 输入转换为该协议；协议不认识 Pi 类型，后续 SQLite Ledger 也只消费该协议。
+`NormalizedRuntimeEvent v1` is the durable Runtime-neutral boundary between Pi SDK / Extension / RPC / Host facts and the future Observation Ledger. Consumers must not depend on Pi classes, raw RPC objects, SQLite rows, wall-clock reads, or generated correlation IDs.
 
-## Envelope
+## Envelope and identity
 
-每个事件包含：
+Each event contains:
 
 ```text
 protocolVersion = 1
@@ -19,242 +19,122 @@ provenance
 persistence / stability / compatibility
 correlation { observed, normalized }
 links { sourceEventIds, replacesEventIds }
-data (closed Runtime-neutral union)
+data (closed, phase-discriminated union)
 ```
 
-## Source slot、事件 ID 与冲突
+`eventId` identifies the source slot: Workspace + Runtime Session + Runtime Instance + Adapter/Runtime/Surface + sequence domain/value. `source.eventType`, correlation, links and payload belong to the canonical body. Same slot and different body is a `source-slot-conflict`; byte-equivalent canonical bodies are exact replay.
 
-`eventId` 标识一个 **source slot**，其输入固定为：
+Sequence is strict only inside the declared source stream. There is no `globalSequence` and no cross-domain total order.
+
+## Stable payload vocabulary
+
+Known durable facts are `compatibility=required`. Message updates are exactly `ephemeral + update + ignorable`. Required unknown vocabulary blocks complete replay.
+
+The closed union contains command response, Agent/Turn/Message/Tool lifecycle, Queue, Retry, Compaction, Session identity, State/Messages Snapshot, Host Action, Process Boundary and diagnostic unknown events.
+
+### Agent end source availability
+
+Public SDK exposes `agent_end.willRetry`; the Extension surface does not. v1 preserves the difference explicitly:
 
 ```text
-protocolVersion
-workspaceId
-runtimeSessionId
-runtimeInstanceId
-source.adapter
-source.runtime implementation/version
-source.surface
-sequence.domain
-sequence.value
+willRetry: true | false | "unavailable"
 ```
 
-`source.eventType`、时间、Correlation、Payload 与 Links 是该位置上的语义正文，不进入 source slot。这样同一来源序号若从 `agent_start` 漂移成其他事件，不会获得新 ID 逃逸，而是形成：
+`"unavailable"` is valid only for `extension / observed` Agent end. It is not optional and cannot be used by SDK, RPC or Host callers. `willRetry=true` is an observed plan, not a guarantee of another Agent Run.
+
+### Retry completion
+
+A successful `auto_retry_end` is an independent stable fact:
 
 ```text
-same eventId
-different idempotencyKey
-relation = source-slot-conflict
+{ kind: "retry.lifecycle", phase: "completed", attempt, success }
 ```
 
-`idempotencyKey` 对完整 canonical semantic body 做 SHA-256。完全相同的 Event 是 `exact-replay`；不同 source slot 是 `distinct`。
-
-`observedAt` 属于正文。重放必须复用首次边界注入值，不能重新读取墙钟。
-
-v1 固定了 canonical body、Event ID 与 Idempotency Key 的 golden vectors；Contract Fixture 也固定完整 canonical hash。算法、字段组成或序列化规则变化时，必须显式做版本决策，而不能只同步修改构造器和测试。
-
-## 顺序与 cross-domain 边界
-
-顺序只在以下流键内单调：
+Trace validation requires an earlier matching Retry start in the same Workspace, Runtime Session, Runtime Instance, Adapter/Runtime/Surface and sequence domain. Retry completion does not borrow an Agent Run correlation. The accepted success chain remains:
 
 ```text
-workspaceId
-+ runtimeSessionId
-+ runtimeInstanceId
-+ source.adapter/runtime/surface
-+ sequence.domain
+Agent Run 1 end(willRetry=true)
+→ Retry started(attempt=1)
+→ Agent Run 2
+→ Retry completed(attempt=1, success=true)
+→ Agent Run 2 end(willRetry=false)
+→ Agent settled
 ```
 
-不同域都可以从 `1` 开始。数组位置只作为显式 Links 的拓扑摄入顺序，不表示 cross-domain Runtime 全序。时间戳、Fixture 行号和未来 SQLite row ID 也不能建立跨域因果。
+### Tool lifecycle and Tool Result Message
 
-## Payload kinds
+Tool started/completed explicitly link one matching declaration in the same Workspace, Runtime Session and Runtime Instance, with matching Tool Call ID, name and known Agent Run/Turn parents.
 
-| kind | 语义 |
-| --- | --- |
-| `command.response` | RPC 命令结果；Prompt 只使用 `preflight-result` |
-| `agent.lifecycle` | Agent Run 的 started / ended / settled |
-| `turn.lifecycle` | Turn started / ended |
-| `message.lifecycle` | Message started / updated / ended |
-| `tool.lifecycle` | Tool declared / started / completed |
-| `queue.changed` | Steering / Follow-up 队列状态 |
-| `retry.lifecycle` | Retry scheduled / started / aborted / exhausted |
-| `compaction.lifecycle` | Compaction started / completed；完成事件保留 lineage |
-| `session.identity` | start/resume/replace/shutdown/invalidate/listener-rebound |
-| `snapshot.state` | Runtime-neutral State Snapshot |
-| `snapshot.messages` | Runtime-neutral Messages Snapshot |
-| `process.boundary` | Host 观察到的 Worker spawn、exit、close |
-| `host.action` | Host 本地 send-command、close-stdin、request-signal |
-| `runtime.unknown` | 未知事件的 canonical diagnostic |
-
-Payload Union 按 lifecycle phase 分型。Started、updated、ended、completed 等阶段只允许本阶段字段；例如 Turn start 不能携带 `toolResultCount`，Message end 不能携带 update delta，Tool started 不能携带 result。
-
-## Runtime-neutral 字段级投影
-
-Adapter 必须做**字段级投影**，不能只对 Raw Pi JSON 调用通用 snapshot 后原样保存。
-
-### Message
-
-Message lifecycle 只允许角色、content kind、stop/error 元数据、update delta，以及可选的中立文本投影：
+Tool completion order and Tool Result Message order are independent. Every tool-role Message start/end must preserve:
 
 ```text
-body = { text }
+correlation.normalized.toolCallId
+data.toolName
+data.success
+data.errorMessage?   // failed result only
+links.sourceEventIds = [matching completed Tool event]
 ```
 
-`body` 不能包含 Pi Message、content block、provider object 或其他任意 JSON 字段。v1 不决定长期正文保留策略：边界是否提供文本、Ledger 后续是否采用更严格保留规则属于独立决策；本协议只冻结允许出现时的中立形状。
+Tool Result Messages do not support `message_update`. Trace validation checks the completed Tool target, Runtime scope, Tool Call ID, name, success, known Run/Turn parents, and stable start/end metadata.
 
-### State Snapshot
-
-State Snapshot 只允许：
+Messages Snapshot tool items must preserve at least:
 
 ```text
-isStreaming
-messageCount
-pendingMessageCount
-isCompacting?
-isIdle?
-steeringQueueCount?
-followUpQueueCount?
-```
-
-Provider、Model class、Session object、callbacks 与 RPC client internals 不得进入协议。
-
-### Messages Snapshot
-
-每个 Snapshot item 只允许：
-
-```text
-role
+role = "tool"
+toolCallId
+toolName
+success
 contentKinds?
-stopReason?
 errorMessage?
 text?
 ```
 
-Adapter 对输入逐字段复制；额外 Pi 字段被丢弃，协议 parser 对落库后的额外字段 fail closed。
+Thus `alpha → beta → gamma` Tool Result Message order is verified by identity, while completion may remain `beta → gamma → alpha`.
 
-Tool input/result 仍允许有限 JSON，因为它们是 Tool contract 数据，而不是 Runtime event envelope；同样必须经过 `zhiwei-json-v1` snapshot、大小和结构边界。
+### Runtime-neutral projections
 
-## Host Action、Extension Shutdown 与 Process Boundary
+Message bodies retain projected text only. State Snapshot has fixed streaming/message/pending/queue/compaction fields. Non-tool Messages Snapshot items retain role/content/stop/error/text. Tool items use the identity-bearing shape above. Adapter code projects fields individually and never snapshots a raw Pi State or Message object wholesale.
 
-以下事实不可合并：
+Tool input/result may contain bounded `zhiwei-json-v1` contract JSON; they are not Runtime envelopes.
 
-```text
-Host close-stdin / request-signal    Host Action, host-synthesized
-Extension session_shutdown          Session identity, observed
-ChildProcess spawn / exit / close   Process Boundary, observed
-```
+## Session Replacement and Invalidation
 
-Host 请求 SIGTERM 不等于 ChildProcess 最终 `code/signal`。Extension Shutdown 也不是 Process exit/close；它保留 Session reason 与 Session Object identity。
-
-## Session Replacement 与 Session Invalidation
-
-已合并 Runtime Fixture 证明，Session Replacement 不是一个 Extension 原生 `session_replaced` 回调。v1 保留真实边界：
+The real replacement chain is:
 
 ```text
-Extension session_shutdown(old)        observed
-→ Host Session Invalidation(old)       host-synthesized
-→ Extension session_start(new, old)    observed
-→ Host session_replaced aggregate      host-synthesized + sourceEventIds
-→ Host listener-rebound(old → new)     host-synthesized
+Extension session_shutdown(old)
+→ Host Session Invalidation(old)
+→ Extension session_start(new, previous=old)
+→ Host session_replaced aggregate + sourceEventIds
+→ Host listener-rebound(old → new)
 ```
 
-`session.identity/replaced` 是可选的 Host 聚合事实，必须显式链接已经摄入的 old shutdown 与 new start；它不能伪装成 Extension observation。Invalidation 与 Listener Rebind 必须分别存在，不能被 replacement 可选字段吞掉。
+The replacement aggregate must have exactly two source links—one earlier observed Extension shutdown and one earlier observed Extension start—and no `replacesEventIds`. Trace validation checks one Workspace and Runtime Session, shutdown-before-start, old/new Session Object identity, optional previous/next Runtime Instance identity and the aggregate's top-level instance.
 
-## 单事件校验与 Trace 校验
+Session Object replacement does not imply Worker restart. The 74-event Fixture includes a same-Runtime-Instance replacement to prove that Session Object, Runtime Session and Worker Instance are distinct identities.
 
-单事件 parser 负责不依赖历史即可判断的结构不变量：
+Host close-stdin/request-signal, Extension session shutdown, and observed process spawn/exit/close remain separate facts.
 
-- Tool lifecycle 必须有 `normalized.toolCallId`；
-- Tool started/completed 必须恰好有一个 declaration `sourceEventIds`；
-- Compaction completed 必须同时有 `sourceEventIds` 与 `replacesEventIds`；
-- Session action 必须具备其 phase 所需 old/new identity；
-- 已知 stable vocabulary 必须是 `compatibility=required`；
-- Message update 固定为 `ephemeral + update + ignorable`；
-- Agent settled 固定为 `durable + settled + required`。
+## Compaction
 
-Trace validator 只验证显式 Correlation 与 Links：
+Compaction completion retains both derived source lineage (`sourceEventIds`, including the earlier Compaction start) and original observations that are replaced for context (`replacesEventIds`). Original facts are never deleted or overwritten.
 
-- 带 `agentRunId` 的 Agent end/settled 必须有更早 start；settled 还必须有更早 end；
-- 带 `turnId` 的 Turn end 必须有更早 Turn start，且 Turn 属于已开始的 Agent Run；
-- 带 `messageId` 的 update/end 必须有更早 Message start，并保持 role、Runtime Instance，以及双方都提供的 Agent Run / Turn ID 一致；
-- Tool start/completed 必须链接同 Workspace、同 Runtime Session、同 Runtime Instance、同 Tool Call ID、同 Tool Name 的 declaration；双方都提供的 Agent Run / Turn ID 必须一致；
-- Compaction lineage 保持在同一 Runtime Session；
-- Links 只能指向同 Workspace、已经摄入的事实；
-- 重复的 correlated start/end/settled 被拒绝。
+## JSON and validation layers
 
-缺失 Correlation 保持缺失；Validator 不用猜测补造关联。`willRetry=true` 只表示当时计划，取消或 `abortRetry()` 仍可使后续 Agent Run 不存在。
+`zhiwei-json-v1` rejects accessors, exotic prototypes, sparse arrays, alias/cycle, Symbol, non-finite numbers and `-0`. IDs use deterministic pure TypeScript SHA-256.
 
-## Compatibility 与 replay
+Single-event parsing validates closed shape, source ownership, phase semantics and locally required links. Trace parsing validates target existence, earlier ingestion, Workspace/Session/Instance scope, lifecycle ordering and parent correlation. A corrupt database object cannot borrow historical context to become valid.
 
-- 所有已知 durable 事实固定为 `required`；
-- Message update 固定为 `ignorable`；
-- `runtime.unknown` 可以是 `ignorable` 或 `required`；
-- 通用摄入可以保存 required unknown；宣称“完整重放”的消费者必须对 **required unknown** fail closed。
+## Contract Fixture
 
-Compatibility 不是任意调用方可修改的跳过开关。把已知 Agent、Message、Process 或 Session 事实标为 ignorable 会被 parser 拒绝。
-
-## 禁止推断
-
-以下事实均不能单独表示任务成功或 Prompt 完成：
-
-- Prompt `success=true`；
-- `session.prompt()` Promise 返回；
-- Queue 清空；
-- `agent_end(willRetry=true|false)`；
-- 最终 Messages 存在；
-- `agent_settled`；
-- Process `exit(0)`；
-- Assistant 文本看起来像成功。
-
-## Correlation
-
-Correlation 分为两组：
-
-- `observed`：Runtime/Host 实际提供的 Request、Provider Response 或 Session Object identity；
-- `normalized`：边界显式注入的 Prompt、Agent Run、Turn、Message、Tool Call 与 RPC Request identity。
-
-Adapter 不读取墙钟、不调用随机数，也不为缺失事实生成 ID。
-
-## JSON 与未知事件
-
-`zhiwei-json-v1` 只接受有限、无环、无 alias 的 JSON primitive、dense Array 与 plain/null-prototype Object。Accessor、Symbol、exotic prototype、`Date/Map/Set`、非有限数与 `-0` 均拒绝。协议内纯 SHA-256 使用标准测试向量，避免依赖 Node API。
-
-未知 Runtime Event 不保存 Raw payload，只保存：
+The executable Fixture contains **74 events**, binds six accepted Runtime evidence fingerprints, and fixes this canonical hash:
 
 ```text
-sourceType
-sorted unique top-level keys
-SHA-256(canonical UTF-8 payload)
-canonicalization = zhiwei-json-v1
+b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
 ```
 
-## Contract Fixture 与证据绑定
+It freezes SDK/Extension Agent end availability, successful Retry completion, Tool completion and Tool Result Message identity/order, Compaction lineage, same-instance Session Replacement, Host/Process boundaries and required/ignorable compatibility behavior.
 
-`packages/protocol/fixtures/normalized-runtime-event-v1.fixture.ts` 是确定性的可执行 Fixture。它引用 Issue #32 合并提交 `374a27505c4a150cbcb63c1b8f6c1afb3bfb4448`，并机器绑定以下已合并 Runtime 证据 fingerprint：
+## Non-goals
 
-- Retry success；
-- Cancel / Retry exhaustion；
-- Parallel Tool ordering；
-- Compaction / Session Replacement；
-- SDK / RPC parity；
-- RPC Worker lifecycle v2。
-
-Fixture 构造 **60 个事件**，覆盖四个 Source Surface、Prompt acceptance/rejection、Agent/Turn/Message、Follow-up queue、并行 Tool 声明与 `beta → gamma → alpha` 完成顺序、`alpha → beta → gamma` Tool Result Message 顺序、Retry aborted/exhausted、Compaction lineage、Session Shutdown/Invalidation/Replacement/Rebind、Host EOF/SIGTERM、Process exit/close 和 ignorable unknown vocabulary。
-
-Fixture canonical hash 固定为：
-
-```text
-8147f73a7bb74d4518f46c5f7f4cfccc7bd2760728f81bdd115f31f6e82a5b44
-```
-
-Checker 同时验证事件数、完整 hash、evidence fingerprint、Payload kind、Surface、关系、来源归属与禁止字段。不能通过手工整体替换生成值掩盖语义漂移。
-
-## 不在 v1 中
-
-- SQLite schema、row/revision/cursor 与 migration；
-- Daemon Worker Supervisor；
-- Cognition Observation 或 MemoryClaim；
-- 长期 Message 正文保留政策；
-- 模型请求级 Step；
-- 从 Assistant 文本推断成功；
-- Pi Raw payload、类实例或 SDK enum；
-- cross-domain `globalSequence`。
+v1 does not define SQLite schema/revision/cursor/migration, Daemon supervision, Cognition Observation/MemoryClaim projection, long-term Message retention policy, model-request Steps, task success, or a cross-domain total order.
