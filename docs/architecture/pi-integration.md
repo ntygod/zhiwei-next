@@ -217,10 +217,10 @@ capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff3
 - 已知 stable vocabulary 固定 `compatibility=required`，Message update 固定 `ephemeral + update + ignorable`；
 - Tool/Compaction/Session 必备关系先由单事件 parser 校验，再由 Trace validator 校验历史 link、Run/Turn/Instance 一致性。
 
-Contract Fixture 绑定 Issue #32 merge commit 和六组 accepted Runtime fingerprint，构造 60 个事件；固定 canonical hash：
+Contract Fixture 绑定 Issue #32 merge commit 和六组 accepted Runtime fingerprint，构造 74 个事件；固定 canonical hash：
 
 ```text
-8147f73a7bb74d4518f46c5f7f4cfccc7bd2760728f81bdd115f31f6e82a5b44
+b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
 ```
 
 ## npm Artifact 信任边界

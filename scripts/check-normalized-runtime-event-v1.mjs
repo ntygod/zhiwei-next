@@ -2,6 +2,7 @@ import "./check-normalized-runtime-event-v1-tool.mjs";
 import "./check-normalized-runtime-event-v1-retry.mjs";
 import "./check-normalized-runtime-event-v1-system.mjs";
 import "./check-normalized-runtime-event-v1-source.mjs";
+import "./check-normalized-runtime-event-v1-docs.mjs";
 import {
   events,
   fixtureHash,
