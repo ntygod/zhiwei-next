@@ -302,12 +302,16 @@ test("Compaction and Session Replacement preserve real Extension/Host ownership"
   }, {
     correlation: correlation({ messageId: "message-1" }),
   });
-  const compaction = normalize(3, {
+  const compactionStart = normalize(3, {
+    type: "compaction_start",
+    reason: "manual",
+  });
+  const compaction = normalize(4, {
     type: "compaction_end",
     summaryKind: "context-summary",
   }, {
     links: {
-      sourceEventIds: [original.eventId],
+      sourceEventIds: [compactionStart.eventId, original.eventId],
       replacesEventIds: [original.eventId],
     },
   });
@@ -364,6 +368,7 @@ test("Compaction and Session Replacement preserve real Extension/Host ownership"
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([
     messageStart,
     original,
+    compactionStart,
     compaction,
     oldShutdown,
     invalidated,
