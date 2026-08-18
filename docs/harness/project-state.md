@@ -3,7 +3,7 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-17
+updated: 2026-08-18
 -->
 
 ## 当前定位
@@ -31,10 +31,10 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 32287c7d33482ca58bd65b46438f3cc8552a3df3
-capture workflow             31781721009
-capture artifact             9211959728
-capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
+capture head                 374015527ec80d0382d8ef52f61aff82380d102e
+capture workflow             32088804546
+capture artifact             9307625961
+capture artifact digest      sha256:25e523c899615c1afe06e6a108c37de161a6015c024a8c29b25087d51b3f0275
 ```
 
 ## 当前 WIP：Issue #49 / PR #66
@@ -45,23 +45,14 @@ capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c
 feat/49-normalized-runtime-event-v1
 ```
 
-PR #66 保持 Draft，base 为 `main@374a27505c4a150cbcb63c1b8f6c1afb3bfb4448`。
+PR #66 保持 Draft，base 为 `main@374a27505c4a150cbcb63c1b8f6c1afb3bfb4448`。`NormalizedRuntimeEvent v1` 的协议、Pi Adapter、74-event Fixture、文档身份门禁与 Compaction start lineage 已完成；旧 HEAD `374015527ec80d0382d8ef52f61aff82380d102e` 曾获得独立 R2 `APPROVED`，但后续 Ready gate 发现 committed Runtime provenance 仍绑定 PR #64，因此该批准不会自动转用于当前候选。
 
-上一轮独立 R2 审查绑定：
+当前候选额外完成 provenance 闭环：
 
-```text
-head                         d77c66abff429219c0ac95ba405c57057e56b929
-verdict                      CHANGES_REQUESTED
-previous B1                  CLOSED
-blocking findings            3
-```
-
-当前候选关闭三项协议缺口：
-
-- Extension `agent_end` 使用显式 `willRetry=unavailable`，与 SDK boolean 分开且不允许省略；
-- 成功 `auto_retry_end` 映射为 `retry.lifecycle/completed`，保存 attempt 与 success，并关联更早 Retry start；
-- Tool Result Message 生命周期和 Messages Snapshot 保存 Tool Call ID、Tool name、success/error 与 completed Tool lineage，独立验证 completion 顺序和 Message 顺序；
-- Session Object replacement 增加同一 Runtime Instance 内的正向场景，证明 Session Object、Runtime Session 与 Worker Instance 不等同。
+- SDK/RPC parity Manifest 绑定 PR #66 的成功 Draft Capture run `32088804546` 与 Artifact `9307625961`；
+- RPC Worker v2 绑定 PR #66 Draft 中同一 run `32090005181` 的 attempts 1/2；两次 Capture、Fresh validation、committed Fixture validation 和 Artifact upload 均成功，只有在完整对象相等后设置的受控 compare 步骤失败；
+- 两个 RPC Worker Artifact 的唯一 `result.json` 逐字节一致，均为 72,731 bytes，SHA-256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`；
+- 临时 recapture 代码与 source-export workflow 不进入最终候选；最终代码恢复正式完整对象比较路径。
 
 Contract Fixture 当前为 **74-event**，固定 canonical hash：
 
@@ -69,7 +60,11 @@ Contract Fixture 当前为 **74-event**，固定 canonical hash：
 b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
 ```
 
-本轮修复系列以 `d77c66abff429219c0ac95ba405c57057e56b929` 为已审查祖先；首个协议提交直接以该 SHA 为父提交。发布后以 GitHub 当前公开完整 HEAD 为唯一审查对象。全量 exact-head CI 成功并获得新的独立 R2 APPROVED 前，不转 Ready、不合并，Issue #56 不消费 Draft HEAD。
+当前最终 HEAD 必须重新完成全量 exact-head CI 和独立 R2 cold review；通过前不转 Ready、不合并，Issue #56 不消费 Draft HEAD。
+
+## 历史 R2 审查连续性锚点
+
+旧审查 `d77c66abff429219c0ac95ba405c57057e56b929` 的 verdict 为 `CHANGES_REQUESTED`；后续提交已经分别关闭 `willRetry=unavailable`、`retry.lifecycle/completed` 与 Tool Result Message 相关 blocker。该历史结论只用于机械连续性，不授权当前新 HEAD。
 
 ## committed Runtime 连续性锚点
 
@@ -120,7 +115,8 @@ docs/harness/provenance-proofs/2026-08-11-pr-13.json
 
 ## 当前顺序
 
-1. 发布本轮三项 R2 修复并完成 exact-head CI；
+1. 完成当前 provenance 重绑候选的 exact-head CI；
 2. 对新的完整 40 位 SHA 执行独立 R2 cold review；
-3. APPROVED 后转 Ready，并经 required `check` 与受保护 squash merge进入 main；
-4. Issue #56 从当时最新 main 实现 append-only SQLite Observation Ledger。
+3. APPROVED 后登记 `independent-review: complete`，转 Ready 并要求 fresh `ready=true` live provenance；
+4. 经 required `check` 与 Autonomous Merge 受保护 squash merge进入 main；
+5. Issue #56 从当时最新 main 实现 append-only SQLite Observation Ledger。

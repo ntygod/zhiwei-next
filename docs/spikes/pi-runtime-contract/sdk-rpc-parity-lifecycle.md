@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #64固定容器Run `31781721009`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `9211959728`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `32287c7d33482ca58bd65b46438f3cc8552a3df3`是本次来源重绑提交的直接祖先。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #66 Draft固定容器Run `32088804546`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `9307625961`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `374015527ec80d0382d8ef52f61aff82380d102e`是当前 provenance 候选的严格祖先。
 
 Committed Fixture：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     32287c7d33482ca58bd65b46438f3cc8552a3df3
-workflow run     31781721009
-artifact id      9211959728
-artifact digest  sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
+capture head     374015527ec80d0382d8ef52f61aff82380d102e
+workflow run     32088804546
+artifact id      9307625961
+artifact digest  sha256:25e523c899615c1afe06e6a108c37de161a6015c024a8c29b25087d51b3f0275
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `31781721009`属于PR #64，机器`display_title`绑定`action=edited`、PR更新时间与Capture HEAD；本次来源重绑提交以该HEAD为直接父提交，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和严格祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `32088804546`属于当前PR #66，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

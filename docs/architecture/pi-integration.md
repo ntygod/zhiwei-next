@@ -190,20 +190,20 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
 source run attempt           2
-source artifact              9181642601
-source artifact digest       sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09
+source artifact              9308041130
+source artifact digest       sha256:9f7c3c1d0083d4f2c13467ba23f61301992e1b32a2b7f170f38aed6b2786c005
 comparison run attempt       1
-comparison artifact          9181575920
-comparison artifact digest   sha256:b7c415e360338f562d3384d22f4c786d845bb78dddaf7b8b10447def94f4b73f
-artifact result bytes        74587
-artifact result sha256       8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62
+comparison artifact          9308008867
+comparison artifact digest   sha256:3ffa43228261c2de228dba070e9855203cff5dfce2c1925e22732ea1980edddc
+artifact result bytes        72731
+artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
 canonical JSON sha256        1b2fd8aabbc3d76f0c9538db9f4c9cdd47a717ee9610d3cd564bb9d36531638a
 outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d6305127ebe0053c
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-两个历史 attempt 的 capture、Fresh validation 和 upload 步骤成功，但当时 **historical compare step failed**，所以旧 Workflow/Worker Job 整体为 failure。当前 committed v2 loader 继续保留并验证这段历史；PR #64 的最终 exact HEAD 已实际通过 Fresh Capture、committed-object comparison、Ready live provenance、required `check`、squash merge 与 Main Provenance，不得把旧失败 attempt 改写为成功。
+PR #66 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 

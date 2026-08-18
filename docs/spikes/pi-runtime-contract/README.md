@@ -28,11 +28,11 @@ PR #25  source-and-runtime-verified-cancel-retry-exhaustion
 PR #27  source-and-runtime-verified-parallel-tool-ordering
 阶段 8  source-and-runtime-verified-compaction-session-replacement
 PR #60  source-and-runtime-verified-sdk-rpc-parity
-PR #64  source-and-runtime-verified-rpc-worker-lifecycle（候选交付，尚未合并）
-当前    SDK/RPC来源已重绑到PR #64的成功Capture；等待新HEAD门禁与独立R3复审
+PR #64  source-and-runtime-verified-rpc-worker-lifecycle（已合并）
+当前    PR #66已把SDK/RPC与RPC Worker provenance重绑到本PR的公开Capture；等待新HEAD exact-head CI与独立R2复审
 ```
 
-历史标签只说明当时的证据强度，不代表当前能力回退。PR #64合并前，Issue #32的Runtime事实已由真实Artifact、重复Capture、committed Fixture、负向mutation和Ready live provenance合同固定，但用户结果仍处于候选交付状态。
+历史标签只说明当时的证据强度，不代表当前能力回退。PR #64已经合并，Issue #32的Runtime事实由真实Artifact、重复Capture、committed Fixture、负向mutation和Ready live provenance合同固定。PR #66只重绑当前消费链所需的公开 provenance，不改写Runtime内容身份。
 
 ## 机器事实源
 
@@ -174,14 +174,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 32287c7d33482ca58bd65b46438f3cc8552a3df3
-capture workflow             31781721009
-capture artifact             9211959728
-capture artifact digest      sha256:01c7a87fe73ac05c5ea295ddddd51809b294a502072c61e97819d77589565cc7
+capture head                 374015527ec80d0382d8ef52f61aff82380d102e
+capture workflow             32088804546
+capture artifact             9307625961
+capture artifact digest      sha256:25e523c899615c1afe06e6a108c37de161a6015c024a8c29b25087d51b3f0275
 external Provider prompts    0
 ```
 
-该来源Run属于PR #64，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD将在本次重绑提交后成为当前HEAD的严格祖先。Ready live provenance仍必须在新exact HEAD上实际运行并成功。
+该来源Run属于当前PR #66，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD是当前候选的严格祖先。Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
 
 ## RPC Worker schema v2 当前合同
 
@@ -253,16 +253,16 @@ Worker Instance与Runtime Session分别关联；Host Signal Request不能替代�
 ### 当前v2身份与公开来源
 
 ```text
-source head                  19f3e93a2bdf4f6b66e4abef00509e9549b22f6b
-source workflow              31701880114
+source head                  474a100e8b5c267ea1e5285b1ed4f96a953656fc
+source workflow              32090005181
 source run attempt           2
-source artifact              9181642601
-source artifact digest       sha256:d7d81bc279c7533777c130fb2b294460fa8a8fff5a2326bf6b2a4f0efd373b09
+source artifact              9308041130
+source artifact digest       sha256:9f7c3c1d0083d4f2c13467ba23f61301992e1b32a2b7f170f38aed6b2786c005
 comparison run attempt       1
-comparison artifact          9181575920
-comparison artifact digest   sha256:b7c415e360338f562d3384d22f4c786d845bb78dddaf7b8b10447def94f4b73f
-artifact result bytes        74587
-artifact result sha256       8c9ee4fd4a1428e4977d2b81af2f1b10ac203f7086c418dc48b1bf31cc347d62
+comparison artifact          9308008867
+comparison artifact digest   sha256:3ffa43228261c2de228dba070e9855203cff5dfce2c1925e22732ea1980edddc
+artifact result bytes        72731
+artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
 canonical JSON sha256        1b2fd8aabbc3d76f0c9538db9f4c9cdd47a717ee9610d3cd564bb9d36531638a
 outer contract fingerprint   b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d6305127ebe0053c
@@ -270,7 +270,7 @@ capture contract fingerprint 511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff3
 external Provider prompts    0
 ```
 
-两个历史attempt的capture、Fresh validation、base validation和upload步骤成功，但旧 **historical compare step failed**，所以Workflow/Worker Job整体为failure。当前v2在新HEAD执行完整normalizer、负向mutation、Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
+PR #66 Draft中的两个受控recapture attempts均完成capture、Fresh validation、base validation和upload；在完整Fresh/committed对象相等后，受控compare步骤显式失败，因此Workflow/Worker Job保持可审计的failure形态。当前v2在新HEAD执行正式完整normalizer、负向mutation与Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
 
 ## RPC Worker schema v1 历史来源
 
