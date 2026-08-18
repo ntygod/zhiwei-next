@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto";
+
+import { readRpcWorkerV2Fixture } from "./rpc-worker-lifecycle-fixture.mjs";
 import {
   validateArtifact,
+  validateRpcWorkerV2ArtifactResults,
   validateRunAttempt,
   validateWorkerArtifactJob,
 } from "./rpc-worker-lifecycle-provenance.mjs";
@@ -174,6 +178,121 @@ expectFailure(
       now: Date.parse("2026-08-14T00:00:00Z"),
     }),
   /ID differs/,
+);
+
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function storedZip(name, content) {
+  const filename = Buffer.from(name, "utf8");
+  const checksum = crc32(content);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt32LE(checksum, 14);
+  local.writeUInt32LE(content.length, 18);
+  local.writeUInt32LE(content.length, 22);
+  local.writeUInt16LE(filename.length, 26);
+
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt32LE(checksum, 16);
+  central.writeUInt32LE(content.length, 20);
+  central.writeUInt32LE(content.length, 24);
+  central.writeUInt16LE(filename.length, 28);
+
+  const centralOffset = local.length + filename.length + content.length;
+  const centralSize = central.length + filename.length;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(centralOffset, 16);
+  return Buffer.concat([local, filename, content, central, filename, end]);
+}
+
+function artifactManifest(sourceZip, comparisonZip, resultBytes) {
+  return {
+    source: {
+      artifactDigest: `sha256:${createHash("sha256").update(sourceZip).digest("hex")}`,
+    },
+    stability: {
+      comparisonArtifactDigest:
+        `sha256:${createHash("sha256").update(comparisonZip).digest("hex")}`,
+      artifactResultJsonBytes: resultBytes.length,
+      artifactResultJsonSha256:
+        createHash("sha256").update(resultBytes).digest("hex"),
+    },
+  };
+}
+
+const committedFixture = await readRpcWorkerV2Fixture();
+const normalizedArtifactResult = structuredClone(committedFixture.result);
+const providerErrorCase =
+  normalizedArtifactResult.capture.cases.acceptedProviderError;
+requireValue(
+  providerErrorCase.acceptanceStateProbe?.excludedFromFrozenFixture === true &&
+    !Object.hasOwn(providerErrorCase, "stateDuring") &&
+    !providerErrorCase.worker.transcript.some(
+      (record) =>
+        record.kind === "response" &&
+        record.id === "provider-error-state-during" &&
+        record.command === "get_state",
+    ),
+  "RPC Worker normalized Artifact test source is not already normalized.",
+);
+const normalizedResultBytes = Buffer.from(
+  `${JSON.stringify(normalizedArtifactResult, null, 2)}\n`,
+  "utf8",
+);
+const normalizedSourceZip = storedZip("result.json", normalizedResultBytes);
+const normalizedComparisonZip = storedZip("result.json", normalizedResultBytes);
+validateRpcWorkerV2ArtifactResults({
+  manifest: artifactManifest(
+    normalizedSourceZip,
+    normalizedComparisonZip,
+    normalizedResultBytes,
+  ),
+  committedResult: committedFixture.result,
+  sourceZip: normalizedSourceZip,
+  comparisonZip: normalizedComparisonZip,
+});
+
+const driftedArtifactResult = structuredClone(normalizedArtifactResult);
+driftedArtifactResult.capture.cases.acceptedProviderError.acceptanceStateProbe.requestId =
+  "drifted-provider-error-state";
+const driftedResultBytes = Buffer.from(
+  `${JSON.stringify(driftedArtifactResult, null, 2)}\n`,
+  "utf8",
+);
+const driftedSourceZip = storedZip("result.json", driftedResultBytes);
+const driftedComparisonZip = storedZip("result.json", driftedResultBytes);
+expectFailure(
+  "normalized Artifact content drift",
+  () =>
+    validateRpcWorkerV2ArtifactResults({
+      manifest: artifactManifest(
+        driftedSourceZip,
+        driftedComparisonZip,
+        driftedResultBytes,
+      ),
+      committedResult: committedFixture.result,
+      sourceZip: driftedSourceZip,
+      comparisonZip: driftedComparisonZip,
+    }),
+  /does not equal the complete committed v2 Fixture/,
 );
 
 console.log("RPC Worker v2 provenance metadata: OK");

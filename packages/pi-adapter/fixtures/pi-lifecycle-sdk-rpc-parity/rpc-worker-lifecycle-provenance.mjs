@@ -9,7 +9,6 @@ import {
   readPullRequestEventContext,
 } from "./rpc-worker-lifecycle-sdk-provenance-base.mjs";
 import { readRpcWorkerV2Fixture } from "./rpc-worker-lifecycle-fixture.mjs";
-import { normalizeRpcWorkerResult } from "./rpc-worker-lifecycle-normalizer.mjs";
 
 const GITHUB_API_VERSION = "2022-11-28";
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -353,20 +352,22 @@ export function validateRpcWorkerV2ArtifactResults({
     "RPC Worker source and comparison result.json bytes are not identical.",
   );
 
-  const sourceNormalized = normalizeRpcWorkerResult(
-    parseResultJson(sourceResultBytes, "RPC Worker source result.json"),
-  );
-  const comparisonNormalized = normalizeRpcWorkerResult(
-    parseResultJson(comparisonResultBytes, "RPC Worker comparison result.json"),
-  );
-  requireValue(
-    isDeepStrictEqual(sourceNormalized, comparisonNormalized),
-    "RPC Worker source attempts normalize to different complete objects.",
-  );
-  requireValue(
-    isDeepStrictEqual(sourceNormalized, committedResult),
-    "RPC Worker public source Artifact does not normalize to the complete committed v2 Fixture.",
-  );
+  const sourceResult = parseResultJson(
+  sourceResultBytes,
+  "RPC Worker source result.json",
+);
+const comparisonResult = parseResultJson(
+  comparisonResultBytes,
+  "RPC Worker comparison result.json",
+);
+requireValue(
+  isDeepStrictEqual(sourceResult, comparisonResult),
+  "RPC Worker source attempts contain different complete normalized objects.",
+);
+requireValue(
+  isDeepStrictEqual(sourceResult, committedResult),
+  "RPC Worker public source Artifact does not equal the complete committed v2 Fixture.",
+);
   return {
     sourceZipSha256: sha256(sourceZip),
     comparisonZipSha256: sha256(comparisonZip),
