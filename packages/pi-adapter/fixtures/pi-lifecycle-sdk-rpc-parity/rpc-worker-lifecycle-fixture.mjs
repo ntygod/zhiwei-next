@@ -194,11 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    if (process.env.GITHUB_ACTIONS === "true") {
-      throw new Error(
-        "Controlled RPC Worker provenance recapture after successful fresh/committed equality.",
-      );
-    }
     return;
   }
   if (outputIndex >= 0) {
