@@ -8,9 +8,11 @@ import type {
   WorkspaceId,
 } from "../../domain/src/index.ts";
 
+export * from "./normalized-runtime-event-v1.ts";
+
 /**
- * Bootstrap contract used before the concrete Pi SDK version is pinned.
- * Only this package may later import Pi SDK types.
+ * @deprecated Bootstrap contract retained for callers that have not moved to
+ * normalizePiRuntimeEventV1. It is not the durable Runtime protocol.
  */
 export type PiBootstrapEvent =
   | { readonly type: "session_start"; readonly payload?: unknown }
@@ -27,6 +29,7 @@ export interface PiNormalizationContext {
   readonly occurredAt: IsoTimestamp;
 }
 
+/** @deprecated Use normalizePiRuntimeEventV1. */
 export function normalizePiEvent(
   event: PiBootstrapEvent,
   context: PiNormalizationContext,
