@@ -1,0 +1,44 @@
+name: PR 66 temporary source export
+run-name: pr66-source-export | pr=${{ github.event.pull_request.number }} | head=${{ github.event.pull_request.head.sha }}
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/pr66-source-export.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr66-source-export-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  export:
+    if: github.event.pull_request.number == 66 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact pull request HEAD
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify and archive source
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          tar --exclude=.git -czf "$RUNNER_TEMP/pr66-source.tar.gz" .
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr66-source-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/pr66-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
