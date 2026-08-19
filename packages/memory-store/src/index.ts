@@ -56,3 +56,6 @@ export class InMemoryCognitionStore implements CognitionStore {
       .map((claim) => structuredClone(claim));
   }
 }
+
+export * from "./migrations.ts";
+export * from "./sqlite-observation-ledger.ts";
