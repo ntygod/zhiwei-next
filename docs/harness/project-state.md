@@ -83,9 +83,12 @@ SQLite Observation Ledger v1 的冻结方向与当前实现：
 - 读取时重新调用正式单事件 parser，并机械验证 canonical bytes、SHA-256与全部投影；
 - Migration history以连续 version、name、SHA-256和 `PRAGMA user_version`冻结，已应用 SQL不可改写；
 - Row ID仅作为 ingestion Cursor，不被解释为 Runtime全局序或语义时间；
-- SQLite operational failure统一映射到稳定 `sqlite` error code，domain conflict与 corruption语义保持不变。
+- SQLite operational failure（包括 constructor/close）统一映射到稳定 `sqlite` error code，domain conflict与 corruption语义保持不变；
+- Schema SQL comparison保留 quoted CHECK/RAISE literal，公开API不允许migration override，pending installation一次原子提交；
+- Runtime与migration table拒绝 `INSERT OR REPLACE`/`REPLACE`历史改写，Row Cursor为正，并逐行验证同source stream sequence；
+- open、read与write均重新验证migration history、canonical applied_at与`PRAGMA user_version`。
 
-Issue #56 当前风险为 R2。PR #69 当前等待独立 R2 cold review；新完整 HEAD 获得 `APPROVED` 前保持 Draft，不得转 Ready或合并。
+Issue #56 当前风险为 R2。PR #69 正在关闭第二轮 R2 cold review 的十项 blocker；修复后的新完整 HEAD 当前等待独立 R2 cold review，获得 `APPROVED` 前保持 Draft，不得转 Ready或合并。
 
 ## 历史 R2 审查连续性锚点
 
@@ -151,7 +154,7 @@ docs/harness/provenance-proofs/2026-08-11-pr-13.json
 ## 当前顺序
 
 1. 在 PR #69 的 `feat/56-sqlite-observation-ledger-v1` 完成六项 R2 blocker 修复与新增负向测试；
-2. 在固定 Node 22.23.1上动态验证 `node:sqlite`、39个 Ledger专项场景和全仓检查；
+2. 在受支持的 Node 22.x line记录实际 patch，动态验证真实 `node:sqlite`、扩展后的 Ledger专项场景和全仓检查；
 3. 清理所有暂存 payload/workflow，形成相对旧候选的单个干净产品提交；
 4. 完成新 exact-head Draft CI与作者自审；
 5. 对新的完整40位 SHA执行独立 R2 cold review；

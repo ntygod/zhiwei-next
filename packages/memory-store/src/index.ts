@@ -57,5 +57,26 @@ export class InMemoryCognitionStore implements CognitionStore {
   }
 }
 
-export * from "./migrations.ts";
-export * from "./sqlite-observation-ledger.ts";
+export {
+  OBSERVATION_LEDGER_PROTOCOL_VERSION,
+  ObservationLedgerClosedError,
+  ObservationLedgerConflictError,
+  ObservationLedgerCorruptionError,
+  ObservationLedgerError,
+  ObservationLedgerQueryError,
+  ObservationLedgerSequenceError,
+  SqliteObservationLedgerV1,
+  fingerprintNormalizedRuntimeEventV1,
+  openSqliteObservationLedgerV1,
+} from "./sqlite-observation-ledger.ts";
+
+export type {
+  AppendRuntimeEventBatchResultV1,
+  AppendRuntimeEventResultV1,
+  ObservationLedgerConflictKind,
+  ObservationLedgerErrorCode,
+  OpenSqliteObservationLedgerOptions,
+  RuntimeEventReplayOptionsV1,
+  RuntimeSourceStreamIdentityV1,
+  StoredRuntimeEventV1,
+} from "./sqlite-observation-ledger.ts";

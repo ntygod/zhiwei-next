@@ -69,7 +69,7 @@ sequence domain
 
 ## Replay
 
-Workspace and Session replay order is SQLite `row_id ASC`, with an optional exclusive `afterRowId` cursor and bounded `limit`. Row ID is an ingestion cursor, not a Runtime global sequence and not a semantic time order.
+Workspace and Session replay order is SQLite `row_id ASC`, with an optional exclusive `afterRowId` cursor and bounded `limit`. Row IDs must be positive integers. Row ID is an ingestion cursor, not a Runtime global sequence and not a semantic time order. Every read first validates migration state, connection PRAGMAs, the Schema manifest, all rows, cross-row source-stream monotonicity and integrity so hidden or post-open corruption cannot produce a partial replay.
 
 The Ledger preserves both durable boundaries and valid ephemeral/ignorable updates exactly as classified by the protocol. It never silently promotes, drops or rewrites their persistence semantics.
 
@@ -102,7 +102,7 @@ The database is not trusted merely because expected object names exist. Open and
 - `PRAGMA index_list` and `index_xinfo`, including auto-indexed event ID, idempotency and complete source-slot uniqueness;
 - absence of unexpected user-defined tables, indexes, or triggers.
 
-A same-name no-op trigger, weakened CHECK/UNIQUE/STRICT table, changed index, missing guard, or extra mutating trigger is corruption. Existing databases are never repaired with `CREATE ... IF NOT EXISTS`; migration metadata is created only for a provably empty database. Opening a damaged database must not modify its Schema.
+A same-name no-op trigger, quoted CHECK/RAISE literal drift, weakened CHECK/UNIQUE/STRICT table, changed index, missing guard, or extra mutating trigger is corruption. SQL signatures normalize comments, keyword case and unquoted whitespace only; quoted strings and identifiers remain byte-exact. Existing databases are never repaired with `CREATE ... IF NOT EXISTS`; migration metadata is created only for a provably empty database. Opening a damaged database must not modify its Schema.
 
 ## Migrations
 
@@ -115,12 +115,16 @@ SHA-256(version + NUL + name + NUL + SQL)
 applied_at
 ```
 
-The migration set must be the contiguous prefix `1..N`. Applied rows must be an exact prefix of the current immutable sources, and `PRAGMA user_version` must equal the latest applied version. Each migration runs in its own `BEGIN IMMEDIATE` transaction; a failing migration leaves neither partial schema nor a migration record.
+The public Ledger uses only module-private immutable migration sources; callers cannot replace them. The migration set must be the contiguous prefix `1..N`. Applied rows must be an exact prefix of the current immutable sources, every `applied_at` must be canonical UTC, and `PRAGMA user_version` must equal the latest applied version. Before pending migrations, the existing prefix is validated without mutation. Migration metadata, all pending DDL/history rows, `user_version`, final Schema/PRAGMA/row/integrity validation and commit form one `BEGIN IMMEDIATE` transaction; any failure rolls the complete pending installation back. Top-level PRAGMA and transaction-control SQL are forbidden in migration sources.
 
-Changing an applied migration, deleting a known migration, introducing a version gap, changing history rows, removing or weakening migration-history guards, or changing `user_version` causes open to fail closed. Schema fixes are new forward migrations. A non-empty database without exact migration metadata is rejected rather than initialized or repaired.
+Changing an applied migration, deleting a known migration, introducing a version gap, changing history rows, removing or weakening migration-history guards, or changing `user_version` causes open, read and write boundaries to fail closed. Schema fixes are new forward migrations. A non-empty database without exact migration metadata is rejected rather than initialized or repaired. BEFORE INSERT replacement guards prevent `INSERT OR REPLACE` and `REPLACE` from deleting and replacing existing Runtime or migration rows even when an external connection leaves `recursive_triggers=0`.
 
 ## Crash and corruption behavior
 
 A process that exits with an uncommitted event transaction leaves no replayable row after reopen. SQLite structural corruption fails `integrity_check`; protocol, canonicalization, hash, projection, PRAGMA or Schema-manifest corruption fails before the Ledger becomes writable. Operational SQLite failures at BEGIN, COMMIT, prepare, query, insert, integrity check or close are exposed as `ObservationLedgerError` with `code="sqlite"`; domain conflicts, sequence failures, migration failures and corruption retain their specific classes. Rollback failure never replaces the primary error.
+
+## Runtime validation line
+
+The supported execution line is Node.js 22.x. Exact-head CI records the resolved patch and runs the full real-`node:sqlite` suite; the initial bootstrap's Node.js 22.23.1 result is historical evidence only. A patch change is accepted only after the same HEAD passes the complete suite, rather than by assuming experimental API compatibility.
 
 The Ledger does not persist raw Pi payloads, class instances, model reasoning, attachments, FTS/vector/graph projections or a derived replacement for original observations.

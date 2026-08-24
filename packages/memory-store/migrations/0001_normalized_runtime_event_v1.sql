@@ -1,5 +1,5 @@
 CREATE TABLE runtime_events (
-  row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  row_id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (row_id > 0),
   event_id TEXT NOT NULL UNIQUE,
   idempotency_key TEXT NOT NULL UNIQUE,
   event_fingerprint TEXT NOT NULL CHECK (length(event_fingerprint) = 64),
@@ -70,4 +70,50 @@ CREATE TRIGGER runtime_events_reject_delete
 BEFORE DELETE ON runtime_events
 BEGIN
   SELECT RAISE(ABORT, 'runtime_events is append-only');
+END;
+
+CREATE TRIGGER runtime_events_reject_row_id_replacement
+BEFORE INSERT ON runtime_events
+WHEN NEW.row_id > 0 AND EXISTS (
+  SELECT 1 FROM runtime_events WHERE row_id = NEW.row_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'runtime_events row_id replacement is forbidden');
+END;
+
+CREATE TRIGGER runtime_events_reject_event_id_replacement
+BEFORE INSERT ON runtime_events
+WHEN EXISTS (
+  SELECT 1 FROM runtime_events WHERE event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'runtime_events event_id replacement is forbidden');
+END;
+
+CREATE TRIGGER runtime_events_reject_idempotency_replacement
+BEFORE INSERT ON runtime_events
+WHEN EXISTS (
+  SELECT 1 FROM runtime_events WHERE idempotency_key = NEW.idempotency_key
+)
+BEGIN
+  SELECT RAISE(ABORT, 'runtime_events idempotency_key replacement is forbidden');
+END;
+
+CREATE TRIGGER runtime_events_reject_source_slot_replacement
+BEFORE INSERT ON runtime_events
+WHEN EXISTS (
+  SELECT 1
+  FROM runtime_events
+  WHERE workspace_id = NEW.workspace_id
+    AND runtime_session_id = NEW.runtime_session_id
+    AND runtime_instance_id = NEW.runtime_instance_id
+    AND source_adapter = NEW.source_adapter
+    AND runtime_implementation = NEW.runtime_implementation
+    AND runtime_version = NEW.runtime_version
+    AND source_surface = NEW.source_surface
+    AND sequence_domain = NEW.sequence_domain
+    AND source_sequence = NEW.source_sequence
+)
+BEGIN
+  SELECT RAISE(ABORT, 'runtime_events source_slot replacement is forbidden');
 END;

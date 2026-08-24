@@ -8,7 +8,7 @@
 
 `NormalizedRuntimeEvent v1` is now the merged Runtime-neutral boundary. M0 needs a real local Ledger that survives restart, rejects replay conflicts and out-of-order source facts, preserves Workspace/Session isolation, and makes migration history immutable without introducing a native third-party driver or lock-file change.
 
-The fixed Runtime validation environment is Node.js 22.23.1, which exposes `node:sqlite`. The implementation must prove this dynamically rather than assume API availability.
+The supported Runtime validation line is Node.js 22.x, which exposes `node:sqlite`. Every exact-head CI run records the resolved patch and executes the complete Ledger matrix on that patch; the historical bootstrap used Node.js 22.23.1, but old patch evidence is never reused for a new HEAD.
 
 ## Decision
 
@@ -50,6 +50,9 @@ The accepted decision includes the following fail-closed installation and operat
 - opening validates every row, and every write transaction revalidates the Schema, connection PRAGMAs and all canonical rows before sequence or identity decisions;
 - file/memory journal mode, foreign keys, busy timeout, synchronous mode, trusted schema and temp store are all read back and asserted;
 - `integrity_check` is mandatory in the public open API and accepts only one exact `ok` row;
-- all operational SQLite exceptions are normalized to the stable `sqlite` error category without swallowing domain conflicts or corruption.
+- all operational SQLite exceptions, including database construction and close, are normalized to the stable `sqlite` error category without swallowing domain conflicts or corruption;
+- SQL Schema signatures normalize only unquoted tokens and preserve quoted literals exactly;
+- the public Ledger API always uses module-private immutable migrations, rejects migration PRAGMA/transaction control, and validates all pending DDL/history/user-version changes before one atomic commit;
+- `INSERT OR REPLACE`/`REPLACE` cannot rewrite Runtime facts or migration history, row cursors are positive, and full-stream sequence monotonicity is rechecked across existing rows.
 
 These checks intentionally trade startup and append throughput for a mechanically trustworthy M0 Ledger. A future performance optimization requires new evidence that it cannot miss projection or Schema drift.

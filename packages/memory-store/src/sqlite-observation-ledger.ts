@@ -17,11 +17,12 @@ import {
   OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL,
   ObservationLedgerMigrationError,
   applyObservationLedgerMigrations,
-  readAppliedObservationLedgerMigrations,
+  assertObservationLedgerMigrationState,
   type AppliedObservationLedgerMigration,
   type MigrationClock,
   type ObservationLedgerMigration,
 } from "./migrations.ts";
+import { normalizeSqlSchemaSignature } from "./sqlite-schema-sql.ts";
 
 export type ObservationLedgerErrorCode =
   | "closed"
@@ -129,7 +130,6 @@ export interface OpenSqliteObservationLedgerOptions {
   readonly filePath: string;
   readonly busyTimeoutMs?: number;
   readonly clock?: MigrationClock;
-  readonly migrations?: readonly ObservationLedgerMigration[];
 }
 
 export interface StoredRuntimeEventV1 {
@@ -456,6 +456,12 @@ function expectProjection(
 
 function decodeRow(row: RuntimeEventRow): StoredRuntimeEventV1 {
   const rowId = toSafeInteger(row.row_id, "row_id");
+  if (rowId < 1) {
+    throw new ObservationLedgerCorruptionError(
+      `Row cursor must be a positive integer; received ${rowId}.`,
+      rowId,
+    );
+  }
   const parsedJson = parseJson(row.event_json, "event", rowId);
   let event: NormalizedRuntimeEventV1;
   try {
@@ -700,12 +706,15 @@ function requireIntegrity(database: DatabaseSync): void {
 }
 
 function normalizeSchemaSql(sql: string | null): string {
-  if (typeof sql !== "string") return "<null>";
-  return sql
-    .trim()
-    .replace(/;+\s*$/u, "")
-    .replace(/\s+/gu, " ")
-    .toLowerCase();
+  try {
+    return normalizeSqlSchemaSignature(sql);
+  } catch (error) {
+    throw new ObservationLedgerCorruptionError(
+      "Observation Ledger Schema SQL could not be tokenized.",
+      undefined,
+      { cause: error },
+    );
+  }
 }
 
 function captureIndexManifest(database: DatabaseSync, tableName: string): readonly IndexManifest[] {
@@ -783,7 +792,10 @@ function captureTableManifest(database: DatabaseSync, tableName: string): TableM
   };
 }
 
-function captureSchemaManifest(database: DatabaseSync): ObservationLedgerSchemaManifest {
+function captureSchemaManifest(
+  database: DatabaseSync,
+  tableNames: readonly string[] = SCHEMA_TABLES,
+): ObservationLedgerSchemaManifest {
   const objects = database
     .prepare(
       `SELECT type, name, sql
@@ -803,7 +815,7 @@ function captureSchemaManifest(database: DatabaseSync): ObservationLedgerSchemaM
       name: row.name,
       sql: normalizeSchemaSql(row.sql),
     })),
-    tables: SCHEMA_TABLES.map((tableName) =>
+    tables: tableNames.map((tableName) =>
       captureTableManifest(database, tableName),
     ).sort((left, right) => left.name.localeCompare(right.name)),
   };
@@ -816,7 +828,9 @@ function buildExpectedSchemaManifest(
   try {
     reference.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
     for (const migration of migrations) reference.exec(migration.sql);
-    return captureSchemaManifest(reference);
+    const tableNames =
+      migrations.length === 0 ? (["schema_migrations"] as const) : SCHEMA_TABLES;
+    return captureSchemaManifest(reference, tableNames);
   } finally {
     reference.close();
   }
@@ -826,7 +840,10 @@ function requireSchemaManifest(
   database: DatabaseSync,
   expected: ObservationLedgerSchemaManifest,
 ): void {
-  const actual = captureSchemaManifest(database);
+  const actual = captureSchemaManifest(
+    database,
+    expected.tables.map((table) => table.name),
+  );
   const expectedJson = JSON.stringify(expected);
   const actualJson = JSON.stringify(actual);
   if (actualJson !== expectedJson) {
@@ -845,7 +862,52 @@ function validateAllRuntimeRows(database: DatabaseSync): StoredRuntimeEventV1[] 
        ORDER BY row_id ASC`,
     )
     .all() as RuntimeEventRow[];
-  return rows.map(decodeRow);
+  const decoded = rows.map(decodeRow);
+  const latestByStream = new Map<
+    string,
+    { readonly rowId: number; readonly sequence: number; readonly stream: RuntimeSourceStreamIdentityV1 }
+  >();
+
+  for (const stored of decoded) {
+    const stream = sourceStreamIdentity(stored.event);
+    const key = canonicalJsonV1(stream);
+    const previous = latestByStream.get(key);
+    if (
+      previous !== undefined &&
+      stored.event.sequence.value <= previous.sequence
+    ) {
+      throw new ObservationLedgerCorruptionError(
+        `Row ${stored.rowId} source sequence ${stored.event.sequence.value} is not greater ` +
+          `than earlier row ${previous.rowId} sequence ${previous.sequence} for ` +
+          `${formatSourceStream(stream)}.`,
+        stored.rowId,
+      );
+    }
+    latestByStream.set(key, {
+      rowId: stored.rowId,
+      sequence: stored.event.sequence.value,
+      stream,
+    });
+  }
+
+  return decoded;
+}
+
+function validateInstalledLedgerState(
+  database: DatabaseSync,
+  options: {
+    readonly expectedPragmas: PragmaSnapshot;
+    readonly expectedSchema: ObservationLedgerSchemaManifest;
+    readonly migrations: readonly ObservationLedgerMigration[];
+    readonly validateRuntimeRows: boolean;
+  },
+): StoredRuntimeEventV1[] {
+  assertObservationLedgerMigrationState(database, options.migrations);
+  requirePragmaSnapshot(readPragmaSnapshot(database), options.expectedPragmas);
+  requireSchemaManifest(database, options.expectedSchema);
+  const rows = options.validateRuntimeRows ? validateAllRuntimeRows(database) : [];
+  requireIntegrity(database);
+  return rows;
 }
 
 export class SqliteObservationLedgerV1 {
@@ -875,25 +937,53 @@ export class SqliteObservationLedgerV1 {
     const filePath = prepareFilePath(options.filePath);
     const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
     assertIntegerInRange(busyTimeoutMs, "busyTimeoutMs", 0, 2_147_483_647);
-    const migrations = options.migrations ?? DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
+    const migrations = DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
 
-    const database = new DatabaseSync(filePath);
+    let database: DatabaseSync | undefined;
     try {
+      database = new DatabaseSync(filePath);
       const pragmas = configureDatabase(database, { filePath, busyTimeoutMs });
+      const schema = buildExpectedSchemaManifest(migrations);
+
       applyObservationLedgerMigrations(database, {
         migrations,
         clock: options.clock ?? defaultClock(),
+        validateBeforePending: ({ applied }) => {
+          const prefixSchema = buildExpectedSchemaManifest(
+            migrations.slice(0, applied.length),
+          );
+          validateInstalledLedgerState(database!, {
+            expectedPragmas: pragmas,
+            expectedSchema: prefixSchema,
+            migrations,
+            validateRuntimeRows: applied.length > 0,
+          });
+        },
+        validateAfterPending: () => {
+          validateInstalledLedgerState(database!, {
+            expectedPragmas: pragmas,
+            expectedSchema: schema,
+            migrations,
+            validateRuntimeRows: true,
+          });
+        },
       });
-      const schema = buildExpectedSchemaManifest(migrations);
-      requireSchemaManifest(database, schema);
-      requireIntegrity(database);
-      validateAllRuntimeRows(database);
+
+      // Re-read every connection and persistence invariant after COMMIT.
+      validateInstalledLedgerState(database, {
+        expectedPragmas: pragmas,
+        expectedSchema: schema,
+        migrations,
+        validateRuntimeRows: true,
+      });
       return new SqliteObservationLedgerV1(database, { filePath, pragmas, schema });
     } catch (error) {
-      try {
-        database.close();
-      } catch {
-        // Preserve the opening failure.
+      if (database !== undefined) {
+        try {
+          database.close();
+        } catch {
+          // Preserve the opening failure.
+        }
       }
       if (isKnownLedgerError(error)) throw error;
       throw new ObservationLedgerError(
@@ -914,7 +1004,10 @@ export class SqliteObservationLedgerV1 {
 
   get appliedMigrations(): readonly AppliedObservationLedgerMigration[] {
     return this.#sqlite("Failed to read applied Observation Ledger migrations.", () =>
-      readAppliedObservationLedgerMigrations(this.#requireDatabase()),
+      assertObservationLedgerMigrationState(
+        this.#requireDatabase(),
+        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+      ),
     );
   }
 
@@ -962,6 +1055,7 @@ export class SqliteObservationLedgerV1 {
 
   getByEventId(eventId: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(eventId, "eventId");
+    this.#validateReadBoundary();
     const row = this.#sqlite(`Failed to read event ${eventId}.`, () =>
       this.#requireDatabase()
         .prepare(
@@ -976,6 +1070,7 @@ export class SqliteObservationLedgerV1 {
 
   getByIdempotencyKey(idempotencyKey: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(idempotencyKey, "idempotencyKey");
+    this.#validateReadBoundary();
     const row = this.#sqlite(`Failed to read idempotency key ${idempotencyKey}.`, () =>
       this.#requireDatabase()
         .prepare(
@@ -996,6 +1091,7 @@ export class SqliteObservationLedgerV1 {
     assertNonEmpty(workspaceId, "workspaceId");
     assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
+    this.#validateReadBoundary();
     const rows = this.#sqlite(
       `Failed to replay Workspace ${workspaceId} Runtime Session ${runtimeSessionId}.`,
       () =>
@@ -1028,6 +1124,7 @@ export class SqliteObservationLedgerV1 {
   ): readonly StoredRuntimeEventV1[] {
     assertNonEmpty(workspaceId, "workspaceId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
+    this.#validateReadBoundary();
     const rows = this.#sqlite(`Failed to replay Workspace ${workspaceId}.`, () =>
       this.#requireDatabase()
         .prepare(
@@ -1062,6 +1159,7 @@ export class SqliteObservationLedgerV1 {
     if (runtimeSessionId !== undefined) {
       assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     }
+    this.#validateReadBoundary();
 
     const row = this.#sqlite("Failed to count Observation Ledger events.", () => {
       const database = this.#requireDatabase();
@@ -1150,12 +1248,32 @@ export class SqliteObservationLedgerV1 {
     }
   }
 
+  #validateReadBoundary(): void {
+    this.#sqlite("Failed to validate Observation Ledger read boundary.", () => {
+      const database = this.#requireDatabase();
+      assertObservationLedgerMigrationState(
+        database,
+        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+      );
+      requirePragmaSnapshot(readPragmaSnapshot(database), this.#expectedPragmas);
+      requireSchemaManifest(database, this.#expectedSchema);
+      validateAllRuntimeRows(database);
+      requireIntegrity(database);
+    });
+  }
+
   #validateWriteBoundary(): StoredRuntimeEventV1[] {
     return this.#sqlite("Failed to validate Observation Ledger write boundary.", () => {
       const database = this.#requireDatabase();
+      assertObservationLedgerMigrationState(
+        database,
+        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+      );
       requirePragmaSnapshot(readPragmaSnapshot(database), this.#expectedPragmas);
       requireSchemaManifest(database, this.#expectedSchema);
-      return validateAllRuntimeRows(database);
+      const rows = validateAllRuntimeRows(database);
+      requireIntegrity(database);
+      return rows;
     });
   }
 

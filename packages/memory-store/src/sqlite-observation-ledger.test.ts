@@ -264,16 +264,25 @@ test("a later batch conflict rolls back all earlier inserts in that batch", () =
   const ledger = openMemory();
   try {
     const existing = makeEvent({ sequence: 1 });
-    ledger.append(existing);
+    const existingRow = ledger.append(existing);
     const candidate = makeEvent({ sequence: 2 });
     const conflicting = makeEvent({ sequence: 1, command: "get_messages" });
 
     assert.throws(
       () => ledger.appendBatch([candidate, conflicting]),
-      ObservationLedgerConflictError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerConflictError &&
+        error.code === "conflict" &&
+        error.conflictKind === "source-slot" &&
+        error.existingRowId === existingRow.rowId &&
+        /Source slot/.test(error.message),
     );
     assert.equal(ledger.countEvents(), 1);
     assert.equal(ledger.getByEventId(candidate.eventId), undefined);
+    assert.deepEqual(
+      ledger.readWorkspace(existing.workspaceId).map((row) => row.rowId),
+      [existingRow.rowId],
+    );
   } finally {
     ledger.close();
   }
@@ -351,31 +360,46 @@ test("migration checksum drift is rejected without rewriting migration history",
   const root = tempRoot();
   const filePath = join(root, "ledger.sqlite");
   try {
-    const ledger = openSqliteObservationLedgerV1({
-      filePath,
-      clock: { now: () => "2026-08-18T00:00:00.000Z" },
-    });
-    ledger.close();
+    openSqliteObservationLedgerV1({ filePath, clock: FIXED_CLOCK }).close();
+    const database = new DatabaseSync(filePath);
+    try {
+      const trigger = database
+        .prepare(
+          "SELECT sql FROM sqlite_schema WHERE type='trigger' AND name='schema_migrations_reject_update'",
+        )
+        .get() as { sql: string };
+      database.exec("DROP TRIGGER schema_migrations_reject_update");
+      database.exec(
+        `UPDATE schema_migrations SET checksum='${"0".repeat(64)}' WHERE version=1`,
+      );
+      database.exec(trigger.sql);
+    } finally {
+      database.close();
+    }
 
-    const drifted = DEFAULT_OBSERVATION_LEDGER_MIGRATIONS.map((migration) => ({
-      ...migration,
-      sql: `${migration.sql}\n-- forbidden rewrite`,
-    }));
     assert.throws(
-      () =>
-        openSqliteObservationLedgerV1({
-          filePath,
-          migrations: drifted,
-          clock: { now: () => "2026-08-18T00:00:00.000Z" },
-        }),
-      ObservationLedgerMigrationError,
+      () => openSqliteObservationLedgerV1({ filePath, clock: FIXED_CLOCK }),
+      (error: unknown) =>
+        error instanceof ObservationLedgerMigrationError &&
+        error.migrationVersion === 1 &&
+        /does not match the immutable source/.test(error.message),
     );
+
+    const verify = new DatabaseSync(filePath);
+    try {
+      const row = verify
+        .prepare("SELECT checksum FROM schema_migrations WHERE version=1")
+        .get() as { checksum: string };
+      assert.equal(row.checksum, "0".repeat(64));
+    } finally {
+      verify.close();
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("each migration is transactional and failed SQL leaves no partial schema", () => {
+test("pending migrations are atomic and failed SQL leaves no partial schema", () => {
   const root = tempRoot();
   const filePath = join(root, "migration.sqlite");
   const database = new DatabaseSync(filePath);
@@ -394,25 +418,23 @@ test("each migration is transactional and failed SQL leaves no partial schema", 
       () =>
         applyObservationLedgerMigrations(database, {
           migrations,
-          clock: { now: () => "2026-08-18T00:00:00.000Z" },
+          clock: FIXED_CLOCK,
         }),
-      ObservationLedgerMigrationError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerMigrationError &&
+        error.migrationVersion === 2 &&
+        /Failed to apply migration 2/.test(error.message),
     );
-    const tables = database
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as Array<{ name: string }>;
-    assert.equal(tables.some((row) => row.name === "stable"), true);
-    assert.equal(tables.some((row) => row.name === "should_rollback"), false);
-    assert.deepEqual(
-      database
-        .prepare("SELECT version FROM schema_migrations ORDER BY version")
-        .all()
-        .map((row) => ({ ...row })),
-      [{ version: 1 }],
-    );
+    const objects = database
+      .prepare(
+        `SELECT type, name FROM sqlite_schema
+         WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name`,
+      )
+      .all();
+    assert.deepEqual(objects, []);
     assert.deepEqual(
       { ...(database.prepare("PRAGMA user_version").get() as Record<string, unknown>) },
-      { user_version: 1 },
+      { user_version: 0 },
     );
   } finally {
     database.close();
@@ -543,22 +565,17 @@ test("opening fails when an append-only schema guard has been removed", () => {
   const root = tempRoot();
   const filePath = join(root, "ledger.sqlite");
   try {
-    const ledger = openSqliteObservationLedgerV1({
-      filePath,
-      clock: { now: () => "2026-08-18T00:00:00.000Z" },
-    });
-    ledger.close();
+    openSqliteObservationLedgerV1({ filePath, clock: FIXED_CLOCK }).close();
     const database = new DatabaseSync(filePath);
     database.exec("DROP TRIGGER runtime_events_reject_delete");
     database.close();
 
     assert.throws(
-      () =>
-        openSqliteObservationLedgerV1({
-          filePath,
-          clock: { now: () => "2026-08-18T00:00:00.000Z" },
-        }),
-      ObservationLedgerCorruptionError,
+      () => openSqliteObservationLedgerV1({ filePath, clock: FIXED_CLOCK }),
+      (error: unknown) =>
+        error instanceof ObservationLedgerCorruptionError &&
+        error.code === "corruption" &&
+        /schema manifest has drifted/.test(error.message),
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -640,15 +657,28 @@ test("closed Ledger and invalid replay options fail closed", () => {
   const ledger = openMemory();
   assert.throws(
     () => ledger.readWorkspace("workspace-a", { limit: 0 }),
-    ObservationLedgerQueryError,
+    (error: unknown) =>
+      error instanceof ObservationLedgerQueryError &&
+      error.code === "invalid-query" &&
+      error.message === "limit must be a safe integer between 1 and 1000.",
   );
   assert.throws(
     () => ledger.countEvents({ runtimeSessionId: "runtime-session-a" }),
-    ObservationLedgerQueryError,
+    (error: unknown) =>
+      error instanceof ObservationLedgerQueryError &&
+      error.message === "runtimeSessionId requires workspaceId.",
   );
   ledger.close();
-  assert.throws(() => ledger.countEvents(), ObservationLedgerClosedError);
-  assert.throws(() => ledger.appendBatch([]), ObservationLedgerClosedError);
+  assert.throws(
+    () => ledger.countEvents(),
+    (error: unknown) =>
+      error instanceof ObservationLedgerClosedError && error.code === "closed",
+  );
+  assert.throws(
+    () => ledger.appendBatch([]),
+    (error: unknown) =>
+      error instanceof ObservationLedgerClosedError && error.code === "closed",
+  );
 });
 
 test("migration source file is stable UTF-8 SQL", () => {
@@ -787,7 +817,12 @@ test("missing migration guards fail closed and are not recreated by open", () =>
     database.exec("DROP TRIGGER schema_migrations_reject_delete");
     database.close();
 
-    assert.throws(() => openFile(filePath), ObservationLedgerMigrationError);
+    assert.throws(
+      () => openFile(filePath),
+      (error: unknown) =>
+        error instanceof ObservationLedgerMigrationError &&
+        /trigger schema_migrations_reject_delete is missing/.test(error.message),
+    );
 
     const verify = new DatabaseSync(filePath);
     try {
@@ -823,7 +858,12 @@ test("schema manifest rejects same-name migration trigger drift", () => {
     } finally {
       database.close();
     }
-    assert.throws(() => openFile(filePath), ObservationLedgerMigrationError);
+    assert.throws(
+      () => openFile(filePath),
+      (error: unknown) =>
+        error instanceof ObservationLedgerMigrationError &&
+        /definition has drifted/.test(error.message),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1035,10 +1075,9 @@ test("protocol and JSON projections are independently checked", () => {
         () => openFile(filePath),
         (error: unknown) =>
           error instanceof ObservationLedgerCorruptionError &&
-          (mutation.column === "protocol_version"
-            ? /integrity_check failed: CHECK constraint failed/.test(error.message)
-            : error.rowId === 1 &&
-              error.message.includes(`projection ${mutation.column}`)),
+          error.code === "corruption" &&
+          error.rowId === 1 &&
+          error.message.includes(`projection ${mutation.column}`),
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -1142,21 +1181,29 @@ test("BEGIN IMMEDIATE lock failures are classified as sqlite errors", () => {
 });
 
 test("query execution failures are classified as sqlite errors", () => {
-  const root = tempRoot();
-  const filePath = join(root, "ledger.sqlite");
-  const ledger = openFile(filePath);
+  const ledger = openMemory();
   try {
-    const database = new DatabaseSync(filePath);
-    database.exec("DROP TABLE runtime_events");
-    database.close();
+    ledger.append(makeEvent());
+    const cause = new Error("simulated replay query failure");
+    (cause as Error & { code?: string }).code = "ERR_SQLITE_ERROR";
     assert.throws(
-      () => ledger.countEvents(),
+      () =>
+        withPrepareOverride(
+          (sql) =>
+            sql.includes("FROM runtime_events") &&
+            sql.includes("WHERE workspace_id = ?") &&
+            !sql.includes("runtime_session_id = ?"),
+          () => ({ all: () => { throw cause; } }),
+          () => ledger.readWorkspace("workspace-a"),
+        ),
       (error: unknown) =>
-        error instanceof ObservationLedgerError && error.code === "sqlite",
+        error instanceof ObservationLedgerError &&
+        error.code === "sqlite" &&
+        /replay Workspace workspace-a/.test(error.message) &&
+        (error as Error & { cause?: unknown }).cause === cause,
     );
   } finally {
     ledger.close();
-    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -1240,15 +1287,26 @@ test("batch-internal source-slot conflicts and reverse sequence roll back every 
     const conflicting = makeEvent({ sequence: 1, command: "get_messages" });
     assert.throws(
       () => ledger.appendBatch([first, conflicting]),
-      ObservationLedgerConflictError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerConflictError &&
+        error.code === "conflict" &&
+        error.conflictKind === "source-slot" &&
+        error.existingRowId === 1 &&
+        /Source slot/.test(error.message),
     );
     assert.equal(ledger.countEvents(), 0);
 
     assert.throws(
       () => ledger.appendBatch([makeEvent({ sequence: 2 }), makeEvent({ sequence: 1 })]),
-      ObservationLedgerSequenceError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerSequenceError &&
+        error.code === "sequence" &&
+        error.sourceSequence === 1 &&
+        error.latestSourceSequence === 2 &&
+        error.stream.sequenceDomain === "rpc-jsonl",
     );
     assert.equal(ledger.countEvents(), 0);
+    assert.deepEqual(ledger.readWorkspace("workspace-a"), []);
   } finally {
     ledger.close();
   }
@@ -1259,21 +1317,30 @@ test("replay options reject oversized limits, unsafe cursors, and unknown surfac
   try {
     assert.throws(
       () => ledger.readWorkspace("workspace-a", { limit: 1_001 }),
-      ObservationLedgerQueryError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerQueryError &&
+        error.code === "invalid-query" &&
+        error.message === "limit must be a safe integer between 1 and 1000.",
     );
     assert.throws(
       () =>
         ledger.readWorkspace("workspace-a", {
           afterRowId: Number.MAX_SAFE_INTEGER + 1,
         }),
-      ObservationLedgerQueryError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerQueryError &&
+        error.code === "invalid-query" &&
+        /afterRowId must be a safe integer between 0/.test(error.message),
     );
     assert.throws(
       () =>
         ledger.readWorkspace("workspace-a", {
           sourceSurface: "invalid" as any,
         }),
-      ObservationLedgerQueryError,
+      (error: unknown) =>
+        error instanceof ObservationLedgerQueryError &&
+        error.code === "invalid-query" &&
+        error.message === "Unknown sourceSurface: invalid.",
     );
   } finally {
     ledger.close();
@@ -1303,12 +1370,17 @@ test("schema manifest rejects same-name no-op DELETE guards", () => {
     {
       trigger: "runtime_events_reject_delete",
       table: "runtime_events",
-      expectedError: ObservationLedgerCorruptionError,
+      predicate: (error: unknown) =>
+        error instanceof ObservationLedgerCorruptionError &&
+        error.code === "corruption" &&
+        /schema manifest has drifted/.test(error.message),
     },
     {
       trigger: "schema_migrations_reject_delete",
       table: "schema_migrations",
-      expectedError: ObservationLedgerMigrationError,
+      predicate: (error: unknown) =>
+        error instanceof ObservationLedgerMigrationError &&
+        /definition has drifted/.test(error.message),
     },
   ] as const;
 
@@ -1330,7 +1402,7 @@ test("schema manifest rejects same-name no-op DELETE guards", () => {
       } finally {
         database.close();
       }
-      assert.throws(() => openFile(filePath), item.expectedError);
+      assert.throws(() => openFile(filePath), item.predicate);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
