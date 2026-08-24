@@ -28,7 +28,7 @@ A DB read succeeds only when all of the following hold:
 4. SHA-256 matches `event_fingerprint`;
 5. every denormalized column and JSON projection equals the parsed event.
 
-Historical Trace context never repairs an invalid row. Trace-level Retry, Tool Result, Compaction and Session Replacement relationships remain the responsibility of the protocol Trace parser after replay.
+Historical Trace context never repairs an invalid row. Opening a database validates every persisted row, and each write transaction repeats full-row validation before sequence or identity decisions so post-open projection drift cannot steer a new append. Trace-level Retry, Tool Result, Compaction and Session Replacement relationships remain the responsibility of the protocol Trace parser after replay.
 
 ## Append and conflict semantics
 
@@ -65,7 +65,7 @@ sequence domain
 
 `source.eventType` and semantic payload are body data, not source-stream identity. Independent streams may each begin at sequence 1; the Ledger creates no cross-domain total order.
 
-`appendBatch()` parses every candidate, then performs replay classification, sequence checks and inserts in one `BEGIN IMMEDIATE` transaction. An already-persisted exact-replay prefix may be followed by new events. Any later conflict or sequence failure rolls back every new row from that batch.
+`appendBatch()` parses every candidate, begins one `BEGIN IMMEDIATE` transaction, revalidates the installed Schema and every existing canonical row, then performs replay classification, sequence checks and inserts. An already-persisted exact-replay prefix may be followed by new events. Any later conflict or sequence failure rolls back every new row from that batch. Sequence decisions are derived from validated canonical events, never from unchecked projection-only queries.
 
 ## Replay
 
@@ -88,7 +88,21 @@ PRAGMA temp_store = MEMORY
 
 `:memory:` databases keep SQLite's `memory` journal mode and are used only for focused tests. File restart tests are authoritative for durability and WAL behavior.
 
-`PRAGMA integrity_check` must return exactly `ok`. UPDATE and DELETE triggers make both `runtime_events` and `schema_migrations` append-only at the SQL boundary.
+Every setting is read back on the actual connection. File databases require `journal_mode=wal`; memory databases require `journal_mode=memory`; `foreign_keys=1`, the exact requested `busy_timeout`, `synchronous=1` (`NORMAL`), `trusted_schema=0`, and `temp_store=2` (`MEMORY`) are mandatory. The public open API has no integrity-check bypass.
+
+`PRAGMA integrity_check` must return exactly one row containing exactly `ok`.
+
+## Installed Schema manifest
+
+The database is not trusted merely because expected object names exist. Open and every write transaction compare the complete installed Schema with a reference Schema built from the immutable migration sources. The manifest covers:
+
+- normalized `sqlite_schema.sql` for both tables, every explicit index, and every trigger;
+- `PRAGMA table_xinfo` column order, affinity, nullability, defaults, primary-key and hidden flags;
+- `PRAGMA table_list` `STRICT` state;
+- `PRAGMA index_list` and `index_xinfo`, including auto-indexed event ID, idempotency and complete source-slot uniqueness;
+- absence of unexpected user-defined tables, indexes, or triggers.
+
+A same-name no-op trigger, weakened CHECK/UNIQUE/STRICT table, changed index, missing guard, or extra mutating trigger is corruption. Existing databases are never repaired with `CREATE ... IF NOT EXISTS`; migration metadata is created only for a provably empty database. Opening a damaged database must not modify its Schema.
 
 ## Migrations
 
@@ -103,10 +117,10 @@ applied_at
 
 The migration set must be the contiguous prefix `1..N`. Applied rows must be an exact prefix of the current immutable sources, and `PRAGMA user_version` must equal the latest applied version. Each migration runs in its own `BEGIN IMMEDIATE` transaction; a failing migration leaves neither partial schema nor a migration record.
 
-Changing an applied migration, deleting a known migration, introducing a version gap, changing history rows or changing `user_version` causes open to fail closed. Schema fixes are new forward migrations.
+Changing an applied migration, deleting a known migration, introducing a version gap, changing history rows, removing or weakening migration-history guards, or changing `user_version` causes open to fail closed. Schema fixes are new forward migrations. A non-empty database without exact migration metadata is rejected rather than initialized or repaired.
 
 ## Crash and corruption behavior
 
-A process that exits with an uncommitted event transaction leaves no replayable row after reopen. SQLite structural corruption fails `integrity_check`; protocol, canonicalization, hash or projection corruption fails row decoding.
+A process that exits with an uncommitted event transaction leaves no replayable row after reopen. SQLite structural corruption fails `integrity_check`; protocol, canonicalization, hash, projection, PRAGMA or Schema-manifest corruption fails before the Ledger becomes writable. Operational SQLite failures at BEGIN, COMMIT, prepare, query, insert, integrity check or close are exposed as `ObservationLedgerError` with `code="sqlite"`; domain conflicts, sequence failures, migration failures and corruption retain their specific classes. Rollback failure never replaces the primary error.
 
 The Ledger does not persist raw Pi payloads, class instances, model reasoning, attachments, FTS/vector/graph projections or a derived replacement for original observations.

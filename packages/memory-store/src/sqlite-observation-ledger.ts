@@ -14,6 +14,7 @@ import {
 } from "../../protocol/src/index.ts";
 import {
   DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+  OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL,
   ObservationLedgerMigrationError,
   applyObservationLedgerMigrations,
   readAppliedObservationLedgerMigrations,
@@ -129,8 +130,6 @@ export interface OpenSqliteObservationLedgerOptions {
   readonly busyTimeoutMs?: number;
   readonly clock?: MigrationClock;
   readonly migrations?: readonly ObservationLedgerMigration[];
-  /** Defaults to true. Disable only in focused migration tests. */
-  readonly verifyIntegrityOnOpen?: boolean;
 }
 
 export interface StoredRuntimeEventV1 {
@@ -185,6 +184,60 @@ interface RuntimeEventRow {
   event_json: string;
 }
 
+interface PragmaSnapshot {
+  readonly journalMode: string;
+  readonly foreignKeys: number;
+  readonly busyTimeoutMs: number;
+  readonly synchronous: number;
+  readonly trustedSchema: number;
+  readonly tempStore: number;
+}
+
+interface SchemaObjectManifest {
+  readonly type: string;
+  readonly name: string;
+  readonly sql: string;
+}
+
+interface TableColumnManifest {
+  readonly cid: number;
+  readonly name: string;
+  readonly type: string;
+  readonly notNull: number;
+  readonly defaultValue: unknown;
+  readonly primaryKey: number;
+  readonly hidden: number;
+}
+
+interface IndexColumnManifest {
+  readonly sequence: number;
+  readonly columnId: number;
+  readonly name: string | null;
+  readonly descending: number;
+  readonly collation: string | null;
+  readonly key: number;
+}
+
+interface IndexManifest {
+  readonly name: string;
+  readonly unique: number;
+  readonly origin: string;
+  readonly partial: number;
+  readonly columns: readonly IndexColumnManifest[];
+}
+
+interface TableManifest {
+  readonly name: string;
+  readonly strict: number;
+  readonly columns: readonly TableColumnManifest[];
+  readonly indexes: readonly IndexManifest[];
+}
+
+interface ObservationLedgerSchemaManifest {
+  readonly objects: readonly SchemaObjectManifest[];
+  readonly tables: readonly TableManifest[];
+}
+
 const SELECT_COLUMNS = `
   row_id,
   event_id,
@@ -216,6 +269,9 @@ const SELECT_COLUMNS = `
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1_000;
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
+const SQLITE_SYNCHRONOUS_NORMAL = 1;
+const SQLITE_TEMP_STORE_MEMORY = 2;
+const SCHEMA_TABLES = ["runtime_events", "schema_migrations"] as const;
 
 function defaultClock(): MigrationClock {
   return { now: () => new Date().toISOString() };
@@ -275,10 +331,79 @@ function prepareFilePath(filePath: string): string {
   return resolved;
 }
 
+function isKnownLedgerError(error: unknown): boolean {
+  return (
+    error instanceof ObservationLedgerError ||
+    error instanceof ObservationLedgerMigrationError
+  );
+}
+
+function throwSqliteError(message: string, error: unknown): never {
+  if (isKnownLedgerError(error)) throw error;
+  throw new ObservationLedgerError("sqlite", message, { cause: error });
+}
+
+function readPragmaScalar(
+  database: DatabaseSync,
+  sql: string,
+  key: string,
+): unknown {
+  const row = database.prepare(sql).get() as Record<string, unknown> | undefined;
+  if (!row || !(key in row)) {
+    throw new ObservationLedgerCorruptionError(
+      `${sql} did not return the required ${key} value.`,
+    );
+  }
+  return row[key];
+}
+
+function readPragmaSnapshot(database: DatabaseSync): PragmaSnapshot {
+  const journalMode = String(
+    readPragmaScalar(database, "PRAGMA journal_mode", "journal_mode"),
+  ).toLowerCase();
+  const foreignKeys = Number(
+    readPragmaScalar(database, "PRAGMA foreign_keys", "foreign_keys"),
+  );
+  const busyTimeoutMs = Number(
+    readPragmaScalar(database, "PRAGMA busy_timeout", "timeout"),
+  );
+  const synchronous = Number(
+    readPragmaScalar(database, "PRAGMA synchronous", "synchronous"),
+  );
+  const trustedSchema = Number(
+    readPragmaScalar(database, "PRAGMA trusted_schema", "trusted_schema"),
+  );
+  const tempStore = Number(
+    readPragmaScalar(database, "PRAGMA temp_store", "temp_store"),
+  );
+  return {
+    journalMode,
+    foreignKeys,
+    busyTimeoutMs,
+    synchronous,
+    trustedSchema,
+    tempStore,
+  };
+}
+
+function requirePragmaSnapshot(
+  actual: PragmaSnapshot,
+  expected: PragmaSnapshot,
+): void {
+  for (const key of Object.keys(expected) as Array<keyof PragmaSnapshot>) {
+    if (actual[key] !== expected[key]) {
+      throw new ObservationLedgerCorruptionError(
+        `SQLite PRAGMA ${key} differs from the required value ` +
+          `(actual=${String(actual[key])}, expected=${String(expected[key])}).`,
+      );
+    }
+  }
+}
+
 function configureDatabase(
   database: DatabaseSync,
   options: { readonly filePath: string; readonly busyTimeoutMs: number },
-): string {
+): PragmaSnapshot {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(`PRAGMA busy_timeout = ${options.busyTimeoutMs}`);
   database.exec("PRAGMA synchronous = NORMAL");
@@ -287,10 +412,18 @@ function configureDatabase(
   if (options.filePath !== ":memory:") {
     database.exec("PRAGMA journal_mode = WAL");
   }
-  const row = database.prepare("PRAGMA journal_mode").get() as
-    | { journal_mode?: string }
-    | undefined;
-  return String(row?.journal_mode ?? "unknown").toLowerCase();
+
+  const expected: PragmaSnapshot = {
+    journalMode: options.filePath === ":memory:" ? "memory" : "wal",
+    foreignKeys: 1,
+    busyTimeoutMs: options.busyTimeoutMs,
+    synchronous: SQLITE_SYNCHRONOUS_NORMAL,
+    trustedSchema: 0,
+    tempStore: SQLITE_TEMP_STORE_MEMORY,
+  };
+  const actual = readPragmaSnapshot(database);
+  requirePragmaSnapshot(actual, expected);
+  return actual;
 }
 
 function parseJson(text: string, label: string, rowId: number): unknown {
@@ -353,13 +486,49 @@ function decodeRow(row: RuntimeEventRow): StoredRuntimeEventV1 {
 
   const sourceSequence = toSafeInteger(row.source_sequence, "source_sequence", rowId);
   const protocolVersion = toSafeInteger(row.protocol_version, "protocol_version", rowId);
-  expectProjection(protocolVersion === event.protocolVersion, rowId, "protocol_version", protocolVersion, event.protocolVersion);
+  expectProjection(
+    protocolVersion === event.protocolVersion,
+    rowId,
+    "protocol_version",
+    protocolVersion,
+    event.protocolVersion,
+  );
   expectProjection(row.event_id === event.eventId, rowId, "event_id", row.event_id, event.eventId);
-  expectProjection(row.idempotency_key === event.idempotencyKey, rowId, "idempotency_key", row.idempotency_key, event.idempotencyKey);
-  expectProjection(row.workspace_id === event.workspaceId, rowId, "workspace_id", row.workspace_id, event.workspaceId);
-  expectProjection(row.runtime_session_id === event.runtimeSessionId, rowId, "runtime_session_id", row.runtime_session_id, event.runtimeSessionId);
-  expectProjection(row.runtime_instance_id === event.runtimeInstanceId, rowId, "runtime_instance_id", row.runtime_instance_id, event.runtimeInstanceId);
-  expectProjection(row.source_adapter === event.source.adapter, rowId, "source_adapter", row.source_adapter, event.source.adapter);
+  expectProjection(
+    row.idempotency_key === event.idempotencyKey,
+    rowId,
+    "idempotency_key",
+    row.idempotency_key,
+    event.idempotencyKey,
+  );
+  expectProjection(
+    row.workspace_id === event.workspaceId,
+    rowId,
+    "workspace_id",
+    row.workspace_id,
+    event.workspaceId,
+  );
+  expectProjection(
+    row.runtime_session_id === event.runtimeSessionId,
+    rowId,
+    "runtime_session_id",
+    row.runtime_session_id,
+    event.runtimeSessionId,
+  );
+  expectProjection(
+    row.runtime_instance_id === event.runtimeInstanceId,
+    rowId,
+    "runtime_instance_id",
+    row.runtime_instance_id,
+    event.runtimeInstanceId,
+  );
+  expectProjection(
+    row.source_adapter === event.source.adapter,
+    rowId,
+    "source_adapter",
+    row.source_adapter,
+    event.source.adapter,
+  );
   expectProjection(
     row.runtime_implementation === event.source.runtime.implementation,
     rowId,
@@ -367,24 +536,108 @@ function decodeRow(row: RuntimeEventRow): StoredRuntimeEventV1 {
     row.runtime_implementation,
     event.source.runtime.implementation,
   );
-  expectProjection(row.runtime_version === event.source.runtime.version, rowId, "runtime_version", row.runtime_version, event.source.runtime.version);
-  expectProjection(row.source_surface === event.source.surface, rowId, "source_surface", row.source_surface, event.source.surface);
-  expectProjection(row.source_event_type === event.source.eventType, rowId, "source_event_type", row.source_event_type, event.source.eventType);
-  expectProjection(row.sequence_domain === event.sequence.domain, rowId, "sequence_domain", row.sequence_domain, event.sequence.domain);
-  expectProjection(sourceSequence === event.sequence.value, rowId, "source_sequence", sourceSequence, event.sequence.value);
-  expectProjection(row.observed_at === event.observedAt, rowId, "observed_at", row.observed_at, event.observedAt);
-  expectProjection(row.provenance === event.provenance, rowId, "provenance", row.provenance, event.provenance);
-  expectProjection(row.persistence === event.persistence, rowId, "persistence", row.persistence, event.persistence);
-  expectProjection(row.stability === event.stability, rowId, "stability", row.stability, event.stability);
-  expectProjection(row.compatibility === event.compatibility, rowId, "compatibility", row.compatibility, event.compatibility);
-  expectProjection(row.data_kind === event.data.kind, rowId, "data_kind", row.data_kind, event.data.kind);
+  expectProjection(
+    row.runtime_version === event.source.runtime.version,
+    rowId,
+    "runtime_version",
+    row.runtime_version,
+    event.source.runtime.version,
+  );
+  expectProjection(
+    row.source_surface === event.source.surface,
+    rowId,
+    "source_surface",
+    row.source_surface,
+    event.source.surface,
+  );
+  expectProjection(
+    row.source_event_type === event.source.eventType,
+    rowId,
+    "source_event_type",
+    row.source_event_type,
+    event.source.eventType,
+  );
+  expectProjection(
+    row.sequence_domain === event.sequence.domain,
+    rowId,
+    "sequence_domain",
+    row.sequence_domain,
+    event.sequence.domain,
+  );
+  expectProjection(
+    sourceSequence === event.sequence.value,
+    rowId,
+    "source_sequence",
+    sourceSequence,
+    event.sequence.value,
+  );
+  expectProjection(
+    row.observed_at === event.observedAt,
+    rowId,
+    "observed_at",
+    row.observed_at,
+    event.observedAt,
+  );
+  expectProjection(
+    row.provenance === event.provenance,
+    rowId,
+    "provenance",
+    row.provenance,
+    event.provenance,
+  );
+  expectProjection(
+    row.persistence === event.persistence,
+    rowId,
+    "persistence",
+    row.persistence,
+    event.persistence,
+  );
+  expectProjection(
+    row.stability === event.stability,
+    rowId,
+    "stability",
+    row.stability,
+    event.stability,
+  );
+  expectProjection(
+    row.compatibility === event.compatibility,
+    rowId,
+    "compatibility",
+    row.compatibility,
+    event.compatibility,
+  );
+  expectProjection(
+    row.data_kind === event.data.kind,
+    rowId,
+    "data_kind",
+    row.data_kind,
+    event.data.kind,
+  );
 
   const correlationJson = canonicalJsonV1(event.correlation);
   const linksJson = event.links === undefined ? null : canonicalJsonV1(event.links);
   const dataJson = canonicalJsonV1(event.data);
-  expectProjection(row.correlation_json === correlationJson, rowId, "correlation_json", row.correlation_json, correlationJson);
-  expectProjection(row.links_json === linksJson, rowId, "links_json", row.links_json, linksJson);
-  expectProjection(row.data_json === dataJson, rowId, "data_json", row.data_json, dataJson);
+  expectProjection(
+    row.correlation_json === correlationJson,
+    rowId,
+    "correlation_json",
+    row.correlation_json,
+    correlationJson,
+  );
+  expectProjection(
+    row.links_json === linksJson,
+    rowId,
+    "links_json",
+    row.links_json,
+    linksJson,
+  );
+  expectProjection(
+    row.data_json === dataJson,
+    rowId,
+    "data_json",
+    row.data_json,
+    dataJson,
+  );
 
   return { rowId, fingerprint, event };
 }
@@ -400,6 +653,22 @@ function sourceStreamIdentity(event: NormalizedRuntimeEventV1): RuntimeSourceStr
     surface: event.source.surface,
     sequenceDomain: event.sequence.domain,
   };
+}
+
+function sameSourceStream(
+  event: NormalizedRuntimeEventV1,
+  stream: RuntimeSourceStreamIdentityV1,
+): boolean {
+  return (
+    event.workspaceId === stream.workspaceId &&
+    event.runtimeSessionId === stream.runtimeSessionId &&
+    event.runtimeInstanceId === stream.runtimeInstanceId &&
+    event.source.adapter === stream.adapter &&
+    event.source.runtime.implementation === stream.runtimeImplementation &&
+    event.source.runtime.version === stream.runtimeVersion &&
+    event.source.surface === stream.surface &&
+    event.sequence.domain === stream.sequenceDomain
+  );
 }
 
 function formatSourceStream(stream: RuntimeSourceStreamIdentityV1): string {
@@ -430,34 +699,153 @@ function requireIntegrity(database: DatabaseSync): void {
   }
 }
 
-function requireAppendOnlySchema(database: DatabaseSync): void {
-  const requiredObjects = new Map([
-    ["table:runtime_events", false],
-    ["table:schema_migrations", false],
-    ["trigger:runtime_events_reject_update", false],
-    ["trigger:runtime_events_reject_delete", false],
-    ["trigger:schema_migrations_reject_update", false],
-    ["trigger:schema_migrations_reject_delete", false],
-  ]);
+function normalizeSchemaSql(sql: string | null): string {
+  if (typeof sql !== "string") return "<null>";
+  return sql
+    .trim()
+    .replace(/;+\s*$/u, "")
+    .replace(/\s+/gu, " ")
+    .toLowerCase();
+}
+
+function captureIndexManifest(database: DatabaseSync, tableName: string): readonly IndexManifest[] {
   const rows = database
-    .prepare(
-      `SELECT type, name
-       FROM sqlite_schema
-       WHERE (type = 'table' OR type = 'trigger')`,
-    )
-    .all() as Array<{ type: string; name: string }>;
-  for (const row of rows) {
-    const key = `${row.type}:${row.name}`;
-    if (requiredObjects.has(key)) requiredObjects.set(key, true);
-  }
-  const missing = [...requiredObjects]
-    .filter(([, present]) => !present)
-    .map(([key]) => key);
-  if (missing.length > 0) {
+    .prepare(`PRAGMA index_list('${tableName}')`)
+    .all() as Array<{
+    readonly name: string;
+    readonly unique: number | bigint;
+    readonly origin: string;
+    readonly partial: number | bigint;
+  }>;
+  return rows
+    .map((row) => {
+      const columns = database
+        .prepare(`PRAGMA index_xinfo('${row.name}')`)
+        .all() as Array<{
+        readonly seqno: number | bigint;
+        readonly cid: number | bigint;
+        readonly name: string | null;
+        readonly desc: number | bigint;
+        readonly coll: string | null;
+        readonly key: number | bigint;
+      }>;
+      return {
+        name: row.name,
+        unique: Number(row.unique),
+        origin: row.origin,
+        partial: Number(row.partial),
+        columns: columns.map((column) => ({
+          sequence: Number(column.seqno),
+          columnId: Number(column.cid),
+          name: column.name,
+          descending: Number(column.desc),
+          collation: column.coll,
+          key: Number(column.key),
+        })),
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function captureTableManifest(database: DatabaseSync, tableName: string): TableManifest {
+  const table = database
+    .prepare(`PRAGMA table_list('${tableName}')`)
+    .get() as { readonly strict?: number | bigint } | undefined;
+  if (!table) {
     throw new ObservationLedgerCorruptionError(
-      `Observation Ledger append-only schema objects are missing: ${missing.join(", ")}.`,
+      `Observation Ledger table ${tableName} is missing.`,
     );
   }
+  const columns = database
+    .prepare(`PRAGMA table_xinfo('${tableName}')`)
+    .all() as Array<{
+    readonly cid: number | bigint;
+    readonly name: string;
+    readonly type: string;
+    readonly notnull: number | bigint;
+    readonly dflt_value: unknown;
+    readonly pk: number | bigint;
+    readonly hidden: number | bigint;
+  }>;
+  return {
+    name: tableName,
+    strict: Number(table.strict ?? 0),
+    columns: columns.map((column) => ({
+      cid: Number(column.cid),
+      name: column.name,
+      type: column.type.toUpperCase(),
+      notNull: Number(column.notnull),
+      defaultValue: column.dflt_value ?? null,
+      primaryKey: Number(column.pk),
+      hidden: Number(column.hidden),
+    })),
+    indexes: captureIndexManifest(database, tableName),
+  };
+}
+
+function captureSchemaManifest(database: DatabaseSync): ObservationLedgerSchemaManifest {
+  const objects = database
+    .prepare(
+      `SELECT type, name, sql
+       FROM sqlite_schema
+       WHERE name NOT LIKE 'sqlite_%'
+         AND type IN ('table', 'index', 'trigger')
+       ORDER BY type ASC, name ASC`,
+    )
+    .all() as Array<{
+    readonly type: string;
+    readonly name: string;
+    readonly sql: string | null;
+  }>;
+  return {
+    objects: objects.map((row) => ({
+      type: row.type,
+      name: row.name,
+      sql: normalizeSchemaSql(row.sql),
+    })),
+    tables: SCHEMA_TABLES.map((tableName) =>
+      captureTableManifest(database, tableName),
+    ).sort((left, right) => left.name.localeCompare(right.name)),
+  };
+}
+
+function buildExpectedSchemaManifest(
+  migrations: readonly ObservationLedgerMigration[],
+): ObservationLedgerSchemaManifest {
+  const reference = new DatabaseSync(":memory:");
+  try {
+    reference.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
+    for (const migration of migrations) reference.exec(migration.sql);
+    return captureSchemaManifest(reference);
+  } finally {
+    reference.close();
+  }
+}
+
+function requireSchemaManifest(
+  database: DatabaseSync,
+  expected: ObservationLedgerSchemaManifest,
+): void {
+  const actual = captureSchemaManifest(database);
+  const expectedJson = JSON.stringify(expected);
+  const actualJson = JSON.stringify(actual);
+  if (actualJson !== expectedJson) {
+    throw new ObservationLedgerCorruptionError(
+      `Observation Ledger schema manifest has drifted ` +
+        `(actual=${sha256(actualJson)}, expected=${sha256(expectedJson)}).`,
+    );
+  }
+}
+
+function validateAllRuntimeRows(database: DatabaseSync): StoredRuntimeEventV1[] {
+  const rows = database
+    .prepare(
+      `SELECT ${SELECT_COLUMNS}
+       FROM runtime_events
+       ORDER BY row_id ASC`,
+    )
+    .all() as RuntimeEventRow[];
+  return rows.map(decodeRow);
 }
 
 export class SqliteObservationLedgerV1 {
@@ -465,43 +853,49 @@ export class SqliteObservationLedgerV1 {
   readonly journalMode: string;
 
   #database: DatabaseSync | undefined;
+  readonly #expectedPragmas: PragmaSnapshot;
+  readonly #expectedSchema: ObservationLedgerSchemaManifest;
 
   private constructor(
     database: DatabaseSync,
-    options: { readonly filePath: string; readonly journalMode: string },
+    options: {
+      readonly filePath: string;
+      readonly pragmas: PragmaSnapshot;
+      readonly schema: ObservationLedgerSchemaManifest;
+    },
   ) {
     this.#database = database;
     this.filePath = options.filePath;
-    this.journalMode = options.journalMode;
+    this.journalMode = options.pragmas.journalMode;
+    this.#expectedPragmas = options.pragmas;
+    this.#expectedSchema = options.schema;
   }
 
   static open(options: OpenSqliteObservationLedgerOptions): SqliteObservationLedgerV1 {
     const filePath = prepareFilePath(options.filePath);
     const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
     assertIntegerInRange(busyTimeoutMs, "busyTimeoutMs", 0, 2_147_483_647);
+    const migrations = options.migrations ?? DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
 
     const database = new DatabaseSync(filePath);
     try {
-      const journalMode = configureDatabase(database, { filePath, busyTimeoutMs });
+      const pragmas = configureDatabase(database, { filePath, busyTimeoutMs });
       applyObservationLedgerMigrations(database, {
-        migrations: options.migrations ?? DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+        migrations,
         clock: options.clock ?? defaultClock(),
       });
-      requireAppendOnlySchema(database);
-      if (options.verifyIntegrityOnOpen !== false) requireIntegrity(database);
-      return new SqliteObservationLedgerV1(database, { filePath, journalMode });
+      const schema = buildExpectedSchemaManifest(migrations);
+      requireSchemaManifest(database, schema);
+      requireIntegrity(database);
+      validateAllRuntimeRows(database);
+      return new SqliteObservationLedgerV1(database, { filePath, pragmas, schema });
     } catch (error) {
       try {
         database.close();
       } catch {
         // Preserve the opening failure.
       }
-      if (
-        error instanceof ObservationLedgerMigrationError ||
-        error instanceof ObservationLedgerError
-      ) {
-        throw error;
-      }
+      if (isKnownLedgerError(error)) throw error;
       throw new ObservationLedgerError(
         "sqlite",
         `Failed to open Observation Ledger at ${filePath}.`,
@@ -519,19 +913,26 @@ export class SqliteObservationLedgerV1 {
   }
 
   get appliedMigrations(): readonly AppliedObservationLedgerMigration[] {
-    return readAppliedObservationLedgerMigrations(this.#requireDatabase());
+    return this.#sqlite("Failed to read applied Observation Ledger migrations.", () =>
+      readAppliedObservationLedgerMigrations(this.#requireDatabase()),
+    );
   }
 
   close(): void {
     const database = this.#database;
     if (!database) return;
     this.#database = undefined;
-    database.close();
+    this.#sqliteWithDatabase(database, "Failed to close Observation Ledger.", () =>
+      database.close(),
+    );
   }
 
   append(input: unknown): AppendRuntimeEventResultV1 {
     const event = parseNormalizedRuntimeEventV1(input);
-    return this.#transaction(() => this.#appendOne(event));
+    return this.#transaction(() => {
+      const rows = this.#validateWriteBoundary();
+      return this.#appendOne(event, rows);
+    });
   }
 
   appendBatch(inputs: readonly unknown[]): AppendRuntimeEventBatchResultV1 {
@@ -545,7 +946,8 @@ export class SqliteObservationLedgerV1 {
     }
 
     return this.#transaction(() => {
-      const results = events.map((event) => this.#appendOne(event));
+      const rows = this.#validateWriteBoundary();
+      const results = events.map((event) => this.#appendOne(event, rows));
       const insertedCount = results.filter((result) => result.inserted).length;
       const rowIds = results.map((result) => result.rowId);
       return {
@@ -560,25 +962,29 @@ export class SqliteObservationLedgerV1 {
 
   getByEventId(eventId: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(eventId, "eventId");
-    const row = this.#requireDatabase()
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE event_id = ?`,
-      )
-      .get(eventId) as RuntimeEventRow | undefined;
+    const row = this.#sqlite(`Failed to read event ${eventId}.`, () =>
+      this.#requireDatabase()
+        .prepare(
+          `SELECT ${SELECT_COLUMNS}
+           FROM runtime_events
+           WHERE event_id = ?`,
+        )
+        .get(eventId) as RuntimeEventRow | undefined,
+    );
     return row === undefined ? undefined : decodeRow(row);
   }
 
   getByIdempotencyKey(idempotencyKey: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(idempotencyKey, "idempotencyKey");
-    const row = this.#requireDatabase()
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE idempotency_key = ?`,
-      )
-      .get(idempotencyKey) as RuntimeEventRow | undefined;
+    const row = this.#sqlite(`Failed to read idempotency key ${idempotencyKey}.`, () =>
+      this.#requireDatabase()
+        .prepare(
+          `SELECT ${SELECT_COLUMNS}
+           FROM runtime_events
+           WHERE idempotency_key = ?`,
+        )
+        .get(idempotencyKey) as RuntimeEventRow | undefined,
+    );
     return row === undefined ? undefined : decodeRow(row);
   }
 
@@ -590,25 +996,29 @@ export class SqliteObservationLedgerV1 {
     assertNonEmpty(workspaceId, "workspaceId");
     assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
-    const rows = this.#requireDatabase()
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE workspace_id = ?
-           AND runtime_session_id = ?
-           AND row_id > ?
-           AND (? IS NULL OR source_surface = ?)
-         ORDER BY row_id ASC
-         LIMIT ?`,
-      )
-      .all(
-        workspaceId,
-        runtimeSessionId,
-        afterRowId,
-        sourceSurface,
-        sourceSurface,
-        limit,
-      ) as RuntimeEventRow[];
+    const rows = this.#sqlite(
+      `Failed to replay Workspace ${workspaceId} Runtime Session ${runtimeSessionId}.`,
+      () =>
+        this.#requireDatabase()
+          .prepare(
+            `SELECT ${SELECT_COLUMNS}
+             FROM runtime_events
+             WHERE workspace_id = ?
+               AND runtime_session_id = ?
+               AND row_id > ?
+               AND (? IS NULL OR source_surface = ?)
+             ORDER BY row_id ASC
+             LIMIT ?`,
+          )
+          .all(
+            workspaceId,
+            runtimeSessionId,
+            afterRowId,
+            sourceSurface,
+            sourceSurface,
+            limit,
+          ) as RuntimeEventRow[],
+    );
     return rows.map(decodeRow);
   }
 
@@ -618,17 +1028,25 @@ export class SqliteObservationLedgerV1 {
   ): readonly StoredRuntimeEventV1[] {
     assertNonEmpty(workspaceId, "workspaceId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
-    const rows = this.#requireDatabase()
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE workspace_id = ?
-           AND row_id > ?
-           AND (? IS NULL OR source_surface = ?)
-         ORDER BY row_id ASC
-         LIMIT ?`,
-      )
-      .all(workspaceId, afterRowId, sourceSurface, sourceSurface, limit) as RuntimeEventRow[];
+    const rows = this.#sqlite(`Failed to replay Workspace ${workspaceId}.`, () =>
+      this.#requireDatabase()
+        .prepare(
+          `SELECT ${SELECT_COLUMNS}
+           FROM runtime_events
+           WHERE workspace_id = ?
+             AND row_id > ?
+             AND (? IS NULL OR source_surface = ?)
+           ORDER BY row_id ASC
+           LIMIT ?`,
+        )
+        .all(
+          workspaceId,
+          afterRowId,
+          sourceSurface,
+          sourceSurface,
+          limit,
+        ) as RuntimeEventRow[],
+    );
     return rows.map(decodeRow);
   }
 
@@ -645,34 +1063,39 @@ export class SqliteObservationLedgerV1 {
       assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     }
 
-    const database = this.#requireDatabase();
-    let row: { count: number | bigint };
-    if (workspaceId === undefined) {
-      row = database.prepare("SELECT count(*) AS count FROM runtime_events").get() as {
-        count: number | bigint;
-      };
-    } else if (runtimeSessionId === undefined) {
-      row = database
-        .prepare("SELECT count(*) AS count FROM runtime_events WHERE workspace_id = ?")
-        .get(workspaceId) as { count: number | bigint };
-    } else {
-      row = database
+    const row = this.#sqlite("Failed to count Observation Ledger events.", () => {
+      const database = this.#requireDatabase();
+      if (workspaceId === undefined) {
+        return database.prepare("SELECT count(*) AS count FROM runtime_events").get() as {
+          count: number | bigint;
+        };
+      }
+      if (runtimeSessionId === undefined) {
+        return database
+          .prepare("SELECT count(*) AS count FROM runtime_events WHERE workspace_id = ?")
+          .get(workspaceId) as { count: number | bigint };
+      }
+      return database
         .prepare(
           `SELECT count(*) AS count
            FROM runtime_events
            WHERE workspace_id = ? AND runtime_session_id = ?`,
         )
         .get(workspaceId, runtimeSessionId) as { count: number | bigint };
-    }
+    });
     return toSafeInteger(row.count, "count");
   }
 
   integrityCheck(): readonly string[] {
-    return integrityCheckRows(this.#requireDatabase());
+    return this.#sqlite("Failed to execute SQLite integrity_check.", () =>
+      integrityCheckRows(this.#requireDatabase()),
+    );
   }
 
   assertIntegrity(): void {
-    requireIntegrity(this.#requireDatabase());
+    this.#sqlite("Failed to assert SQLite integrity.", () =>
+      requireIntegrity(this.#requireDatabase()),
+    );
   }
 
   #requireDatabase(): DatabaseSync {
@@ -680,35 +1103,74 @@ export class SqliteObservationLedgerV1 {
     return this.#database;
   }
 
-  #transaction<T>(operation: () => T): T {
-    const database = this.#requireDatabase();
-    database.exec("BEGIN IMMEDIATE");
+  #sqlite<T>(message: string, operation: () => T): T {
+    return this.#sqliteWithDatabase(this.#requireDatabase(), message, operation);
+  }
+
+  #sqliteWithDatabase<T>(
+    _database: DatabaseSync,
+    message: string,
+    operation: () => T,
+  ): T {
     try {
-      const result = operation();
-      database.exec("COMMIT");
-      return result;
+      return operation();
     } catch (error) {
-      try {
-        database.exec("ROLLBACK");
-      } catch {
-        // Preserve the original failure.
-      }
-      throw error;
+      throwSqliteError(message, error);
     }
   }
 
-  #appendOne(event: NormalizedRuntimeEventV1): AppendRuntimeEventResultV1 {
+  #transaction<T>(operation: () => T): T {
+    const database = this.#requireDatabase();
+    let began = false;
+    try {
+      this.#sqlite("Failed to begin Observation Ledger transaction.", () =>
+        database.exec("BEGIN IMMEDIATE"),
+      );
+      began = true;
+      const result = operation();
+      this.#sqlite("Failed to commit Observation Ledger transaction.", () =>
+        database.exec("COMMIT"),
+      );
+      began = false;
+      return result;
+    } catch (error) {
+      if (began) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the primary failure.
+        }
+      }
+      if (isKnownLedgerError(error)) throw error;
+      throw new ObservationLedgerError(
+        "sqlite",
+        "Observation Ledger transaction failed.",
+        { cause: error },
+      );
+    }
+  }
+
+  #validateWriteBoundary(): StoredRuntimeEventV1[] {
+    return this.#sqlite("Failed to validate Observation Ledger write boundary.", () => {
+      const database = this.#requireDatabase();
+      requirePragmaSnapshot(readPragmaSnapshot(database), this.#expectedPragmas);
+      requireSchemaManifest(database, this.#expectedSchema);
+      return validateAllRuntimeRows(database);
+    });
+  }
+
+  #appendOne(
+    event: NormalizedRuntimeEventV1,
+    validatedRows: StoredRuntimeEventV1[],
+  ): AppendRuntimeEventResultV1 {
     const database = this.#requireDatabase();
     const canonicalEvent = canonicalNormalizedRuntimeEventV1(event);
     const fingerprint = sha256(canonicalEvent);
-    const existingRows = database
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE event_id = ? OR idempotency_key = ?
-         ORDER BY row_id ASC`,
-      )
-      .all(event.eventId, event.idempotencyKey) as RuntimeEventRow[];
+    const existingRows = validatedRows.filter(
+      (stored) =>
+        stored.event.eventId === event.eventId ||
+        stored.event.idempotencyKey === event.idempotencyKey,
+    );
 
     if (existingRows.length > 1) {
       throw new ObservationLedgerCorruptionError(
@@ -716,7 +1178,7 @@ export class SqliteObservationLedgerV1 {
       );
     }
     if (existingRows.length === 1) {
-      const stored = decodeRow(existingRows[0]);
+      const stored = existingRows[0];
       if (stored.event.eventId !== event.eventId) {
         throw new ObservationLedgerConflictError(
           event,
@@ -750,37 +1212,14 @@ export class SqliteObservationLedgerV1 {
     }
 
     const stream = sourceStreamIdentity(event);
-    const latest = database
-      .prepare(
-        `SELECT source_sequence
-         FROM runtime_events
-         WHERE workspace_id = ?
-           AND runtime_session_id = ?
-           AND runtime_instance_id = ?
-           AND source_adapter = ?
-           AND runtime_implementation = ?
-           AND runtime_version = ?
-           AND source_surface = ?
-           AND sequence_domain = ?
-         ORDER BY source_sequence DESC
-         LIMIT 1`,
-      )
-      .get(
-        stream.workspaceId,
-        stream.runtimeSessionId,
-        stream.runtimeInstanceId,
-        stream.adapter,
-        stream.runtimeImplementation,
-        stream.runtimeVersion,
-        stream.surface,
-        stream.sequenceDomain,
-      ) as { source_sequence: number | bigint } | undefined;
-
-    if (latest !== undefined) {
-      const latestSequence = toSafeInteger(latest.source_sequence, "latest source_sequence");
-      if (event.sequence.value <= latestSequence) {
-        throw new ObservationLedgerSequenceError(event, latestSequence);
-      }
+    const latestSequence = validatedRows
+      .filter((stored) => sameSourceStream(stored.event, stream))
+      .reduce(
+        (latest, stored) => Math.max(latest, stored.event.sequence.value),
+        0,
+      );
+    if (latestSequence > 0 && event.sequence.value <= latestSequence) {
+      throw new ObservationLedgerSequenceError(event, latestSequence);
     }
 
     const correlationJson = canonicalJsonV1(event.correlation);
@@ -844,34 +1283,36 @@ export class SqliteObservationLedgerV1 {
         );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/UNIQUE constraint failed|SQLITE_CONSTRAINT/.test(message)) {
+      if (/UNIQUE constraint failed|SQLITE_CONSTRAINT/u.test(message)) {
+        const conflictKind: ObservationLedgerConflictKind =
+          /idempotency_key/u.test(message) ? "idempotency-key" : "source-slot";
         throw new ObservationLedgerConflictError(
           event,
-          "source-slot",
+          conflictKind,
           `SQLite rejected a conflicting identity or source slot for ${event.eventId}.`,
           { cause: error },
         );
       }
-      throw new ObservationLedgerError(
-        "sqlite",
-        `SQLite rejected event ${event.eventId}.`,
-        { cause: error },
-      );
+      throwSqliteError(`SQLite rejected event ${event.eventId}.`, error);
     }
 
-    const inserted = database
-      .prepare(
-        `SELECT ${SELECT_COLUMNS}
-         FROM runtime_events
-         WHERE event_id = ?`,
-      )
-      .get(event.eventId) as RuntimeEventRow | undefined;
+    const inserted = this.#sqlite(`Failed to read back inserted event ${event.eventId}.`, () =>
+      database
+        .prepare(
+          `SELECT ${SELECT_COLUMNS}
+           FROM runtime_events
+           WHERE event_id = ?`,
+        )
+        .get(event.eventId) as RuntimeEventRow | undefined,
+    );
     if (inserted === undefined) {
       throw new ObservationLedgerCorruptionError(
         `Inserted event ${event.eventId} could not be read back in its transaction.`,
       );
     }
-    return { ...decodeRow(inserted), inserted: true };
+    const stored = decodeRow(inserted);
+    validatedRows.push(stored);
+    return { ...stored, inserted: true };
   }
 
   #validateReplayOptions(options: RuntimeEventReplayOptionsV1): {

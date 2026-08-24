@@ -40,3 +40,16 @@ Once a real database has applied migration 1, that migration can never be edited
 - **Only normalized columns without full event JSON:** cannot prove lossless readback or reject projection drift.
 - **Only full JSON without indexed source identity:** cannot mechanically enforce conflicts, monotonic streams or isolated replay efficiently.
 - **Trace validation during each append batch:** a batch may legitimately reference facts already persisted outside the batch; single-row DB validity and complete-Trace validity are separate protocol layers.
+
+## R2 hardening amendment
+
+The accepted decision includes the following fail-closed installation and operation rules:
+
+- migration metadata is created only when the database has no user Schema objects and `user_version=0`; an existing database is never repaired with `IF NOT EXISTS`;
+- the installed tables, explicit indexes, auto-index semantics, STRICT state, CHECK/UNIQUE structure and trigger bodies are compared with an immutable reference manifest;
+- opening validates every row, and every write transaction revalidates the Schema, connection PRAGMAs and all canonical rows before sequence or identity decisions;
+- file/memory journal mode, foreign keys, busy timeout, synchronous mode, trusted schema and temp store are all read back and asserted;
+- `integrity_check` is mandatory in the public open API and accepts only one exact `ok` row;
+- all operational SQLite exceptions are normalized to the stable `sqlite` error category without swallowing domain conflicts or corruption.
+
+These checks intentionally trade startup and append throughput for a mechanically trustworthy M0 Ledger. A future performance optimization requires new evidence that it cannot miss projection or Schema drift.

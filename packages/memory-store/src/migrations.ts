@@ -49,6 +49,38 @@ export const DEFAULT_OBSERVATION_LEDGER_MIGRATIONS: readonly ObservationLedgerMi
     ),
   );
 
+const SCHEMA_MIGRATIONS_TABLE_SQL = `
+CREATE TABLE schema_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  checksum TEXT NOT NULL CHECK (length(checksum) = 64),
+  applied_at TEXT NOT NULL
+) STRICT
+`.trim();
+
+const SCHEMA_MIGRATIONS_UPDATE_TRIGGER_SQL = `
+CREATE TRIGGER schema_migrations_reject_update
+BEFORE UPDATE ON schema_migrations
+BEGIN
+  SELECT RAISE(ABORT, 'schema_migrations is append-only');
+END
+`.trim();
+
+const SCHEMA_MIGRATIONS_DELETE_TRIGGER_SQL = `
+CREATE TRIGGER schema_migrations_reject_delete
+BEFORE DELETE ON schema_migrations
+BEGIN
+  SELECT RAISE(ABORT, 'schema_migrations is append-only');
+END
+`.trim();
+
+/**
+ * The migration metadata Schema is installed only for a truly empty database.
+ * Existing databases are verified against this immutable definition and are
+ * never repaired with CREATE ... IF NOT EXISTS.
+ */
+export const OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL = `${SCHEMA_MIGRATIONS_TABLE_SQL};\n\n${SCHEMA_MIGRATIONS_UPDATE_TRIGGER_SQL};\n\n${SCHEMA_MIGRATIONS_DELETE_TRIGGER_SQL};\n`;
+
 export function checksumObservationLedgerMigration(
   migration: Pick<ObservationLedgerMigration, "version" | "name" | "sql">,
 ): string {
@@ -63,6 +95,104 @@ function migrationError(
   options?: ErrorOptions,
 ): never {
   throw new ObservationLedgerMigrationError(message, migrationVersion, options);
+}
+
+function normalizeSchemaSql(sql: string): string {
+  return sql
+    .trim()
+    .replace(/;+\s*$/u, "")
+    .replace(/\s+/gu, " ")
+    .toLowerCase();
+}
+
+function readSchemaObject(
+  database: DatabaseSync,
+  type: "table" | "trigger",
+  name: string,
+): { readonly type: string; readonly name: string; readonly sql: string | null } | undefined {
+  return database
+    .prepare(
+      `SELECT type, name, sql
+       FROM sqlite_schema
+       WHERE type = ? AND name = ?`,
+    )
+    .get(type, name) as
+    | { readonly type: string; readonly name: string; readonly sql: string | null }
+    | undefined;
+}
+
+function assertSchemaObject(
+  database: DatabaseSync,
+  type: "table" | "trigger",
+  name: string,
+  expectedSql: string,
+): void {
+  const row = readSchemaObject(database, type, name);
+  if (!row || typeof row.sql !== "string") {
+    migrationError(`Migration metadata ${type} ${name} is missing.`);
+  }
+  if (normalizeSchemaSql(row.sql) !== normalizeSchemaSql(expectedSql)) {
+    migrationError(`Migration metadata ${type} ${name} definition has drifted.`);
+  }
+}
+
+function assertMigrationMetadataSchema(database: DatabaseSync): void {
+  assertSchemaObject(
+    database,
+    "table",
+    "schema_migrations",
+    SCHEMA_MIGRATIONS_TABLE_SQL,
+  );
+  assertSchemaObject(
+    database,
+    "trigger",
+    "schema_migrations_reject_update",
+    SCHEMA_MIGRATIONS_UPDATE_TRIGGER_SQL,
+  );
+  assertSchemaObject(
+    database,
+    "trigger",
+    "schema_migrations_reject_delete",
+    SCHEMA_MIGRATIONS_DELETE_TRIGGER_SQL,
+  );
+
+  const table = database
+    .prepare("PRAGMA table_list('schema_migrations')")
+    .get() as { readonly strict?: number | bigint } | undefined;
+  const strict = table?.strict === undefined ? undefined : Number(table.strict);
+  if (strict !== 1) {
+    migrationError("Migration metadata table schema_migrations must remain STRICT.");
+  }
+
+  const columns = database
+    .prepare("PRAGMA table_xinfo('schema_migrations')")
+    .all() as Array<{
+    readonly cid: number | bigint;
+    readonly name: string;
+    readonly type: string;
+    readonly notnull: number | bigint;
+    readonly dflt_value: unknown;
+    readonly pk: number | bigint;
+    readonly hidden: number | bigint;
+  }>;
+  const actualColumns = columns.map((column) => ({
+    cid: Number(column.cid),
+    name: column.name,
+    type: column.type.toUpperCase(),
+    notnull: Number(column.notnull),
+    defaultValue: column.dflt_value ?? null,
+    pk: Number(column.pk),
+    hidden: Number(column.hidden),
+  }));
+  const expectedColumns = [
+    { cid: 0, name: "version", type: "INTEGER", notnull: 0, defaultValue: null, pk: 1, hidden: 0 },
+    { cid: 1, name: "name", type: "TEXT", notnull: 1, defaultValue: null, pk: 0, hidden: 0 },
+    { cid: 2, name: "checksum", type: "TEXT", notnull: 1, defaultValue: null, pk: 0, hidden: 0 },
+    { cid: 3, name: "applied_at", type: "TEXT", notnull: 1, defaultValue: null, pk: 0, hidden: 0 },
+  ];
+  if (JSON.stringify(actualColumns) !== JSON.stringify(expectedColumns)) {
+    migrationError("Migration metadata table schema_migrations columns have drifted.");
+  }
 }
 
 function assertMigrationSet(migrations: readonly ObservationLedgerMigration[]): void {
@@ -100,29 +230,6 @@ function assertMigrationSet(migrations: readonly ObservationLedgerMigration[]): 
   }
 }
 
-function ensureMigrationTable(database: DatabaseSync): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      checksum TEXT NOT NULL CHECK (length(checksum) = 64),
-      applied_at TEXT NOT NULL
-    ) STRICT;
-
-    CREATE TRIGGER IF NOT EXISTS schema_migrations_reject_update
-    BEFORE UPDATE ON schema_migrations
-    BEGIN
-      SELECT RAISE(ABORT, 'schema_migrations is append-only');
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS schema_migrations_reject_delete
-    BEFORE DELETE ON schema_migrations
-    BEGIN
-      SELECT RAISE(ABORT, 'schema_migrations is append-only');
-    END;
-  `);
-}
-
 function safeInteger(value: number | bigint, label: string): number {
   const converted = typeof value === "bigint" ? Number(value) : value;
   if (!Number.isSafeInteger(converted)) {
@@ -131,22 +238,87 @@ function safeInteger(value: number | bigint, label: string): number {
   return converted;
 }
 
+function readUserVersion(database: DatabaseSync): number {
+  const row = database.prepare("PRAGMA user_version").get() as
+    | { user_version?: number | bigint }
+    | undefined;
+  return safeInteger(row?.user_version ?? 0, "PRAGMA user_version");
+}
+
+function initializeOrVerifyMigrationMetadata(database: DatabaseSync): void {
+  const existing = readSchemaObject(database, "table", "schema_migrations");
+  if (!existing) {
+    const objects = database
+      .prepare(
+        `SELECT type, name
+         FROM sqlite_schema
+         WHERE name NOT LIKE 'sqlite_%'
+         ORDER BY type, name`,
+      )
+      .all() as Array<{ readonly type: string; readonly name: string }>;
+    const userVersion = readUserVersion(database);
+    if (objects.length !== 0 || userVersion !== 0) {
+      migrationError(
+        `Migration metadata is missing from a non-empty database ` +
+          `(objects=${objects.map((row) => `${row.type}:${row.name}`).join(",") || "none"}, ` +
+          `user_version=${userVersion}).`,
+      );
+    }
+
+    let began = false;
+    try {
+      database.exec("BEGIN IMMEDIATE");
+      began = true;
+      database.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
+      database.exec("COMMIT");
+      began = false;
+    } catch (error) {
+      if (began) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the initialization failure.
+        }
+      }
+      migrationError("Failed to initialize immutable migration metadata.", undefined, {
+        cause: error,
+      });
+    }
+  }
+
+  try {
+    assertMigrationMetadataSchema(database);
+  } catch (error) {
+    if (error instanceof ObservationLedgerMigrationError) throw error;
+    migrationError("Failed to verify immutable migration metadata.", undefined, {
+      cause: error,
+    });
+  }
+}
+
 export function readAppliedObservationLedgerMigrations(
   database: DatabaseSync,
 ): readonly AppliedObservationLedgerMigration[] {
-  ensureMigrationTable(database);
-  const rows = database
-    .prepare(
-      `SELECT version, name, checksum, applied_at
-       FROM schema_migrations
-       ORDER BY version ASC`,
-    )
-    .all() as Array<{
+  initializeOrVerifyMigrationMetadata(database);
+  let rows: Array<{
     version: number | bigint;
     name: string;
     checksum: string;
     applied_at: string;
   }>;
+  try {
+    rows = database
+      .prepare(
+        `SELECT version, name, checksum, applied_at
+         FROM schema_migrations
+         ORDER BY version ASC`,
+      )
+      .all() as typeof rows;
+  } catch (error) {
+    migrationError("Failed to read immutable migration history.", undefined, {
+      cause: error,
+    });
+  }
 
   return rows.map((row) => ({
     version: safeInteger(row.version, "schema_migrations.version"),
@@ -204,13 +376,6 @@ function canonicalAppliedAt(value: string, version: number): string {
   return value;
 }
 
-function readUserVersion(database: DatabaseSync): number {
-  const row = database.prepare("PRAGMA user_version").get() as
-    | { user_version?: number | bigint }
-    | undefined;
-  return safeInteger(row?.user_version ?? 0, "PRAGMA user_version");
-}
-
 export function applyObservationLedgerMigrations(
   database: DatabaseSync,
   options: {
@@ -220,7 +385,7 @@ export function applyObservationLedgerMigrations(
 ): readonly AppliedObservationLedgerMigration[] {
   const migrations = options.migrations ?? DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
   assertMigrationSet(migrations);
-  ensureMigrationTable(database);
+  initializeOrVerifyMigrationMetadata(database);
 
   const applied = readAppliedObservationLedgerMigrations(database);
   validateAppliedPrefix(migrations, applied);
@@ -237,8 +402,10 @@ export function applyObservationLedgerMigrations(
   for (const migration of migrations.slice(applied.length)) {
     const checksum = checksumObservationLedgerMigration(migration);
     const appliedAt = canonicalAppliedAt(options.clock.now(), migration.version);
-    database.exec("BEGIN IMMEDIATE");
+    let began = false;
     try {
+      database.exec("BEGIN IMMEDIATE");
+      began = true;
       database.exec(migration.sql);
       database
         .prepare(
@@ -248,11 +415,14 @@ export function applyObservationLedgerMigrations(
         .run(migration.version, migration.name, checksum, appliedAt);
       database.exec(`PRAGMA user_version = ${migration.version}`);
       database.exec("COMMIT");
+      began = false;
     } catch (error) {
-      try {
-        database.exec("ROLLBACK");
-      } catch {
-        // Preserve the migration failure as the primary error.
+      if (began) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the migration failure as the primary error.
+        }
       }
       migrationError(
         `Failed to apply migration ${migration.version} (${migration.name}).`,
@@ -271,5 +441,6 @@ export function applyObservationLedgerMigrations(
       finalVersion,
     );
   }
+  assertMigrationMetadataSchema(database);
   return result;
 }

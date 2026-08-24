@@ -15,9 +15,11 @@
 - Runtime source sequence 只在协议声明的完整 source stream 内单调；不得按墙钟时间或仅按 Surface 建立伪全序。
 - Session 回放使用稳定 SQLite Row Cursor；Workspace、Runtime Session 与 Source Stream 必须隔离。
 - 相关 Observation、Session 状态和 Outbox 的一致性由显式事务保证。
-- SQLite 启用 WAL、外键和合理的 busy timeout，并用真实连接验证。
-- 已应用迁移不可重写；修复 Schema 必须新增前向迁移，version/name/checksum/history 均 fail closed。
-- 数据库行中的 canonical event 与索引投影必须逐项一致；未知协议、非 canonical JSON 或投影漂移按 corruption 拒绝。
+- SQLite 启用 WAL、外键和合理的 busy timeout；journal mode、foreign keys、busy timeout、synchronous、trusted schema、temp store 与 integrity_check 必须在每个真实连接上机械回读，公开 open API 不得提供绕过。
+- 已应用迁移不可重写；修复 Schema 必须新增前向迁移，version/name/checksum/history 均 fail closed。只允许为空数据库初始化 migration metadata，已存在数据库禁止 `IF NOT EXISTS` 式静默修复。
+- 数据库行中的 canonical event 与索引投影必须逐项一致；open 和每次写事务都要验证既有完整行，未知协议、非 canonical JSON 或任一投影漂移按 corruption 拒绝。
+- 安装态 Schema 必须按 table/index/trigger SQL、STRICT、table_xinfo 与 index_xinfo manifest 验证；同名弱化对象和额外 trigger 也必须拒绝。
+- 所有 SQLite operational failure 统一为 `code=sqlite`，不得让原生 message 逃逸；domain conflict、sequence、migration 和 corruption 语义保持不变。
 - 崩溃恢复、部分写入和重启重放是核心场景，不是后续优化。
 
 ## 当前范围
@@ -27,6 +29,6 @@ M0 只实现 `NormalizedRuntimeEvent v1` Observation Ledger、Workspace/Session 
 ## 测试
 
 - SQLite 行为使用真实临时数据库，不用 Mock SQL 代替。
-- 覆盖 exact replay、冲突、完整 source-stream 单调性、批量事务回滚、Cursor、Workspace/Session 隔离、进程重启、未提交事务、排序稳定性和迁移 checksum 漂移。
+- 覆盖 exact replay、冲突、完整 source-stream 单调性、批量事务回滚、Cursor、Workspace/Session 隔离、进程重启、未提交事务、排序稳定性、迁移 checksum/user_version/history gap、Schema manifest、PRAGMA readback、projection corruption 与 SQLite error classification。
 - 文件数据库必须证明 WAL 与 `PRAGMA integrity_check=ok`；`:memory:` 的 journal mode 单独记录，不能冒充文件 WAL。
 - 测试数据必须是虚构内容，不包含真实用户记忆、密钥或本机数据库副本。

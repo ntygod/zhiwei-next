@@ -3,7 +3,7 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-18
+updated: 2026-08-24
 -->
 
 ## 当前定位
@@ -53,15 +53,25 @@ b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
 
 ## 当前 WIP：Issue #56
 
-唯一 active primary branch：
+唯一 active primary PR 与 branch：
 
 ```text
-feat/m0-sqlite-observation-ledger-v1
+PR #69
+feat/56-sqlite-observation-ledger-v1
 ```
 
-旧原型 HEAD `0da4e97e5cac42add96a55285976a93afd992495` 相对 PR #66 合并后的 main 已经 diverged，并仍消费旧的扁平 Runtime Event 字段。该 SHA只保留为 Migration checksum、WAL、事务、重启与 Cursor 测试结构参考；当前分支必须从最新 main 重建，不能整体 cherry-pick 旧 Schema。
+<!-- zhiwei-active-primary
+work-item: #56
+primary-pr: #69
+branch: feat/56-sqlite-observation-ledger-v1
+status: review-required
+-->
 
-SQLite Observation Ledger v1 的冻结方向：
+PR #68 已关闭且未合并；其 `feat/m0-sqlite-observation-ledger-v1` 只保留为历史 bootstrap/staging 分支，不再是 active primary。Issue #56 的合规交付面已从 `main@843c09569360184592f3d5cecb3b1b165eba6af7` 重建到编号分支，并由 PR #69 supersede PR #68。
+
+旧原型 HEAD `0da4e97e5cac42add96a55285976a93afd992495` 相对 PR #66 合并后的 main 已经 diverged，并仍消费旧的扁平 Runtime Event 字段。该 SHA只保留为 Migration checksum、WAL、事务、重启与 Cursor 测试结构参考；它不在当前 ancestry，不能整体 cherry-pick 旧 Schema。
+
+SQLite Observation Ledger v1 的冻结方向与当前实现：
 
 - 只消费已合并的 `NormalizedRuntimeEvent v1`；
 - canonical full event JSON 是数据库真源，索引列是读回时逐项复核的投影；
@@ -69,11 +79,13 @@ SQLite Observation Ledger v1 的冻结方向：
 - exact replay 在单调性检查之前处理；source-slot、idempotency 与 canonical-body冲突均 fail closed；
 - 单条与批量写入使用真实 SQLite事务；批次中后续失败不会留下前缀新行；
 - file DB使用 WAL，`:memory:`行为单独记录；
+- 每次 open 和写事务在提交前验证不可变 Schema manifest、SQLite PRAGMA readback 与全部既有 row；
 - 读取时重新调用正式单事件 parser，并机械验证 canonical bytes、SHA-256与全部投影；
 - Migration history以连续 version、name、SHA-256和 `PRAGMA user_version`冻结，已应用 SQL不可改写；
-- Row ID仅作为 ingestion Cursor，不被解释为 Runtime全局序或语义时间。
+- Row ID仅作为 ingestion Cursor，不被解释为 Runtime全局序或语义时间；
+- SQLite operational failure统一映射到稳定 `sqlite` error code，domain conflict与 corruption语义保持不变。
 
-Issue #56 当前风险为 R2。获得当前最终 HEAD 绑定的独立 R2 `APPROVED` 前保持 Draft，不得转 Ready或合并。
+Issue #56 当前风险为 R2。PR #69 当前等待独立 R2 cold review；新完整 HEAD 获得 `APPROVED` 前保持 Draft，不得转 Ready或合并。
 
 ## 历史 R2 审查连续性锚点
 
@@ -138,9 +150,9 @@ docs/harness/provenance-proofs/2026-08-11-pr-13.json
 
 ## 当前顺序
 
-1. 从 `main@843c09569360184592f3d5cecb3b1b165eba6af7` 重建 Issue #56同名 primary branch；
-2. 实现 canonical v1 row、完整 source-stream sequence、Migration、事务、Cursor、WAL、重启、corruption与 integrity测试；
-3. 在固定 Node 22.23.1上动态验证 `node:sqlite`与文件 Ledger；
-4. 完成全量 exact-head CI与作者自审；
-5. 对新的完整 40位 SHA执行独立 R2 cold review；
+1. 在 PR #69 的 `feat/56-sqlite-observation-ledger-v1` 完成六项 R2 blocker 修复与新增负向测试；
+2. 在固定 Node 22.23.1上动态验证 `node:sqlite`、39个 Ledger专项场景和全仓检查；
+3. 清理所有暂存 payload/workflow，形成相对旧候选的单个干净产品提交；
+4. 完成新 exact-head Draft CI与作者自审；
+5. 对新的完整40位 SHA执行独立 R2 cold review；
 6. APPROVED 后登记 `independent-review: complete`，转 Ready并经受保护 Autonomous Merge进入 main。
