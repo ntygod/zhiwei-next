@@ -69,7 +69,7 @@ sequence domain
 
 ## Replay
 
-Workspace and Session replay order is SQLite `row_id ASC`, with an optional exclusive `afterRowId` cursor and bounded `limit`. Row IDs must be positive integers. Row ID is an ingestion cursor, not a Runtime global sequence and not a semantic time order. Every read first validates migration state, connection PRAGMAs, the Schema manifest, all rows, cross-row source-stream monotonicity and integrity so hidden or post-open corruption cannot produce a partial replay.
+Workspace and Session replay order is SQLite `row_id ASC`, with an optional exclusive `afterRowId` cursor and bounded `limit`. Row IDs must be positive integers. Row ID is an ingestion cursor, not a Runtime global sequence and not a semantic time order. Every read starts one explicit SQLite read transaction, validates migration state, connection PRAGMAs, the Schema manifest, all rows, cross-row source-stream monotonicity and integrity in that snapshot, and derives the requested result from the same validated row set. A concurrent writer may commit a later WAL snapshot, but it cannot insert an unvalidated row between validation and the returned replay.
 
 The Ledger preserves both durable boundaries and valid ephemeral/ignorable updates exactly as classified by the protocol. It never silently promotes, drops or rewrites their persistence semantics.
 
@@ -115,7 +115,7 @@ SHA-256(version + NUL + name + NUL + SQL)
 applied_at
 ```
 
-The public Ledger uses only module-private immutable migration sources; callers cannot replace them. The migration set must be the contiguous prefix `1..N`. Applied rows must be an exact prefix of the current immutable sources, every `applied_at` must be canonical UTC, and `PRAGMA user_version` must equal the latest applied version. Before pending migrations, the existing prefix is validated without mutation. Migration metadata, all pending DDL/history rows, `user_version`, final Schema/PRAGMA/row/integrity validation and commit form one `BEGIN IMMEDIATE` transaction; any failure rolls the complete pending installation back. Top-level PRAGMA and transaction-control SQL are forbidden in migration sources.
+The public Ledger uses only module-private immutable migration sources; callers cannot replace them. The migration set must be the contiguous prefix `1..N`. Applied rows must be an exact prefix of the current immutable sources, every `applied_at` must be canonical UTC, and `PRAGMA user_version` must equal the latest applied version. Before pending migrations, the existing prefix is validated without mutation. Migration metadata, all pending DDL/history rows, `user_version`, final Schema/PRAGMA/row/integrity validation and commit form one `BEGIN IMMEDIATE` transaction; any failure rolls the complete pending installation back. Migration SQL is statically checked before reference or target execution; top-level PRAGMA and transaction-control aliases including `END [TRANSACTION]` are forbidden, legal trigger-body `BEGIN ... END` remains allowed, and `DatabaseSync.isTransaction` is checked after every migration step.
 
 Changing an applied migration, deleting a known migration, introducing a version gap, changing history rows, removing or weakening migration-history guards, or changing `user_version` causes open, read and write boundaries to fail closed. Schema fixes are new forward migrations. A non-empty database without exact migration metadata is rejected rather than initialized or repaired. BEFORE INSERT replacement guards prevent `INSERT OR REPLACE` and `REPLACE` from deleting and replacing existing Runtime or migration rows even when an external connection leaves `recursive_triggers=0`.
 
@@ -125,6 +125,6 @@ A process that exits with an uncommitted event transaction leaves no replayable 
 
 ## Runtime validation line
 
-The supported execution line is Node.js 22.x. Exact-head CI records the resolved patch and runs the full real-`node:sqlite` suite; the initial bootstrap's Node.js 22.23.1 result is historical evidence only. A patch change is accepted only after the same HEAD passes the complete suite, rather than by assuming experimental API compatibility.
+The supported execution range is Node.js `>=22.16.0 <23`. The minimum supplies both unflagged `node:sqlite` and `DatabaseSync.isTransaction`, which the Ledger uses to verify migration and read-snapshot transaction state. Exact-head CI records the resolved 22.x patch and runs the full real-`node:sqlite` suite; the initial bootstrap's Node.js 22.23.1 result is historical evidence only. A patch change is accepted only after the same HEAD passes the complete suite.
 
 The Ledger does not persist raw Pi payloads, class instances, model reasoning, attachments, FTS/vector/graph projections or a derived replacement for original observations.

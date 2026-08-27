@@ -17,6 +17,7 @@ import {
   OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL,
   ObservationLedgerMigrationError,
   applyObservationLedgerMigrations,
+  assertObservationLedgerMigrationSet,
   assertObservationLedgerMigrationState,
   type AppliedObservationLedgerMigration,
   type MigrationClock,
@@ -111,11 +112,28 @@ export class ObservationLedgerSequenceError extends ObservationLedgerError {
 
 export class ObservationLedgerCorruptionError extends ObservationLedgerError {
   readonly rowId?: number;
+  readonly previousRowId?: number;
+  readonly previousSourceSequence?: number;
+  readonly currentSourceSequence?: number;
+  readonly stream?: RuntimeSourceStreamIdentityV1;
 
-  constructor(message: string, rowId?: number, options?: ErrorOptions) {
+  constructor(
+    message: string,
+    rowId?: number,
+    options?: ErrorOptions & {
+      readonly previousRowId?: number;
+      readonly previousSourceSequence?: number;
+      readonly currentSourceSequence?: number;
+      readonly stream?: RuntimeSourceStreamIdentityV1;
+    },
+  ) {
     super("corruption", message, options);
     this.name = "ObservationLedgerCorruptionError";
     this.rowId = rowId;
+    this.previousRowId = options?.previousRowId;
+    this.previousSourceSequence = options?.previousSourceSequence;
+    this.currentSourceSequence = options?.currentSourceSequence;
+    this.stream = options?.stream;
   }
 }
 
@@ -236,6 +254,12 @@ interface TableManifest {
 interface ObservationLedgerSchemaManifest {
   readonly objects: readonly SchemaObjectManifest[];
   readonly tables: readonly TableManifest[];
+}
+
+interface ValidatedLedgerState {
+  readonly migrations: readonly AppliedObservationLedgerMigration[];
+  readonly rows: StoredRuntimeEventV1[];
+  readonly integrity: readonly string[];
 }
 
 const SELECT_COLUMNS = `
@@ -696,13 +720,14 @@ function integrityCheckRows(database: DatabaseSync): readonly string[] {
   return rows.map((row) => String(Object.values(row)[0]));
 }
 
-function requireIntegrity(database: DatabaseSync): void {
+function requireIntegrity(database: DatabaseSync): readonly string[] {
   const result = integrityCheckRows(database);
   if (result.length !== 1 || result[0] !== "ok") {
     throw new ObservationLedgerCorruptionError(
       `SQLite integrity_check failed: ${result.join("; ") || "no result"}.`,
     );
   }
+  return result;
 }
 
 function normalizeSchemaSql(sql: string | null): string {
@@ -824,6 +849,7 @@ function captureSchemaManifest(
 function buildExpectedSchemaManifest(
   migrations: readonly ObservationLedgerMigration[],
 ): ObservationLedgerSchemaManifest {
+  if (migrations.length > 0) assertObservationLedgerMigrationSet(migrations);
   const reference = new DatabaseSync(":memory:");
   try {
     reference.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
@@ -881,6 +907,12 @@ function validateAllRuntimeRows(database: DatabaseSync): StoredRuntimeEventV1[] 
           `than earlier row ${previous.rowId} sequence ${previous.sequence} for ` +
           `${formatSourceStream(stream)}.`,
         stored.rowId,
+        {
+          previousRowId: previous.rowId,
+          previousSourceSequence: previous.sequence,
+          currentSourceSequence: stored.event.sequence.value,
+          stream,
+        },
       );
     }
     latestByStream.set(key, {
@@ -901,13 +933,16 @@ function validateInstalledLedgerState(
     readonly migrations: readonly ObservationLedgerMigration[];
     readonly validateRuntimeRows: boolean;
   },
-): StoredRuntimeEventV1[] {
-  assertObservationLedgerMigrationState(database, options.migrations);
+): ValidatedLedgerState {
+  const migrations = assertObservationLedgerMigrationState(
+    database,
+    options.migrations,
+  );
   requirePragmaSnapshot(readPragmaSnapshot(database), options.expectedPragmas);
   requireSchemaManifest(database, options.expectedSchema);
   const rows = options.validateRuntimeRows ? validateAllRuntimeRows(database) : [];
-  requireIntegrity(database);
-  return rows;
+  const integrity = requireIntegrity(database);
+  return { migrations, rows, integrity };
 }
 
 export class SqliteObservationLedgerV1 {
@@ -934,13 +969,13 @@ export class SqliteObservationLedgerV1 {
   }
 
   static open(options: OpenSqliteObservationLedgerOptions): SqliteObservationLedgerV1 {
-    const filePath = prepareFilePath(options.filePath);
-    const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
-    assertIntegerInRange(busyTimeoutMs, "busyTimeoutMs", 0, 2_147_483_647);
-    const migrations = DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
-
+    let filePath = String((options as { readonly filePath?: unknown } | undefined)?.filePath);
     let database: DatabaseSync | undefined;
     try {
+      filePath = prepareFilePath(options.filePath);
+      const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
+      assertIntegerInRange(busyTimeoutMs, "busyTimeoutMs", 0, 2_147_483_647);
+      const migrations = DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
       database = new DatabaseSync(filePath);
       const pragmas = configureDatabase(database, { filePath, busyTimeoutMs });
       const schema = buildExpectedSchemaManifest(migrations);
@@ -1003,12 +1038,7 @@ export class SqliteObservationLedgerV1 {
   }
 
   get appliedMigrations(): readonly AppliedObservationLedgerMigration[] {
-    return this.#sqlite("Failed to read applied Observation Ledger migrations.", () =>
-      assertObservationLedgerMigrationState(
-        this.#requireDatabase(),
-        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
-      ),
-    );
+    return this.#readTransaction((state) => state.migrations);
   }
 
   close(): void {
@@ -1055,32 +1085,18 @@ export class SqliteObservationLedgerV1 {
 
   getByEventId(eventId: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(eventId, "eventId");
-    this.#validateReadBoundary();
-    const row = this.#sqlite(`Failed to read event ${eventId}.`, () =>
-      this.#requireDatabase()
-        .prepare(
-          `SELECT ${SELECT_COLUMNS}
-           FROM runtime_events
-           WHERE event_id = ?`,
-        )
-        .get(eventId) as RuntimeEventRow | undefined,
+    return this.#readTransaction((state) =>
+      state.rows.find((stored) => stored.event.eventId === eventId),
     );
-    return row === undefined ? undefined : decodeRow(row);
   }
 
   getByIdempotencyKey(idempotencyKey: string): StoredRuntimeEventV1 | undefined {
     assertNonEmpty(idempotencyKey, "idempotencyKey");
-    this.#validateReadBoundary();
-    const row = this.#sqlite(`Failed to read idempotency key ${idempotencyKey}.`, () =>
-      this.#requireDatabase()
-        .prepare(
-          `SELECT ${SELECT_COLUMNS}
-           FROM runtime_events
-           WHERE idempotency_key = ?`,
-        )
-        .get(idempotencyKey) as RuntimeEventRow | undefined,
+    return this.#readTransaction((state) =>
+      state.rows.find(
+        (stored) => stored.event.idempotencyKey === idempotencyKey,
+      ),
     );
-    return row === undefined ? undefined : decodeRow(row);
   }
 
   readSession(
@@ -1091,31 +1107,18 @@ export class SqliteObservationLedgerV1 {
     assertNonEmpty(workspaceId, "workspaceId");
     assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
-    this.#validateReadBoundary();
-    const rows = this.#sqlite(
-      `Failed to replay Workspace ${workspaceId} Runtime Session ${runtimeSessionId}.`,
-      () =>
-        this.#requireDatabase()
-          .prepare(
-            `SELECT ${SELECT_COLUMNS}
-             FROM runtime_events
-             WHERE workspace_id = ?
-               AND runtime_session_id = ?
-               AND row_id > ?
-               AND (? IS NULL OR source_surface = ?)
-             ORDER BY row_id ASC
-             LIMIT ?`,
-          )
-          .all(
-            workspaceId,
-            runtimeSessionId,
-            afterRowId,
-            sourceSurface,
-            sourceSurface,
-            limit,
-          ) as RuntimeEventRow[],
+    return this.#readTransaction((state) =>
+      state.rows
+        .filter(
+          (stored) =>
+            stored.event.workspaceId === workspaceId &&
+            stored.event.runtimeSessionId === runtimeSessionId &&
+            stored.rowId > afterRowId &&
+            (sourceSurface === null ||
+              stored.event.source.surface === sourceSurface),
+        )
+        .slice(0, limit),
     );
-    return rows.map(decodeRow);
   }
 
   readWorkspace(
@@ -1124,27 +1127,17 @@ export class SqliteObservationLedgerV1 {
   ): readonly StoredRuntimeEventV1[] {
     assertNonEmpty(workspaceId, "workspaceId");
     const { afterRowId, limit, sourceSurface } = this.#validateReplayOptions(options);
-    this.#validateReadBoundary();
-    const rows = this.#sqlite(`Failed to replay Workspace ${workspaceId}.`, () =>
-      this.#requireDatabase()
-        .prepare(
-          `SELECT ${SELECT_COLUMNS}
-           FROM runtime_events
-           WHERE workspace_id = ?
-             AND row_id > ?
-             AND (? IS NULL OR source_surface = ?)
-           ORDER BY row_id ASC
-           LIMIT ?`,
+    return this.#readTransaction((state) =>
+      state.rows
+        .filter(
+          (stored) =>
+            stored.event.workspaceId === workspaceId &&
+            stored.rowId > afterRowId &&
+            (sourceSurface === null ||
+              stored.event.source.surface === sourceSurface),
         )
-        .all(
-          workspaceId,
-          afterRowId,
-          sourceSurface,
-          sourceSurface,
-          limit,
-        ) as RuntimeEventRow[],
+        .slice(0, limit),
     );
-    return rows.map(decodeRow);
   }
 
   countEvents(options: {
@@ -1159,41 +1152,23 @@ export class SqliteObservationLedgerV1 {
     if (runtimeSessionId !== undefined) {
       assertNonEmpty(runtimeSessionId, "runtimeSessionId");
     }
-    this.#validateReadBoundary();
 
-    const row = this.#sqlite("Failed to count Observation Ledger events.", () => {
-      const database = this.#requireDatabase();
-      if (workspaceId === undefined) {
-        return database.prepare("SELECT count(*) AS count FROM runtime_events").get() as {
-          count: number | bigint;
-        };
-      }
-      if (runtimeSessionId === undefined) {
-        return database
-          .prepare("SELECT count(*) AS count FROM runtime_events WHERE workspace_id = ?")
-          .get(workspaceId) as { count: number | bigint };
-      }
-      return database
-        .prepare(
-          `SELECT count(*) AS count
-           FROM runtime_events
-           WHERE workspace_id = ? AND runtime_session_id = ?`,
-        )
-        .get(workspaceId, runtimeSessionId) as { count: number | bigint };
-    });
-    return toSafeInteger(row.count, "count");
+    return this.#readTransaction((state) =>
+      state.rows.filter(
+        (stored) =>
+          (workspaceId === undefined || stored.event.workspaceId === workspaceId) &&
+          (runtimeSessionId === undefined ||
+            stored.event.runtimeSessionId === runtimeSessionId),
+      ).length,
+    );
   }
 
   integrityCheck(): readonly string[] {
-    return this.#sqlite("Failed to execute SQLite integrity_check.", () =>
-      integrityCheckRows(this.#requireDatabase()),
-    );
+    return this.#readTransaction((state) => state.integrity);
   }
 
   assertIntegrity(): void {
-    this.#sqlite("Failed to assert SQLite integrity.", () =>
-      requireIntegrity(this.#requireDatabase()),
-    );
+    this.#readTransaction(() => undefined);
   }
 
   #requireDatabase(): DatabaseSync {
@@ -1214,6 +1189,44 @@ export class SqliteObservationLedgerV1 {
       return operation();
     } catch (error) {
       throwSqliteError(message, error);
+    }
+  }
+
+  #readTransaction<T>(operation: (state: ValidatedLedgerState) => T): T {
+    const database = this.#requireDatabase();
+    let began = false;
+    try {
+      this.#sqlite("Failed to begin Observation Ledger read snapshot.", () =>
+        database.exec("BEGIN"),
+      );
+      began = true;
+      if (!database.isTransaction) {
+        throw new ObservationLedgerError(
+          "sqlite",
+          "SQLite did not enter the Observation Ledger read transaction.",
+        );
+      }
+      const state = this.#validateReadBoundary();
+      const result = operation(state);
+      this.#sqlite("Failed to commit Observation Ledger read snapshot.", () =>
+        database.exec("COMMIT"),
+      );
+      began = false;
+      return result;
+    } catch (error) {
+      if (began && database.isTransaction) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the primary read failure.
+        }
+      }
+      if (isKnownLedgerError(error)) throw error;
+      throw new ObservationLedgerError(
+        "sqlite",
+        "Observation Ledger read snapshot failed.",
+        { cause: error },
+      );
     }
   }
 
@@ -1248,33 +1261,26 @@ export class SqliteObservationLedgerV1 {
     }
   }
 
-  #validateReadBoundary(): void {
-    this.#sqlite("Failed to validate Observation Ledger read boundary.", () => {
-      const database = this.#requireDatabase();
-      assertObservationLedgerMigrationState(
-        database,
-        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
-      );
-      requirePragmaSnapshot(readPragmaSnapshot(database), this.#expectedPragmas);
-      requireSchemaManifest(database, this.#expectedSchema);
-      validateAllRuntimeRows(database);
-      requireIntegrity(database);
-    });
+  #validateReadBoundary(): ValidatedLedgerState {
+    return this.#sqlite("Failed to validate Observation Ledger read boundary.", () =>
+      validateInstalledLedgerState(this.#requireDatabase(), {
+        expectedPragmas: this.#expectedPragmas,
+        expectedSchema: this.#expectedSchema,
+        migrations: DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+        validateRuntimeRows: true,
+      }),
+    );
   }
 
   #validateWriteBoundary(): StoredRuntimeEventV1[] {
-    return this.#sqlite("Failed to validate Observation Ledger write boundary.", () => {
-      const database = this.#requireDatabase();
-      assertObservationLedgerMigrationState(
-        database,
-        DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
-      );
-      requirePragmaSnapshot(readPragmaSnapshot(database), this.#expectedPragmas);
-      requireSchemaManifest(database, this.#expectedSchema);
-      const rows = validateAllRuntimeRows(database);
-      requireIntegrity(database);
-      return rows;
-    });
+    return this.#sqlite("Failed to validate Observation Ledger write boundary.", () =>
+      validateInstalledLedgerState(this.#requireDatabase(), {
+        expectedPragmas: this.#expectedPragmas,
+        expectedSchema: this.#expectedSchema,
+        migrations: DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+        validateRuntimeRows: true,
+      }).rows,
+    );
   }
 
   #appendOne(
@@ -1459,6 +1465,13 @@ export class SqliteObservationLedgerV1 {
       sourceSurface: options.sourceSurface ?? null,
     };
   }
+}
+
+/** @internal Test-only seam; not exported from the memory-store public index. */
+export function validateObservationLedgerRuntimeRowsForTest(
+  database: DatabaseSync,
+): readonly StoredRuntimeEventV1[] {
+  return validateAllRuntimeRows(database);
 }
 
 export function openSqliteObservationLedgerV1(

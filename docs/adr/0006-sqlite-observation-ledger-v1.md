@@ -8,7 +8,7 @@
 
 `NormalizedRuntimeEvent v1` is now the merged Runtime-neutral boundary. M0 needs a real local Ledger that survives restart, rejects replay conflicts and out-of-order source facts, preserves Workspace/Session isolation, and makes migration history immutable without introducing a native third-party driver or lock-file change.
 
-The supported Runtime validation line is Node.js 22.x, which exposes `node:sqlite`. Every exact-head CI run records the resolved patch and executes the complete Ledger matrix on that patch; the historical bootstrap used Node.js 22.23.1, but old patch evidence is never reused for a new HEAD.
+The supported Runtime validation range is Node.js `>=22.16.0 <23`. Node 22.16 is the minimum because the Ledger uses `DatabaseSync.isTransaction` to prove migration and read-snapshot transaction state. Every exact-head CI run records the resolved 22.x patch and executes the complete Ledger matrix on that patch; the historical bootstrap used Node.js 22.23.1, but old patch evidence is never reused for a new HEAD.
 
 ## Decision
 

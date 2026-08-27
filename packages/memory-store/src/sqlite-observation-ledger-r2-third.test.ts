@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,17 +19,31 @@ import {
   applyObservationLedgerMigrations,
   type ObservationLedgerMigration,
 } from "./migrations.ts";
-import { normalizeSqlSchemaSignature } from "./sqlite-schema-sql.ts";
 import {
+  normalizeSqlSchemaSignature,
+  sqlStatementLeadingKeywords,
+} from "./sqlite-schema-sql.ts";
+import {
+  ObservationLedgerConflictError,
   ObservationLedgerCorruptionError,
   ObservationLedgerError,
+  ObservationLedgerQueryError,
+  ObservationLedgerSequenceError,
   openSqliteObservationLedgerV1,
+  validateObservationLedgerRuntimeRowsForTest,
 } from "./sqlite-observation-ledger.ts";
 
 const CLOCK = { now: () => "2026-08-24T00:00:00.000Z" };
 
-test("Observation Ledger exact-head validation runs on the supported Node 22.x line", () => {
-  assert.match(process.version, /^v22\./u);
+test("Observation Ledger exact-head validation runs in the declared Node range", () => {
+  const match = /^v(\d+)\.(\d+)\./u.exec(process.version);
+  assert.ok(match);
+  assert.equal(Number(match[1]), 22);
+  assert.ok(Number(match[2]) >= 16);
+  const packageJson = JSON.parse(
+    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+  ) as { engines?: { node?: string } };
+  assert.equal(packageJson.engines?.node, ">=22.16.0 <23");
 });
 
 const RUNTIME_COLUMNS = [
@@ -261,6 +275,35 @@ test("Schema SQL signatures preserve quoted CHECK and RAISE literal bytes", () =
     normalizeSqlSchemaSignature("SELECT RAISE(ABORT, 'two  spaces')"),
     normalizeSqlSchemaSignature("select raise(abort, 'two spaces')"),
   );
+  assert.notEqual(
+    normalizeSqlSchemaSignature("SELECT X'ABCD'"),
+    normalizeSqlSchemaSignature("SELECT X'abcd'"),
+  );
+  assert.notEqual(
+    normalizeSqlSchemaSignature('CREATE TABLE "CaseName"(id INTEGER)'),
+    normalizeSqlSchemaSignature('CREATE TABLE "casename"(id INTEGER)'),
+  );
+  assert.notEqual(
+    normalizeSqlSchemaSignature("CREATE TABLE [CaseName](id INTEGER)"),
+    normalizeSqlSchemaSignature("CREATE TABLE [casename](id INTEGER)"),
+  );
+  assert.notEqual(
+    normalizeSqlSchemaSignature("CREATE TABLE `CaseName`(id INTEGER)"),
+    normalizeSqlSchemaSignature("CREATE TABLE `casename`(id INTEGER)"),
+  );
+  assert.deepEqual(
+    sqlStatementLeadingKeywords(`
+      CREATE TRIGGER valid_trigger AFTER INSERT ON demo
+      BEGIN
+        SELECT CASE WHEN NEW.id > 0 THEN 1 ELSE 0 END;
+      END;
+    `),
+    ["create"],
+  );
+  assert.deepEqual(
+    sqlStatementLeadingKeywords("END TRANSACTION; CREATE TABLE escaped(id INTEGER);"),
+    ["end", "create"],
+  );
 
   const cases: ReadonlyArray<{
     readonly name: string;
@@ -367,8 +410,8 @@ test("an existing migration prefix is validated without mutating rogue Schema", 
             AFTER INSERT ON schema_migrations
             BEGIN SELECT 1; END;`,
       predicate: (error: unknown) =>
-        error instanceof ObservationLedgerCorruptionError &&
-        /schema manifest has drifted/.test(error.message),
+        error instanceof ObservationLedgerMigrationError &&
+        /Migration metadata Schema manifest has drifted/.test(error.message),
     },
   ];
 
@@ -434,29 +477,55 @@ test("pending migration installation and metadata roll back when final validatio
   }
 });
 
-test("migration SQL rejects PRAGMA and transaction-control statements before writing", () => {
+test("migration SQL rejects every top-level transaction escape before writing", () => {
   const cases = [
-    "PRAGMA busy_timeout=1; CREATE TABLE forbidden(id INTEGER PRIMARY KEY) STRICT;",
-    "BEGIN; CREATE TABLE forbidden(id INTEGER PRIMARY KEY) STRICT; COMMIT;",
+    { sql: "PRAGMA busy_timeout=1; CREATE TABLE forbidden(id INTEGER PRIMARY KEY) STRICT;", leader: "PRAGMA" },
+    { sql: "BEGIN; CREATE TABLE forbidden(id INTEGER PRIMARY KEY) STRICT; COMMIT;", leader: "BEGIN" },
+    { sql: "END; CREATE TABLE escaped_commit(id INTEGER PRIMARY KEY) STRICT;", leader: "END" },
+    { sql: "END TRANSACTION; CREATE TABLE escaped_transaction(id INTEGER PRIMARY KEY) STRICT;", leader: "END" },
   ];
-  for (const [index, sql] of cases.entries()) {
+  for (const [index, item] of cases.entries()) {
     const database = new DatabaseSync(":memory:");
     try {
       const before = userSchemaSnapshot(database);
       assert.throws(
         () =>
           applyObservationLedgerMigrations(database, {
-            migrations: [{ version: 1, name: `unsafe-${index}`, sql }],
+            migrations: [{ version: 1, name: `unsafe-${index}`, sql: item.sql }],
             clock: CLOCK,
           }),
         (error: unknown) =>
           error instanceof ObservationLedgerMigrationError &&
-          /forbidden top-level (PRAGMA|BEGIN)/.test(error.message),
+          error.migrationVersion === 1 &&
+          error.message.includes(`forbidden top-level ${item.leader}`),
       );
       assert.deepEqual(userSchemaSnapshot(database), before);
     } finally {
       database.close();
     }
+  }
+
+  const valid = new DatabaseSync(":memory:");
+  try {
+    applyObservationLedgerMigrations(valid, {
+      migrations: [{
+        version: 1,
+        name: "valid-trigger-end",
+        sql: `
+          CREATE TABLE demo(id INTEGER PRIMARY KEY) STRICT;
+          CREATE TRIGGER demo_guard BEFORE DELETE ON demo
+          BEGIN
+            SELECT CASE WHEN OLD.id > 0 THEN RAISE(ABORT, 'guard') ELSE 0 END;
+          END;
+        `,
+      }],
+      clock: CLOCK,
+    });
+    assert.equal(valid.isTransaction, false);
+    valid.exec("INSERT INTO demo(id) VALUES (1)");
+    assert.throws(() => valid.exec("DELETE FROM demo"), /guard/);
+  } finally {
+    valid.close();
   }
 });
 
@@ -687,6 +756,10 @@ test("canonical persisted reverse source sequence fails at open and every live b
       (error: unknown) =>
         error instanceof ObservationLedgerCorruptionError &&
         error.rowId === 2 &&
+        error.previousRowId === 1 &&
+        error.previousSourceSequence === 2 &&
+        error.currentSourceSequence === 1 &&
+        error.stream?.sequenceDomain === "rpc-jsonl" &&
         /source sequence 1 is not greater than earlier row 1 sequence 2/.test(error.message),
     );
 
@@ -707,6 +780,17 @@ test("canonical persisted reverse source sequence fails at open and every live b
         (error: unknown) =>
           error instanceof ObservationLedgerCorruptionError &&
           error.rowId === 2 &&
+          error.previousRowId === 1 &&
+          error.previousSourceSequence === 2 &&
+          error.currentSourceSequence === 1 &&
+          error.stream?.workspaceId === "workspace-r2" &&
+          error.stream.runtimeSessionId === "session-r2" &&
+          error.stream.runtimeInstanceId === "instance-r2" &&
+          error.stream.adapter === "pi-rpc-v1" &&
+          error.stream.runtimeImplementation === "pi" &&
+          error.stream.runtimeVersion === "0.84.1" &&
+          error.stream.surface === "rpc" &&
+          error.stream.sequenceDomain === "rpc-jsonl" &&
           /source sequence 1 is not greater/.test(error.message),
       );
       assert.deepEqual(rawRuntimeState(filePath), before);
@@ -734,6 +818,15 @@ test("post-open migration history and user_version drift block reads and writes"
           .run("0".repeat(64), CLOCK.now());
       },
       message: /unknown migration version 2/,
+    },
+    {
+      name: "version-gap",
+      mutate(database) {
+        restoreTrigger(database, "schema_migrations_reject_update", () => {
+          database.exec("UPDATE schema_migrations SET version=2 WHERE version=1");
+        });
+      },
+      message: /not a contiguous prefix/,
     },
     {
       name: "name",
@@ -784,6 +877,7 @@ test("post-open migration history and user_version drift block reads and writes"
 
       for (const operation of [
         () => ledger.appliedMigrations,
+        () => ledger.schemaVersion,
         () => ledger.append(makeEvent(2)),
         () => ledger.appendBatch([makeEvent(2), makeEvent(3)]),
         () => ledger.readWorkspace("workspace-r2"),
@@ -855,11 +949,244 @@ test("zero and negative row cursors are rejected by SQL and by logical boundarie
   }
 });
 
+test("pending DDL is blocked by canonical row corruption before any migration write", () => {
+  const root = tempRoot();
+  const filePath = join(root, "future-prefix-corruption.sqlite");
+  const database = new DatabaseSync(filePath);
+  const future: ObservationLedgerMigration = {
+    version: 2,
+    name: "future-marker",
+    sql: "CREATE TABLE future_marker(id INTEGER PRIMARY KEY) STRICT;",
+  };
+  try {
+    applyObservationLedgerMigrations(database, {
+      migrations: DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
+      clock: CLOCK,
+    });
+    insertRuntimeEvent(database, makeEvent(2));
+    insertRuntimeEvent(database, makeEvent(1));
+    const before = userSchemaSnapshot(database);
+
+    assert.throws(
+      () =>
+        applyObservationLedgerMigrations(database, {
+          migrations: [...DEFAULT_OBSERVATION_LEDGER_MIGRATIONS, future],
+          clock: CLOCK,
+          validateBeforePending() {
+            validateObservationLedgerRuntimeRowsForTest(database);
+          },
+        }),
+      (error: unknown) =>
+        error instanceof ObservationLedgerCorruptionError &&
+        error.rowId === 2 &&
+        error.previousRowId === 1 &&
+        error.previousSourceSequence === 2 &&
+        error.currentSourceSequence === 1,
+    );
+    assert.deepEqual(userSchemaSnapshot(database), before);
+    assert.equal(
+      Number(
+        (
+          database
+            .prepare("SELECT count(*) AS count FROM sqlite_schema WHERE name='future_marker'")
+            .get() as { count: number | bigint }
+        ).count,
+      ),
+      0,
+    );
+  } finally {
+    database.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("arbitrary metadata triggers fail through getters, reads, and writes", () => {
+  const root = tempRoot();
+  const filePath = join(root, "rogue-metadata-trigger.sqlite");
+  const ledger = openFile(filePath);
+  try {
+    ledger.append(makeEvent(1));
+    const external = new DatabaseSync(filePath);
+    external.exec(`
+      CREATE TRIGGER rogue_after_insert
+      AFTER INSERT ON schema_migrations
+      BEGIN
+        SELECT 1;
+      END;
+    `);
+    external.close();
+    const before = rawRuntimeState(filePath);
+
+    for (const operation of [
+      () => ledger.appliedMigrations,
+      () => ledger.schemaVersion,
+      () => ledger.getByEventId(makeEvent(1).eventId),
+      () => ledger.append(makeEvent(2)),
+      () => ledger.appendBatch([makeEvent(2), makeEvent(3)]),
+    ]) {
+      assert.throws(
+        operation,
+        (error: unknown) =>
+          error instanceof ObservationLedgerMigrationError &&
+          /Migration metadata Schema manifest has drifted/.test(error.message),
+      );
+    }
+    assert.deepEqual(rawRuntimeState(filePath), before);
+  } finally {
+    ledger.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("every business read uses one validated SQLite snapshot", () => {
+  const operations = [
+    {
+      name: "getByEventId",
+      run: (ledger: ReturnType<typeof openFile>, event: NormalizedRuntimeEventV1) =>
+        ledger.getByEventId(event.eventId)?.event.sequence.value,
+      expected: 2,
+    },
+    {
+      name: "getByIdempotencyKey",
+      run: (ledger: ReturnType<typeof openFile>, event: NormalizedRuntimeEventV1) =>
+        ledger.getByIdempotencyKey(event.idempotencyKey)?.event.sequence.value,
+      expected: 2,
+    },
+    {
+      name: "readSession",
+      run: (ledger: ReturnType<typeof openFile>) =>
+        ledger.readSession("workspace-r2", "session-r2").map((row) => row.event.sequence.value),
+      expected: [2],
+    },
+    {
+      name: "readWorkspace",
+      run: (ledger: ReturnType<typeof openFile>) =>
+        ledger.readWorkspace("workspace-r2").map((row) => row.event.sequence.value),
+      expected: [2],
+    },
+    {
+      name: "countEvents",
+      run: (ledger: ReturnType<typeof openFile>) => ledger.countEvents(),
+      expected: 1,
+    },
+  ] as const;
+
+  for (const item of operations) {
+    const root = tempRoot();
+    const filePath = join(root, `${item.name}.sqlite`);
+    const ledger = openFile(filePath);
+    const event = makeEvent(2);
+    ledger.append(event);
+    const external = new DatabaseSync(filePath);
+    let injected = false;
+    try {
+      const result = withPrepareOverride(
+        (sql) =>
+          sql.includes("FROM runtime_events") &&
+          sql.includes("ORDER BY row_id ASC"),
+        (statement) =>
+          new Proxy(statement, {
+            get(target, property, receiver) {
+              if (property !== "all") return Reflect.get(target, property, receiver);
+              return (...args: unknown[]) => {
+                const rows = target.all(...args);
+                if (!injected) {
+                  injected = true;
+                  insertRuntimeEvent(external, makeEvent(1));
+                }
+                return rows;
+              };
+            },
+          }),
+        () => item.run(ledger, event),
+      );
+      assert.deepEqual(result, item.expected, item.name);
+      assert.equal(injected, true);
+
+      for (const integrityOperation of [
+        () => ledger.integrityCheck(),
+        () => ledger.assertIntegrity(),
+      ]) {
+        assert.throws(
+          integrityOperation,
+          (error: unknown) =>
+            error instanceof ObservationLedgerCorruptionError &&
+            error.rowId === 2 &&
+            error.previousSourceSequence === 2 &&
+            error.currentSourceSequence === 1,
+        );
+      }
+    } finally {
+      external.close();
+      ledger.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("batch conflicts and reverse sequence preserve the exact cursor state", () => {
+  const root = tempRoot();
+  try {
+    const laterPath = join(root, "later.sqlite");
+    const later = openFile(laterPath);
+    later.append(makeEvent(1));
+    const beforeLater = rawRuntimeState(laterPath);
+    assert.throws(
+      () => later.appendBatch([makeEvent(2), makeEvent(1, "conflict")]),
+      (error: unknown) =>
+        error instanceof ObservationLedgerConflictError &&
+        error.code === "conflict" &&
+        error.conflictKind === "source-slot" &&
+        error.eventId === makeEvent(1, "conflict").eventId,
+    );
+    assert.deepEqual(rawRuntimeState(laterPath), beforeLater);
+    later.close();
+
+    const internalPath = join(root, "internal.sqlite");
+    const internal = openFile(internalPath);
+    const beforeInternal = rawRuntimeState(internalPath);
+    assert.throws(
+      () => internal.appendBatch([makeEvent(1), makeEvent(1, "conflict")]),
+      (error: unknown) =>
+        error instanceof ObservationLedgerConflictError &&
+        error.code === "conflict" &&
+        error.conflictKind === "source-slot",
+    );
+    assert.deepEqual(rawRuntimeState(internalPath), beforeInternal);
+
+    assert.throws(
+      () => internal.appendBatch([makeEvent(2), makeEvent(1)]),
+      (error: unknown) =>
+        error instanceof ObservationLedgerSequenceError &&
+        error.code === "sequence" &&
+        error.sourceSequence === 1 &&
+        error.latestSourceSequence === 2 &&
+        error.stream.sequenceDomain === "rpc-jsonl",
+    );
+    assert.deepEqual(rawRuntimeState(internalPath), beforeInternal);
+    internal.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("DatabaseSync constructor and close failures use the stable sqlite contract", () => {
   const root = tempRoot();
   const directoryPath = join(root, "database-directory");
   mkdirSync(directoryPath);
+  const parentFile = join(root, "parent-file");
+  writeFileSync(parentFile, "not a directory", "utf8");
   try {
+    assert.throws(
+      () => openFile(join(parentFile, "ledger.sqlite")),
+      (error: unknown) =>
+        error instanceof ObservationLedgerError &&
+        error.code === "sqlite" &&
+        /Failed to open Observation Ledger/.test(error.message) &&
+        (error as any).cause instanceof Error &&
+        ["ENOTDIR", "EEXIST"].includes((error as any).cause.code),
+    );
+
     assert.throws(
       () => openFile(directoryPath),
       (error: unknown) =>

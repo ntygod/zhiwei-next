@@ -1184,22 +1184,22 @@ test("query execution failures are classified as sqlite errors", () => {
   const ledger = openMemory();
   try {
     ledger.append(makeEvent());
-    const cause = new Error("simulated replay query failure");
+    const cause = new Error("simulated validated-row query failure");
     (cause as Error & { code?: string }).code = "ERR_SQLITE_ERROR";
     assert.throws(
       () =>
         withPrepareOverride(
           (sql) =>
             sql.includes("FROM runtime_events") &&
-            sql.includes("WHERE workspace_id = ?") &&
-            !sql.includes("runtime_session_id = ?"),
+            sql.includes("ORDER BY row_id ASC") &&
+            !sql.includes("WHERE"),
           () => ({ all: () => { throw cause; } }),
           () => ledger.readWorkspace("workspace-a"),
         ),
       (error: unknown) =>
         error instanceof ObservationLedgerError &&
         error.code === "sqlite" &&
-        /replay Workspace workspace-a/.test(error.message) &&
+        /validate Observation Ledger read boundary/.test(error.message) &&
         (error as Error & { cause?: unknown }).cause === cause,
     );
   } finally {

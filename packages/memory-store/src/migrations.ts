@@ -151,6 +151,7 @@ const FORBIDDEN_MIGRATION_STATEMENT_LEADERS = new Set([
   "begin",
   "commit",
   "detach",
+  "end",
   "pragma",
   "release",
   "rollback",
@@ -315,7 +316,7 @@ function captureMigrationMetadataManifest(database: DatabaseSync): unknown {
       `SELECT type, name, sql
        FROM sqlite_schema
        WHERE name = 'schema_migrations'
-          OR name LIKE 'schema_migrations_reject_%'
+          OR (type = 'trigger' AND tbl_name = 'schema_migrations')
        ORDER BY type ASC, name ASC`,
     )
     .all() as Array<{
@@ -399,7 +400,9 @@ function assertMigrationSqlSafe(migration: ObservationLedgerMigration): void {
   }
 }
 
-function assertMigrationSet(migrations: readonly ObservationLedgerMigration[]): void {
+export function assertObservationLedgerMigrationSet(
+  migrations: readonly ObservationLedgerMigration[],
+): void {
   if (!Array.isArray(migrations) || migrations.length === 0) {
     migrationError("Observation Ledger migrations must contain version 1.");
   }
@@ -432,6 +435,19 @@ function assertMigrationSet(migrations: readonly ObservationLedgerMigration[]): 
     }
     assertMigrationSqlSafe(migration);
     names.add(migration.name);
+  }
+}
+
+function assertMigrationTransactionActive(
+  database: DatabaseSync,
+  migrationVersion: number | undefined,
+  phase: string,
+): void {
+  if (!database.isTransaction) {
+    migrationError(
+      `Migration ${String(migrationVersion)} ended the outer transaction during ${phase}.`,
+      migrationVersion,
+    );
   }
 }
 
@@ -555,7 +571,7 @@ export function assertObservationLedgerMigrationState(
   migrations: readonly ObservationLedgerMigration[] =
     DEFAULT_OBSERVATION_LEDGER_MIGRATIONS,
 ): readonly AppliedObservationLedgerMigration[] {
-  assertMigrationSet(migrations);
+  assertObservationLedgerMigrationSet(migrations);
   const state = inspectMigrationState(database, migrations);
   if (state.isNewDatabase) {
     migrationError("Observation Ledger migration metadata is not installed.");
@@ -568,7 +584,7 @@ export function applyObservationLedgerMigrations(
   options: ApplyObservationLedgerMigrationsOptions,
 ): readonly AppliedObservationLedgerMigration[] {
   const migrations = options.migrations ?? DEFAULT_OBSERVATION_LEDGER_MIGRATIONS;
-  assertMigrationSet(migrations);
+  assertObservationLedgerMigrationSet(migrations);
 
   const initial = inspectMigrationState(database, migrations);
   const pending = migrations.slice(initial.applied.length);
@@ -594,10 +610,12 @@ export function applyObservationLedgerMigrations(
   try {
     database.exec("BEGIN IMMEDIATE");
     began = true;
+    assertMigrationTransactionActive(database, currentVersion, "transaction start");
     phase = "install";
 
     if (initial.isNewDatabase) {
       database.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
+      assertMigrationTransactionActive(database, currentVersion, "metadata installation");
     }
 
     for (const migration of pending) {
@@ -609,17 +627,21 @@ export function applyObservationLedgerMigrations(
         `Migration ${migration.version} clock value`,
       );
       database.exec(migration.sql);
+      assertMigrationTransactionActive(database, migration.version, "migration SQL");
       database
         .prepare(
           `INSERT INTO schema_migrations (version, name, checksum, applied_at)
            VALUES (?, ?, ?, ?)`,
         )
         .run(migration.version, migration.name, checksum, appliedAt);
+      assertMigrationTransactionActive(database, migration.version, "history write");
     }
 
     const finalVersion = migrations.length;
     database.exec(`PRAGMA user_version = ${finalVersion}`);
+    assertMigrationTransactionActive(database, currentVersion, "user_version update");
     const result = assertObservationLedgerMigrationState(database, migrations);
+    assertMigrationTransactionActive(database, currentVersion, "migration-state validation");
 
     phase = "validate";
     options.validateAfterPending?.({
@@ -628,6 +650,7 @@ export function applyObservationLedgerMigrations(
       applied: result,
       pending,
     });
+    assertMigrationTransactionActive(database, currentVersion, "final validation");
 
     phase = "commit";
     database.exec("COMMIT");

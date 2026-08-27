@@ -119,16 +119,58 @@ export function normalizeSqlSchemaSignature(sql: string | null): string {
 export function sqlStatementLeadingKeywords(sql: string): readonly string[] {
   const leaders: string[] = [];
   let atStatementStart = true;
+  let createPrelude = false;
+  let createTrigger = false;
+  let triggerBody = false;
+  let triggerCaseDepth = 0;
+
+  const resetStatement = (): void => {
+    atStatementStart = true;
+    createPrelude = false;
+    createTrigger = false;
+    triggerBody = false;
+    triggerCaseDepth = 0;
+  };
 
   for (const token of tokenizeSqlSchema(sql)) {
-    if (token.kind === "punctuation" && token.value === ";") {
-      atStatementStart = true;
-      continue;
-    }
-    if (!atStatementStart) continue;
-    if (token.kind === "word") {
+    if (atStatementStart) {
+      if (token.kind === "punctuation" && token.value === ";") continue;
+      if (token.kind !== "word") continue;
       leaders.push(token.value);
       atStatementStart = false;
+      createPrelude = token.value === "create";
+      continue;
+    }
+
+    if (createPrelude && token.kind === "word") {
+      if (["temp", "temporary", "unique"].includes(token.value)) continue;
+      createTrigger = token.value === "trigger";
+      createPrelude = false;
+    }
+
+    if (createTrigger) {
+      if (!triggerBody && token.kind === "word" && token.value === "begin") {
+        triggerBody = true;
+        continue;
+      }
+      if (triggerBody && token.kind === "word") {
+        if (token.value === "case") {
+          triggerCaseDepth += 1;
+        } else if (token.value === "end") {
+          if (triggerCaseDepth > 0) triggerCaseDepth -= 1;
+          else triggerBody = false;
+        }
+        continue;
+      }
+      if (token.kind === "punctuation" && token.value === ";") {
+        if (!triggerBody) resetStatement();
+        continue;
+      }
+      continue;
+    }
+
+    if (token.kind === "punctuation" && token.value === ";") {
+      resetStatement();
     }
   }
 

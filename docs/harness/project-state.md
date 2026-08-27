@@ -86,7 +86,9 @@ SQLite Observation Ledger v1 的冻结方向与当前实现：
 - SQLite operational failure（包括 constructor/close）统一映射到稳定 `sqlite` error code，domain conflict与 corruption语义保持不变；
 - Schema SQL comparison保留 quoted CHECK/RAISE literal，公开API不允许migration override，pending installation一次原子提交；
 - Runtime与migration table拒绝 `INSERT OR REPLACE`/`REPLACE`历史改写，Row Cursor为正，并逐行验证同source stream sequence；
-- open、read与write均重新验证migration history、canonical applied_at与`PRAGMA user_version`。
+- open、read与write均重新验证migration history、canonical applied_at与`PRAGMA user_version`；任意名称但作用于metadata table的额外trigger也被精确manifest拒绝；
+- 每个正式read在单一显式SQLite snapshot内验证并从同一row集返回，防止validation/query间并发提交产生partial replay；
+- Migration在reference/target执行前拒绝顶层`END [TRANSACTION]`等控制语句，并使用`DatabaseSync.isTransaction`逐步证明外层事务仍存活；正式Runtime范围为Node.js `>=22.16.0 <23`。
 
 Issue #56 当前风险为 R2。PR #69 正在关闭第二轮 R2 cold review 的十项 blocker；修复后的新完整 HEAD 当前等待独立 R2 cold review，获得 `APPROVED` 前保持 Draft，不得转 Ready或合并。
 
