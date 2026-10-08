@@ -4,7 +4,7 @@
 
 Pi 是知微默认 Agent Runtime，但不是产品本体、长期记忆真源或领域协议。知微优先使用发布包提供的 SDK、Extension 与 RPC，不维护深度 Fork；所有上游语义先经过 `packages/pi-adapter` 防腐层，再进入 Runtime 中立协议。
 
-当前固定的是 **M0 契约基线**，不是生产依赖承诺。正式 `NormalizedRuntimeEvent v1` 由 `docs/architecture/normalized-runtime-event-v1.md` 与 ADR 0005 定义；Issue #49 / PR #66 合并前，Issue #56 不得消费 Draft branch，合并后只消费当时最新 `main` 上的协议。
+当前固定的是 **M0 契约基线**，不是生产依赖承诺。正式 `NormalizedRuntimeEvent v1` 由 `docs/architecture/normalized-runtime-event-v1.md` 与 ADR 0005 定义，已经由 Issue #49 / PR #66 合入；Issue #56 只消费最新 `main` 上的正式协议。
 
 ## 当前基线与证据
 
@@ -189,12 +189,12 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 ```text
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
-source run attempt           2
-source artifact              9308041130
-source artifact digest       sha256:9f7c3c1d0083d4f2c13467ba23f61301992e1b32a2b7f170f38aed6b2786c005
-comparison run attempt       1
-comparison artifact          9308008867
-comparison artifact digest   sha256:3ffa43228261c2de228dba070e9855203cff5dfce2c1925e22732ea1980edddc
+source run attempt           3
+source artifact              11536294836
+source artifact digest       sha256:e6e02dec7aa7132b56001a2a0cff286c15a1fb36dc7f2996f508d50ca8b5da72
+comparison run attempt       2
+comparison artifact          11537221975
+comparison artifact digest   sha256:945bf091ff9bbb6a0b30dee3188da6c687da8236ec3264b7bb18912fac052c51
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -203,7 +203,7 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-PR #66 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
+PR #71 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 
@@ -255,4 +255,4 @@ Capture launcher 以 Git blob SHA 固定历史源码，在 tmpfs 创建只读 ha
 
 ## 后续顺序
 
-Issue #49 / PR #66 完成 `NormalizedRuntimeEvent v1` 的 exact-HEAD 独立 R2 cold review、Ready gate 与受保护 squash merge；Issue #56 随后只从当时最新 `main` 创建合规分支，实现 append-only SQLite Observation Ledger。Daemon / Worker Supervisor 只能消费已合并协议与 Ledger。
+Issue #49 / PR #66 已完成正式协议交付。Issue #56 / PR #69 继续收口 append-only SQLite Observation Ledger；其后按[执行计划](../planning/execution-plan.md)推进 M0。Daemon / Worker Supervisor 只能消费已合并协议与 Ledger。

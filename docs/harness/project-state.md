@@ -10,7 +10,7 @@ updated: 2026-10-08
 
 本次整理对应 Issue #70 / PR #71。执行顺序以 [M0—M7 执行计划](../planning/execution-plan.md) 为准，当前仍是 [M0：能观察](../planning/milestone-m0.md)，没有进入记忆或完整 UI 阶段。计划随 PR #71 合入 main 后生效，其中的 Proposed 决策仍须分别取证、形成 ADR 并审查。
 
-2026-10-08 对账时，main 为 `843c09569360184592f3d5cecb3b1b165eba6af7`；PR #66 已合并，Issue #49 已关闭。正式 `NormalizedRuntimeEvent v1`、Pi 事件映射和契约 Fixture 已进入主分支；SQLite Ledger、正式 Worker/Daemon 链路和 CLI 查询回放尚未交付。README 和本文件此前将 #66 记为待完成的状态已在本次整理中纠正。
+2026-10-08 对账时，main 为 `843c09569360184592f3d5cecb3b1b165eba6af7`；PR #66 已合并，Issue #49 已关闭。正式 `NormalizedRuntimeEvent v1`、Pi 事件映射和契约 Fixture 已进入主分支；SQLite Ledger、正式 Worker/Daemon 链路和 CLI 查询回放尚未交付。本文件此前将 #66 记为待完成的状态已在本次整理中纠正，README 同步提供当前入口。
 
 本文件保存有日期的交接快照。开工时仍须实时核对 Incident、人类新输入、PR HEAD、CI 和分支，不能把下方历史 Fixture/审查身份当成当前候选批准。
 
@@ -68,18 +68,20 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 374015527ec80d0382d8ef52f61aff82380d102e
-capture workflow             32088804546
-capture artifact             9307625961
-capture artifact digest      sha256:25e523c899615c1afe06e6a108c37de161a6015c024a8c29b25087d51b3f0275
+capture head                 e2daad61f4433cc55a7bf1584b3d7a62d1f65bb5
+capture workflow             37746670390
+capture artifact             11535787397
+capture artifact digest      sha256:790ffd986ff162ca864f48dd9a08462c3000c1ce2d48528d34e38c52c0a75c12
 ```
+
+2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
 
 ## 已合入协议的 Fixture 与历史证据
 
 `NormalizedRuntimeEvent v1` 的协议、Pi Adapter、74-event Fixture、文档身份门禁与 Compaction start lineage 已通过 PR #66 合入。以下保留该 PR 的取证连续性，不再表示它是当前 WIP，也不能用于批准 #69：
 
-- SDK/RPC parity Manifest 绑定 PR #66 的成功 Draft Capture run `32088804546` 与 Artifact `9307625961`；
-- RPC Worker v2 绑定 PR #66 Draft 中同一 run `32090005181` 的 attempts 1/2；两次 Capture、Fresh validation、committed Fixture validation 和 Artifact upload 均成功，只有在完整对象相等后设置的受控 compare 步骤失败；
+- 历史 SDK/RPC parity Manifest 绑定 PR #66 的成功 Draft Capture run `32088804546` 与 Artifact `9307625961`；
+- 历史 RPC Worker v2 来源绑定 PR #66 Draft 中同一 run `32090005181` 的 attempts 1/2；两次 Capture、Fresh validation、committed Fixture validation 和 Artifact upload 均成功，只有在完整对象相等后设置的受控 compare 步骤失败；
 - 两个 RPC Worker Artifact 的唯一 `result.json` 逐字节一致，均为 72,731 bytes，SHA-256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`；
 - 临时 recapture 代码与 source-export workflow 未进入最终候选；合入代码使用正式完整对象比较路径。
 
