@@ -3,50 +3,36 @@
 - 状态：Proposed
 - 日期：2026-10-08
 - 计划决策：D-02；关联 D-03/D-09
-- 被取代关系：不取代 ADR 0006；不授权任何新表或迁移
+- 被取代关系：不取代 ADR 0006；本轮不注册任何新生产表或迁移
 
 ## 背景
 
-当前 Ledger 的完整 Schema manifest 故意拒绝额外用户表、索引和 trigger。`memory-store` 在公开 open、写入与正式读取边界验证安装态；M0-2 不能直接添加 Workspace/Session 表后禁用这些验证。[ADR 0006](0006-sqlite-observation-ledger-v1.md)要求已应用迁移不可变、合法 pending migration 原子提交。已有测试证明内部迁移失败原子回滚，但没有批准未来业务表或证明完整旧库升级产品路径。
+ADR 0006 的公开 Ledger 固定 migration 1，并在 open、append 和正式读取边界验证已安装 Schema 与行。M0-2 不能加 Workspace/Session 表后关闭完整验证。候选演进要保持旧 canonical event、cursor、自增状态及 history，并有失败/恢复证据。
 
-## 拟议决策
+## 有限决策文本
 
-优先评估同库、模块私有前向迁移与按已应用版本确定的完整 reference manifest。旧库迁移前先验证旧版本完整 Schema/行；在一笔事务内应用全部待执行迁移、history、user_version 并验证新 manifest，失败整体回滚。迁移之后继续拒绝任何不在批准 manifest 中的对象。新版本的合法新增对象不是允许任意额外对象的通行证。
+选择同库、模块私有前向迁移，按已应用版本选择完整 reference manifest。旧态先验证，在单一事务内应用全部 pending DDL/history/user_version 并验证新 manifest，失败回滚；COMMIT 后异常不能误报未提交。manifest 的本次准确对象范围是 table/index/trigger，并核对 quoted SQL signature、STRICT、table_xinfo/index_xinfo 等已实现属性；合法新对象必须进入对应版本 manifest，未知表/索引/trigger、弱化定义和坏旧态继续 fail closed。
 
-迁移 1 与其 history 校验保持不可变；新增 Schema 必须新版本，不向调用方开放 migrations/manifest override 或关闭完整验证。旧程序打开新版本库应 fail closed，不降级改写版本或静默删表。升级时应避免新旧应用并发写；具体 owner/锁定策略依赖 D-09，不能靠该文档假定已经解决。
+原 migration 1 与既有 history 不变；新增 Schema 必须新版本。公开 API 不接受 migrations/manifest override 或 skipValidation。旧二进制打开新版本明确失败，不静默删表、降级版本或覆盖历史。未来真实业务 Schema 须在独立任务接受，不能用本夹具合成表作为业务合同。
 
-同库是候选而非已经接受的数据库布局。若实验证明需分库，必须重新比较：各库真源、逻辑 Session 与 Runtime 事件的关联、跨库提交与 Outbox/对账边界、部分完成和恢复。分库不能被用于避开每库完整 manifest。
+view 当前不在原 manifest 枚举覆盖内。此次选择不保证任意 SQLite 对象全拒绝，也不把“允许 view”定为未来兼容合同；以后若引入 view 或扩大对象范围，必须显式扩展 validator/manifest 和正反测试，再评审实际迁移。
 
-## 备选方案与权衡
+旧态 prevalidation 在原 runner 的 BEGIN IMMEDIATE 之前；单 owner 合成实验不证明跨连接升级排他性或检查到使用之间无竞态。生产升级的 owner/epoch、旧 owner 复活、并发写入和在线备份前置仍由 D-09/M0-2 定案。不能把 SQLite 写事务推导成完整多 owner 协调。
 
-| 方案 | 收益 | 代价/结论 |
-|---|---|---|
-| 同库、版本化完整 manifest | 原子关联和单库恢复边界较清晰 | 升级协调、全量校验成本；优先实验 |
-| 分库、各自完整 manifest | 可以隔离演进和负载 | 跨库故障/确认点复杂；证据充分才选择 |
-| 添加表后忽略未知对象 | 接入方便 | 隐藏篡改，违反 ADR 0006；拒绝 |
-| 重写迁移 1 或暴露 override | 少写一次迁移 | 破坏历史/公开入口保障；拒绝 |
+## 备选方案
 
-## 证据与接受条件
+- 同库、版本化完整 manifest：选择，事务及恢复边界简单，保留全量验证成本。
+- 分库、各库独立 manifest：当前无需增加跨库提交/Outbox/对账复杂度；未来有真实证据再 supersede 本选择，仍不得关闭任一库的完整验证。
+- 忽略额外对象、重写 migration 1 或开放 override：破坏已接受边界，不选。
 
-现有证据见[不变量目录](../architecture/invariant-ownership-baseline.md)的 I-LEDGER-SCHEMA、I-LEDGER-IMMUTABILITY：未知表拒绝、checksum 漂移、事务逃逸、pending final validation 失败回滚。接受仍需下列完整条件。G-1c 的合成证据见下方，D-02 继续 Proposed：
+## 证据与审查
 
-1. 由未修改迁移 1 生成合成旧库，以候选新迁移升级并逐项保留已有 canonical event/cursor/history。
-2. 合法新增领域表通过新版本完整 manifest；同名弱化表、额外 trigger、未知表仍被拒绝。
-3. 在升级前、DDL/history 写入中、最终验证与 commit 边界注入失败；重开后只能看到完整旧态或完整新态，不存在部分状态。
-4. 旧二进制打开新库明确失败；恢复备份/前向修复路径有测试，不能以 revert 代码冒充降级数据库。
-5. 独立 R2 审查绑定正式 PR/完整 HEAD；D-02 登记 ADR、实验和审查来源。性能预算留给 D-03/G-5，不能为了实验变快删除全量验证。
+[G-1c 包内实验](../../packages/memory-store/fixtures/schema-evolution/README.md)用正式公共入口和未修改 migration 1 创建含 3 条虚构事件的旧文件库，经原内部 runner/validator 升级合成候选。覆盖旧行/cursor/history 完整保留、合法 STRICT 表与索引、未知/弱化对象拒绝、DDL/history/最终验证/commit 异常、原 validator 真拒绝缺索引、进程突然退出、旧程序拒新库和闭库备份恢复。
 
-这些是候选选择的最小验证条件，不创建未来表/包，不提前实现 M0-2。实验夹具使用合成数据库，不能使用真实个人资料。
+这不是生产升级 API，测试 seam 无公开 override；子进程退出不是断电/OS/设备损坏证明，闭库样本不是在线备份证明。[当前执行决议 D-02](../planning/current-decisions.md#d-02)维护范围/证据/审查。PR #79 实验批准不接受本决策，需新正式决策 HEAD 独立审查及最终新 HEAD cold review。
 
-### G-1c 的已运行有限证据
+## 后果、限制与回滚
 
-[Issue #78 的包内实验](../../packages/memory-store/fixtures/schema-evolution/README.md)使用未修改的 migration 1 和公开 Ledger 创建含 3 条虚构事件的真实旧文件库，再通过原内部 migration runner、原 manifest/row validator 升级候选合成表。覆盖完整旧行/cursor/history 保留、合法新表 STRICT/table_xinfo/index_xinfo、未知表/额外索引与 trigger、弱化定义、坏旧态拒绝、DDL/history/最终验证/commit 边界异常，以及突然进程退出和闭库备份恢复。原 validator 真正发现候选索引缺失与主动注入 throw 分开测试。COMMIT 后异常保留完整新态，不能将调用失败推断为未提交。
+同库方向减少当前跨库一致性负担，保留升级协调和全量校验成本。D-03/G-5 的性能预算与硬件持久性、D-09 并发、真实 Schema/生产接入仍待各自任务。本轮不交付 M0-2，不自动完成 G-1 或阶段门。
 
-该路径不是公开产品升级 API。唯一新增 seam 为同包内部测试复用，不能由 public index、open 参数或既有 Ledger 实例配置进入；正式入口仍使用固定 migration 1。候选表无业务含义，不注册未来 Session/Workspace Schema。子进程退出不证明断电或存储设备故障；闭库合成备份不证明在线备份或多 owner 协调。
-
-当前原 manifest 的明确覆盖是 table/index/trigger；独立观察脚本确认额外 view 尚不在此验证范围，这不是泄漏或损坏证据。后续选择须明确是否纳入 view，不能把“未知额外表拒绝”扩大成任意 SQLite 对象全拒绝。D-09 升级所有权、真实 Schema 与生产接入、D-03 性能/持久性、新 PR/完整 HEAD 的独立审查仍未闭合，本提案不标 Accepted。
-
-
-## 后果、兼容与回滚
-
-目前不改 Schema 或 runtime；只是给后续演进提供可证伪方案。文档可撤回，已应用迁移不能回退。未来选择被接受后仍须为实际 Schema PR 提供前向迁移和恢复证据。
+撤回决策资料即可回滚本轮，没有生产 Schema 变化。未来应用过的新迁移只允许前向修复或经验证恢复；代码 revert 不是数据库降级方案。

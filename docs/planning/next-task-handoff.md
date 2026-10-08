@@ -1,12 +1,15 @@
 # 下一执行上下文交接
 
-状态：当前导航更新至 G-1c / Issue #78；下方 #72/#69 内容保留为历史资料，不替代 live 对象核验。
+状态：当前导航更新至 Issue #80；下方 #72/#69 内容是历史资料，不替代 live 对象核验。
 
 ## 当前执行导航（2026-10-08）
 
-PR #77 已合入 `main@f1156747e94760e26f9ac3afdfc5accfbe52b98b`，#76 已关闭；G-1c 的 canonical Issue 为 [#78](https://github.com/ntygod/zhiwei-next/issues/78)，唯一分支 `spike/78-session-schema-evidence`。[决策实证说明](../spikes/g1-decision-evidence/README.md)连接 D-01 合成输入/revision 与 D-02 原 runner/validator 的真实临时 SQLite 演进实验，并保留 D-10 已合证据的精确历史身份。全部决策仍 Proposed，完整 G-1 未放行；候选 table/index/trigger 验证不外推任意 SQLite 对象、真实业务表、并发 owner 或硬件故障保证。
+起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，含 PR #77/#79 的有限实证。canonical Issue 为 [#80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`。当前范围、状态、逐项证据及保留前置只看[当前执行决议](current-decisions.md)与[表示说明](decision-execution-layer.md)；原登记、源 JSON 和原 checker 保持历史冻结语义。
 
-当前 PR/完整 HEAD/审查/CI 以 #78 实时对象为准；下一上下文先按[项目状态](../harness/project-state.md)对账，再复核本轮实验和有限决策缺口。若推进接受，先有真实实证 HEAD 的独立审查，再按受审的源快照/执行决议分离方案同步 ADR/登记/机器投影，并重新审最终 HEAD；本轮原11项Proposed冻结 checker 不变。不创建无实质实验的 finalizer PR，不用本轮新规则自授权正式入口。
+本轮先形成 Evidence Ready 的 D-01/02/10 有限选择，再用新 primary PR 的真实独立决策审查记录 Accepted；先前 PR #77/#79 批准仅属实验。状态登记后的新完整 HEAD 重新 cold review，不能自引用未来批准。G-1 原卡须单独验收，不从 Accepted 自动推导完成，也不以未来 Session/真实 Pi/动态 Host/D-03/04/09 产品门无限阻塞有限基线。G-1 真完成后按原依赖推进 G-2/G-3；#67 整体与 M0 仍未完成。
+
+先按[项目状态](../harness/project-state.md)及现行治理对账真实 PR/base/HEAD/CI/评论。Evidence Ready 候选只有当前实验文件与记录/历史 blob 一致时才就绪；Accepted 等终态保留被审候选的历史证据，不冻结后续产品源码，也不批准后续实现。ADR/决议范围改文必须重审，当前产品代码仍由其任务独立验证。不要创建 finalizer PR，不依本任务新规则授权受约束产品入口。
+
 ## 历史：#72 开工基线与当时产品目标
 
 - repository: `ntygod/zhiwei-next`

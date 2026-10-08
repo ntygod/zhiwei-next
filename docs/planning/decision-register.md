@@ -1,3 +1,8 @@
+# 原执行前决策登记：历史源快照
+
+以下正文逐字保存至 PR #79 的原始提案及取证导航，全部 Proposed 是来源状态，不是实时执行状态。唯一当前执行决议入口为 [当前执行决议](current-decisions.md)，由 current-decisions.json 生成；原专项 checker 继续校验本历史正文，不改其冻结断言。历史中的“目前”“当前”“尚未实现”仅指对应当时。
+
+<!-- original-decision-register:start -->
 # 执行前决策清单
 
 > 文档状态：Issue #72 的执行细化提案，随本项 PR 合入后生效；不是实现完成记录、ADR 批准或 PR 审查结论。

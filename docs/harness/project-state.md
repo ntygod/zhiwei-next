@@ -6,13 +6,13 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-1c 会话输入与 Schema 演进实证
+## 当前工作：G-1 有限执行决议
 
-2026-10-08 重新对账：`main@f1156747e94760e26f9ac3afdfc5accfbe52b98b` 已包含 PR #77 的 G-1b 静态包归属实验，以及 PR #75/#69 的 Proposed 架构资料和正式 SQLite Ledger。#76 已关闭；已合实验不是 D-10 接受，完整 G-1、正式 Worker/Daemon 和会话产品链仍未交付。
+2026-10-08 本项起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，已含 PR #77/#79 的静态包归属、合成输入和真实临时 SQLite 演进实证。canonical execution 为 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`；primary PR、完整 HEAD、CI 和独立审查以实时对象为准。
 
-当前 canonical execution 为 [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)，唯一工作分支 `spike/78-session-schema-evidence`。[G-1c 决策实证](../spikes/g1-decision-evidence/README.md)补齐可独立完成的 D-01 许可输入/revision 合成实验与 D-02 真实临时 SQLite 候选升级、失败回滚、旧版拒新库和闭库备份恢复。D-02 复用原 validator，不复制断言，不注册生产迁移；manifest 范围明确限 table/index/trigger。primary PR、最终 HEAD、真实 CI 和独立审查以 #78 实时关联为准，不预填批准。
+[当前执行决议](../planning/current-decisions.md)是单一执行状态入口，原源登记及 JSON 是历史 Proposed 快照；[状态层说明](../planning/decision-execution-layer.md)记录严格 opt-in 校验、有限范围和审查身份。D-01/02/10 本轮形成 Evidence Ready 候选；PR #77/#79 实验批准不能接受决策。正式接受需新本 PR 对真实决议 HEAD 的逐项独立审查，登记后的新完整 HEAD 再 cold review；不预填批准或合入。
 
-D-01/D-02/D-10 及 ADR 0007—0010 继续 Proposed；原源快照、专项冻结 checker、Workflow 与质量门不变。D-10 旧 PR #77 批准仅是该实验的历史证据；后续有限接受必须有新的真实 evidence/review HEAD、ADR/登记一致性和最终完整 HEAD 审查。当前不新增 Session、产品配置加载器、正式 Schema、ProviderHost 或新协议，不放行 G-2…G-5/M0-2。真实数据保留、owner/升级并发和性能/硬件持久性分别待 D-04/D-09/D-03。
+G-1 按原三项条件与失败路径单独验收，不因三个 Accepted 自动完成，也不要求先交付未来产品能力。基线真正完成后推进就绪的 G-2/G-3；D-04/G-2 保留授权、D-09 owner/升级并发、D-03/G-5 性能与硬件持久性仍约束相关产品实施。D-02 只覆盖 table/index/trigger/xinfo，view 未覆盖且旧态验证在 BEGIN IMMEDIATE 前。本项不实现 Session、生产迁移、Host 或新权限，不改原质量门。#67 整体、M0 与正式会话链仍未完成。
 
 以下 PR #71/#73/#69/#75 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。project-state 更新命中既有 Runtime 来源路径时，按现行合同取证，不为减少重采成本省略应有状态或修改门禁。
 

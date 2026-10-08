@@ -1,5 +1,7 @@
 # D-02 合成 Schema 演进实验
 
+> 历史取证说明：下文状态、当前任务及接受条件保留原实验时点语义；唯一当前决议状态和有限范围见[当前执行决议](../../../../docs/planning/current-decisions.md)。原实验批准不授权新的决策或 HEAD。
+
 状态：G-1c / [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78) 的 opt-in 实验。基线 `main@f1156747e94760e26f9ac3afdfc5accfbe52b98b`，工作分支 `spike/78-session-schema-evidence`。不是正式 migration 2、Workspace/Session Schema 或生产升级 API；D-02 / [ADR 0009](../../../../docs/adr/0009-ledger-schema-evolution-boundary.md) 仍 Proposed。
 
 ## 实际路径

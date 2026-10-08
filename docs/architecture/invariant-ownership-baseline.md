@@ -1,5 +1,7 @@
 # G-1 不变量归属与调用证据基线
 
+> 历史取证说明：下文状态、当前任务及接受条件保留原实验时点语义；唯一当前决议状态和有限范围见[当前执行决议](../planning/current-decisions.md)。原实验批准不授权新的决策或 HEAD。
+
 状态：**决策资料，不是运行时 registry 或 G-1 完成证明**。G-1a 已由 PR #75 合入；本轮取证基线为 `main@e2dfa854585cb8365c17ffea6b95a491ad8e8636`。当前工作为 [Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)，分支 `spike/76-invariant-ownership-evidence`；增加独立 opt-in 实验，不改产品实现、协议、迁移或质量门。
 
 ## 如何读取

@@ -1,5 +1,7 @@
 # D-01 合成输入重建实验
 
+> 历史取证说明：下文状态、当前任务及接受条件保留原实验时点语义；唯一当前决议状态和有限范围见[当前执行决议](../../planning/current-decisions.md)。原实验批准不授权新的决策或 HEAD。
+
 状态：独立 opt-in 决策实验；[D-01](../../planning/decision-register.md#d-01--会话合同模型输入重建及-m0m2-分工)与 [ADR 0008](../../adr/0008-session-record-reconstruction-boundary.md)仍为 Proposed。关联 [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)，分支 `spike/78-session-schema-evidence`。本目录只验证合成假设，不是 SessionContract、产品 API、真实模型请求采集器或 E0-09 正式 Runtime 端到端完成证据。实验起始基线为 `main@f1156747e94760e26f9ac3afdfc5accfbe52b98b`。
 
 ## 目标、范围与回滚

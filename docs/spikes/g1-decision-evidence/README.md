@@ -1,5 +1,7 @@
 # G-1c：会话输入与 Schema 演进的决策实证
 
+> 历史取证说明：下文状态、当前任务及接受条件保留原实验时点语义；唯一当前决议状态和有限范围见[当前执行决议](../../planning/current-decisions.md)。原实验批准不授权新的决策或 HEAD。
+
 状态：独立 opt-in Spike，关联 [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)，分支 `spike/78-session-schema-evidence`，起点 `main@f1156747e94760e26f9ac3afdfc5accfbe52b98b`。D-01、D-02、D-10 和 ADR 0007—0010 均保持 Proposed；本轮不把实验存在、旧批准或文档合入视为决策接受。
 
 ## 一个有限结果，两条真实实验路径

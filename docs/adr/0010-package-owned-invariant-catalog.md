@@ -2,46 +2,46 @@
 
 - 状态：Proposed
 - 日期：2026-10-08
-- 计划决策：D-10；G-1b / Issue #76 的包归属决策资料
-- 被取代关系：不取代已接受 ADR 0001—0006；从仍为 Proposed 的 ADR 0007 分出包归属责任，0007 保留核心/外壳与组合边界
+- 计划决策：D-10；G-1 包归属决策
+- 被取代关系：不取代 ADR 0001—0006；ADR 0007 保留核心/外壳和组合边界
 
 ## 背景
 
-#67 要求分别记录核心边界、会话记录和 package-owned Runtime Invariants。ADR 0007 同时讨论核心和包归属不等于该三项决策已被分别接受；本提案与 [ADR 0007](0007-hard-core-soft-shell-ownership.md)、[ADR 0008](0008-session-record-reconstruction-boundary.md)分别对应三项，ADR 0009 仍独立负责 Schema 演进，不能代替包归属。三项都保持 Proposed，父需求不自动完成。
+#67 的核心边界、会话记录及 package-owned Runtime Invariants 分别由 ADR 0007、0008、0010 承接；额外的 Schema ADR 0009 不是第三项核心 ADR 的替代。父项其他要求与产品能力不因这些决议自动完成。
 
-## 拟议决策
+## 有限决策文本
+
+每个不变量一个语义 owner，可以有多个 enforcement 调用点。选择现有包公开入口复用、单一目录生成视图和固定显式组合，不建立第二份 validator 或动态 capability registry。
 
 | 责任 | 唯一语义 owner | 消费者/机制 |
 |---|---|---|
-| ID/Scope 值与基础证据/置信度约束 | `domain` | Cognition/Compiler/Store 复用，不重新定义 |
-| Candidate 接受与 Claim 纠正 | `cognition-core` | 未来应用协调存储事务；Store 不判断事实真假 |
-| Scope 先过滤再排序的胶囊选择 | `context-compiler` | 未来检索/预算机制提供输入，不关闭过滤 |
-| Runtime-neutral 单事件与 Trace 合同 | `protocol` | Adapter 调用公开 create；Store 调用公开 parse，复用 protocol 核心断言 |
-| append-only、事务、Schema/行验证与 cursor | `memory-store` | SQLite 是当前唯一正式实现 |
-| Pi 字段投影及可观察来源差异 | `pi-adapter` | Pi 为执行机制；不得覆盖协议 owner |
-| 启停、调用顺序、依赖选择 | `apps/daemon` | 组合责任，不新增业务不变量副本 |
+| ID/Scope 与基础证据/置信度 | domain | Cognition/Compiler/Store 复用 |
+| Candidate 接受与 Claim 纠正 | cognition-core | 未来应用协调事务；Store 不判断真假 |
+| Scope 先过滤再排序 | context-compiler | 未来检索/预算不得关闭过滤 |
+| Runtime-neutral 单事件与 Trace | protocol | Adapter create / Store parse 复用核心断言 |
+| append-only、事务、Schema/行与 cursor | memory-store | SQLite 是当前唯一正式实现 |
+| Pi 投影及观察来源差异 | pi-adapter | 不覆盖协议 owner |
+| 启停、调用顺序、依赖选择 | apps/daemon | 组合责任，不复制业务不变量 |
 
-一项不变量只有一个语义 owner，可以有多个 enforcement 调用点。Adapter 的 createNormalizedRuntimeEventV1 与 Store 的 parseNormalizedRuntimeEventV1 是不同公开入口，内部复用 protocol 的核心形状/扩展断言；多处边界验证不是两个 owner；单事件与跨事件 Trace 是两个不同不变量，不能把 Trace 校验塞进任意 append 批次。跨包只走公开入口。现有 `memory-store → protocol` 已由 ADR 0006 和局部规则确定，不是此次提案新增依赖。
+Adapter create 与 Store parse 是不同公开入口，并非两个 owner；单事件和跨事件 Trace 是不同不变量，不能把 Trace 塞进任意 append 批次。跨包只用公开入口；memory-store → protocol 已由 ADR 0006 接受，不是本次新增依赖。
 
-[catalog.json](../spikes/invariant-ownership/catalog.json)是当前 13 项映射的唯一维护源，架构基线中的表格从它生成。每项包含局部审计 ID、唯一 owner、公开入口、正反测试的完整文件/精确名称、成熟度和明确限制。它是现状证据目录，不是产品 capability registry；语义和已实现行为仍由已接受 ADR、代码与测试决定。多处调用不复制语义 owner，也不复制 validator。
-
-实验通过固定公开模块 imports 核对真实导出和类自身的公开方法；通过真实 Node 测试执行核对名称和通过结果，不用注释/子串存在冒充测试。手工标注的正/反角色、owner 是否语义正确以及测试是否足够仍需独立审查。以后新增入口或包须按任务更新目录及实验，不能动态装载任意字符串模块。
+[catalog.json](../spikes/invariant-ownership/catalog.json)是现有 13 项映射的唯一维护源；生成架构视图，记录 owner、公开入口、精确正反测试、成熟度及限制。它描述证据，不是运行权限；代码/测试和已接受 ADR 才定义实际行为。固定 imports 验证真实导出/类自身方法，实际 Node 测试执行验证名称/结果，不能靠注释或字符串存在冒充执行。owner 的语义正确性与覆盖是否足够仍须独立审查。
 
 ## 备选方案
 
-- 保留纯手工表格：维护简单，但不能发现引用/生成漂移；不选作后续证据维护方式。
-- 为每个 Provider 再写 validator：重复现有协议与 Ledger 真源；拒绝。
-- 通用静态 registry/动态注册宿主：当前没有需要，扩大组合与生命周期合同；不引入。
-- 单一目录、生成视图、固定函数组合：拟选；用有限 opt-in 实验取证，接受前不接入正式产品或质量门。
+- 纯手工重复表格：容易漂移，不选。
+- 每 Provider 自带核心 validator：重复真源，不选。
+- 动态 Host/通用 registry：无实际替换需求，不选。
+- 单一目录、生成视图、现有公开入口与固定组合：选择；产品配置/Harness 分离由 ADR 0007 定义。
 
-核心不可由 Provider 关闭、产品配置与 Harness 分离的原则由 ADR 0007 持有；此处只记录 owner 和调用/证据映射，不另设配置 revision、Session 或生命周期 Host。
+## 证据与审查
 
-## 实证与接受边界
+[G-1b 实验](../spikes/invariant-ownership/README.md)覆盖重复 ID、缺/多 owner、无效包/导出/方法/精确测试和生成漂移；固定组合在 Provider 输入/SQLite I/O 前拒绝关闭/替换核心校验。有效声明真实运行现有 Adapter → protocol → 临时 Ledger，验证 WAL/重开/exact replay，坏数据仍被原核心拒绝。45 项 opt-in、其中单独引用 30 项已有测试、全仓 138 项分别计数，不相加。
 
-[G-1b 实验说明](../spikes/invariant-ownership/README.md)记录真实正负命令和限制：目录重复 ID、缺/多 owner、无效包/导出/方法/测试、生成漂移明确拒绝；固定组合拒绝重复能力及关闭/替换核心校验声明，拒绝发生于读取 Provider 输入和打开 SQLite 之前。有效声明走现有 Adapter→protocol→真实临时文件 Ledger，证明 WAL、重开和 exact replay；有效声明下坏数据仍被已有核心拒绝。
+[当前执行决议 D-10](../planning/current-decisions.md#d-10)是状态/范围/证据/审查的单一执行投影。PR #77 的实验批准不是决策接受；新正式决策与最终 HEAD 各自按现行治理审查。
 
-这些结果不证明动态 Provider 不可绕过、不证明恶意同进程代码隔离，也不证明 Daemon/真实 Worker 已组合。旧不变量的测试执行不是穷举覆盖承诺。实验可以支持后续接受有限 D-10，但接受仍须正式 PR/完整 HEAD 的新独立 R2 审查，ADR/决策登记/机器投影一致，且不得依靠本轮新规则授权本轮正式实现。D-01/D-02 和完整 G-1 仍各自待证。
+## 后果、限制与回滚
 
-## 后果、兼容与回滚
+目录有维护成本但消除手工双份表。接受方向不证明动态 Provider 不可绕过、恶意同进程隔离、sandbox、Daemon/真实 Worker 已组合、未来入口完整覆盖或完整记忆能力。新增入口仍须独立任务验证。G-1 按原卡单独验收，不自动完成 #67、M0 或后续产品工作。
 
-目录多一个生成步骤，但移除了手工双份表；opt-in 实验失败可定位到声明、真实入口或精确测试。没有改动产品公开 API、事件 v1、Schema、固定迁移或质量门。回退本实验与生成表/提案即可；不回退数据库，不删历史审计。以后正式入口接入需要独立任务与相应验证，不能将本目录直接当作运行权限。
+本轮不改产品 API、v1、Schema、迁移、CI 或合并门。撤回文档/执行状态资料即可；不回退数据库或删除审计历史。
