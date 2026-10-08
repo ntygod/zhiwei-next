@@ -13,20 +13,20 @@ The v1 base is not the current contract. It remains committed so the provenance 
 
 ```text
 source state                 captured
-capture head                 9d1a9477a6e75ab37e1c240af7e937189265468a
-workflow run                 37777086083
+capture head                 ed58bad330d36b37bb2bdc3a3ae045d321f49244
+workflow run                 37784271382
 source run attempt           2
-source artifact id           11550710794
-source artifact digest       sha256:2db63423bd12a588919b5ece4cdecc41e7faec7e754ec2d3c43c73cc5266c035
+source artifact id           11553691472
+source artifact digest       sha256:5c50686a8610d0b5da6ab72e28c5d457c88448b8e76aa40dfc01b02a44dbd609
 comparison run attempt       1
-comparison artifact id       11550421552
-comparison artifact digest   sha256:51983f7ad8fbd26ce479ad99d7f3caa5fac4be5baa048c22c2f39a5df3f2b381
+comparison artifact id       11553287747
+comparison artifact digest   sha256:10ba0c4e0a888c36335ad9ca0fd3b3f28833fd11c0bb75210261357ae9c55b73
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 byte-identical attempts      true
 ```
 
-Both controlled PR #77 Draft recapture attempts completed Worker capture, Fresh sanitization validation, committed-base validation and Artifact upload successfully. Their Workflow and Worker Job results remain `failure` because a temporary recapture-only guard failed the compare step only after formal Fresh/committed complete-object equality succeeded. The final repository restores the normal compare path. Ready-PR **Worker v2 live provenance** reads both immutable attempts, validates the exact Worker Job step outcomes, Artifact IDs/names/digests, downloads both ZIPs, extracts the unique `result.json`, checks byte identity, applies the current full normalizer and requires complete equality with the committed v2 object.
+Both controlled PR #79 Draft recapture attempts completed Worker capture, Fresh sanitization validation, committed-base validation and Artifact upload successfully. Their Workflow and Worker Job results remain `failure` because a temporary recapture-only guard failed the compare step only after formal Fresh/committed complete-object equality succeeded. The final repository restores the normal compare path. Ready-PR **Worker v2 live provenance** reads both immutable attempts, validates the exact Worker Job step outcomes, Artifact IDs/names/digests, downloads both ZIPs, extracts the unique `result.json`, checks byte identity, applies the current full normalizer and requires complete equality with the committed v2 object.
 
 ## Current committed identity
 

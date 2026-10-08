@@ -91,10 +91,10 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 1c0795929677729f035973a2c806c0840cdb67f1
-capture workflow             37776588065
-capture artifact             11549719639
-capture artifact digest      sha256:ad5673d798f4dab395c4d449737961b8c88100a07dc156c1bd1c1bc0a005aa9c
+capture head                 146ba51e0dd97f046174d2f3e4207a05c24421f5
+capture workflow             37783782584
+capture artifact             11553431732
+capture artifact digest      sha256:e2b700711fef82518d83c965f5334f98ae702df8c46126d45e7f267392379068
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
@@ -179,6 +179,10 @@ a1f9cd4 的产品冷审、138项测试与Draft CI通过后，Ready live provenan
 
 G-1a文档切片在83df4e09获独立R2，但Ready因当前PR来源关联被拒。现按[真实采集记录](../spikes/pi-runtime-contract/README.md)续期SDK与RPC来源，两Worker attempts的完整相等后受控CLI失败已明确记录，临时guard已恢复原blob。当前交付升R3，等待新最终完整HEAD的独立审查和fresh Ready CI；不复用83df批准，也不把来源更新视为新增产品能力。
 
-## 当前 PR #77 来源闭环状态
+## 历史 PR #77 来源闭环状态
 
 G-1b当前PR77已按[真实Runtime取证记录](../spikes/pi-runtime-contract/README.md)准备本PR成功SDK来源与Worker两attempt来源。完整比较成功后才制造受控CLI失败，最终CLI已恢复原blob；不改内容指纹与接受谓词。冷审修复文件包装器/空suite误计与入口键序重复后，实验45项、目录精确运行30项与全仓138项分别验证；来源续期使最终风险为R3，等待最终完整HEAD新独立审查与fresh Ready CI，不复用PR75审查或宣布D-10接受。
+
+## 当前 PR #79 来源闭环状态
+
+G-1c当前PR79已按[真实Runtime取证记录](../spikes/pi-runtime-contract/README.md)核对本PR成功SDK与Worker两attempt；完整比较成功后受控CLI失败的原日志/原ZIP均保留，CLI现已恢复原blob。D01 50项、D02 35项、既有G1b45项与全仓138项各自验证，不合加。仍等待新最终完整HEAD独立R3/fresh ReadyCI；不改变原11项Proposed，不宣称真实模型输入/生产升级/任意SQLite对象覆盖。
