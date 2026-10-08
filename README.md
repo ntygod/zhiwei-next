@@ -37,12 +37,15 @@ Pi Adapter → Pi Agent Runtime
 
 这一阶段只解决一件事：将 Pi 生命周期规范化为知微自己的不可变 Observation，并能够可靠保存、查询和回放。记忆提取、向量检索、主动提醒和桌面端均不属于 M0。
 
+`NormalizedRuntimeEvent v1` 已通过 PR #66 合入；SQLite Ledger 仍由 Issue #56 / Draft PR #69 承接，尚未成为主分支能力。后续开发从[项目状态](docs/harness/project-state.md)核对当前工作，再按[执行计划](docs/planning/execution-plan.md)的依赖和阶段门推进。
+
 详细计划见：
 
 - [产品愿景](docs/product/product-vision.md)
 - [系统架构](docs/architecture/system-architecture.md)
 - [领域模型](docs/architecture/domain-model.md)
 - [路线图](docs/planning/roadmap.md)
+- [M0—M7 执行计划与任务依赖](docs/planning/execution-plan.md)
 - [M0 实施计划](docs/planning/milestone-m0.md)
 - [UI 设计总纲](docs/product/ui-design.md)
 - [低保真交互原型](docs/design/prototype/index.html)
@@ -101,4 +104,4 @@ docs/
 
 ## 许可证
 
-仓库当前处于私有孵化阶段，暂标记为 `UNLICENSED`。在首次公开发布前单独完成许可证决策，不默认沿用旧仓库许可证。
+仓库当前公开可读，许可证仍标记为 `UNLICENSED`；公开仓库不表示已授予开源许可。在首次产品发布前单独完成许可证决策，不默认沿用旧仓库许可证。

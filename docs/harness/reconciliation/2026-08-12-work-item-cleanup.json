@@ -72,6 +72,12 @@
       "expectedHead": "0da4e97e5cac42add96a55285976a93afd992495",
       "action": "preserve-snapshot",
       "reason": "substantive pre-governance code for Issue #56; frozen and blocked until #49"
+    },
+    {
+      "branch": "feat/m0-sqlite-observation-ledger-v1",
+      "expectedHead": "5d5aef1dd7bfd7b6b7812a9b0d4975dbd7963af0",
+      "action": "delete-branch",
+      "reason": "Issue #70 / PR #71 reconciliation on 2026-10-08: PR #68 is closed and superseded by #69; product parent 9126ca35e4afbc2c137cfa8978e0eae7bd97529f is retained in #69, and this exact head adds only the obsolete issue56-ledger-bootstrap workflow. Preserve the earlier snapshot record as history; never delete a moved or active branch."
     }
   ],
   "safety": {
