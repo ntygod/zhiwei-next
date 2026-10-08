@@ -19,6 +19,19 @@ on:
       - docs/spikes/pi-runtime-contract/README.md
       - docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md
       - docs/architecture/pi-integration.md
+      - .node-version
+      - .npmrc
+      - package-lock.json
+      - tsconfig.json
+      - toolchain.json
+      - scripts/typecheck.mjs
+      - scripts/check-toolchain.mjs
+      - scripts/toolchain.test.mjs
+      - scripts/toolchain-environment.mjs
+      - scripts/install-toolchain.mjs
+      - scripts/formal-toolchain.sh
+      - scripts/diagnose-pi-root-types.mjs
+      - packages/pi-adapter/src/pi-client-types.test.ts
   push:
     branches: [main]
     paths:
@@ -36,6 +49,19 @@ on:
       - docs/spikes/pi-runtime-contract/README.md
       - docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md
       - docs/architecture/pi-integration.md
+      - .node-version
+      - .npmrc
+      - package-lock.json
+      - tsconfig.json
+      - toolchain.json
+      - scripts/typecheck.mjs
+      - scripts/check-toolchain.mjs
+      - scripts/toolchain.test.mjs
+      - scripts/toolchain-environment.mjs
+      - scripts/install-toolchain.mjs
+      - scripts/formal-toolchain.sh
+      - scripts/diagnose-pi-root-types.mjs
+      - packages/pi-adapter/src/pi-client-types.test.ts
   workflow_dispatch:
   schedule:
     - cron: "29 3 * * 1"

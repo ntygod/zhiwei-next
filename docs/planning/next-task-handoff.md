@@ -1,6 +1,10 @@
 # 下一执行上下文交接
 
-状态：当前导航更新至 Issue #80；下方 #72/#69 内容是历史资料，不替代 live 对象核验。
+状态：当前导航为 Issue #82 / PR #83；下方 #80/#72/#69 内容是历史资料，不替代 live 对象核验。
+
+## 当前 G-3a 导航（2026-10-08）
+
+G-1 已经 PR #81 在 main@4a565f0f26ba747275d4a024e0f1211b24f65acf 受保护交付，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #83，分支 chore/82-formal-toolchain。有限[工具链支持面](../architecture/formal-toolchain.md)不批准 D-07 整体、生产 SDK/RPC 路径或 M0-4；root SDK 声明缺陷明确保留。原工作包 JSON、原 checker、Accepted ADR 范围与历史证据保持不变。接续时先核当前 HEAD 的独立 R3、完整 check、fresh 动态矩阵、Ready CI 与来源回读，禁止借旧批准跳过。
 
 ## 当前执行导航（2026-10-08）
 

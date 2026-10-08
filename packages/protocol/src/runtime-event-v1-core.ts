@@ -297,7 +297,7 @@ export function createNormalizedRuntimeEventV1(input: NormalizedRuntimeEventDraf
   validateNormalizedRuntimeEventSnapshotV1(snapshot);
   return snapshot;
 }
-function validateNormalizedRuntimeEventSnapshotV1(snapshot: JsonValue): asserts snapshot is NormalizedRuntimeEventV1 {
+function validateNormalizedRuntimeEventSnapshotV1(snapshot: unknown): asserts snapshot is NormalizedRuntimeEventV1 {
   if (!isRecord(snapshot)) throw new TypeError("NormalizedRuntimeEvent v1 must be an object");
   validateCommon(snapshot, false);
   if (!/^nre1_[0-9a-f]{64}$/.test(String(snapshot.eventId))) {

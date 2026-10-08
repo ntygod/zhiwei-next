@@ -5,10 +5,11 @@
   "type": "module",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=22.16.0 <23"
+    "node": "22.23.1",
+    "npm": "10.9.8"
   },
   "scripts": {
-    "check": "npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:normalized-runtime-event-v1 && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run check:pi-rpc-worker-lifecycle && npm run test",
+    "check": "npm run check:toolchain && npm run typecheck && npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:normalized-runtime-event-v1 && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run check:pi-rpc-worker-lifecycle && npm run test",
     "test": "node scripts/test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:agents": "node scripts/check-agents.mjs",
@@ -41,6 +42,16 @@
     "probe:pi:sdk-rpc-parity": "PI_LIFECYCLE_SCENARIO=sdk-rpc-parity PI_LIFECYCLE_CAPTURE_SCRIPT=scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "probe:pi:rpc-worker-lifecycle": "PI_LIFECYCLE_SCENARIO=rpc-worker-lifecycle PI_LIFECYCLE_CAPTURE_SCRIPT=packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs node scripts/probes/pi-lifecycle-ci.mjs",
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
-    "start:cli": "node --experimental-strip-types apps/cli/src/index.ts"
+    "start:cli": "node --experimental-strip-types apps/cli/src/index.ts",
+    "typecheck": "node scripts/typecheck.mjs",
+    "check:toolchain": "node scripts/check-toolchain.mjs && node --test scripts/toolchain.test.mjs",
+    "install:toolchain": "sh scripts/formal-toolchain.sh install",
+    "diagnose:pi-root-types": "node scripts/diagnose-pi-root-types.mjs"
+  },
+  "packageManager": "npm@10.9.8",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3"
   }
 }

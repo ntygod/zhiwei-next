@@ -122,12 +122,16 @@ export function snapshotJsonValue(
   return visit(input, "$", 0);
 }
 
+function isJsonArray(value: JsonValue): value is readonly JsonValue[] {
+  return Array.isArray(value);
+}
+
 function stringifySnapshot(value: JsonValue): string {
   if (value === null || typeof value === "boolean" || typeof value === "number") {
     return JSON.stringify(value);
   }
   if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stringifySnapshot).join(",")}]`;
+  if (isJsonArray(value)) return `[${value.map(stringifySnapshot).join(",")}]`;
   return `{${Object.keys(value)
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stringifySnapshot(value[key])}`)

@@ -1,3 +1,4 @@
+import { ids } from "../../domain/src/index.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -43,7 +44,9 @@ test("Observation Ledger exact-head validation runs in the declared Node range",
   const packageJson = JSON.parse(
     readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
   ) as { engines?: { node?: string } };
-  assert.equal(packageJson.engines?.node, ">=22.16.0 <23");
+  // G-3a pins a tested patch inside ADR 0006's existing supported Ledger range.
+  assert.equal(packageJson.engines?.node, "22.23.1");
+  assert.equal(process.versions.node, packageJson.engines.node);
 });
 
 const RUNTIME_COLUMNS = [
@@ -85,8 +88,8 @@ function sha256(value: string): string {
 function makeEvent(sequence: number, suffix = ""): NormalizedRuntimeEventV1 {
   return createNormalizedRuntimeEventV1({
     protocolVersion: 1,
-    workspaceId: "workspace-r2",
-    runtimeSessionId: "session-r2",
+    workspaceId: ids.workspace("workspace-r2"),
+    runtimeSessionId: ids.session("session-r2"),
     runtimeInstanceId: "instance-r2",
     source: {
       adapter: "pi-rpc-v1",

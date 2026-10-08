@@ -227,7 +227,7 @@ export function assertReplayableNormalizedRuntimeEventTraceV1(
   const requiredUnknown = events.find(
     (event) => event.data.kind === "runtime.unknown" && event.compatibility === "required",
   );
-  if (requiredUnknown) {
+  if (requiredUnknown?.data.kind === "runtime.unknown") {
     throw new TypeError(
       `required unknown Runtime event blocks replay: ${requiredUnknown.data.sourceType}`,
     );

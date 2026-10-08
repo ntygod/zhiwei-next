@@ -37,7 +37,7 @@ Pi Adapter → Pi Agent Runtime
 
 这一阶段只解决一件事：将 Pi 生命周期规范化为知微自己的不可变 Observation，并能够可靠保存、查询和回放。记忆提取、向量检索、主动提醒和桌面端均不属于 M0。
 
-`NormalizedRuntimeEvent v1` 已通过 PR #66 合入，SQLite Ledger 已通过 PR #69 合入。PR #75/#77/#79 已建立 G-1 决策资料及合成实证；当前 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)维护[有限执行决议](docs/planning/current-decisions.md)，D-01/02/10 的有限方向已依据 PR #81 的真实历史逐项审查记录 Accepted。[G-1 原卡逐项验收](docs/planning/g1-baseline-acceptance.md)显示本 PR 候选实质条件满足，状态登记后的新完整 HEAD 仍待最终独立审查、CI 与合入；#67 整体、M0 和正式 Worker/Daemon 会话链仍未完成。后续从[项目状态](docs/harness/project-state.md)核对真实工作，再按[执行计划](docs/planning/execution-plan.md)推进。
+`NormalizedRuntimeEvent v1` 与 SQLite Ledger 已通过 PR #66/#69 合入。G-1 有限决议与逐项验收已由 PR #81 合入 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf`；D-01/02/10 仅在[登记的范围](docs/planning/current-decisions.md)内 Accepted。当前 [Issue #82 / PR #83](https://github.com/ntygod/zhiwei-next/pull/83)推进 G-3a [正式工具链](docs/architecture/formal-toolchain.md)：完整 TypeScript 检查、固定依赖和有限官方 Pi client 类型面。该候选不等于 G-3/D-07/M0-4 完成；root SDK 声明仍有明确未支持缺陷，#67 整体、M0 和正式 Worker/Daemon 链仍未完成。
 
 详细计划见：
 
@@ -52,10 +52,13 @@ Pi Adapter → Pi Agent Runtime
 
 ## Bootstrap 运行方式
 
-当前骨架刻意保持**零第三方依赖**，使用 Node.js 22 的类型擦除能力运行 TypeScript。M0 的 Pi 适配器技术验证完成后，再固定 Pi、TypeScript 编译器和包管理器版本。
+固定 Node 22.23.1 / npm 10.9.8 / TypeScript 5.9.3。先完成无凭证隔离安装，再执行真实 strict noEmit 编译和原有 Node 类型擦除行为测试；支持边界与 root SDK 声明限制见[工具链说明](docs/architecture/formal-toolchain.md)。
 
 ```bash
-# 架构约束 + 全部测试
+# 精确依赖安装（临时 HOME/cache，禁止 lifecycle scripts）
+sh scripts/formal-toolchain.sh install
+
+# 严格类型检查 + 架构约束 + 全部测试
 npm run check
 
 # 启动本地 Daemon（默认 http://127.0.0.1:4265）
@@ -65,7 +68,7 @@ npm run start:daemon
 npm run start:cli -- doctor
 ```
 
-> Node.js 的 Type Stripping 在 Node 22 中仍可能输出实验性提示；这是 Bootstrap 阶段的临时选择，不是最终构建方案。
+> Node.js 的 Type Stripping 在 Node 22 中仍可能输出实验性提示；运行时擦除与编译检查是两条独立验证路径；正式构建/生产执行路径仍待后续里程碑。
 
 ## 仓库结构
 

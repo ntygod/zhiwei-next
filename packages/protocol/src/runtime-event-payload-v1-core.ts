@@ -327,8 +327,8 @@ function safeInteger(value: unknown, label: string, minimum = 0): void {
     throw new TypeError(`${label} must be a safe integer >= ${minimum}`);
   }
 }
-function oneOf(value: unknown, allowed: readonly string[], label: string): void {
-  if (typeof value !== "string" || !allowed.includes(value)) {
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): asserts value is T {
+  if (typeof value !== "string" || !allowed.some((candidate) => candidate === value)) {
     throw new TypeError(`${label} is unsupported`);
   }
 }
