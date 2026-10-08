@@ -160,15 +160,15 @@ Capture要求实际Response、`stateDuring`和ordering summary互相一致。Run
 
 ## v2 Artifact、Fixture与 live provenance
 
-PR #83 Draft中的两次受控recapture attempt均完成Worker capture、Fresh validation、committed Fixture validation和Artifact upload；正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Job整体保持failure。两个不可变Artifact各有一个72,731字节`result.json`且逐字节一致：
+PR #85 Draft中的两次受控recapture attempt均完成Worker capture、Fresh validation、committed Fixture validation和Artifact upload；正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Job整体保持failure。两个不可变Artifact各有一个72,731字节`result.json`且逐字节一致：
 
 ```text
 source run attempt           2
-source artifact              11572794687
-source artifact digest       sha256:6ca1f21586cbfdc47b5bb0dbc1e79b0c9229a486d9fd580c4111efc81b4e24b8
+source artifact              11577764963
+source artifact digest       sha256:5d276a490ea551292ce420ea0b9d8e6bf31190a7ee466b0dad4a8220b2a204d2
 comparison run attempt       1
-comparison artifact          11573452055
-comparison artifact digest   sha256:1ec0fd3ddc2071ca7f5b48d7eaa78b19c84bceb7d8159963d3dfca30bf368ed6
+comparison artifact          11577365916
+comparison artifact digest   sha256:3307b1b8cc14a22ce5469661f8f1c92255b8a3ebd1043aa69047694a5a5a9201
 artifact JSON sha256         87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
 canonical JSON sha256        1b2fd8aabbc3d76f0c9538db9f4c9cdd47a717ee9610d3cd564bb9d36531638a

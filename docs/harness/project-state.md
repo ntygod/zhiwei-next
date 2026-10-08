@@ -14,6 +14,8 @@ canonical 为 [Issue #84](https://github.com/ntygod/zhiwei-next/issues/84)，唯
 
 Node 22.23.1 真实隔离 HTTP 先复现旧入口风险，新增负例验证拒绝；本地无 Docker，动态矩阵由原 CI 执行。有限 ADR 待真实独立决策审查后才可接受，之后新完整 HEAD 仍需独立 R3、fresh Ready CI、受保护交付及来源回读。D-04/D-08、G-2 整体以及文件路径/工具注入/Private 外发/正文与 Claim/cache/backup 保留未完成，不解锁 M0-3/4/5/7 或 #67。
 
+当前 PR #85 已按[Runtime 来源记录](../spikes/pi-runtime-contract/README.md#2026-10-08-pr-85-当前来源续期)核对本 PR 成功 SDK 与 Worker 两个 attempts 的原 ZIP、唯一 JSON、严格 Checker 及完整对象相等。Worker 两次在完整比较成功后由明确 guard 产生受控 CLI failure，并非 Runtime 故障；原 CLI blob 已在 `2b70d98c71534519bda1c373206075691f2bb8bf` 恢复。来源 metadata 更新不改变内容指纹、既有 G-1 决议或本项 ADR 状态；最终完整 HEAD 仍须新独立 R3、fresh Ready CI 与真实 live provenance 成功。
+
 以下 G-3a、G-1 与更早段落保留为历史工作快照，包含当时的 Proposed/待审状态和机器锚点，不表示当前 WIP 或批准。
 
 ## 历史工作：G-3a 固定工具链与完整类型检查
@@ -107,14 +109,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本连续性表按现行 Harness 与 manifest 同步至 PR #83；PR #81 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
+本连续性表按现行 Harness 与 manifest 同步至 PR #85；PR #83 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 2d70ea8fe05277b9cad241b4238ed88d9744fbe1
-capture workflow             37822256937
-capture artifact             11569408126
-capture artifact digest      sha256:bca83082df22cddba1157bbfcaded5761fe6d71bd579c166f1c40d2e514f5eea
+capture head                 676494c0afe1729c7fb0f2381e1928b4baa8b477
+capture workflow             37839141100
+capture artifact             11577131301
+capture artifact digest      sha256:87b1373e9c21886d38f53b494a02ff530aebc3b67463eb4f7b24a9914df24604
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
