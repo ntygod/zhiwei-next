@@ -37,7 +37,7 @@ Pi Adapter → Pi Agent Runtime
 
 这一阶段只解决一件事：将 Pi 生命周期规范化为知微自己的不可变 Observation，并能够可靠保存、查询和回放。记忆提取、向量检索、主动提醒和桌面端均不属于 M0。
 
-`NormalizedRuntimeEvent v1` 与 SQLite Ledger 已通过 PR #66/#69 合入。G-1 有限决议与逐项验收已由 PR #81 合入 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf`；D-01/02/10 仅在[登记的范围](docs/planning/current-decisions.md)内 Accepted。当前 [Issue #82 / PR #83](https://github.com/ntygod/zhiwei-next/pull/83)推进 G-3a [正式工具链](docs/architecture/formal-toolchain.md)：完整 TypeScript 检查、固定依赖和有限官方 Pi client 类型面。该候选不等于 G-3/D-07/M0-4 完成；root SDK 声明仍有明确未支持缺陷，#67 整体、M0 和正式 Worker/Daemon 链仍未完成。
+`NormalizedRuntimeEvent v1` 与 SQLite Ledger 已通过 PR #66/#69 合入。G-1 有限决议与逐项验收已由 PR #81 合入 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf`；D-01/02/10 仅在[登记的范围](docs/planning/current-decisions.md)内 Accepted。G-3a [正式工具链](docs/architecture/formal-toolchain.md)已由 PR #83 合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`。当前 [Issue #84 / PR #85](https://github.com/ntygod/zhiwei-next/pull/85)保护现有 health/meta 与 doctor 的[有限本地诊断通道](docs/architecture/local-diagnostics.md)，需要用户明确配置凭据。G-2/G-3、D-04/D-07/D-08 整体仍未完成，root SDK 声明仍有明确未支持缺陷；#67、M0 与正式 Worker/Daemon 链仍未完成。
 
 详细计划见：
 
@@ -61,12 +61,16 @@ sh scripts/formal-toolchain.sh install
 # 严格类型检查 + 架构约束 + 全部测试
 npm run check
 
+# 先由用户或可信启动器向两个进程注入同一个 ZHIWEI_DIAGNOSTIC_TOKEN
+# 必填 64 字符十六进制值；此处不提供或保存实际凭据
 # 启动本地 Daemon（默认 http://127.0.0.1:4265）
 npm run start:daemon
 
 # 另一个终端检查状态
 npm run start:cli -- doctor
 ```
+
+配置、兼容变化、错误类别和未保证边界见[本地诊断说明](docs/architecture/local-diagnostics.md)。未配置凭据时 Daemon/doctor 在 I/O 前失败；help/version 不受影响。
 
 > Node.js 的 Type Stripping 在 Node 22 中仍可能输出实验性提示；运行时擦除与编译检查是两条独立验证路径；正式构建/生产执行路径仍待后续里程碑。
 

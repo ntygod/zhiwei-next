@@ -1,8 +1,14 @@
 # 下一执行上下文交接
 
-状态：当前导航为 Issue #82 / PR #83；下方 #80/#72/#69 内容是历史资料，不替代 live 对象核验。
+状态：当前导航为 Issue #84 / PR #85；下方 #82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
 
-## 当前 G-3a 导航（2026-10-08）
+## 当前 G-2a 导航（2026-10-08）
+
+G-3a 已由 PR #83 受保护合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #85，分支 `feat/84-protected-local-diagnostics`，canonical Issue #84。只保护现有 health/meta/doctor，配置与真实负例见[本地诊断](../architecture/local-diagnostics.md)。ADR 0012 已按本 PR [真实有限决策审查](https://github.com/ntygod/zhiwei-next/pull/85#issuecomment-6069198884)记 Accepted，历史被审 HEAD/正文摘要见项目状态；状态更新后的新完整 HEAD 仍须全新独立 R3/fresh Ready，不继承历史候选或 G-3a 批准。
+
+D-04/D-08 聚合与 G-2 其余保留/路径/工具/模型边界仍未完成，不解锁 M0。保留原源 JSON、原 checker、Accepted ADR 与历史机器锚点。接续先核 live HEAD、全部 check、适用动态矩阵和当前 PR 来源；不要为了省略 recapture 改 gate。
+
+## 历史 G-3a 导航（2026-10-08）
 
 G-1 已经 PR #81 在 main@4a565f0f26ba747275d4a024e0f1211b24f65acf 受保护交付，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #83，分支 chore/82-formal-toolchain。有限[工具链支持面](../architecture/formal-toolchain.md)不批准 D-07 整体、生产 SDK/RPC 路径或 M0-4；root SDK 声明缺陷明确保留。原工作包 JSON、原 checker、Accepted ADR 范围与历史证据保持不变。接续时先核当前 HEAD 的独立 R3、完整 check、fresh 动态矩阵、Ready CI 与来源回读，禁止借旧批准跳过。
 
