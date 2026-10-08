@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { writeCurrentDecisionsView } from "./write-current-decisions-view.mjs";
 import test from "node:test";
 import { readFileSync, mkdtempSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -211,3 +214,112 @@ test("Accepted reviewed candidate blob absence fails closed", () => {
   f.io.blob = (head, p) => { if (head === REVIEW_HEAD && p === path) throw new Error("Reviewed candidate Git blob unavailable"); return blob(head, p); };
   assert.throws(() => validateCurrentDecisions(f.data, f.io), /Reviewed candidate Git blob unavailable/);
 });
+
+function viewWorkspace(run) {
+  const directory = mkdtempSync(join(tmpdir(), "zhiwei-view-write-"));
+  const parent = join(directory, "docs/planning");
+  fs.mkdirSync(parent, { recursive: true });
+  const target = join(directory, VIEW_PATH);
+  const source = join(directory, SOURCE.path);
+  fs.writeFileSync(target, "previous view\n"); fs.writeFileSync(source, "frozen source\n");
+  try { run({ directory, parent, target, source }); }
+  finally { rmSync(directory, { recursive: true, force: true }); }
+}
+function noTemporaryFiles(parent) { assert.deepEqual(fs.readdirSync(parent).filter((name) => name.startsWith(".current-decisions.md.")), []); }
+function cliWorkspace(run) {
+  const temp = mkdtempSync(join(tmpdir(), "zhiwei-view-cli-"));
+  const directory = join(temp, "repository");
+  try {
+    execFileSync("git", ["clone", "--shared", "--quiet", root, directory], { stdio: "pipe" });
+    // Exercise this worktree's proposed CLI even before it is committed; history remains real.
+    for (const path of ["scripts/check-current-decisions.mjs", "scripts/current-decisions.mjs", "scripts/write-current-decisions-view.mjs"]) fs.copyFileSync(join(root, path), join(directory, path));
+    const target = join(directory, VIEW_PATH); const source = join(directory, SOURCE.path);
+    const before = fs.readFileSync(source);
+    const execute = () => spawnSync(process.execPath, ["scripts/check-current-decisions.mjs", "--write-view"], { cwd: directory, encoding: "utf8" });
+    run({ directory, target, source, before, execute });
+    assert.deepEqual(fs.readFileSync(source), before, "CLI must preserve frozen source bytes on success or failure");
+    noTemporaryFiles(join(directory, "docs/planning"));
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+}
+for (const [name, setUp] of [
+  ["source symlink", ({ target }) => { fs.unlinkSync(target); fs.symlinkSync("work-packages.json", target); }],
+  ["dangling symlink", ({ target }) => { fs.unlinkSync(target); fs.symlinkSync("missing-source.json", target); }],
+  ["source hard link", ({ target, source }) => { fs.unlinkSync(target); fs.linkSync(source, target); }],
+  ["directory target", ({ target }) => { fs.unlinkSync(target); fs.mkdirSync(target); }],
+]) {
+  test(`real CLI refuses ${name} without modifying frozen source or reporting success`, () => cliWorkspace((f) => {
+    setUp(f); const result = f.execute();
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.ok(!result.stdout.includes("Original source/checker bytes preserved."));
+    assert.match(result.stderr, /Unsafe output target|hard link/);
+  }));
+}
+test("real CLI refuses linked parent directory and preserves source", () => cliWorkspace((f) => {
+  const parent = join(f.directory, "docs/planning"); const moved = join(f.directory, "docs/planning-original");
+  fs.renameSync(parent, moved); fs.symlinkSync("planning-original", parent);
+  const result = f.execute(); assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Symlink|Unsafe output parent/);
+  assert.ok(!result.stdout.includes("Original source/checker bytes preserved."));
+}));
+test("real CLI atomically creates missing view and regenerates an existing regular view", () => cliWorkspace((f) => {
+  fs.unlinkSync(f.target);
+  const expected = renderCurrentDecisions(JSON.parse(fs.readFileSync(join(f.directory, OVERLAY_PATH), "utf8")));
+  let result = f.execute(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(f.target, "utf8"), expected);
+  const oldInode = fs.lstatSync(f.target).ino;
+  result = f.execute(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(f.target, "utf8"), expected);
+  assert.notEqual(fs.lstatSync(f.target).ino, oldInode, "Regeneration must replace instead of truncating old inode");
+}));
+for (const failurePoint of ["writeFileSync", "fsyncSync", "renameSync"]) {
+  test(`safe generator preserves old view and cleans staged file on ${failurePoint} failure`, () => viewWorkspace((f) => {
+    const viewBefore = fs.readFileSync(f.target); const sourceBefore = fs.readFileSync(f.source);
+    const io = { ...fs, [failurePoint]: (...args) => {
+      if (failurePoint === "writeFileSync") fs.writeFileSync(args[0], "partial staged output");
+      throw new Error(`Synthetic ${failurePoint} failure`);
+    } };
+    assert.throws(() => writeCurrentDecisionsView(f.directory, "new view\n", io), new RegExp(`Synthetic ${failurePoint} failure`));
+    assert.deepEqual(fs.readFileSync(f.target), viewBefore);
+    assert.deepEqual(fs.readFileSync(f.source), sourceBefore); noTemporaryFiles(f.parent);
+  }));
+}
+test("safe generator rejects linked parent without staging any write", () => viewWorkspace((f) => {
+  const moved = join(f.directory, "original-planning");
+  fs.renameSync(f.parent, moved); fs.symlinkSync(moved, f.parent);
+  assert.throws(() => writeCurrentDecisionsView(f.directory, "new view\n"), /Unsafe output parent/);
+  assert.equal(fs.readFileSync(f.target, "utf8"), "previous view\n"); noTemporaryFiles(moved);
+}));
+test("safe generator uses exclusive no-follow creation and never opens existing view for writing", () => viewWorkspace((f) => {
+  let opens = 0;
+  writeCurrentDecisionsView(f.directory, "new view\n", { ...fs, openSync: (path, flags, mode) => {
+    opens++; assert.notEqual(path, f.target);
+    assert.equal(flags & fs.constants.O_NOFOLLOW, fs.constants.O_NOFOLLOW);
+    assert.equal(flags & fs.constants.O_EXCL, fs.constants.O_EXCL);
+    return fs.openSync(path, flags, mode);
+  } });
+  assert.equal(opens, 1); assert.equal(fs.readFileSync(f.target, "utf8"), "new view\n"); noTemporaryFiles(f.parent);
+}));
+test("safe generator detects concurrent destination replacement and preserves the competing view", () => viewWorkspace((f) => {
+  const competing = join(f.parent, "competing.md");
+  assert.throws(() => writeCurrentDecisionsView(f.directory, "new view\n", { ...fs, fsyncSync: (fd) => {
+    fs.fsyncSync(fd); fs.writeFileSync(competing, "competing view\n"); fs.renameSync(competing, f.target);
+  } }), /Output target changed/);
+  assert.equal(fs.readFileSync(f.target, "utf8"), "competing view\n"); noTemporaryFiles(f.parent);
+}));
+test("real CLI rejects input leaf symlink before parsing external contents", () => cliWorkspace((f) => {
+  const external = join(dirname(f.directory), "external.json");
+  fs.writeFileSync(external, "SYNTHETIC-EXTERNAL-CONTENTS-NOT-TO-BE-PARSED");
+  const input = join(f.directory, OVERLAY_PATH); fs.unlinkSync(input); fs.symlinkSync(external, input);
+  const result = f.execute(); assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Symlink is not an evidence file/);
+  assert.ok(!result.stderr.includes("SYNTHETIC-EXTERNAL-CONTENTS-NOT-TO-BE-PARSED"));
+  assert.ok(!result.stdout.includes("Original source/checker bytes preserved."));
+}));
+test("real CLI revalidates written view before reporting successful source preservation", () => cliWorkspace((f) => {
+  const probe = join(f.directory, "synthetic-post-rename-probe.mjs");
+  fs.writeFileSync(probe, `import fs from "node:fs";\nimport { syncBuiltinESMExports } from "node:module";\nconst original = fs.renameSync;\nfs.renameSync = (from, to) => { original(from, to); if (String(to).endsWith("current-decisions.md")) fs.writeFileSync(to, "synthetic interrupted output\\n"); };\nsyncBuiltinESMExports();\n`);
+  const result = spawnSync(process.execPath, ["--import", probe, "scripts/check-current-decisions.mjs", "--write-view"], { cwd: f.directory, encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Generated current decision register drift/);
+  assert.ok(!result.stdout.includes("Original source/checker bytes preserved."));
+}));

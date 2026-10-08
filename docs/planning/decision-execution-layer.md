@@ -44,7 +44,7 @@ node scripts/check-execution-plan.mjs
 npm run check
 ```
 
-更新生成登记使用 `node scripts/check-current-decisions.mjs --write-view`；先校验其余数据再写视图，不写 ADR/源快照。新命令是严格 opt-in，未加入 npm scripts、CI 或合并门。
+更新生成登记使用 `node scripts/check-current-decisions.mjs --write-view`；先校验其余数据再写视图，不写 ADR/源快照。写出固定视图前检查根/父目录链与目标，拒绝符号链接、非普通文件及多硬链接目标；以独占 no-follow 方式创建同目录临时文件，完整写入并复查身份后原子替换，写入/同步/替换失败保留旧视图并清理临时文件。CLI 的输入 JSON 也通过拒绝符号链接的同一 reader 读取；生成后重新读取 JSON 并完整校验冻结源与实际视图，成功输出不能沿用写前结果。CLI 级负例覆盖输入 leaf symlink、链接到冻结源的输出目标以及写后视图漂移，不能仅靠读取路径检查保护生成写入。这防止错误链接和可检测的并发替换，不宣称隔离有同用户权限、持续恶意竞争目录的进程。新命令是严格 opt-in，未加入 npm scripts、CI 或合并门。
 
 文件读取拒绝越界和符号链接；历史读取只允许 40 位小写 hex commit 与安全仓库相对路径，以 Git 参数数组调用，无 shell。命令、URL、路径都是资料，不 eval、不执行 JSON 中命令、不抓取 URL、不消费 token。测试里的合成 approval 仅在内存 mock 中，绝不写入仓库当前资料或 GitHub。
 
