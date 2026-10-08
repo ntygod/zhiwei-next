@@ -37,7 +37,7 @@ Pi Adapter → Pi Agent Runtime
 
 这一阶段只解决一件事：将 Pi 生命周期规范化为知微自己的不可变 Observation，并能够可靠保存、查询和回放。记忆提取、向量检索、主动提醒和桌面端均不属于 M0。
 
-`NormalizedRuntimeEvent v1` 已通过 PR #66 合入；SQLite Ledger 仍由 Issue #56 / Draft PR #69 承接，尚未成为主分支能力。后续开发从[项目状态](docs/harness/project-state.md)核对当前工作，再按[执行计划](docs/planning/execution-plan.md)的依赖和阶段门推进。
+`NormalizedRuntimeEvent v1` 已通过 PR #66 合入，SQLite Ledger 已通过 PR #69 合入。PR #75 建立 G-1a Proposed 决策资料，当前 [G-1b / Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)补充[不变量目录与合成实验](docs/spikes/invariant-ownership/README.md)；完整 G-1 和正式 Worker/Daemon 会话链仍未交付。后续开发从[项目状态](docs/harness/project-state.md)核对当前工作，再按[执行计划](docs/planning/execution-plan.md)的依赖和阶段门推进。
 
 详细计划见：
 

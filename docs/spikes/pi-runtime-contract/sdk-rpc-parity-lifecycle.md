@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #75 Draft固定容器Run `37770080525`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `11547735102`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `83df4e09d05e9cd656fa5a33f8e04b7bc2a0cf99`是当前 provenance 候选的严格祖先。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #77 Draft固定容器Run `37776588065`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `11549719639`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `1c0795929677729f035973a2c806c0840cdb67f1`是当前 provenance 候选的严格祖先。
 
 Committed Fixture：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     83df4e09d05e9cd656fa5a33f8e04b7bc2a0cf99
-workflow run     37770080525
-artifact id      11547735102
-artifact digest  sha256:016622c7d4669efdd15b990a1ae40e8a4fc5f331211ee09c82d4373be7d6f820
+capture head     1c0795929677729f035973a2c806c0840cdb67f1
+workflow run     37776588065
+artifact id      11549719639
+artifact digest  sha256:ad5673d798f4dab395c4d449737961b8c88100a07dc156c1bd1c1bc0a005aa9c
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `37770080525`属于当前PR #75，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `37776588065`属于当前PR #77，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

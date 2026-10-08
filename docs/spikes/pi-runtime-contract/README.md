@@ -32,7 +32,8 @@ PR #64  source-and-runtime-verified-rpc-worker-lifecycle（已合并）
 PR #66  NormalizedRuntimeEvent v1 与来源绑定（已合并）
 历史    PR #71 更新已失效 Artifact 的公开来源身份；Runtime 内容身份不变
 历史    PR #69 重新绑定其 PR 来源；Runtime 内容身份不变
-当前    PR #75 重新绑定本 PR 来源；Runtime 内容身份不变
+历史    PR #75 重新绑定其 PR 来源；Runtime 内容身份不变
+当前    PR #77 重新绑定本 PR 来源；Runtime 内容身份不变
 ```
 
 历史标签只说明当时的证据强度，不代表当前能力回退。PR #64、#66 已经合并，Issue #32 的 Runtime 事实和正式协议继续保留。PR #71 在 2026-10-08 的 Ready gate 发现历史 Artifact 返回 404 后，重新采集并绑定当前 PR 的来源；不改写 Runtime 内容身份，不改变任何来源校验条件。
@@ -177,14 +178,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 83df4e09d05e9cd656fa5a33f8e04b7bc2a0cf99
-capture workflow             37770080525
-capture artifact             11547735102
-capture artifact digest      sha256:016622c7d4669efdd15b990a1ae40e8a4fc5f331211ee09c82d4373be7d6f820
+capture head                 1c0795929677729f035973a2c806c0840cdb67f1
+capture workflow             37776588065
+capture artifact             11549719639
+capture artifact digest      sha256:ad5673d798f4dab395c4d449737961b8c88100a07dc156c1bd1c1bc0a005aa9c
 external Provider prompts    0
 ```
 
-该来源Run属于当前PR #75，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD是当前候选的严格祖先。Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
+该来源Run属于当前PR #77，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD是当前候选的严格祖先。Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
 
 ## RPC Worker schema v2 当前合同
 
@@ -256,14 +257,14 @@ Worker Instance与Runtime Session分别关联；Host Signal Request不能替代�
 ### 当前v2身份与公开来源
 
 ```text
-source head                  72e67b2452f023e27e86310799a9651af88132dd
-source workflow              37771441848
+source head                  9d1a9477a6e75ab37e1c240af7e937189265468a
+source workflow              37777086083
 source run attempt           2
-source artifact              11547462798
-source artifact digest       sha256:fb3b239819da047dee4298aefe08bcaeb2daf5fb062e986b3b2fddf6bede3add
+source artifact              11550710794
+source artifact digest       sha256:2db63423bd12a588919b5ece4cdecc41e7faec7e754ec2d3c43c73cc5266c035
 comparison run attempt       1
-comparison artifact          11548036907
-comparison artifact digest   sha256:b8d8fdb55dcf2a8d64dc59f6c8dc7e750ddaa80e608c21acad5aa369b6ec0519
+comparison artifact          11550421552
+comparison artifact digest   sha256:51983f7ad8fbd26ce479ad99d7f3caa5fac4be5baa048c22c2f39a5df3f2b381
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -273,7 +274,7 @@ capture contract fingerprint 511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff3
 external Provider prompts    0
 ```
 
-PR #75 Draft中的两个受控recapture attempts均完成capture、Fresh validation、base validation和upload；在完整Fresh/committed对象相等后，受控compare步骤显式失败，因此Workflow/Worker Job保持可审计的failure形态。当前v2在新HEAD执行正式完整normalizer、负向mutation与Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
+PR #77 Draft中的两个受控recapture attempts均完成capture、Fresh validation、base validation和upload；在完整Fresh/committed对象相等后，受控compare步骤显式失败，因此Workflow/Worker Job保持可审计的failure形态。当前v2在新HEAD执行正式完整normalizer、负向mutation与Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
 
 PR #71 历史续期记录：2026-10-08 的有效比较使用 run `37748698280` 的 attempts **2/3**。整轮重跑后 attempt 1 的 Artifact 已不可访问；仅重跑 RPC Worker job 后，attempts 2/3 的 Artifact 同时可读，下载的 `result.json` 逐字节一致。后续重复采集需先保存上一份证据，再验证单作业重跑后的两份公开 Artifact 都可读取，不能只保留日志中的 Artifact ID。当前 Workflow 的 Artifact 保留期为 14 天；到期后重新取证，不将本次 ID 当作永久在线证据。
 
@@ -393,3 +394,11 @@ G-1a 的 project-state.md 更新命中既有 SDK/RPC probe paths；Ready run3777
 RPC run37771441848在72e67b2452f023e27e86310799a9651af88132dd上真实执行attempts1/2。两个日志均先完成两次checker与完整Fresh/committed对象相等，再由明确PR75 recapture-only guard制造CLI失败；这不是Runtime故障或正常比较不相等。单Worker job重跑后，Artifact11548036907/11547462798再次下载可读。ZIP摘要分别b8d8fdb55dcf2a8d64dc59f6c8dc7e750ddaa80e608c21acad5aa369b6ec0519、fb3b239819da047dee4298aefe08bcaeb2daf5fb062e986b3b2fddf6bede3add；两份result.json均72731字节，SHA256 87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa，逐字节相同且与完整committed v2对象深相等。source attempt2、comparison attempt1。
 
 最终恢复CLI原blob fba36da923a94cd2b9ba024f020089e3ef313d90；Workflow、validator、normalizer、内容指纹和接受谓词无净变更。已有固定base reader/wrapper关系不变。83df的文档R2审查不覆盖新来源HEAD，最终全树须新独立R3与fresh Ready CI。Artifact仍受14天保留期限制。仅文档状态更新也要求每PR重采两attempt的维护成本已记录为后续评估项，本次不调整触发范围或质量门。
+
+## 2026-10-08 PR #77 当前来源续期
+
+G-1b更新project-state.md命中既有SDK/RPC路径；现行冻结合同要求来源关联当前PR，因此不把PR75来源移作PR77身份。本轮在Draft/no/required内取本PR成功SDK run37776588065 attempt1 / artifact11549719639（source HEAD1c0795929677729f035973a2c806c0840cdb67f1）。独立重新下载原ZIP10441字节，摘要ad5673d798f4dab395c4d449737961b8c88100a07dc156c1bd1c1bc0a005aa9c；唯一result.json122178字节与committed逐字节及完整对象相同，未repack。
+
+Worker run37777086083在9d1a9477a6e75ab37e1c240af7e937189265468a上执行attempts1/2，job113310720517/113311718373。两份原始日志均先完成两checker和完整Fresh/committed对象相等，再由明确PR77 recapture-only guard制造CLI失败，不是Runtime故障或正常compare不相等。仅重跑Worker job后，两Artifact11550421552/11550710794仍重新下载可读；ZIP摘要51983f7ad8fbd26ce479ad99d7f3caa5fac4be5baa048c22c2f39a5df3f2b381 / 2db63423bd12a588919b5ece4cdecc41e7faec7e754ec2d3c43c73cc5266c035。两个唯一result.json均72731字节、SHA256 87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa，字节及完整对象相同。source attempt2、comparison attempt1。
+
+CLI已恢复原blob fba36da923a94cd2b9ba024f020089e3ef313d90，正常完整compare重新通过。Workflow、validator、normalizer、固定base/wrapper、内容指纹与接受谓词无净变更；此前PR69/75历史来源记录保留。本次最终全树需新的独立R3与真实ReadyCI。Artifact保留14天及每PR来源续期成本仍按既有规则记录，不在本任务修改门禁。

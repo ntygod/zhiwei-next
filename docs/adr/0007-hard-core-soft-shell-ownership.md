@@ -1,4 +1,4 @@
-# ADR 0007：Hard Core / Soft Shell 与不变量唯一归属
+# ADR 0007：Hard Core / Soft Shell 与显式组合边界
 
 - 状态：Proposed
 - 日期：2026-10-08
@@ -13,19 +13,7 @@
 
 Hard Core 指知微不可委托给可替换 Provider 决定的语义：身份/Scope、证据与状态转换、协议解析、持久化完整性、模型输入的可解释性、权限与审计。Soft Shell 指在相同合同下可替换的执行机制，例如 Pi Runtime、模型和存储驱动；可替换机制不等于可关闭核心语义。
 
-采用显式函数/对象组合，`apps/*` 是组合根；不增加通用 DI、动态注册宿主、反射或未来包空壳。边界按责任而非按“所有核心逻辑放一个包”划分：
-
-| 责任 | 唯一语义 owner | 消费者/机制 |
-|---|---|---|
-| ID/Scope 值与基础证据/置信度约束 | `domain` | Cognition/Compiler/Store 复用，不重新定义 |
-| Candidate 接受与 Claim 纠正 | `cognition-core` | 未来应用协调存储事务；Store 不判断事实真假 |
-| Scope 先过滤再排序的胶囊选择 | `context-compiler` | 未来检索/预算机制提供输入，不关闭过滤 |
-| Runtime-neutral 单事件与 Trace 合同 | `protocol` | Adapter 调用公开 create；Store 调用公开 parse，复用 protocol 核心断言 |
-| append-only、事务、Schema/行验证与 cursor | `memory-store` | SQLite 是当前唯一正式实现 |
-| Pi 字段投影及可观察来源差异 | `pi-adapter` | Pi 为执行机制；不得覆盖协议 owner |
-| 启停、调用顺序、依赖选择 | `apps/daemon` | 组合责任，不新增业务不变量副本 |
-
-一项不变量只有一个语义 owner，可以有多个 enforcement 调用点。Adapter 的 createNormalizedRuntimeEventV1 与 Store 的 parseNormalizedRuntimeEventV1 是不同公开入口，内部复用 protocol 的核心形状/扩展断言；多处边界验证不是两个 owner；单事件与跨事件 Trace 是两个不同不变量，不能把 Trace 校验塞进任意 append 批次。跨包只走公开入口。现有 `memory-store → protocol` 已由 ADR 0006 和局部规则确定，不是此次提案新增依赖。
+采用显式函数/对象组合，`apps/*` 是组合根；不增加通用 DI、动态注册宿主、反射或未来包空壳。逐项包归属和 owner/enforcement 的区别由独立 [ADR 0010](0010-package-owned-invariant-catalog.md) 负责，不在本决策保留第二份归属表。该拆分只整理仍为 Proposed 的提案，不改变已接受 ADR。
 
 Provider 只能提供合同允许的数据/能力；不得提供 `skipValidation`、替换核心断言、迁移覆盖或全局 `unsafe` 开关。后续组合入口应先拒绝重复能力/不变量 ID、没有 owner 的映射，以及关闭核心校验的配置，再进行任何 I/O。这里是待验收合同，当前不存在这样的通用组合入口；已有 Ledger 的固定迁移与不可关闭 integrity check 只是局部先例。
 
@@ -36,11 +24,11 @@ Provider 只能提供合同允许的数据/能力；不得提供 `skipValidation
 - 动态插件 Host/DI：目前没有第二个正式 Runtime/Store，扩大可绕过面与测试矩阵，拒绝提前引入。
 - 每个 Provider 自带安全/协议 validator：形成多份真源，拒绝。
 - 把全部校验集中到应用入口：Store 公开入口和数据库读回仍可绕过，拒绝。
-- 静态目录加 opt-in 一致性检查：下一有限切片的候选；只检查已存在入口/测试，不冒充 runtime enforcement。
+- 静态目录加 opt-in 一致性检查：已有 [G-1b 合成实验](../spikes/invariant-ownership/README.md)；只检查已存在入口/测试与固定组合，不冒充通用 runtime enforcement。
 
 ## 证据、接受条件与后果
 
-[不变量证据目录](../architecture/invariant-ownership-baseline.md)列出当前入口、正反测试与缺口。D-10 接受前需要新的独立 R2 审查，绑定正式 PR/完整 HEAD；决策登记还须具备实验证据并与机器投影一致。后续最小静态实验必须拒绝重复 ID、缺 owner、Provider 关闭核心校验；这些负例目前未执行，不能把文档表格当作通过。
+[不变量证据目录](../architecture/invariant-ownership-baseline.md)列出当前入口、正反测试与缺口。D-10 接受前需要新的独立 R2 审查，绑定正式 PR/完整 HEAD；决策登记还须具备实验证据并与机器投影一致。[G-1b 实验](../spikes/invariant-ownership/README.md)覆盖重复 ID、缺/多 owner、无效引用和 Provider 声明关闭核心校验；只支持有限声明与固定合成路径结论，不证明运行中 Provider Host。独立审查、正式决策接受和受约束入口接入仍未完成。
 
 这会使 owner 和调用点可审查，但不能阻止有权限的恶意源码修改，也不是 sandbox。未来新增 Provider 需要证明经过同一核心入口，不能仅凭目录通过。未接受前不实现受约束的正式新入口、不放行 G-1；独立合成实验/Spike 可在 Proposed 阶段先行，以产生接受所需证据。
 
