@@ -18,9 +18,9 @@
   "outerContractFingerprint": "c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf",
   "captureContractFingerprint": "70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7",
   "source": {
-    "head": "e2daad61f4433cc55a7bf1584b3d7a62d1f65bb5",
-    "workflowRun": 37746670390,
-    "artifactId": 11535787397,
-    "artifactDigest": "sha256:790ffd986ff162ca864f48dd9a08462c3000c1ce2d48528d34e38c52c0a75c12"
+    "head": "a1f9cd41419bc1994d0af31fb311e45d3950baf1",
+    "workflowRun": 37760933918,
+    "artifactId": 11542107196,
+    "artifactDigest": "sha256:16e113ac7b834da5e9bd9d59fd227b134fa5b6fe6996558e3304bf291d26bdbd"
   }
 }
