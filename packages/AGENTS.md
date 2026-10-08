@@ -9,7 +9,7 @@
 | `domain` | 领域类型、值对象和基础不变量 | 无仓库内依赖 |
 | `cognition-core` | 候选、Claim 和认知状态转换 | `domain` |
 | `context-compiler` | 将已筛选认知编译为上下文胶囊 | `domain` |
-| `memory-store` | 存储端口与持久化适配器 | `domain` |
+| `memory-store` | 存储端口与持久化适配器 | `domain`、Runtime-neutral `protocol`（ADR 0006） |
 | `protocol` | Runtime 中立的本地/事件协议 | `domain` |
 | `pi-adapter` | Pi 事件与知微协议之间的防腐层 | `domain`、`protocol`、Pi SDK |
 | `evals` | 用户场景和跨包验收 | 仅依赖被测包的公开入口 |

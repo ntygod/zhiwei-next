@@ -1,5 +1,9 @@
 # 系统架构
 
+## 实现状态与边界取证
+
+下图是目标结构，不代表 Daemon 已组装全部服务。正式已实现边界与 bootstrap 哨兵见 [G-1 不变量归属与调用证据基线](invariant-ownership-baseline.md)；相关 ADR 0007—0009 仍是 Proposed，不放行后续实现或 G-1。已接受 ADR 0006 的 SQLite Ledger 已进入 main，Daemon/Worker 正式组合仍待 M0 后续工作。
+
 ## 总体结构
 
 ```text
@@ -49,6 +53,7 @@ cognition-core  memory-store  context-compiler  protocol
 ```
 
 - `domain` 是最内层；
+- 图示为分层概览；`memory-store → protocol → domain` 是 ADR 0006 已接受且已实现的正式事件校验依赖，Store 不重新定义协议；
 - Pi 依赖只能存在于 `pi-adapter`；
 - Runtime 事件进入知微前必须规范化；
 - 领域事件离开知微前必须通过协议 DTO；

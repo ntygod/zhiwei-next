@@ -151,3 +151,9 @@
 **定案证据与边界：**签名/许可证/恢复/设备撤销有证据；一个连接器一个执行目标，不预定未知 API。
 
 **受影响任务：**M6-1, M6-6, M6-7, M7-5。
+
+## G-1 首轮取证导航（2026-10-08）
+
+[D-10 核心与包归属提案](../adr/0007-hard-core-soft-shell-ownership.md)、[D-01 会话记录提案](../adr/0008-session-record-reconstruction-boundary.md)、[D-02 Schema 演进提案](../adr/0009-ledger-schema-evolution-boundary.md)均为 Proposed；[当前入口与测试目录](../architecture/invariant-ownership-baseline.md)明确已实现边界及证据缺口。D-05 的摄取确认/投影分工只做交界映射，未定案。
+
+本轮不改变上述 11 项状态，不把文档合入视作决策接受或完整 G-1 交付。未来接受决策时，必须同步本登记、结构化投影与当前冻结 Proposed 的专项校验，保留 ADR、相关 PR/完整 HEAD、审查和实验证据；不得先放宽检查再据此授权同一任务的受约束实现。
