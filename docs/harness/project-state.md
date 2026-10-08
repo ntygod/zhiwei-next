@@ -12,6 +12,8 @@ canonical 为 [Issue #82](https://github.com/ntygod/zhiwei-next/issues/82)，唯
 
 本项固定版本/完整 strict 编译/官方 Pi client 类型面/安装隔离与负例，详见[工具链边界](../architecture/formal-toolchain.md)与 Proposed ADR 0011。root SDK 官方声明仍有 46 个诊断，不把 client 子路径通过写成 root SDK 兼容。D-07 整体仍 Proposed，不实现 Session、WorkerSupervisor、Daemon 或 M0-4；当前完整 HEAD 的独立 R3、fresh Ready CI、全部动态矩阵及受保护交付尚待 PR 实证。
 
+当前PR已按[Runtime来源记录](../spikes/pi-runtime-contract/README.md)核对本PR成功SDK及Worker两attempt的原ZIP、内容身份和完整对象相等。Worker两次均在完整比较成功后由临时guard产生受控CLI失败，非Runtime故障；CLI已恢复原blob。来源metadata与内容指纹分开记录；实现HEAD `2d70ea8fe05277b9cad241b4238ed88d9744fbe1` 的Draft动态CI已成功，最终完整HEAD仍待独立R3与真实Ready live gate；本次续期不改变G-1历史决议或D-07状态。
+
 以下 G-1 与更早开发记录是历史快照，保留全部被审身份、原始状态与机器锚点。它们不表示本项 WIP，不继承批准。
 
 ## 当前工作：G-1 有限执行决议
@@ -95,14 +97,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-SDK / RPC parity当前 `verified` Fixture身份：
+本连续性表按现行 Harness 与 manifest 同步至 PR #83；PR #81 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 7bbbd44e87c440591421cec10fa24e9d4a57f600
-capture workflow             37792517432
-capture artifact             11556798358
-capture artifact digest      sha256:d07b2d569e140b0d4298a7ec736f82fb6625cb7b6cb7c1e60f1ea4640eaf2ceb
+capture head                 2d70ea8fe05277b9cad241b4238ed88d9744fbe1
+capture workflow             37822256937
+capture artifact             11569408126
+capture artifact digest      sha256:bca83082df22cddba1157bbfcaded5761fe6d71bd579c166f1c40d2e514f5eea
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
