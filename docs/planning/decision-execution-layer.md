@@ -11,6 +11,12 @@
 
 G-1 原卡的三项完成条件和重复 ID/缺 owner/Provider 关闭核心失败路径保持原样。D-01/02/10 的有限方向真正接受后，应按原卡单独验收 G-1 基线，再推进就绪的 G-2/G-3；不要求先交付未来 Session、真实 Pi、动态 Host、D-03/04/09 或整个 M0。但三项 Accepted 本身不等于 G-1 完成，更不等于 #67 整体或 M0 完成。当前层没有任何工作包/阶段完成字段或自动放行函数。
 
+## 本 PR 的真实接受记录
+
+D-01、D-02、D-10 已依据 [PR #81 的逐项独立决策审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)从 Evidence Ready 记为 Accepted。reviewed/evidence HEAD 均为 `4eae854403dc6596a0db7297dcf756137c848ec7`，评论回读观测时间为 `2026-10-08T15:05:32Z`；各项仍分别绑定原 proposalSha256。四份 ADR 只改变唯一状态行，其余正文/有限范围/证据保持被审版本。
+
+[G-1 原卡逐项验收](g1-baseline-acceptance.md)独立列出三项实质条件和失败路径。状态登记后的新完整 HEAD 尚需全新独立 cold review、fresh Ready CI、合入及来源回读，旧评论不批准这些未来事实。#67 整体与 M0 未完成，下一 G-2/G-3 工作候选仅在本 PR 完成后启动。
+
 ## 严格 v1 表示
 
 顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围只配置 D-01/02/10 的 ADR 和实验入口；其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。

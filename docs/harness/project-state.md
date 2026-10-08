@@ -8,11 +8,11 @@ updated: 2026-10-08
 
 ## 当前工作：G-1 有限执行决议
 
-2026-10-08 本项起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，已含 PR #77/#79 的静态包归属、合成输入和真实临时 SQLite 演进实证。canonical execution 为 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`；primary PR、完整 HEAD、CI 和独立审查以实时对象为准。
+2026-10-08 本项起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，已含 PR #77/#79 的静态包归属、合成输入和真实临时 SQLite 演进实证。canonical execution 为 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`，primary 为 [PR #81](https://github.com/ntygod/zhiwei-next/pull/81)；新完整 HEAD、CI 和最终独立审查以实时对象为准。
 
-[当前执行决议](../planning/current-decisions.md)是单一执行状态入口，原源登记及 JSON 是历史 Proposed 快照；[状态层说明](../planning/decision-execution-layer.md)记录严格 opt-in 校验、有限范围和审查身份。D-01/02/10 本轮形成 Evidence Ready 候选；PR #77/#79 实验批准不能接受决策。正式接受需新本 PR 对真实决议 HEAD 的逐项独立审查，登记后的新完整 HEAD 再 cold review；不预填批准或合入。
+[当前执行决议](../planning/current-decisions.md)是单一执行状态入口，原源登记及 JSON 是历史 Proposed 快照；[状态层说明](../planning/decision-execution-layer.md)记录严格 opt-in 校验、有限范围和审查身份。D-01/02/10 已依据 [PR #81 的真实逐项决策审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)记 Accepted，reviewed HEAD 为 `4eae854403dc6596a0db7297dcf756137c848ec7`，回读观测为 `2026-10-08T15:05:32Z`。ADR 0007—0010 仅状态行改变，被审正文/范围/实验摘要不变。该评论只批准历史 proposal；PR #77/#79 仍仅属实验批准。状态登记后的新完整 HEAD 待全新独立 cold review、fresh Ready CI、受保护合入与来源回读，不继承未来批准。
 
-G-1 按原三项条件与失败路径单独验收，不因三个 Accepted 自动完成，也不要求先交付未来产品能力。基线真正完成后推进就绪的 G-2/G-3；D-04/G-2 保留授权、D-09 owner/升级并发、D-03/G-5 性能与硬件持久性仍约束相关产品实施。D-02 只覆盖 table/index/trigger/xinfo，view 未覆盖且旧态验证在 BEGIN IMMEDIATE 前。本项不实现 Session、生产迁移、Host 或新权限，不改原质量门。#67 整体、M0 与正式会话链仍未完成。
+[G-1 原卡逐项验收记录](../planning/g1-baseline-acceptance.md)已分别核对三项完成条件和两类失败路径，本 PR 候选实质条件满足；尚不宣称已合入 main 交付，不从三个 Accepted 自动算完成，也不要求先交付未来产品能力。待本 PR 最终审查/CI/合入回读完成后，按原依赖选择 G-2/G-3 就绪工作；D-04/G-2 保留授权、D-09 owner/升级并发、D-03/G-5 性能与硬件持久性仍约束相关产品实施。D-02 只覆盖 table/index/trigger/xinfo，view 未覆盖且旧态验证在 BEGIN IMMEDIATE 前。本项不实现 Session、生产迁移、Host 或新权限，不改原质量门。#67 整体、M0 与正式会话链仍未完成。
 
 以下 PR #71/#73/#69/#75 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。project-state 更新命中既有 Runtime 来源路径时，按现行合同取证，不为减少重采成本省略应有状态或修改门禁。
 
@@ -187,6 +187,6 @@ G-1b当前PR77已按[真实Runtime取证记录](../spikes/pi-runtime-contract/RE
 
 G-1c当前PR79已按[真实Runtime取证记录](../spikes/pi-runtime-contract/README.md)核对本PR成功SDK与Worker两attempt；完整比较成功后受控CLI失败的原日志/原ZIP均保留，CLI现已恢复原blob。D01 50项、D02 35项、既有G1b45项与全仓138项各自验证，不合加。仍等待新最终完整HEAD独立R3/fresh ReadyCI；不改变原11项Proposed，不宣称真实模型输入/生产升级/任意SQLite对象覆盖。
 
-## 当前 PR #81 来源与决议审查状态
+## 历史 PR #81 来源取证状态（正式决议审查前）
 
-本PR已按[真实Runtime记录](../spikes/pi-runtime-contract/README.md)核齐当前PR成功SDK及Worker两attempt来源，原CLI已恢复。当前执行层仍是3项Evidence Ready、8项Proposed、零Accepted；需先有真实逐项决议审查，才能登记状态，并对新最终完整HEAD独立R3/fresh Ready，不拿来源或旧实验批准代替接受。
+本PR已按[真实Runtime记录](../spikes/pi-runtime-contract/README.md)核齐当前PR成功SDK及Worker两attempt来源，原CLI已恢复。取证时执行层仍是3项Evidence Ready、8项Proposed、零Accepted；当时需先有真实逐项决议审查，才能登记状态，并对新最终完整HEAD独立R3/fresh Ready，不拿来源或旧实验批准代替接受。

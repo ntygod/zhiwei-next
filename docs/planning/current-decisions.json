@@ -14,10 +14,11 @@
   "decisions": [
     {
       "id": "D-01",
-      "status": "Evidence Ready",
+      "status": "Accepted",
       "history": [
         "Proposed",
-        "Evidence Ready"
+        "Evidence Ready",
+        "Accepted"
       ],
       "adrs": [
         {
@@ -137,15 +138,25 @@
           ]
         }
       ],
-      "decisionReview": null,
+      "decisionReview": {
+        "purpose": "decision-accepted",
+        "decisionId": "D-01",
+        "primaryPr": "https://github.com/ntygod/zhiwei-next/pull/81",
+        "evidenceHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewedHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewUrl": "https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403",
+        "proposalSha256": "8db7ad2c3c26e7270d653ba88058487855b706a418647a7508797165277e4b7f",
+        "observedAt": "2026-10-08T15:05:32Z"
+      },
       "disposition": null
     },
     {
       "id": "D-02",
-      "status": "Evidence Ready",
+      "status": "Accepted",
       "history": [
         "Proposed",
-        "Evidence Ready"
+        "Evidence Ready",
+        "Accepted"
       ],
       "adrs": [
         {
@@ -311,7 +322,16 @@
           ]
         }
       ],
-      "decisionReview": null,
+      "decisionReview": {
+        "purpose": "decision-accepted",
+        "decisionId": "D-02",
+        "primaryPr": "https://github.com/ntygod/zhiwei-next/pull/81",
+        "evidenceHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewedHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewUrl": "https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403",
+        "proposalSha256": "ee6c3bbb0390d1c942356b08df8434c1ea6d61a45255f0a146fd9484177faa6c",
+        "observedAt": "2026-10-08T15:05:32Z"
+      },
       "disposition": null
     },
     {
@@ -400,10 +420,11 @@
     },
     {
       "id": "D-10",
-      "status": "Evidence Ready",
+      "status": "Accepted",
       "history": [
         "Proposed",
-        "Evidence Ready"
+        "Evidence Ready",
+        "Accepted"
       ],
       "adrs": [
         {
@@ -627,7 +648,16 @@
           ]
         }
       ],
-      "decisionReview": null,
+      "decisionReview": {
+        "purpose": "decision-accepted",
+        "decisionId": "D-10",
+        "primaryPr": "https://github.com/ntygod/zhiwei-next/pull/81",
+        "evidenceHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewedHead": "4eae854403dc6596a0db7297dcf756137c848ec7",
+        "reviewUrl": "https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403",
+        "proposalSha256": "b45b2fb82d261522b712966966ae8d18de6ed2dc930f3aea08d432b4a194f243",
+        "observedAt": "2026-10-08T15:05:32Z"
+      },
       "disposition": null
     },
     {

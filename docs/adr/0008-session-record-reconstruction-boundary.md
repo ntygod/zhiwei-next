@@ -1,6 +1,6 @@
 # ADR 0008：会话记录与模型输入重建的边界
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-08
 - 计划决策：D-01；关联 D-04/D-05/D-09
 - 被取代关系：不取代 ADR 0005/0006，不扩展 NormalizedRuntimeEvent v1

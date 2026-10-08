@@ -8,9 +8,9 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 
 ## D-01
 
-当前状态：**Evidence Ready**
+当前状态：**Accepted**
 
-状态路径：Proposed → Evidence Ready
+状态路径：Proposed → Evidence Ready → Accepted
 
 - ADR：[docs/adr/0008-session-record-reconstruction-boundary.md](../../docs/adr/0008-session-record-reconstruction-boundary.md)；正文摘要（仅归一化状态行）：`1fe3c356afad6cfa81dd27c78dd21b011a9ddbb1165da1f549a2862b6a763380`
 
@@ -60,13 +60,13 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
   - [packages/protocol/src/sha256.ts](https://github.com/ntygod/zhiwei-next/blob/9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d/packages/protocol/src/sha256.ts)（历史快照）：`d3543537fa3d15f394fcdae0c06889b4f2181ad1d4ed1ec671b7f658707870a0`
 - 命令：`node --experimental-strip-types --test docs/spikes/session-reconstruction/experiment.test.mjs`；exit 0，tests/pass 50/50，fail/skip/todo 0/0/0
 
-正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
+决策审查记录：[decision-accepted](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)；被审 HEAD `4eae854403dc6596a0db7297dcf756137c848ec7`；绑定 D-01 / `8db7ad2c3c26e7270d653ba88058487855b706a418647a7508797165277e4b7f`；记录观测 2026-10-08T15:05:32Z。其真实性/完整范围须查远端原文；该历史记录不批准后续完整 HEAD。
 
 ## D-02
 
-当前状态：**Evidence Ready**
+当前状态：**Accepted**
 
-状态路径：Proposed → Evidence Ready
+状态路径：Proposed → Evidence Ready → Accepted
 
 - ADR：[docs/adr/0009-ledger-schema-evolution-boundary.md](../../docs/adr/0009-ledger-schema-evolution-boundary.md)；正文摘要（仅归一化状态行）：`abf9d2edd70c0611b7b6201fb5bb6b73325cb6ff86e6e9dccd15fa90cc1a4a4d`
 
@@ -129,7 +129,7 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
   - [packages/protocol/src/sha256.ts](https://github.com/ntygod/zhiwei-next/blob/9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d/packages/protocol/src/sha256.ts)（历史快照）：`d3543537fa3d15f394fcdae0c06889b4f2181ad1d4ed1ec671b7f658707870a0`
 - 命令：`node --experimental-strip-types --test packages/memory-store/fixtures/schema-evolution/experiment.test.mjs`；exit 0，tests/pass 35/35，fail/skip/todo 0/0/0
 
-正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
+决策审查记录：[decision-accepted](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)；被审 HEAD `4eae854403dc6596a0db7297dcf756137c848ec7`；绑定 D-02 / `ee6c3bbb0390d1c942356b08df8434c1ea6d61a45255f0a146fd9484177faa6c`；记录观测 2026-10-08T15:05:32Z。其真实性/完整范围须查远端原文；该历史记录不批准后续完整 HEAD。
 
 ## D-03
 
@@ -189,9 +189,9 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 
 ## D-10
 
-当前状态：**Evidence Ready**
+当前状态：**Accepted**
 
-状态路径：Proposed → Evidence Ready
+状态路径：Proposed → Evidence Ready → Accepted
 
 - ADR：[docs/adr/0007-hard-core-soft-shell-ownership.md](../../docs/adr/0007-hard-core-soft-shell-ownership.md)；正文摘要（仅归一化状态行）：`27e4a3db3d044cc041a443e5fb84f731d068f3bb6308e37a6cea4672f0cf4b6c`
 - ADR：[docs/adr/0010-package-owned-invariant-catalog.md](../../docs/adr/0010-package-owned-invariant-catalog.md)；正文摘要（仅归一化状态行）：`c2246b0a7568dc6375628de60566d6d8ae26efb3a4352649f75e54d28b2e193a`
@@ -267,7 +267,7 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
   - [packages/protocol/src/sha256.ts](https://github.com/ntygod/zhiwei-next/blob/9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d/packages/protocol/src/sha256.ts)（历史快照）：`d3543537fa3d15f394fcdae0c06889b4f2181ad1d4ed1ec671b7f658707870a0`
 - 命令：`node --experimental-strip-types --test docs/spikes/invariant-ownership/experiment.test.mjs`；exit 0，tests/pass 45/45，fail/skip/todo 0/0/0
 
-正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
+决策审查记录：[decision-accepted](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)；被审 HEAD `4eae854403dc6596a0db7297dcf756137c848ec7`；绑定 D-10 / `b45b2fb82d261522b712966966ae8d18de6ed2dc930f3aea08d432b4a194f243`；记录观测 2026-10-08T15:05:32Z。其真实性/完整范围须查远端原文；该历史记录不批准后续完整 HEAD。
 
 ## D-11
 

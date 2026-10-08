@@ -6,7 +6,7 @@
 
 起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，含 PR #77/#79 的有限实证。canonical Issue 为 [#80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`。当前范围、状态、逐项证据及保留前置只看[当前执行决议](current-decisions.md)与[表示说明](decision-execution-layer.md)；原登记、源 JSON 和原 checker 保持历史冻结语义。
 
-本轮先形成 Evidence Ready 的 D-01/02/10 有限选择，再用新 primary PR 的真实独立决策审查记录 Accepted；先前 PR #77/#79 批准仅属实验。状态登记后的新完整 HEAD 重新 cold review，不能自引用未来批准。G-1 原卡须单独验收，不从 Accepted 自动推导完成，也不以未来 Session/真实 Pi/动态 Host/D-03/04/09 产品门无限阻塞有限基线。G-1 真完成后按原依赖推进 G-2/G-3；#67 整体与 M0 仍未完成。
+D-01/02/10 已依据 [PR #81 正式逐项决策审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)记 Accepted；被审 HEAD `4eae854403dc6596a0db7297dcf756137c848ec7`、真实观测时间 `2026-10-08T15:05:32Z` 已逐项绑定。PR #77/#79 仍仅属实验批准。[G-1 原卡逐项验收](g1-baseline-acceptance.md)记录本 PR 候选三项条件与失败路径的实质证据；新完整 HEAD 仍待独立 cold review、fresh Ready CI、受保护合入及来源回读，不能自引用未来批准或将候选写为 main 交付。仅在这些条件完成后按原依赖推进 G-2/G-3；#67 整体与 M0 仍未完成。
 
 先按[项目状态](../harness/project-state.md)及现行治理对账真实 PR/base/HEAD/CI/评论。Evidence Ready 候选只有当前实验文件与记录/历史 blob 一致时才就绪；Accepted 等终态保留被审候选的历史证据，不冻结后续产品源码，也不批准后续实现。ADR/决议范围改文必须重审，当前产品代码仍由其任务独立验证。不要创建 finalizer PR，不依本任务新规则授权受约束产品入口。
 
