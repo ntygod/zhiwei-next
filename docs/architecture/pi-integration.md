@@ -190,11 +190,11 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
 source run attempt           2
-source artifact              11543925497
-source artifact digest       sha256:f52aeec7cf255430519aba96539449caad514bf488b177cd180d4a0673ce87a0
+source artifact              11547462798
+source artifact digest       sha256:fb3b239819da047dee4298aefe08bcaeb2daf5fb062e986b3b2fddf6bede3add
 comparison run attempt       1
-comparison artifact          11542914249
-comparison artifact digest   sha256:998ad033dc225311a9dd7322e5d2d8da20fd685304570ea327c4cf8324e9a060
+comparison artifact          11548036907
+comparison artifact digest   sha256:b8d8fdb55dcf2a8d64dc59f6c8dc7e750ddaa80e608c21acad5aa369b6ec0519
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -203,7 +203,7 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-PR #69 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
+PR #75 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 
@@ -255,4 +255,4 @@ Capture launcher 以 Git blob SHA 固定历史源码，在 tmpfs 创建只读 ha
 
 ## 后续顺序
 
-Issue #49 / PR #66 已完成正式协议交付。Issue #56 / PR #69 继续收口 append-only SQLite Observation Ledger；其后按[执行计划](../planning/execution-plan.md)推进 M0。Daemon / Worker Supervisor 只能消费已合并协议与 Ledger。
+Issue #49 / PR #66 已完成正式协议交付。Issue #56 / PR #69 已交付 append-only SQLite Observation Ledger；其后按[执行计划](../planning/execution-plan.md)推进 M0。Daemon / Worker Supervisor 只能消费已合并协议与 Ledger。

@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前开发起点
+## 当前工作：G-1a 边界与决策证据基线
+
+2026-10-08 重新对账：`main@f0fb58c9095aeca5121f9e196b158f7fda2ad442` 已包含 PR #73 规划资料和 PR #69 SQLite Ledger；Issue #72、#56 已关闭。M0-1 已合入，不再是产品 WIP；正式 Worker/Daemon 和会话产品链仍未交付。
+
+当前 canonical execution 为 [Issue #74](https://github.com/ntygod/zhiwei-next/issues/74)，唯一工作分支 `docs/74-core-boundary-baseline`。本有限 G-1a 切片交付 [不变量入口/正反测试目录](../architecture/invariant-ownership-baseline.md)、核心/会话/Schema 三份 Proposed ADR，以及按 ADR 0006 对齐既有 Store 依赖表。primary PR、最终 HEAD、真实 CI 和独立审查以 #74 实时关联为准；本记录不预填批准。
+
+D-01/D-02/D-10 仍 Proposed。没有新增 runtime 校验入口、Provider Host、产品配置加载器、Schema 或迁移；尚未覆盖目录重复 ID/无 owner 和产品级 Provider-disable 实验，完整 G-1 未完成。下一有限目标是依各 ADR 补足决策实验/接受证据，再做确有必要的静态映射与组合验证；不要把规划 checker 当前冻结 Proposed 当作永远不能推进决策的规则。G-2…G-5 和 M0-2 不因本切片放行。
+
+以下 PR #71/#73/#69 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。此处只补充本实质任务的现状，不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。
+
+## 历史开发起点（PR #71 期间）
 
 本次整理对应 Issue #70 / PR #71。执行顺序以 [M0—M7 执行计划](../planning/execution-plan.md) 为准，当前仍是 [M0：能观察](../planning/milestone-m0.md)，没有进入记忆或完整 UI 阶段。计划随 PR #71 合入 main 后生效，其中的 Proposed 决策仍须分别取证、形成 ADR 并审查。
 
@@ -14,7 +24,7 @@ updated: 2026-10-08
 
 本文件保存有日期的交接快照。开工时仍须实时核对 Incident、人类新输入、PR HEAD、CI 和分支，不能把下方历史 Fixture/审查身份当成当前候选批准。
 
-## 当前产品 WIP：Issue #56 / PR #69
+## 历史产品 WIP：Issue #56 / PR #69（现已合入）
 
 | 项目 | 对账结果 |
 |---|---|
@@ -28,7 +38,7 @@ updated: 2026-10-08
 
 旧 HEAD `ba04fca042f3495b3fc4886da992cbb727b7cd0b` 的 `CHANGES_REQUESTED` 和 6 项 blocker 不代表当前 HEAD 已获批准。当前候选已有修复及历史 Draft CI 证据，但本规划整理不替代产品审查、不移动产品分支、不将候选代码计入 main。下一轮从 #69 的当前真实完整身份继续，不新建替代 Ledger PR；如需适配新的 main，仍在 #69 完成并重新审查最终 HEAD。
 
-## Ledger 候选继续记录
+## 历史 Ledger 候选继续记录（保留测试锚点）
 
 <!-- zhiwei-active-primary
 work-item: #56
@@ -41,7 +51,7 @@ status: review-required
 
 本轮仍在同一 #56/#69 修正两处边界并加入真实临时 SQLite 回归。提前独立复核进一步覆盖安装时真实 SQLITE_FULL 及 metadata/history I/O 错误；这些 operational cause 同样交给公开 sqlite 错误边界，SQL/constraint/history 语义失败仍保持 migration 分类。从 `main@dea55a9780ba8ad0ae22494d2664396c02dbcbb3` 保留已合入规划、Runtime 来源和精确清理记录，合并冲突只在本文件对齐。实际最终 HEAD、修复验证与审查结论以 PR 为准，旧审查不继承到新 HEAD；本文件不宣称 Ledger 已合入。
 
-## 工作队列与仓库对账
+## 历史工作队列与仓库对账（PR #71/#69 期间）
 
 1. 完成 M0-1（#56 / #69）；
 2. 依次选择 G-1 → G-2 → G-3 → G-4 → G-5 中前置已满足的实质目标；
@@ -81,10 +91,10 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 a1f9cd41419bc1994d0af31fb311e45d3950baf1
-capture workflow             37760933918
-capture artifact             11542107196
-capture artifact digest      sha256:16e113ac7b834da5e9bd9d59fd227b134fa5b6fe6996558e3304bf291d26bdbd
+capture head                 83df4e09d05e9cd656fa5a33f8e04b7bc2a0cf99
+capture workflow             37770080525
+capture artifact             11547735102
+capture artifact digest      sha256:016622c7d4669efdd15b990a1ae40e8a4fc5f331211ee09c82d4373be7d6f820
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
@@ -159,8 +169,12 @@ docs/harness/provenance-proofs/2026-08-11-pr-13.json
 
 历史机械锚点继续保留在本文件，完整的状态/历史分离留给 G-6a；本次不修改依赖这些锚点的机器检查。
 
-## PR #69 Ready 来源回读与续期
+## 历史 PR #69 Ready 来源回读与续期
 
 a1f9cd4 的产品冷审、138项测试与Draft CI通过后，Ready live provenance拒绝了继承PR71的来源，因为现行冻结合同要求RPC Worker来源关联当前PR。现按PR69本身的真实来源记录续期：SDK成功run37760933918；RPC run37763595121的attempts1/2均完成capture、fresh/committed校验和完整对象相等，之后才由显式recapture-only guard额外制造CLI失败。它不是Runtime失败，也不是正常完整比较失败。
 
 两份Worker Artifact重新公开下载仍可读，72731字节result.json逐字节相同且与完整committed对象深相等。临时guard已恢复为原CLI blob fba36da923a94cd2b9ba024f020089e3ef313d90，协议、normalizer、Workflow、validator、内容指纹和接受谓词无净变化。本轮最终交付风险升R3；原产品R2批准不授权新的来源HEAD，当前仍等待新最终完整HEAD的独立R3冷审、Ready全CI与受保护合入。
+
+## 当前 PR #75 来源闭环状态
+
+G-1a文档切片在83df4e09获独立R2，但Ready因当前PR来源关联被拒。现按[真实采集记录](../spikes/pi-runtime-contract/README.md)续期SDK与RPC来源，两Worker attempts的完整相等后受控CLI失败已明确记录，临时guard已恢复原blob。当前交付升R3，等待新最终完整HEAD的独立审查和fresh Ready CI；不复用83df批准，也不把来源更新视为新增产品能力。
