@@ -6,13 +6,13 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-1c 会话输入与 Schema 演进实证
+## 当前工作：G-1 有限执行决议
 
-2026-10-08 重新对账：`main@f1156747e94760e26f9ac3afdfc5accfbe52b98b` 已包含 PR #77 的 G-1b 静态包归属实验，以及 PR #75/#69 的 Proposed 架构资料和正式 SQLite Ledger。#76 已关闭；已合实验不是 D-10 接受，完整 G-1、正式 Worker/Daemon 和会话产品链仍未交付。
+2026-10-08 本项起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，已含 PR #77/#79 的静态包归属、合成输入和真实临时 SQLite 演进实证。canonical execution 为 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`，primary 为 [PR #81](https://github.com/ntygod/zhiwei-next/pull/81)；新完整 HEAD、CI 和最终独立审查以实时对象为准。
 
-当前 canonical execution 为 [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)，唯一工作分支 `spike/78-session-schema-evidence`。[G-1c 决策实证](../spikes/g1-decision-evidence/README.md)补齐可独立完成的 D-01 许可输入/revision 合成实验与 D-02 真实临时 SQLite 候选升级、失败回滚、旧版拒新库和闭库备份恢复。D-02 复用原 validator，不复制断言，不注册生产迁移；manifest 范围明确限 table/index/trigger。primary PR、最终 HEAD、真实 CI 和独立审查以 #78 实时关联为准，不预填批准。
+[当前执行决议](../planning/current-decisions.md)是单一执行状态入口，原源登记及 JSON 是历史 Proposed 快照；[状态层说明](../planning/decision-execution-layer.md)记录严格 opt-in 校验、有限范围和审查身份。D-01/02/10 已依据 [PR #81 的真实逐项决策审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6062783403)记 Accepted，reviewed HEAD 为 `4eae854403dc6596a0db7297dcf756137c848ec7`，回读观测为 `2026-10-08T15:05:32Z`。ADR 0007—0010 仅状态行改变，被审正文/范围/实验摘要不变。该评论只批准历史 proposal；PR #77/#79 仍仅属实验批准。状态登记后的新完整 HEAD 待全新独立 cold review、fresh Ready CI、受保护合入与来源回读，不继承未来批准。
 
-D-01/D-02/D-10 及 ADR 0007—0010 继续 Proposed；原源快照、专项冻结 checker、Workflow 与质量门不变。D-10 旧 PR #77 批准仅是该实验的历史证据；后续有限接受必须有新的真实 evidence/review HEAD、ADR/登记一致性和最终完整 HEAD 审查。当前不新增 Session、产品配置加载器、正式 Schema、ProviderHost 或新协议，不放行 G-2…G-5/M0-2。真实数据保留、owner/升级并发和性能/硬件持久性分别待 D-04/D-09/D-03。
+[G-1 原卡逐项验收记录](../planning/g1-baseline-acceptance.md)已分别核对三项完成条件和两类失败路径，本 PR 候选实质条件满足；尚不宣称已合入 main 交付，不从三个 Accepted 自动算完成，也不要求先交付未来产品能力。待本 PR 最终审查/CI/合入回读完成后，按原依赖选择 G-2/G-3 就绪工作；D-04/G-2 保留授权、D-09 owner/升级并发、D-03/G-5 性能与硬件持久性仍约束相关产品实施。D-02 只覆盖 table/index/trigger/xinfo，view 未覆盖且旧态验证在 BEGIN IMMEDIATE 前。本项不实现 Session、生产迁移、Host 或新权限，不改原质量门。#67 整体、M0 与正式会话链仍未完成。
 
 以下 PR #71/#73/#69/#75 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。project-state 更新命中既有 Runtime 来源路径时，按现行合同取证，不为减少重采成本省略应有状态或修改门禁。
 
@@ -91,10 +91,10 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 146ba51e0dd97f046174d2f3e4207a05c24421f5
-capture workflow             37783782584
-capture artifact             11553431732
-capture artifact digest      sha256:e2b700711fef82518d83c965f5334f98ae702df8c46126d45e7f267392379068
+capture head                 7bbbd44e87c440591421cec10fa24e9d4a57f600
+capture workflow             37792517432
+capture artifact             11556798358
+capture artifact digest      sha256:d07b2d569e140b0d4298a7ec736f82fb6625cb7b6cb7c1e60f1ea4640eaf2ceb
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
@@ -183,6 +183,10 @@ G-1a文档切片在83df4e09获独立R2，但Ready因当前PR来源关联被拒�
 
 G-1b当前PR77已按[真实Runtime取证记录](../spikes/pi-runtime-contract/README.md)准备本PR成功SDK来源与Worker两attempt来源。完整比较成功后才制造受控CLI失败，最终CLI已恢复原blob；不改内容指纹与接受谓词。冷审修复文件包装器/空suite误计与入口键序重复后，实验45项、目录精确运行30项与全仓138项分别验证；来源续期使最终风险为R3，等待最终完整HEAD新独立审查与fresh Ready CI，不复用PR75审查或宣布D-10接受。
 
-## 当前 PR #79 来源闭环状态
+## 历史 PR #79 来源闭环状态
 
 G-1c当前PR79已按[真实Runtime取证记录](../spikes/pi-runtime-contract/README.md)核对本PR成功SDK与Worker两attempt；完整比较成功后受控CLI失败的原日志/原ZIP均保留，CLI现已恢复原blob。D01 50项、D02 35项、既有G1b45项与全仓138项各自验证，不合加。仍等待新最终完整HEAD独立R3/fresh ReadyCI；不改变原11项Proposed，不宣称真实模型输入/生产升级/任意SQLite对象覆盖。
+
+## 历史 PR #81 来源取证状态（正式决议审查前）
+
+本PR已按[真实Runtime记录](../spikes/pi-runtime-contract/README.md)核齐当前PR成功SDK及Worker两attempt来源，原CLI已恢复。取证时执行层仍是3项Evidence Ready、8项Proposed、零Accepted；当时需先有真实逐项决议审查，才能登记状态，并对新最终完整HEAD独立R3/fresh Ready，不拿来源或旧实验批准代替接受。

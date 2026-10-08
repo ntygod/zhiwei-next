@@ -1,5 +1,7 @@
 # G-1b 不变量归属合成实验
 
+> 历史取证说明：下文状态、当前任务及接受条件保留原实验时点语义；唯一当前决议状态和有限范围见[当前执行决议](../../planning/current-decisions.md)。原实验批准不授权新的决策或 HEAD。
+
 状态：独立 opt-in Spike，D-10 / ADR 0007、0010 仍为 Proposed，不是产品入口、质量门或 G-1 完成证明。对应 [Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)，分支 `spike/76-invariant-ownership-evidence`，基线 `main@e2dfa854585cb8365c17ffea6b95a491ad8e8636`。
 
 ## 结果与边界
