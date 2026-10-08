@@ -194,9 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    // PR #75 controlled recapture: preserve the existing source-attempt contract.
-    // This guard runs only after full validation and equality; remove before Ready.
-    throw new Error("PR #75 recapture-only guard: complete Fresh/committed equality succeeded; retain the historical compare-failure provenance shape.");
     return;
   }
   if (outputIndex >= 0) {

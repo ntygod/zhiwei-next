@@ -10,7 +10,7 @@ updated: 2026-10-08
 
 2026-10-08 重新对账：`main@f0fb58c9095aeca5121f9e196b158f7fda2ad442` 已包含 PR #73 规划资料和 PR #69 SQLite Ledger；Issue #72、#56 已关闭。M0-1 已合入，不再是产品 WIP；正式 Worker/Daemon 和会话产品链仍未交付。
 
-当前 canonical execution 为 [Issue #74](https://github.com/ntygod/zhiwei-next/issues/74)，唯一工作分支 `docs/74-core-boundary-baseline`。本有限 G-1a 切片交付 [不变量入口/正反测试目录](../architecture/invariant-ownership-baseline.md)、核心/会话/Schema 三份 Proposed ADR，以及按 ADR 0006 对齐既有 Store 依赖表。primary PR、最终 HEAD、真实 CI 和独立 R2 审查以 #74 实时关联为准；本记录不预填批准。
+当前 canonical execution 为 [Issue #74](https://github.com/ntygod/zhiwei-next/issues/74)，唯一工作分支 `docs/74-core-boundary-baseline`。本有限 G-1a 切片交付 [不变量入口/正反测试目录](../architecture/invariant-ownership-baseline.md)、核心/会话/Schema 三份 Proposed ADR，以及按 ADR 0006 对齐既有 Store 依赖表。primary PR、最终 HEAD、真实 CI 和独立审查以 #74 实时关联为准；本记录不预填批准。
 
 D-01/D-02/D-10 仍 Proposed。没有新增 runtime 校验入口、Provider Host、产品配置加载器、Schema 或迁移；尚未覆盖目录重复 ID/无 owner 和产品级 Provider-disable 实验，完整 G-1 未完成。下一有限目标是依各 ADR 补足决策实验/接受证据，再做确有必要的静态映射与组合验证；不要把规划 checker 当前冻结 Proposed 当作永远不能推进决策的规则。G-2…G-5 和 M0-2 不因本切片放行。
 
@@ -91,10 +91,10 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 a1f9cd41419bc1994d0af31fb311e45d3950baf1
-capture workflow             37760933918
-capture artifact             11542107196
-capture artifact digest      sha256:16e113ac7b834da5e9bd9d59fd227b134fa5b6fe6996558e3304bf291d26bdbd
+capture head                 83df4e09d05e9cd656fa5a33f8e04b7bc2a0cf99
+capture workflow             37770080525
+capture artifact             11547735102
+capture artifact digest      sha256:016622c7d4669efdd15b990a1ae40e8a4fc5f331211ee09c82d4373be7d6f820
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
@@ -169,8 +169,12 @@ docs/harness/provenance-proofs/2026-08-11-pr-13.json
 
 历史机械锚点继续保留在本文件，完整的状态/历史分离留给 G-6a；本次不修改依赖这些锚点的机器检查。
 
-## PR #69 Ready 来源回读与续期
+## 历史 PR #69 Ready 来源回读与续期
 
 a1f9cd4 的产品冷审、138项测试与Draft CI通过后，Ready live provenance拒绝了继承PR71的来源，因为现行冻结合同要求RPC Worker来源关联当前PR。现按PR69本身的真实来源记录续期：SDK成功run37760933918；RPC run37763595121的attempts1/2均完成capture、fresh/committed校验和完整对象相等，之后才由显式recapture-only guard额外制造CLI失败。它不是Runtime失败，也不是正常完整比较失败。
 
 两份Worker Artifact重新公开下载仍可读，72731字节result.json逐字节相同且与完整committed对象深相等。临时guard已恢复为原CLI blob fba36da923a94cd2b9ba024f020089e3ef313d90，协议、normalizer、Workflow、validator、内容指纹和接受谓词无净变化。本轮最终交付风险升R3；原产品R2批准不授权新的来源HEAD，当前仍等待新最终完整HEAD的独立R3冷审、Ready全CI与受保护合入。
+
+## 当前 PR #75 来源闭环状态
+
+G-1a文档切片在83df4e09获独立R2，但Ready因当前PR来源关联被拒。现按[真实采集记录](../spikes/pi-runtime-contract/README.md)续期SDK与RPC来源，两Worker attempts的完整相等后受控CLI失败已明确记录，临时guard已恢复原blob。当前交付升R3，等待新最终完整HEAD的独立审查和fresh Ready CI；不复用83df批准，也不把来源更新视为新增产品能力。
