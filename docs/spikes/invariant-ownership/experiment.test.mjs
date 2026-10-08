@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { loadCatalog, validateCatalog, verifyEvidence, validateEvidenceProcess } from "./catalog-check.mjs";
+import { loadCatalog, validateCatalog, verifyEvidence, validateEvidenceProcess, root } from "./catalog-check.mjs";
 import { checkRenderedCatalog } from "./render-catalog.mjs";
 import { runSyntheticComposition, syntheticDeclaration, syntheticInput, validateDeclaration } from "./composition.mjs";
 
@@ -32,6 +32,7 @@ const catalogMutations = [
   ["internal protocol function not exported", (value) => value.invariants[0].entries[0].export = "assertNonEmpty", /missing public export/],
   ["nonexistent instance method", (value) => value.invariants[3].entries[0].method = "missingAppend", /missing own public method/],
   ["inherited method is not a declared entry", (value) => value.invariants[3].entries[0].method = "toString", /missing own public method/],
+  ["duplicate entry with reordered keys", (value) => { const entry = value.invariants[3].entries[0]; value.invariants[3].entries.push({ method: entry.method, export: entry.export }); }, /Duplicate entry reference/],
   ["missing entry", (value) => value.invariants[0].entries = [], /nonempty array/],
   ["missing test file", (value) => value.invariants[0].tests[0].file = "packages/protocol/src/absent.test.ts", /ENOENT/],
   ["test path traversal", (value) => value.invariants[0].tests[0].file = "../outside.test.ts", /Invalid test path/],
@@ -49,13 +50,13 @@ test("existing test file with a nonexistent exact test name is rejected by actua
   const candidate = structuredClone(catalog);
   candidate.invariants = [candidate.invariants.find((item) => item.id === "I-CORRECTION")];
   candidate.invariants[0].tests[0].name = "a plausible but absent test name";
-  assert.throws(() => verifyEvidence(candidate), /missing\/duplicate executed test/);
+  assert.throws(() => verifyEvidence(candidate), /actual test count differs/);
 });
 test("a substring of a real test name is not accepted as evidence", () => {
   const candidate = structuredClone(catalog);
   candidate.invariants = [candidate.invariants.find((item) => item.id === "I-CORRECTION")];
   candidate.invariants[0].tests[0].name = "explicit correction";
-  assert.throws(() => verifyEvidence(candidate), /missing\/duplicate executed test/);
+  assert.throws(() => verifyEvidence(candidate), /actual test count differs/);
 });
 test("catalog changes cannot silently leave the generated documentation stale", () => {
   const candidate = structuredClone(catalog);
@@ -141,7 +142,48 @@ for (const [name, records, error] of [
   ["failed", [{ type: "test:fail", name: "required", skip: false, todo: false }], /failed evidence/],
 ]) {
   test(`evidence result parser rejects ${name} reporter records even with exit zero`, () => {
-    const result = { status: 0, stdout: records.map((record) => JSON.stringify(record)).join("\n"), stderr: "" };
+    const file = resolve(root, "synthetic reporter");
+    const summary = { type: "test:summary", file, success: true,
+      counts: { tests: 1, passed: 1, failed: 0, cancelled: 0, skipped: 0, todo: 0 } };
+    const emitted = [...records.map((record) => ({ ...record, file, line: 2, column: 1, testType: "test" })), summary];
+    const result = { status: 0, stdout: emitted.map((record) => JSON.stringify(record)).join("\n"), stderr: "" };
     assert.throws(() => validateEvidenceProcess(result, "synthetic reporter", new Set(["required"])), error);
   });
 }
+
+test("real Node file-wrapper pass cannot stand in for a test when the pattern matches zero tests", () => {
+  const candidate = structuredClone(catalog);
+  candidate.invariants = [candidate.invariants.find((item) => item.id === "I-CORRECTION")];
+  for (const reference of candidate.invariants[0].tests) reference.name = resolve(root, reference.file);
+  // On Node 22 the child summary has tests=0, followed by a wrapper pass named
+  // after the absolute file. The global summary incorrectly looks like tests=1.
+  assert.throws(() => verifyEvidence(candidate), /actual test count differs/);
+});
+
+function withReporterFixture(makeSource, inspect) {
+  const directory = mkdtempSync(join(tmpdir(), "zhiwei-g1-reporter-"));
+  const file = join(directory, "fixture.test.mjs");
+  try {
+    writeFileSync(file, makeSource(file));
+    const result = spawnSync(process.execPath, ["--test", "--test-reporter",
+      resolve(root, "docs/spikes/invariant-ownership/evidence-reporter.mjs"), file],
+    { encoding: "utf8", timeout: 10_000,
+      env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "NODE_TEST_CONTEXT")) });
+    inspect(result, file);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+test("a real named test may legitimately use its absolute file path as its name", () => {
+  withReporterFixture((file) => `import test from "node:test";\ntest(${JSON.stringify(file)}, () => {});\n`, (result, file) => {
+    assert.equal(validateEvidenceProcess(result, file, new Set([file])), 1);
+  });
+});
+test("a real Node suite pass is not a concrete named test even with one passing child", () => {
+  withReporterFixture(() => 'import { describe, it } from "node:test";\ndescribe("suite-only", () => { it("child", () => {}); });\n', (result, file) => {
+    assert.throws(() => validateEvidenceProcess(result, file, new Set(["suite-only"])), /evidence is not a concrete test/);
+  });
+});
+test("an empty real Node suite cannot stand in for an executed named test", () => {
+  withReporterFixture(() => 'import { describe } from "node:test";\ndescribe("empty-suite", () => {});\n', (result, file) => {
+    assert.throws(() => validateEvidenceProcess(result, file, new Set(["empty-suite"])), /actual test count differs/);
+  });
+});

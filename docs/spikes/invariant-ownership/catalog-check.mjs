@@ -73,7 +73,7 @@ export function validateCatalog(catalog) {
         const descriptor = Object.getOwnPropertyDescriptor(exported.prototype ?? {}, entry.method);
         assert.equal(typeof descriptor?.value, "function", `${owner}.${entry.export}: missing own public method ${entry.method}`);
       }
-      const key = JSON.stringify(entry);
+      const key = JSON.stringify([entry.export, entry.method ?? null]);
       assert.ok(!entries.has(key), "Duplicate entry reference");
       entries.add(key);
     }
@@ -120,9 +120,25 @@ export function validateEvidenceProcess(result, file, names) {
   assert.ifError(result.error);
   assert.equal(result.status, 0, `${file}: evidence subprocess failed\n${result.stderr}\n${result.stdout}`);
   const results = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const expectedFile = resolve(root, file);
+  // The global summary counts a file wrapper as a passing test when no test
+  // matched. Only the child file's own summary counts actual named tests.
+  const summaries = results.filter((entry) => entry.type === "test:summary" && entry.file === expectedFile);
+  assert.equal(summaries.length, 1, `${file}: missing/duplicate file summary`);
+  const summary = summaries[0];
+  assert.equal(summary.success, true, `${file}: unsuccessful file summary`);
+  assert.equal(summary.counts?.tests, names.size, `${file}: actual test count differs from requested names`);
+  assert.equal(summary.counts?.passed, names.size, `${file}: actual passing test count differs from requested names`);
+  for (const key of ["failed", "cancelled", "skipped", "todo"]) {
+    assert.equal(summary.counts?.[key], 0, `${file}: file summary has ${key} tests`);
+  }
   for (const name of names) {
-    const matches = results.filter((entry) => entry.name === name);
+    const matches = results.filter((entry) => ["test:pass", "test:fail"].includes(entry.type) && entry.name === name);
     assert.equal(matches.length, 1, `${file}: missing/duplicate executed test ${name}`);
+    assert.equal(matches[0].testType, "test", `${file}: evidence is not a concrete test: ${name}`);
+    assert.equal(matches[0].file, expectedFile, `${file}: evidence comes from a different file: ${name}`);
+    assert.ok(Number.isInteger(matches[0].line) && matches[0].line > 0 &&
+      Number.isInteger(matches[0].column) && matches[0].column > 0, `${file}: missing test source location: ${name}`);
     assert.equal(matches[0].type, "test:pass", `${file}: failed evidence ${name}`);
     assert.equal(matches[0].skip, false, `${file}: skipped evidence ${name}`);
     assert.equal(matches[0].todo, false, `${file}: TODO evidence ${name}`);
