@@ -2,7 +2,7 @@
 
 ## 实现状态与边界取证
 
-下图是目标结构，不代表 Daemon 已组装全部服务。正式已实现边界与 bootstrap 哨兵见 [G-1 不变量归属与调用证据基线](invariant-ownership-baseline.md)；相关 ADR 0007—0009 仍是 Proposed，不放行后续实现或 G-1。已接受 ADR 0006 的 SQLite Ledger 已进入 main，Daemon/Worker 正式组合仍待 M0 后续工作。
+下图是目标结构，不代表 Daemon 已组装全部服务。正式已实现边界与 bootstrap 哨兵见 [G-1 不变量归属与调用证据基线](invariant-ownership-baseline.md)；相关 ADR 0007—0010 仍是 Proposed，不放行后续实现或 G-1。已接受 ADR 0006 的 SQLite Ledger 已进入 main，Daemon/Worker 正式组合仍待 M0 后续工作。
 
 ## 总体结构
 

@@ -6,15 +6,15 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-1a 边界与决策证据基线
+## 当前工作：G-1b 包归属目录与合成实证
 
-2026-10-08 重新对账：`main@f0fb58c9095aeca5121f9e196b158f7fda2ad442` 已包含 PR #73 规划资料和 PR #69 SQLite Ledger；Issue #72、#56 已关闭。M0-1 已合入，不再是产品 WIP；正式 Worker/Daemon 和会话产品链仍未交付。
+2026-10-08 重新对账：`main@e2dfa854585cb8365c17ffea6b95a491ad8e8636` 已包含 PR #75 的 G-1a 提案/目录和 PR #69 的正式 SQLite Ledger。G-1a 仅交付决策资料，完整 G-1、正式 Worker/Daemon 和会话产品链仍未交付。
 
-当前 canonical execution 为 [Issue #74](https://github.com/ntygod/zhiwei-next/issues/74)，唯一工作分支 `docs/74-core-boundary-baseline`。本有限 G-1a 切片交付 [不变量入口/正反测试目录](../architecture/invariant-ownership-baseline.md)、核心/会话/Schema 三份 Proposed ADR，以及按 ADR 0006 对齐既有 Store 依赖表。primary PR、最终 HEAD、真实 CI 和独立审查以 #74 实时关联为准；本记录不预填批准。
+当前 canonical execution 为 [Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)，唯一工作分支 `spike/76-invariant-ownership-evidence`。本切片交付 [单一目录与合成实验](../spikes/invariant-ownership/README.md)、由目录生成的[证据视图](../architecture/invariant-ownership-baseline.md)，以及从 0007 分出的 Proposed 包归属 ADR 0010。primary PR、最终 HEAD、真实 CI 和独立审查以 #76 实时关联为准；本记录不预填批准。
 
-D-01/D-02/D-10 仍 Proposed。没有新增 runtime 校验入口、Provider Host、产品配置加载器、Schema 或迁移；尚未覆盖目录重复 ID/无 owner 和产品级 Provider-disable 实验，完整 G-1 未完成。下一有限目标是依各 ADR 补足决策实验/接受证据，再做确有必要的静态映射与组合验证；不要把规划 checker 当前冻结 Proposed 当作永远不能推进决策的规则。G-2…G-5 和 M0-2 不因本切片放行。
+实验范围为真实公开入口/精确测试的目录校验，以及固定合成 Adapter→protocol→临时 SQLite 组合。目录/能力重复、缺/多 owner、无效引用、Provider 声明禁用核心等被拒绝；不能外推为运行中 Provider Host 或 sandbox。D-01/D-02/D-10 仍 Proposed；不新增正式产品入口、Session、产品配置加载器、Schema、迁移或质量门。下一决策必须把完整 HEAD 的独立审查、实证、登记与机器投影闭合；完整 G-1 未完成，G-2…G-5 和 M0-2 不因本切片放行。
 
-以下 PR #71/#73/#69 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。此处只补充本实质任务的现状，不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。
+以下 PR #71/#73/#69/#75 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。project-state 更新命中既有 Runtime 来源路径时，按现行合同取证，不为减少重采成本省略应有状态或修改门禁。
 
 ## 历史开发起点（PR #71 期间）
 
@@ -175,6 +175,6 @@ a1f9cd4 的产品冷审、138项测试与Draft CI通过后，Ready live provenan
 
 两份Worker Artifact重新公开下载仍可读，72731字节result.json逐字节相同且与完整committed对象深相等。临时guard已恢复为原CLI blob fba36da923a94cd2b9ba024f020089e3ef313d90，协议、normalizer、Workflow、validator、内容指纹和接受谓词无净变化。本轮最终交付风险升R3；原产品R2批准不授权新的来源HEAD，当前仍等待新最终完整HEAD的独立R3冷审、Ready全CI与受保护合入。
 
-## 当前 PR #75 来源闭环状态
+## 历史 PR #75 来源闭环状态
 
 G-1a文档切片在83df4e09获独立R2，但Ready因当前PR来源关联被拒。现按[真实采集记录](../spikes/pi-runtime-contract/README.md)续期SDK与RPC来源，两Worker attempts的完整相等后受控CLI失败已明确记录，临时guard已恢复原blob。当前交付升R3，等待新最终完整HEAD的独立审查和fresh Ready CI；不复用83df批准，也不把来源更新视为新增产品能力。

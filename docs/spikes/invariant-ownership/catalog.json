@@ -1,0 +1,444 @@
+{
+  "schemaVersion": 1,
+  "invariants": [
+    {
+      "id": "I-EVENT-SHAPE",
+      "owners": [
+        "protocol"
+      ],
+      "maturity": "formal-v1",
+      "summary": "闭合形状、版本、canonical body/身份",
+      "entries": [
+        {
+          "export": "createNormalizedRuntimeEventV1"
+        },
+        {
+          "export": "parseNormalizedRuntimeEventV1"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/protocol/src/runtime-event-v1.test.ts",
+          "name": "v1 canonical body, source-slot event ID and idempotency key have fixed golden vectors",
+          "role": "positive"
+        },
+        {
+          "file": "packages/protocol/src/runtime-event-v1.test.ts",
+          "name": "parser fails closed for protocol, identity, phase and global-order drift",
+          "role": "negative"
+        }
+      ],
+      "limitations": "Adapter 调用 create、Ledger 调用 parse，复用 protocol 断言；只验证单事件，不证明目标存在。"
+    },
+    {
+      "id": "I-TRACE-RELATIONS",
+      "owners": [
+        "protocol"
+      ],
+      "maturity": "formal-v1",
+      "summary": "同域严格顺序、先行关联、完整回放",
+      "entries": [
+        {
+          "export": "parseNormalizedRuntimeEventTraceV1"
+        },
+        {
+          "export": "assertReplayableNormalizedRuntimeEventTraceV1"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/protocol/src/runtime-event-stream-v1.test.ts",
+          "name": "independent sequence domains may both start at one without implying a total order",
+          "role": "positive"
+        },
+        {
+          "file": "packages/protocol/src/runtime-event-stream-v1.test.ts",
+          "name": "Tool links cannot borrow a declaration from another Agent Run or Runtime instance",
+          "role": "negative"
+        },
+        {
+          "file": "packages/protocol/src/runtime-event-stream-v1.test.ts",
+          "name": "explicit links cannot point forward",
+          "role": "negative"
+        },
+        {
+          "file": "packages/protocol/src/runtime-event-stream-v1.test.ts",
+          "name": "complete replay fails closed on required unknown vocabulary",
+          "role": "negative"
+        }
+      ],
+      "limitations": "调用方须提供足够 Trace，不等于单批 append。"
+    },
+    {
+      "id": "I-PI-PROJECTION",
+      "owners": [
+        "pi-adapter"
+      ],
+      "maturity": "formal-v1",
+      "summary": "字段级投影，不发明关联",
+      "entries": [
+        {
+          "export": "normalizePiRuntimeEventV1"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/pi-adapter/src/normalized-runtime-event-v1.test.ts",
+          "name": "State and Messages snapshots are projected field-by-field instead of passing raw Pi objects",
+          "role": "positive"
+        },
+        {
+          "file": "packages/pi-adapter/src/normalized-runtime-event-v1.test.ts",
+          "name": "Adapter does not invent missing correlation IDs",
+          "role": "negative"
+        }
+      ],
+      "limitations": "复用 protocol；不能证明正式 Worker 已接入。"
+    },
+    {
+      "id": "I-LEDGER-IDENTITY",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "exact replay 幂等、冲突和完整 source stream 单调",
+      "entries": [
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "append"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "appendBatch"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "SQLite Ledger appends once and exact replay returns the existing row",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "source-slot conflict is rejected before it can become a duplicate row",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "sequence monotonicity is scoped to the complete v1 source stream",
+          "role": "negative"
+        }
+      ],
+      "limitations": "入口复用 protocol parser；eventId 规则仍归 protocol。"
+    },
+    {
+      "id": "I-LEDGER-ATOMICITY",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "批次不部分提交",
+      "entries": [
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "appendBatch"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "batch replay prefix and new suffix are atomic and preserve result identity",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "a later batch conflict rolls back all earlier inserts in that batch",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "batch conflicts and reverse sequence preserve the exact cursor state",
+          "role": "negative"
+        }
+      ],
+      "limitations": "不证明上游确认点。"
+    },
+    {
+      "id": "I-LEDGER-READ",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "Scope/cursor 隔离、canonical 行与投影、单 snapshot",
+      "entries": [
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "readSession"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "readWorkspace"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "getByEventId"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "getByIdempotencyKey"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "countEvents"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "row cursor replay keeps Workspace and Runtime Session isolated",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "every business read uses one validated SQLite snapshot",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "DB read rejects a denormalized projection that differs from canonical event_json",
+          "role": "negative"
+        }
+      ],
+      "limitations": "数据库隔离不等于 HTTP 客户端身份认证。"
+    },
+    {
+      "id": "I-LEDGER-SCHEMA",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "完整安装态、PRAGMA、integrity fail closed",
+      "entries": [
+        {
+          "export": "openSqliteObservationLedgerV1"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "integrityCheck"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "assertIntegrity"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "file Ledger uses WAL and replays the same validated event after reopen",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-fifth.test.ts",
+          "name": "post-open hidden-prefix Schema drift fails every public read/write and integrity boundary",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "integrity check cannot be disabled and accepts only one exact ok row",
+          "role": "negative"
+        }
+      ],
+      "limitations": "公开读/写边界继续验证；没有产品级 Provider 组合测试。"
+    },
+    {
+      "id": "I-LEDGER-IMMUTABILITY",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "append-only、固定迁移与原子历史",
+      "entries": [
+        {
+          "export": "openSqliteObservationLedgerV1"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "append"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "appendBatch"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "migration source file is stable UTF-8 SQL",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "file Ledger uses WAL and replays the same validated event after reopen",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "INSERT OR REPLACE and REPLACE cannot rewrite Runtime or migration history",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "public Ledger API ignores migration overrides and hides migration execution seams",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "pending migration installation and metadata roll back when final validation fails",
+          "role": "negative"
+        }
+      ],
+      "limitations": "迁移源模块私有；不证明未来新领域表升级。"
+    },
+    {
+      "id": "I-LEDGER-ERROR",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "formal-v1",
+      "summary": "SQLite operational 错误稳定分类",
+      "entries": [
+        {
+          "export": "openSqliteObservationLedgerV1"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "append"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "readSession"
+        },
+        {
+          "export": "SqliteObservationLedgerV1",
+          "method": "close"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+          "name": "SQLite Ledger appends once and exact replay returns the existing row",
+          "role": "positive"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-fifth.test.ts",
+          "name": "real SQLITE_FULL during metadata installation retains sqlite category and atomic rollback",
+          "role": "negative"
+        },
+        {
+          "file": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+          "name": "DatabaseSync constructor and close failures use the stable sqlite contract",
+          "role": "negative"
+        }
+      ],
+      "limitations": "语义冲突另见 I-LEDGER-IDENTITY；不是所有硬件故障持久性承诺。"
+    },
+    {
+      "id": "I-EVIDENCE",
+      "owners": [
+        "domain"
+      ],
+      "maturity": "bootstrap-sentinel",
+      "summary": "非空证据 ID、置信度范围",
+      "entries": [
+        {
+          "export": "assertEvidence"
+        },
+        {
+          "export": "assertConfidence"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/cognition-core/src/index.test.ts",
+          "name": "explicit correction supersedes the old claim and activates a new version",
+          "role": "positive"
+        },
+        {
+          "file": "packages/cognition-core/src/index.test.ts",
+          "name": "a correction without evidence is rejected",
+          "role": "negative"
+        }
+      ],
+      "limitations": "没有查证 Observation 存在、同 Scope、可信来源；置信度越界没有专属负例，不能称完整 Claim 接受验证。"
+    },
+    {
+      "id": "I-CORRECTION",
+      "owners": [
+        "cognition-core"
+      ],
+      "maturity": "bootstrap-sentinel",
+      "summary": "返回 superseded 与新版本",
+      "entries": [
+        {
+          "export": "correctClaim"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/cognition-core/src/index.test.ts",
+          "name": "explicit correction supersedes the old claim and activates a new version",
+          "role": "positive"
+        },
+        {
+          "file": "packages/cognition-core/src/index.test.ts",
+          "name": "a correction without evidence is rejected",
+          "role": "negative"
+        }
+      ],
+      "limitations": "没有持久化原子 supersede、并发/有效时间/重复 Claim ID 合同；InMemoryCognitionStore.putClaim 可覆盖同 ID，只是 bootstrap。"
+    },
+    {
+      "id": "I-CONTEXT-SCOPE",
+      "owners": [
+        "context-compiler"
+      ],
+      "maturity": "bootstrap-sentinel",
+      "summary": "先过滤 active/Scope 再排序",
+      "entries": [
+        {
+          "export": "compileContext"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/context-compiler/src/index.test.ts",
+          "name": "workspace compilation never leaks a claim from another workspace",
+          "role": "positive-and-negative"
+        }
+      ],
+      "limitations": "仅单一跨 Workspace 哨兵，同时保留 A/排除 B；没有去重测试/实现，未完成状态与预算矩阵；浅 freeze 不证明深层不可变；M0 不注入 Context。"
+    },
+    {
+      "id": "I-BOOTSTRAP-OBSERVATION",
+      "owners": [
+        "memory-store"
+      ],
+      "maturity": "bootstrap-sentinel",
+      "summary": "内存 Observation 拒绝重复 ID",
+      "entries": [
+        {
+          "export": "InMemoryCognitionStore",
+          "method": "appendObservation"
+        }
+      ],
+      "tests": [
+        {
+          "file": "packages/memory-store/src/index.test.ts",
+          "name": "observation ledger preserves session order and rejects duplicate ids",
+          "role": "positive-and-negative"
+        }
+      ],
+      "limitations": "哨兵按 occurredAt 排序，不能替代正式 Ledger 的 source/cursor 合同、持久性或 Workspace 查询。"
+    }
+  ]
+}

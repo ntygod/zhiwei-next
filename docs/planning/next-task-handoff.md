@@ -1,8 +1,12 @@
 # 下一执行上下文交接
 
-状态：Issue #72 执行资料补全候选；不替代 live 对象核验，也不是 #69 的产品批准。
+状态：当前导航更新至 G-1b / Issue #76；下方 #72/#69 内容保留为历史资料，不替代 live 对象核验。
 
-## 已合入基线与当前产品目标
+## 当前执行导航（2026-10-08）
+
+PR #75 已合入 `main@e2dfa854585cb8365c17ffea6b95a491ad8e8636`，G-1b 的 canonical Issue 为 [#76](https://github.com/ntygod/zhiwei-next/issues/76)，唯一分支 `spike/76-invariant-ownership-evidence`。[实验说明](../spikes/invariant-ownership/README.md)给出目录、生成检查、真实测试与固定合成路径，D-10 仍 Proposed，完整 G-1 未放行。当前 PR/HEAD/审查/CI 以 #76 实时对象为准；下一上下文先按[项目状态](../harness/project-state.md)对账，再选择现有决策的有限缺口，不批量建立远期任务。
+
+## 历史：#72 开工基线与当时产品目标
 
 - repository: `ntygod/zhiwei-next`
 - 本项起点：`main@ebb926ffa5228941057e1d264aab3f353c35d109`，PR #71 已合并、#70 已完成关闭
