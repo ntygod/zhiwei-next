@@ -428,7 +428,7 @@ test("pending migrations are atomic and failed SQL leaves no partial schema", ()
     const objects = database
       .prepare(
         `SELECT type, name FROM sqlite_schema
-         WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name`,
+         WHERE name NOT GLOB 'sqlite_*' ORDER BY type, name`,
       )
       .all();
     assert.deepEqual(objects, []);

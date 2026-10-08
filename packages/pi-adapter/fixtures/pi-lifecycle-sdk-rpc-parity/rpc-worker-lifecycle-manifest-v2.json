@@ -10,16 +10,16 @@
   "captureContractFingerprint": "511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0",
   "source": {
     "state": "captured",
-    "head": "474a100e8b5c267ea1e5285b1ed4f96a953656fc",
-    "workflowRun": 32090005181,
-    "runAttempt": 2,
-    "artifactId": 9308041130,
-    "artifactDigest": "sha256:9f7c3c1d0083d4f2c13467ba23f61301992e1b32a2b7f170f38aed6b2786c005"
+    "head": "44336fbaa512ef6351ef39d01380323ad6562b78",
+    "workflowRun": 37748698280,
+    "runAttempt": 3,
+    "artifactId": 11536294836,
+    "artifactDigest": "sha256:e6e02dec7aa7132b56001a2a0cff286c15a1fb36dc7f2996f508d50ca8b5da72"
   },
   "stability": {
-    "comparisonRunAttempt": 1,
-    "comparisonArtifactId": 9308008867,
-    "comparisonArtifactDigest": "sha256:3ffa43228261c2de228dba070e9855203cff5dfce2c1925e22732ea1980edddc",
+    "comparisonRunAttempt": 2,
+    "comparisonArtifactId": 11537221975,
+    "comparisonArtifactDigest": "sha256:945bf091ff9bbb6a0b30dee3188da6c687da8236ec3264b7bb18912fac052c51",
     "artifactResultJsonBytes": 72731,
     "artifactResultJsonSha256": "87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa",
     "byteIdenticalAcrossAttempts": true

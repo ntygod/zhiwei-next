@@ -172,6 +172,20 @@ function migrationError(
   migrationVersion?: number,
   options?: ErrorOptions,
 ): never {
+  // Keep environmental SQLite failures visible to the public Ledger's sqlite
+  // error boundary, including failures while reading migration history or
+  // installing metadata/DDL. SQL/constraint/type/binding errors remain migration
+  // source failures; explicit semantic MigrationError paths have no native cause.
+  // Extended result codes retain their primary category in the low eight bits:
+  // https://www.sqlite.org/rescode.html
+  const cause = options?.cause;
+  if (cause instanceof Error) {
+    const { code, errcode } = cause as Error & { code?: unknown; errcode?: unknown };
+    if (code === "ERR_SQLITE_ERROR" && typeof errcode === "number" && Number.isSafeInteger(errcode) && errcode > 0) {
+      const primary = errcode & 0xff;
+      if (primary !== 0 && ![1, 19, 20, 25].includes(primary)) throw cause;
+    }
+  }
   throw new ObservationLedgerMigrationError(message, migrationVersion, options);
 }
 
@@ -211,7 +225,7 @@ function readUserSchemaObjects(
     .prepare(
       `SELECT type, name
        FROM sqlite_schema
-       WHERE name NOT LIKE 'sqlite_%'
+       WHERE name NOT GLOB 'sqlite_*'
        ORDER BY type ASC, name ASC`,
     )
     .all() as Array<{ readonly type: string; readonly name: string }>;
@@ -664,12 +678,14 @@ export function applyObservationLedgerMigrations(
         // Preserve the primary install or validation failure.
       }
     }
-    if (phase === "validate") throw error;
     if (error instanceof ObservationLedgerMigrationError) throw error;
+    // Transaction acquisition/commit failures describe the SQLite operation,
+    // not invalid migration source. Preserve the primary cause so the public
+    // Ledger boundary can classify them as code="sqlite". Validation keeps its
+    // existing domain/corruption error category.
+    if (phase === "begin" || phase === "commit" || phase === "validate") throw error;
     migrationError(
-      phase === "commit"
-        ? "Failed to commit Observation Ledger migrations."
-        : `Failed to apply migration ${String(currentVersion)}.`,
+      `Failed to apply migration ${String(currentVersion)}.`,
       currentVersion,
       { cause: error },
     );

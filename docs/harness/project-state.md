@@ -3,10 +3,59 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-08-24
+updated: 2026-10-08
 -->
 
-## 当前定位
+## 当前开发起点
+
+本次整理对应 Issue #70 / PR #71。执行顺序以 [M0—M7 执行计划](../planning/execution-plan.md) 为准，当前仍是 [M0：能观察](../planning/milestone-m0.md)，没有进入记忆或完整 UI 阶段。计划随 PR #71 合入 main 后生效，其中的 Proposed 决策仍须分别取证、形成 ADR 并审查。
+
+2026-10-08 对账时，main 为 `843c09569360184592f3d5cecb3b1b165eba6af7`；PR #66 已合并，Issue #49 已关闭。正式 `NormalizedRuntimeEvent v1`、Pi 事件映射和契约 Fixture 已进入主分支；SQLite Ledger、正式 Worker/Daemon 链路和 CLI 查询回放尚未交付。本文件此前将 #66 记为待完成的状态已在本次整理中纠正，README 同步提供当前入口。
+
+本文件保存有日期的交接快照。开工时仍须实时核对 Incident、人类新输入、PR HEAD、CI 和分支，不能把下方历史 Fixture/审查身份当成当前候选批准。
+
+## 当前产品 WIP：Issue #56 / PR #69
+
+| 项目 | 对账结果 |
+|---|---|
+| 工作包 | M0-1：SQLite append-only Observation Ledger v1 收口 |
+| canonical Issue / primary PR | Issue #56 / PR #69 |
+| 状态 | open / Draft / 未合并 |
+| 唯一 active 产品分支 | `feat/56-sqlite-observation-ledger-v1` |
+| 候选 HEAD | `f4b94886020ea5c67c302f6eac2db518ac6bde27` |
+| 基线 | `main@843c09569360184592f3d5cecb3b1b165eba6af7` |
+| 待完成 | 当前 HEAD 的全新独立 R2 cold review、Ready CI、受保护合并和合入回读 |
+
+旧 HEAD `ba04fca042f3495b3fc4886da992cbb727b7cd0b` 的 `CHANGES_REQUESTED` 和 6 项 blocker 不代表当前 HEAD 已获批准。当前候选已有修复及历史 Draft CI 证据，但本规划整理不替代产品审查、不移动产品分支、不将候选代码计入 main。下一轮从 #69 的当前真实完整身份继续，不新建替代 Ledger PR；如需适配新的 main，仍在 #69 完成并重新审查最终 HEAD。
+
+## Ledger 候选继续记录
+
+<!-- zhiwei-active-primary
+work-item: #56
+primary-pr: #69
+branch: feat/56-sqlite-observation-ledger-v1
+status: review-required
+-->
+
+当前等待独立 R2 cold review。#69 原候选 `f4b94886020ea5c67c302f6eac2db518ac6bde27` 的独立复核发现：Schema 对象过滤将 LIKE 的 `_` 当通配符，遗漏 `sqlitex_*` 用户表/trigger；新库初始化锁冲突被归为 migration 而非稳定 `sqlite` 错误。该候选的 55 项 Ledger/129 项全仓检查通过不代表上述负例通过或已获批准。
+
+本轮仍在同一 #56/#69 修正两处边界并加入真实临时 SQLite 回归。提前独立复核进一步覆盖安装时真实 SQLITE_FULL 及 metadata/history I/O 错误；这些 operational cause 同样交给公开 sqlite 错误边界，SQL/constraint/history 语义失败仍保持 migration 分类。从 `main@dea55a9780ba8ad0ae22494d2664396c02dbcbb3` 保留已合入规划、Runtime 来源和精确清理记录，合并冲突只在本文件对齐。实际最终 HEAD、修复验证与审查结论以 PR 为准，旧审查不继承到新 HEAD；本文件不宣称 Ledger 已合入。
+
+## 工作队列与仓库对账
+
+1. 完成 M0-1（#56 / #69）；
+2. 依次选择 G-1 → G-2 → G-3 → G-4 → G-5 中前置已满足的实质目标；
+3. 再按计划推进 M0-2…M0-8，整体 M0 阶段门通过后进入 M1。
+
+Issue #67 保留架构父项；Issue #44 保留后台进度的 owner-input 原文和开放状态，由 M0-7、M5-6、M6-4 分阶段承接。Issue #15 复用为低优先级 G-6b，不阻塞产品主线。不批量创建远期工作包 Issue；本次入口和事实同步不宣称 G-1 或完整 G-6 已交付。
+
+旧 PR #68 已关闭、未合并，由 #69 supersede。旧分支 `feat/m0-sqlite-observation-ledger-v1` 当前为 `5d5aef1dd7bfd7b6b7812a9b0d4975dbd7963af0`，已不同于 2026-08-12 的冻结快照。核验结果：其产品父提交 `9126ca35e4afbc2c137cfa8978e0eae7bd97529f` 已由 #69 保留，唯一额外提交只加入废弃的 `.github/workflows/issue56-ledger-bootstrap.yml`。
+
+本次在[现有精确身份清理记录](reconciliation/2026-08-12-work-item-cleanup.json)追加该旧 HEAD，保留原快照登记作为历史，不改清理策略、Workflow 或检查器。仅在 PR #71 经 R3 审查合入后，由既有 Repository Hygiene 重查默认分支、protection、开放 PR 和完整 HEAD 再回收；HEAD 移动或重新获得开放 PR 时必须保留。实际删除结果以该 Workflow 回读为准。
+
+回收前已制作完整历史 Git bundle，并在独立临时裸仓库恢复验证：HEAD 为 `5d5aef1dd7bfd7b6b7812a9b0d4975dbd7963af0`，tree 为 `b7534e3eafb564287defc2194720ef76b8599439`。恢复时先通过受审查 PR 撤销本次精确清理登记，再从保存的完整 SHA/bundle 重建分支；不得 reset main 或覆盖 #69。文档可 revert，已登记 Issue、PR 和审计记录保留。
+
+## 治理状态
 
 知微处于 **M0：能观察**，AI-primary 自主开发模式为：
 
@@ -22,10 +71,9 @@ public-free-ruleset
 
 - PR #60已合并；
 - Issue #61 已完成 Public Ruleset 与 required evidence 闭环；
-- Issue #32 已由 PR #64 完成；
-- Issue #49 已由 PR #66 完成，`NormalizedRuntimeEvent v1` 已进入 main；
-- 当前 main 基线为 `843c09569360184592f3d5cecb3b1b165eba6af7`；
-- Pi SDK / Extension、RPC、Host、Tool、Retry、Queue、Cancel、Compaction、Session Replacement、Process Boundary 与 Runtime-neutral v1 协议的脱敏 Fixture 已进入 main。
+- Issue #32 已由 PR #64 完成，其合并基线为 `374a27505c4a150cbcb63c1b8f6c1afb3bfb4448`；
+- Issue #49 已由 PR #66 完成，协议合并基线为 `843c09569360184592f3d5cecb3b1b165eba6af7`；
+- Pi SDK / Extension、RPC、Host、Tool、Retry、Queue、Cancel、Compaction、Session Replacement 与 Process Boundary 的脱敏 Fixture 已进入 main。
 
 ## SDK / RPC verified Fixture 连续性
 
@@ -33,76 +81,34 @@ SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 374015527ec80d0382d8ef52f61aff82380d102e
-capture workflow             32088804546
-capture artifact             9307625961
-capture artifact digest      sha256:25e523c899615c1afe06e6a108c37de161a6015c024a8c29b25087d51b3f0275
+capture head                 e2daad61f4433cc55a7bf1584b3d7a62d1f65bb5
+capture workflow             37746670390
+capture artifact             11535787397
+capture artifact digest      sha256:790ffd986ff162ca864f48dd9a08462c3000c1ce2d48528d34e38c52c0a75c12
 ```
 
-RPC Worker v2 committed evidence继续绑定 PR #66 的公开 attempts 1/2；两个 Artifact 的唯一 `result.json` 逐字节一致，均为 72,731 bytes，SHA-256：
+2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
 
-```text
-87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
-```
+## 已合入协议的 Fixture 与历史证据
 
-Contract Fixture 保持 **74-event**，固定 canonical hash：
+`NormalizedRuntimeEvent v1` 的协议、Pi Adapter、74-event Fixture、文档身份门禁与 Compaction start lineage 已通过 PR #66 合入。以下保留该 PR 的取证连续性，不再表示它是当前 WIP，也不能用于批准 #69：
+
+- 历史 SDK/RPC parity Manifest 绑定 PR #66 的成功 Draft Capture run `32088804546` 与 Artifact `9307625961`；
+- 历史 RPC Worker v2 来源绑定 PR #66 Draft 中同一 run `32090005181` 的 attempts 1/2；两次 Capture、Fresh validation、committed Fixture validation 和 Artifact upload 均成功，只有在完整对象相等后设置的受控 compare 步骤失败；
+- 两个 RPC Worker Artifact 的唯一 `result.json` 逐字节一致，均为 72,731 bytes，SHA-256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`；
+- 临时 recapture 代码与 source-export workflow 未进入最终候选；合入代码使用正式完整对象比较路径。
+
+Contract Fixture 当前为 **74-event**，固定 canonical hash：
 
 ```text
 b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
 ```
 
-## 当前 WIP：Issue #56
-
-唯一 active primary PR 与 branch：
-
-```text
-PR #69
-feat/56-sqlite-observation-ledger-v1
-```
-
-<!-- zhiwei-active-primary
-work-item: #56
-primary-pr: #69
-branch: feat/56-sqlite-observation-ledger-v1
-status: review-required
--->
-
-PR #68 已关闭且未合并；其 `feat/m0-sqlite-observation-ledger-v1` 只保留为历史 bootstrap/staging 分支，不再是 active primary。Issue #56 的合规交付面已从 `main@843c09569360184592f3d5cecb3b1b165eba6af7` 重建到编号分支，并由 PR #69 supersede PR #68。
-
-旧原型 HEAD `0da4e97e5cac42add96a55285976a93afd992495` 相对 PR #66 合并后的 main 已经 diverged，并仍消费旧的扁平 Runtime Event 字段。该 SHA只保留为 Migration checksum、WAL、事务、重启与 Cursor 测试结构参考；它不在当前 ancestry，不能整体 cherry-pick 旧 Schema。
-
-SQLite Observation Ledger v1 的冻结方向与当前实现：
-
-- 只消费已合并的 `NormalizedRuntimeEvent v1`；
-- canonical full event JSON 是数据库真源，索引列是读回时逐项复核的投影；
-- source sequence scope为 Workspace、Runtime Session、Runtime Instance、Adapter、Runtime implementation/version、Surface 与 sequence domain；
-- exact replay 在单调性检查之前处理；source-slot、idempotency 与 canonical-body冲突均 fail closed；
-- 单条与批量写入使用真实 SQLite事务；批次中后续失败不会留下前缀新行；
-- file DB使用 WAL，`:memory:`行为单独记录；
-- 每次 open 和写事务在提交前验证不可变 Schema manifest、SQLite PRAGMA readback 与全部既有 row；
-- 读取时重新调用正式单事件 parser，并机械验证 canonical bytes、SHA-256与全部投影；
-- Migration history以连续 version、name、SHA-256和 `PRAGMA user_version`冻结，已应用 SQL不可改写；
-- Row ID仅作为 ingestion Cursor，不被解释为 Runtime全局序或语义时间；
-- SQLite operational failure（包括 constructor/close）统一映射到稳定 `sqlite` error code，domain conflict与 corruption语义保持不变；
-- Schema SQL comparison保留 quoted CHECK/RAISE literal，公开API不允许migration override，pending installation一次原子提交；
-- Runtime与migration table拒绝 `INSERT OR REPLACE`/`REPLACE`历史改写，Row Cursor为正，并逐行验证同source stream sequence；
-- open、read与write均重新验证migration history、canonical applied_at与`PRAGMA user_version`；任意名称但作用于metadata table的额外trigger也被精确manifest拒绝；
-- 每个正式read在单一显式SQLite snapshot内验证并从同一row集返回，防止validation/query间并发提交产生partial replay；
-- Migration在reference/target执行前拒绝顶层`END [TRANSACTION]`等控制语句，并使用`DatabaseSync.isTransaction`逐步证明外层事务仍存活；正式Runtime范围为Node.js `>=22.16.0 <23`。
-
-Issue #56 当前风险为 R2。PR #69 正在关闭第二轮 R2 cold review 的十项 blocker；修复后的新完整 HEAD 当前等待独立 R2 cold review，获得 `APPROVED` 前保持 Draft，不得转 Ready或合并。
+Issue #56 使用已合入 main 的正式协议，不消费历史 Draft HEAD。
 
 ## 历史 R2 审查连续性锚点
 
-NormalizedRuntimeEvent v1 Contract Fixture 当前为 74-event，canonical hash：
-
-```text
-b6630cff347af84e43eca74e2d76c1b786cbe8fab71b9eab4e76df10c8110d2b
-```
-
-旧审查 HEAD `d77c66abff429219c0ac95ba405c57057e56b929` 的 verdict 为 `CHANGES_REQUESTED`。后续提交分别关闭了 `willRetry=unavailable`、`retry.lifecycle/completed` 与 Tool Result Message 的来源、关联和 lineage blocker；这些文字由协议连续性 Checker 机械读取，不能在 Project State 压缩时删除。
-
-PR #66 后续还关闭了 Retry completion Run/Turn correlation、Fixture identity、Compaction start lineage与 normalized RPC Worker Artifact二次归一化缺口。最终批准 HEAD `d1aa5a727976bec3ca602a13ad007f032bf3bb8c` 经 fresh `ready=true` live provenance与 Autonomous Merge合入。历史结论只用于机械连续性，不授权 Issue #56 的新 HEAD。
+旧审查 `d77c66abff429219c0ac95ba405c57057e56b929` 的 verdict 为 `CHANGES_REQUESTED`；后续提交已经分别关闭 `willRetry=unavailable`、`retry.lifecycle/completed` 与 Tool Result Message 相关 blocker。该历史结论只用于机械连续性，不授权当前新 HEAD。
 
 ## committed Runtime 连续性锚点
 
@@ -121,7 +127,7 @@ PR #66 后续还关闭了 Retry completion Run/Turn correlation、Fixture identi
 - Issue #61 已完成 Public Ruleset、required evidence 聚合与 post-merge provenance 闭环；
 - **Issue #57** 已完成仓库级 `work-item lifecycle` 治理；
 - **Issue #45** 是已完成的 SDK / RPC parity canonical execution Issue；
-- Issue #44 保持 owner-input；Issue #49 已关闭；Issue #56 当前是唯一 Ledger execution Issue；
+- Issue #44 保持 owner-input；Issue #56 的协议前置已完成，当前产品候选见上方 PR #69；
 - 每个 primary PR 在 pre-merge 阶段验证 work item 对象类型、开放状态、分支编号、owner-input 来源与 supersedes 关系；
 - 一个 execution Issue 最多一个 active branch 和一个开放 primary PR；
 - R2/R3 要求当前最终 HEAD 绑定的独立 AI cold review，作者自审不能替代。
@@ -129,8 +135,6 @@ PR #66 后续还关闭了 Retry completion Run/Turn correlation、Fixture identi
 ## Runtime 合同连续性
 
 后续协议和 Ledger 必须保留 SDK、Extension、RPC 与 Host Surface；Prompt、Agent Run、Turn、Message、Tool Call、Retry attempt、Session Object、Runtime Session、Worker Instance、Host Action、Extension Shutdown、Process exit/close 与 Compaction lineage。不得从 Prompt success、Queue 清空、最终 Messages、Agent settled 或 Process exit code 单独推断任务成功。
-
-Ledger 不得用 SQLite Row ID、墙钟时间或仅 Surface 的 sequence 建立跨 source-domain total order；也不得把 Compaction Summary、Context Projection或最终 `session.messages` 作为原始 Runtime Event的覆盖写入。
 
 ## 历史连续性锚点
 
@@ -153,11 +157,4 @@ docs/harness/provenance-proofs/2026-08-11-pr-12.json
 docs/harness/provenance-proofs/2026-08-11-pr-13.json
 ```
 
-## 当前顺序
-
-1. 在 PR #69 的 `feat/56-sqlite-observation-ledger-v1` 完成六项 R2 blocker 修复与新增负向测试；
-2. 在受支持的 Node 22.x line记录实际 patch，动态验证真实 `node:sqlite`、扩展后的 Ledger专项场景和全仓检查；
-3. 清理所有暂存 payload/workflow，形成相对旧候选的单个干净产品提交；
-4. 完成新 exact-head Draft CI与作者自审；
-5. 对新的完整40位 SHA执行独立 R2 cold review；
-6. APPROVED 后登记 `independent-review: complete`，转 Ready并经受保护 Autonomous Merge进入 main。
+历史机械锚点继续保留在本文件，完整的状态/历史分离留给 G-6a；本次不修改依赖这些锚点的机器检查。

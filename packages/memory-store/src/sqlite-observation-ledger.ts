@@ -825,7 +825,7 @@ function captureSchemaManifest(
     .prepare(
       `SELECT type, name, sql
        FROM sqlite_schema
-       WHERE name NOT LIKE 'sqlite_%'
+       WHERE name NOT GLOB 'sqlite_*'
          AND type IN ('table', 'index', 'trigger')
        ORDER BY type ASC, name ASC`,
     )
