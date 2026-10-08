@@ -14,7 +14,7 @@
 
 | 当前 seam/角色 | Definition | Provider / 实现机制 | Consumer | 核心/外壳及成熟度 |
 |---|---|---|---|---|
-| Runtime 事件边界 | `protocol` 的 NormalizedRuntimeEventV1 和公开 parser | `pi-adapter.normalizePiRuntimeEventV1` | `memory-store` 正式 Ledger；Trace 调用者 | 协议是核心、Pi 投影是外壳；不是正式 AgentRuntime 启停接口 |
+| Runtime 事件边界 | `protocol` 的 NormalizedRuntimeEventV1、公开 create/parse | `pi-adapter.normalizePiRuntimeEventV1` | `memory-store` 正式 Ledger；Trace 调用者 | 协议是核心、Pi 投影是外壳；不是正式 AgentRuntime 启停接口 |
 | Ledger 调用边界 | `memory-store` 公开 open/append/read 类型 | `SqliteObservationLedgerV1` | 当前测试；未来 Daemon 组合 | 核心语义与 SQLite 机制在同包内显式分工；没有第二实现或通用存储 Provider |
 | Context 哨兵 | `context-compiler` 的 ContextRequest/ContextCapsule | `compileContext` | 当前测试，M2 才产品化 | 核心过滤不可关闭；不存在 ContextContributor registry |
 | 迁移时钟 seam | `memory-store` 的 OpenSqliteObservationLedgerOptions.clock | 调用方注入 MigrationClock，缺省使用 Store 边界时钟 | 固定迁移安装过程 | 测试确定性边界；不影响协议时间由调用方注入的约束 |
@@ -34,7 +34,7 @@ Retrieval、Connector、DelegationExecutor 和 ExecutionPolicy Provider 仍是�
 
 | 不变量 ID / 唯一 owner | 实际公开调用入口 | 正证据 | 反证据 / 限制 |
 |---|---|---|---|
-| I-EVENT-SHAPE / `protocol`：闭合形状、版本、canonical body/身份 | [parseNormalizedRuntimeEventV1](../../packages/protocol/src/runtime-event-v1.ts)；Adapter 与 Ledger 复用 | P: `v1 canonical body, source-slot event ID and idempotency key have fixed golden vectors` | P: `parser fails closed for protocol, identity, phase and global-order drift`；只验证单事件，不证明目标存在 |
+| I-EVENT-SHAPE / `protocol`：闭合形状、版本、canonical body/身份 | [createNormalizedRuntimeEventV1 / parseNormalizedRuntimeEventV1](../../packages/protocol/src/runtime-event-v1.ts)；Adapter 调用 create，Ledger 调用 parse，二者复用 protocol 的核心形状/扩展断言 | P: `v1 canonical body, source-slot event ID and idempotency key have fixed golden vectors` | P: `parser fails closed for protocol, identity, phase and global-order drift`；只验证单事件，不证明目标存在 |
 | I-TRACE-RELATIONS / `protocol`：同域严格顺序、先行关联、完整回放 | [parseNormalizedRuntimeEventTraceV1 / assertReplayableNormalizedRuntimeEventTraceV1](../../packages/protocol/src/runtime-event-stream-v1.ts) | T: `independent sequence domains may both start at one without implying a total order` | T: `Tool links cannot borrow a declaration from another Agent Run or Runtime instance`、`explicit links cannot point forward`、`complete replay fails closed on required unknown vocabulary`；调用方须提供足够 Trace，不等于单批 append |
 | I-PI-PROJECTION / `pi-adapter`：字段级投影，不发明关联 | [normalizePiRuntimeEventV1](../../packages/pi-adapter/src/normalized-runtime-event-v1.ts) → protocol | A: `State and Messages snapshots are projected field-by-field instead of passing raw Pi objects` | A: `Adapter does not invent missing correlation IDs`；不能证明正式 Worker 已接入 |
 | I-LEDGER-IDENTITY / `memory-store`：exact replay 幂等、冲突和完整 source stream 单调 | [append / appendBatch](../../packages/memory-store/src/sqlite-observation-ledger.ts) → protocol parser | L: `SQLite Ledger appends once and exact replay returns the existing row` | L: `source-slot conflict is rejected before it can become a duplicate row`、`sequence monotonicity is scoped to the complete v1 source stream`；eventId 规则仍归 protocol |

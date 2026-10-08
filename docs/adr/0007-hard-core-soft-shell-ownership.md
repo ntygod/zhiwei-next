@@ -20,12 +20,12 @@ Hard Core 指知微不可委托给可替换 Provider 决定的语义：身份/Sc
 | ID/Scope 值与基础证据/置信度约束 | `domain` | Cognition/Compiler/Store 复用，不重新定义 |
 | Candidate 接受与 Claim 纠正 | `cognition-core` | 未来应用协调存储事务；Store 不判断事实真假 |
 | Scope 先过滤再排序的胶囊选择 | `context-compiler` | 未来检索/预算机制提供输入，不关闭过滤 |
-| Runtime-neutral 单事件与 Trace 合同 | `protocol` | Adapter/Store 调用同一公开 parser |
+| Runtime-neutral 单事件与 Trace 合同 | `protocol` | Adapter 调用公开 create；Store 调用公开 parse，复用 protocol 核心断言 |
 | append-only、事务、Schema/行验证与 cursor | `memory-store` | SQLite 是当前唯一正式实现 |
 | Pi 字段投影及可观察来源差异 | `pi-adapter` | Pi 为执行机制；不得覆盖协议 owner |
 | 启停、调用顺序、依赖选择 | `apps/daemon` | 组合责任，不新增业务不变量副本 |
 
-一项不变量只有一个语义 owner，可以有多个 enforcement 调用点。协议 parser 在 Adapter 和 Store 重复调用是边界防御，不是两个 owner；单事件与跨事件 Trace 是两个不同不变量，不能把 Trace 校验塞进任意 append 批次。跨包只走公开入口。现有 `memory-store → protocol` 已由 ADR 0006 和局部规则确定，不是此次提案新增依赖。
+一项不变量只有一个语义 owner，可以有多个 enforcement 调用点。Adapter 的 createNormalizedRuntimeEventV1 与 Store 的 parseNormalizedRuntimeEventV1 是不同公开入口，内部复用 protocol 的核心形状/扩展断言；多处边界验证不是两个 owner；单事件与跨事件 Trace 是两个不同不变量，不能把 Trace 校验塞进任意 append 批次。跨包只走公开入口。现有 `memory-store → protocol` 已由 ADR 0006 和局部规则确定，不是此次提案新增依赖。
 
 Provider 只能提供合同允许的数据/能力；不得提供 `skipValidation`、替换核心断言、迁移覆盖或全局 `unsafe` 开关。后续组合入口应先拒绝重复能力/不变量 ID、没有 owner 的映射，以及关闭核心校验的配置，再进行任何 I/O。这里是待验收合同，当前不存在这样的通用组合入口；已有 Ledger 的固定迁移与不可关闭 integrity check 只是局部先例。
 
