@@ -139,9 +139,9 @@ test("agent_end preserves observed booleans and explicit Extension unavailabilit
     sequence: { domain: "extension-events", value: 1 },
   });
 
-  assert.equal(sdk.data.kind === "agent.lifecycle" && sdk.data.willRetry, true);
+  assert.equal(sdk.data.kind === "agent.lifecycle" && sdk.data.phase === "ended" && sdk.data.willRetry, true);
   assert.equal(
-    extension.data.kind === "agent.lifecycle" && extension.data.willRetry,
+    extension.data.kind === "agent.lifecycle" && extension.data.phase === "ended" && extension.data.willRetry,
     "unavailable",
   );
   assert.deepEqual(parseNormalizedRuntimeEventV1(extension), extension);
@@ -243,7 +243,7 @@ test("successful Retry completion remains distinct from both Agent Runs and fina
   );
   assert.equal(retryStarted.correlation.normalized.agentRunId, undefined);
   assert.equal(retryCompleted.correlation.normalized.agentRunId, undefined);
-  assert.equal(retryCompleted.data.kind === "retry.lifecycle" && retryCompleted.data.success, true);
+  assert.equal(retryCompleted.data.kind === "retry.lifecycle" && retryCompleted.data.phase === "completed" && retryCompleted.data.success, true);
 
   assert.throws(
     () => event(8, {

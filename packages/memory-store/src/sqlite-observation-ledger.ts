@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 
 import {
   NORMALIZED_RUNTIME_EVENT_PROTOCOL_VERSION,
@@ -174,7 +174,7 @@ export interface RuntimeEventReplayOptionsV1 {
   readonly sourceSurface?: NormalizedRuntimeSourceSurfaceV1;
 }
 
-interface RuntimeEventRow {
+interface RuntimeEventRow extends Record<string, SQLOutputValue> {
   row_id: number | bigint;
   event_id: string;
   idempotency_key: string;

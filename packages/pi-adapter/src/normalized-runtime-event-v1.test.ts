@@ -13,6 +13,12 @@ import {
   type PiRuntimeNormalizationInputV1,
 } from "./normalized-runtime-event-v1.ts";
 
+import {
+  normalizePiRuntimeEventV1 as normalizeCore,
+  type PiRuntimeEventInputV1 as CoreEvent,
+  type PiRuntimeNormalizationInputV1 as CoreInput,
+} from "./normalized-runtime-event-v1-core.ts";
+
 const workspaceId = ids.workspace("workspace-1");
 const runtimeSessionId = ids.session("runtime-session-1");
 
@@ -486,4 +492,32 @@ test("Host EOF and signal requests remain actions while exit and close remain ob
   assert.equal(exit.data.kind, "process.boundary");
   assert.equal(close.data.kind, "process.boundary");
   assert.doesNotThrow(() => parseNormalizedRuntimeEventTraceV1([eof, signal, exit, close]));
+});
+
+
+test("core message narrowing retains explicit rejection of incomplete tool results", () => {
+  const context: Omit<CoreInput, "event"> = {
+    workspaceId,
+    runtimeSessionId,
+    runtimeInstanceId: "synthetic-core-worker",
+    runtimeVersion: "0.84.1",
+    surface: "sdk",
+    sequenceDomain: "sdk-public-events",
+    sourceSequence: 1,
+    sourceEventType: "message_start",
+    observedAt: "2026-10-08T00:00:00.000Z",
+    provenance: "observed",
+    correlation: correlation(),
+  };
+  const incomplete = [
+    { type: "message_start", role: "tool" },
+    { type: "message_update", role: "tool", delta: "synthetic" },
+    { type: "message_end", role: "tool" },
+  ] satisfies readonly CoreEvent[];
+  for (const event of incomplete) {
+    assert.throws(
+      () => normalizeCore({ ...context, event, sourceEventType: event.type }),
+      /tool result messages require the extended typed contract/,
+    );
+  }
 });

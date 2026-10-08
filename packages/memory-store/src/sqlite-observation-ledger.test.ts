@@ -1,3 +1,4 @@
+import { ids } from "../../domain/src/index.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -63,8 +64,8 @@ function makeEvent(overrides: EventOverrides = {}): NormalizedRuntimeEventV1 {
   const rpc = surface === "rpc";
   return createNormalizedRuntimeEventV1({
     protocolVersion: 1,
-    workspaceId: overrides.workspaceId ?? "workspace-a",
-    runtimeSessionId: overrides.runtimeSessionId ?? "runtime-session-a",
+    workspaceId: ids.workspace(overrides.workspaceId ?? "workspace-a"),
+    runtimeSessionId: ids.session(overrides.runtimeSessionId ?? "runtime-session-a"),
     runtimeInstanceId: overrides.runtimeInstanceId ?? "runtime-instance-a",
     source: {
       adapter: overrides.adapter ?? "pi-rpc-v1",
@@ -111,8 +112,8 @@ function makeEvent(overrides: EventOverrides = {}): NormalizedRuntimeEventV1 {
 function makeEphemeralMessageUpdate(sequence = 1): NormalizedRuntimeEventV1 {
   return createNormalizedRuntimeEventV1({
     protocolVersion: 1,
-    workspaceId: "workspace-a",
-    runtimeSessionId: "runtime-session-a",
+    workspaceId: ids.workspace("workspace-a"),
+    runtimeSessionId: ids.session("runtime-session-a"),
     runtimeInstanceId: "runtime-instance-a",
     source: {
       adapter: "pi-sdk-v1",

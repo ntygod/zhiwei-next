@@ -44,7 +44,9 @@
     "start:daemon": "node --experimental-strip-types apps/daemon/src/index.ts",
     "start:cli": "node --experimental-strip-types apps/cli/src/index.ts",
     "typecheck": "node scripts/typecheck.mjs",
-    "check:toolchain": "node scripts/check-toolchain.mjs"
+    "check:toolchain": "node scripts/check-toolchain.mjs && node --test scripts/toolchain.test.mjs",
+    "install:toolchain": "sh scripts/formal-toolchain.sh install",
+    "diagnose:pi-root-types": "node scripts/diagnose-pi-root-types.mjs"
   },
   "packageManager": "npm@10.9.8",
   "devDependencies": {

@@ -217,6 +217,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     });
   }
   if (event.type === "message_start") {
+    if (event.role === "tool") throw new TypeError("tool result messages require the extended typed contract");
     return compactObject({
       kind: "message.lifecycle" as const,
       phase: "started" as const,
@@ -225,6 +226,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     });
   }
   if (event.type === "message_update") {
+    if (event.role === "tool") throw new TypeError("tool result messages require the extended typed contract");
     return {
       kind: "message.lifecycle",
       phase: "updated",
@@ -233,6 +235,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     };
   }
   if (event.type === "message_end") {
+    if (event.role === "tool") throw new TypeError("tool result messages require the extended typed contract");
     return compactObject({
       kind: "message.lifecycle" as const,
       phase: "ended" as const,
@@ -396,6 +399,7 @@ function payload(event: PiRuntimeEventInputV1): NormalizedRuntimePayloadV1 {
     };
   }
 
+  if (event.type !== "unknown") throw new TypeError("unsupported Runtime event input");
   const snapshot = snapshotJsonValue(event.payload);
   const keys = snapshot !== null && typeof snapshot === "object" && !Array.isArray(snapshot)
     ? Object.keys(snapshot).sort()

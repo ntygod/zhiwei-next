@@ -209,13 +209,14 @@ export function parseNormalizedRuntimeEventTraceV1(
         }
         toolDeclarations.set(declarationKey, event);
       } else {
+        const toolName = event.data.toolName;
         const declarations = linkedEvents(event.links?.sourceEventIds, byId).filter(
           (candidate) =>
             candidate.runtimeSessionId === event.runtimeSessionId &&
             candidate.runtimeInstanceId === event.runtimeInstanceId &&
             candidate.data.kind === "tool.lifecycle" &&
             candidate.data.phase === "declared" &&
-            candidate.data.toolName === event.data.toolName &&
+            candidate.data.toolName === toolName &&
             candidate.correlation.normalized.toolCallId === toolCallId,
         );
         if (declarations.length !== 1) {
@@ -273,7 +274,7 @@ export function assertReplayableNormalizedRuntimeEventTraceV1(
   const requiredUnknown = events.find(
     (event) => event.data.kind === "runtime.unknown" && event.compatibility === "required",
   );
-  if (requiredUnknown) {
+  if (requiredUnknown?.data.kind === "runtime.unknown") {
     throw new TypeError(`required unknown Runtime event blocks replay: ${requiredUnknown.data.sourceType}`);
   }
   return events;

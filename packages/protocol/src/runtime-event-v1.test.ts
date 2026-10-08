@@ -381,7 +381,7 @@ test("Host actions, Process boundaries and Session actions retain source/provena
 test("assertion rejects accessors without invoking them and permits multiline error text", () => {
   const valid = createNormalizedRuntimeEventV1(draft());
   let invoked = false;
-  const candidate = structuredClone(valid) as Record<string, unknown>;
+  const candidate: Record<string, unknown> = { ...structuredClone(valid) };
   Object.defineProperty(candidate, "data", {
     enumerable: true,
     get() {

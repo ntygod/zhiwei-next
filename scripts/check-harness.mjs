@@ -309,6 +309,19 @@ const expectedRequiredStatusCheck = {
           "docs/spikes/pi-runtime-contract/README.md",
           "docs/spikes/pi-runtime-contract/parallel-tool-ordering-lifecycle.md",
           "docs/architecture/pi-integration.md",
+          ".node-version",
+          ".npmrc",
+          "package-lock.json",
+          "tsconfig.json",
+          "toolchain.json",
+          "scripts/typecheck.mjs",
+          "scripts/check-toolchain.mjs",
+          "scripts/toolchain.test.mjs",
+          "scripts/toolchain-environment.mjs",
+          "scripts/install-toolchain.mjs",
+          "scripts/formal-toolchain.sh",
+          "scripts/diagnose-pi-root-types.mjs",
+          "packages/pi-adapter/src/pi-client-types.test.ts",
         ],
       },
       {
@@ -333,6 +346,19 @@ const expectedRequiredStatusCheck = {
           "docs/spikes/pi-runtime-contract/compaction-session-replacement-lifecycle.md",
           "docs/architecture/pi-integration.md",
           "docs/harness/project-state.md",
+          ".node-version",
+          ".npmrc",
+          "package-lock.json",
+          "tsconfig.json",
+          "toolchain.json",
+          "scripts/typecheck.mjs",
+          "scripts/check-toolchain.mjs",
+          "scripts/toolchain.test.mjs",
+          "scripts/toolchain-environment.mjs",
+          "scripts/install-toolchain.mjs",
+          "scripts/formal-toolchain.sh",
+          "scripts/diagnose-pi-root-types.mjs",
+          "packages/pi-adapter/src/pi-client-types.test.ts",
         ],
       },
       {
@@ -372,6 +398,19 @@ const expectedRequiredStatusCheck = {
           "docs/spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md",
           "docs/architecture/pi-integration.md",
           "docs/harness/project-state.md",
+          ".node-version",
+          ".npmrc",
+          "package-lock.json",
+          "tsconfig.json",
+          "toolchain.json",
+          "scripts/typecheck.mjs",
+          "scripts/check-toolchain.mjs",
+          "scripts/toolchain.test.mjs",
+          "scripts/toolchain-environment.mjs",
+          "scripts/install-toolchain.mjs",
+          "scripts/formal-toolchain.sh",
+          "scripts/diagnose-pi-root-types.mjs",
+          "packages/pi-adapter/src/pi-client-types.test.ts",
         ],
       },
     ],
@@ -712,6 +751,8 @@ for (const command of config.requiredCommands ?? []) {
 
 const checkScript = scripts.check ?? "";
 for (const required of [
+  "check:toolchain",
+  "typecheck",
   "check:architecture",
   "check:agents",
   "check:main-provenance",
@@ -855,6 +896,13 @@ requireValue(
 );
 
 const staticContractsBlock = ciJobs.get(requiredStatusCheck?.staticContractsJob) ?? "";
+requireValue(
+  staticContractsBlock.includes("          node-version: 22.23.1") &&
+    staticContractsBlock.includes("run: sh scripts/formal-toolchain.sh install") &&
+    staticContractsBlock.indexOf("run: sh scripts/formal-toolchain.sh install") <
+      staticContractsBlock.indexOf("run: npm run check"),
+  "Static contracts must install the exact isolated formal toolchain before the original check.",
+);
 const evidenceBlock = ciJobs.get(requiredStatusCheck?.evidenceJob) ?? "";
 const finalCheckBlock = ciJobs.get(requiredStatusCheck?.aggregatorJob) ?? "";
 const standaloneContract = requiredStatusCheck?.standaloneWorkflowRuns;

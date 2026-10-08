@@ -1,3 +1,4 @@
+import { ids } from "../../domain/src/index.ts";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,8 +21,8 @@ const clock = { now: () => "2026-10-08T00:00:00.000Z" };
 function event(sequence = 1) {
   return createNormalizedRuntimeEventV1({
     protocolVersion: 1,
-    workspaceId: "synthetic-workspace",
-    runtimeSessionId: "synthetic-session",
+    workspaceId: ids.workspace("synthetic-workspace"),
+    runtimeSessionId: ids.session("synthetic-session"),
     runtimeInstanceId: "synthetic-instance",
     source: {
       adapter: "pi-rpc-v1",

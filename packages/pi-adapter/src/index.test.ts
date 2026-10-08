@@ -315,6 +315,7 @@ test("SDK/RPC Fixture packer rejects results beyond the provenance byte limit", 
   );
   await assert.rejects(
     packSdkRpcParityFixture({
+      testHooks: undefined,
       manifestPath,
       freshPath: oversizedPath,
       sourceHead: "a".repeat(40),
@@ -327,10 +328,11 @@ test("SDK/RPC Fixture loader bounds high-compression output before parsing", asy
   const { manifestPath } = await temporarySdkRpcFixture(t);
   const fixtureDir = dirname(manifestPath);
   const oversized = Buffer.alloc(SDK_RPC_PARITY_MAX_RESULT_JSON_BYTES + 1, 0x20);
-  const compressed = gzipSync(oversized, { level: 9, mtime: 0 });
+  const compressed = gzipSync(oversized, { level: 9 });
+  assert.equal(compressed.readUInt32LE(4), 0, "Node gzip keeps a deterministic zero MTIME header");
   const base64 = compressed.toString("base64");
   const partLength = 2400;
-  const parts = [];
+  const parts: string[] = [];
   for (let offset = 0; offset < base64.length; offset += partLength) {
     const partName = `part-${String(parts.length).padStart(2, "0")}.b64`;
     parts.push(partName);
@@ -373,6 +375,7 @@ test("SDK/RPC Fixture pack lock fails closed without changing the active Fixture
   await writeFile(lockPath, "existing lock\n", { flag: "wx" });
   await assert.rejects(
     packSdkRpcParityFixture({
+      testHooks: undefined,
       manifestPath,
       freshPath: manifestPath,
       sourceHead: "a".repeat(40),
@@ -419,6 +422,7 @@ test("SDK/RPC Fixture packer rejects a directory replacement without moving its 
           replacementBefore = await fixtureDirectorySnapshot(fixtureDir);
           await assert.rejects(
             packSdkRpcParityFixture({
+              testHooks: undefined,
               manifestPath,
               freshPath: manifestPath,
               sourceHead: "b".repeat(40),
@@ -528,6 +532,7 @@ test("SDK/RPC Fixture packer retains parts referenced by an in-flight reader", a
   await writeFile(freshPath, `${JSON.stringify(fresh, null, 2)}\n`);
 
   await packSdkRpcParityFixture({
+    testHooks: undefined,
     manifestPath,
     freshPath,
     sourceHead: "a".repeat(40),
@@ -658,11 +663,11 @@ test("SDK/RPC live provenance binds the successful run and Artifact to the curre
 
   assert.equal(validateSdkRpcParityProvenance(input).artifactId, source.artifactId);
   for (const mutate of [
-    (invalid) => (invalid.run.conclusion = "failure"),
-    (invalid) => (invalid.comparison.behind_by = 1),
-    (invalid) => (invalid.artifact.digest = `sha256:${"d".repeat(64)}`),
-    (invalid) => (invalid.pullRequest.head.sha = "e".repeat(40)),
-    (invalid) =>
+    (invalid: typeof input) => (invalid.run.conclusion = "failure"),
+    (invalid: typeof input) => (invalid.comparison.behind_by = 1),
+    (invalid: typeof input) => (invalid.artifact.digest = `sha256:${"d".repeat(64)}`),
+    (invalid: typeof input) => (invalid.pullRequest.head.sha = "e".repeat(40)),
+    (invalid: typeof input) =>
       (invalid.run.display_title = invalid.run.display_title.replace(
         `pr=${eventPullRequest.number}`,
         "pr=61",

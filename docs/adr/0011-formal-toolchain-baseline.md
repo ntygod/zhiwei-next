@@ -11,11 +11,13 @@
 
 ## 提案
 
-固定 Node 22.23.1、npm 10.9.8、TypeScript 5.9.3、@types/node 22.19.19 和 Pi 0.84.1。Node/npm 沿用已验证的 Pi 隔离 Runtime 版本；Node 声明与实际版本一致，满足 Pi 的 >=22.19.0。Node 类型沿用 Pi 发布 shrinkwrap 的 22.x 类型；TypeScript 采用 Pi 上游构建使用的 5.9.3。
+固定 Node 22.23.1、npm 10.9.8、TypeScript 5.9.3、@types/node 22.19.19 和 Pi 0.84.1。Node/npm 沿用已验证的 Pi 隔离 Runtime 版本；Node 声明与实际版本一致，满足 Pi 的 >=22.19.0。Node 类型沿用 Pi 发布 shrinkwrap 的 22.x 类型；TypeScript 对齐 Pi 固定上游声明的开发依赖版本 5.9.3；不声称上游构建命令等同于本仓库的 tsc/Compiler API。
 
-根 package-lock.json 使用官方 npm registry 的精确版本与 integrity；不运行依赖 lifecycle scripts。Pi 仅用于 Adapter 内的编译合同，未据此建立生产执行路径。既有经过 tarball/shrinkwrap 校验、无凭证隔离的 Runtime probes 继续保留并重新运行；不重新实现宿主。
+根 package-lock.json 使用官方 npm registry 的精确版本与 integrity；不运行依赖 lifecycle scripts。保留官方 Pi 全部 143 个子条目；官方缺失 integrity 的六个内部包由同版本 registry tarball 摘要补齐，原 shrinkwrap 字节不变。Pi 仅用于 Adapter 内的编译合同，未据此建立生产执行路径。既有经过 tarball/shrinkwrap 校验、无凭证隔离的 Runtime probes 保留，由真实 CI 重跑；不重新实现宿主。
 
 真实 TypeScript program 以 apps/packages 下全部 TypeScript 源与测试作为 roots，包含 fixture 与导入声明，strict/noEmit、NodeNext、erasableSyntaxOnly 和 skipLibCheck=false。类型检查是根 check 的前置步骤；Node 行为测试仍独立执行。
+
+支持的官方类型面为 `@earendil-works/pi-coding-agent/client` 及其完整传递声明图。root SDK 声明仍有 46 个实际诊断（JSON import attribute、Anthropic undici 路径、Google optional MCP peer），明确不支持；没有借子路径绿宣称 root SDK 兼容，也没有排除任何既有正式源码。具体复现、安装隔离、闭包增强及未覆盖项见[工具链说明](../architecture/formal-toolchain.md)。
 
 ## 备选方案
 

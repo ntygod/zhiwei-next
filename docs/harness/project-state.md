@@ -6,6 +6,14 @@ status: active
 updated: 2026-10-08
 -->
 
+## 当前工作：G-3a 固定工具链与完整类型检查
+
+canonical 为 [Issue #82](https://github.com/ntygod/zhiwei-next/issues/82)，唯一分支 `chore/82-formal-toolchain`，primary 为 [PR #83](https://github.com/ntygod/zhiwei-next/pull/83)。起点 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf` 已交付 G-1 有限基线：PR #81 [最终独立审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6063364919)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37801655818)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37802221249)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37802251253)及[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37802274027)分开保存，不作为新候选的批准。
+
+本项固定版本/完整 strict 编译/官方 Pi client 类型面/安装隔离与负例，详见[工具链边界](../architecture/formal-toolchain.md)与 Proposed ADR 0011。root SDK 官方声明仍有 46 个诊断，不把 client 子路径通过写成 root SDK 兼容。D-07 整体仍 Proposed，不实现 Session、WorkerSupervisor、Daemon 或 M0-4；当前完整 HEAD 的独立 R3、fresh Ready CI、全部动态矩阵及受保护交付尚待 PR 实证。
+
+以下 G-1 与更早开发记录是历史快照，保留全部被审身份、原始状态与机器锚点。它们不表示本项 WIP，不继承批准。
+
 ## 当前工作：G-1 有限执行决议
 
 2026-10-08 本项起点为 `main@9242e8cd12747b1517b2a0f3ae8e13f0cb94aa4d`，已含 PR #77/#79 的静态包归属、合成输入和真实临时 SQLite 演进实证。canonical execution 为 [Issue #80](https://github.com/ntygod/zhiwei-next/issues/80)，唯一分支 `chore/80-current-decision-evidence`，primary 为 [PR #81](https://github.com/ntygod/zhiwei-next/pull/81)；新完整 HEAD、CI 和最终独立审查以实时对象为准。

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 // Use the real compiler program, including test files and imported declarations.
 // No transpileModule, emit-only runner, generated stub, or diagnostic filtering.
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = fileURLToPath(new URL('../', import.meta.url));
 const configPath = resolve(root, 'tsconfig.json');
 const config = ts.readConfigFile(configPath, ts.sys.readFile);
 if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
@@ -14,6 +15,16 @@ for (const flag of ['strict', 'noEmit', 'allowImportingTsExtensions', 'verbatimM
   assert.equal(parsed.options[flag], true, `Required compiler option: ${flag}`);
 }
 assert.equal(parsed.options.skipLibCheck, false, 'Dependency declarations must be checked');
+assert.equal(parsed.options.module, ts.ModuleKind.NodeNext, 'The formal target is Node ESM');
+assert.equal(parsed.options.moduleResolution, ts.ModuleResolutionKind.NodeNext);
+assert.equal(parsed.options.target, ts.ScriptTarget.ES2023);
+for (const flag of ['noImplicitAny', 'noImplicitThis', 'strictNullChecks', 'strictFunctionTypes', 'strictBindCallApply', 'strictPropertyInitialization', 'strictBuiltinIteratorReturn', 'useUnknownInCatchVariables', 'alwaysStrict']) {
+  assert.notEqual(parsed.options[flag], false, `Cannot disable strict sub-option: ${flag}`);
+}
+for (const flag of ['paths', 'typeRoots', 'baseUrl', 'noResolve', 'skipDefaultLibCheck']) {
+  assert.equal(parsed.options[flag], undefined, `Unsupported compiler override: ${flag}`);
+}
+assert.deepEqual(parsed.options.types, ['node']);
 assert.equal(parsed.options.noCheck, undefined, 'Compiler diagnostics cannot be disabled');
 async function sources(directory) {
   const result = [];

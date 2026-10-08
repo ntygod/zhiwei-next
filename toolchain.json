@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "node": "22.23.1",
+  "npm": "10.9.8",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3"
+  },
+  "piShrinkwrapSha256": "a724da15dc849d0ab2fe346845f8986b059ab89339a03a365b5910b23217c0c3",
+  "publishedIntegritySupplements": [
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core",
+      "integrity": "sha512-evyzXYWCLQGmcaBYHlmSku02r8qoN4SGI60GZABo6iV+H+nqX+P9ud8fEZ4GmRq9mUSREvvfX+w9dA9ThF9C6w==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-agent-core/0.84.1"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
+      "integrity": "sha512-wMsAdJMxuNri08vLqTyYVI201DQQezGhPSTkzYsHdw5dYX3rCNwEmSvpaAwhi7ELKI/2tE/CEgSWg/6iRxSgdQ==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-ai/0.84.1"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-client",
+      "integrity": "sha512-/V5hGHE4Zq+jG0GtwIB9PyBUOGd6gBLZ7lkQYFKchKnxYHeH3rmWC5xw4kpnZKKBuBuFTdLVbU9vEjlAGMMb2A==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-client/0.84.1"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-protocol",
+      "integrity": "sha512-Ox1pciyeSPGEEUcxvR0/dJcrY7C6hrEGA8y71rOsvSIUlXN1Cbp/be/eoL71OGDBk5O97TeQPfWN6Ju/2Ehjww==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-protocol/0.84.1"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-telemetry",
+      "integrity": "sha512-180/xGJtsq7IoR3p9EKWjRd0e9M4DkxInhlo9xyD7prDC7Qrhqq+nhvwrW0lFjPfXcEI2FSHmGCSyvSJE9GsaQ==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-telemetry/0.84.1"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui",
+      "integrity": "sha512-udeXFbgEhJ6JiB0uguwNVNkDy2FENfmtQwPcY+/iJ8GWeq18wkal1tKqa5YyeH0IqtX1vG0cGh8zfSYzyzVuLA==",
+      "source": "https://registry.npmjs.org/@earendil-works/pi-tui/0.84.1"
+    }
+  ]
+}

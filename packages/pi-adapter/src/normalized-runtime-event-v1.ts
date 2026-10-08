@@ -17,6 +17,11 @@ export * from "./normalized-runtime-event-v1-core.ts";
 
 export type PiRuntimeNonToolMessageRoleV1 = Exclude<RuntimeMessageRoleV1, "tool">;
 
+// Runtime callers may bypass TypeScript; retain the rejection at the boundary.
+function isToolRole(role: unknown): role is "tool" {
+  return role === "tool";
+}
+
 export interface PiRuntimeNonToolMessageSnapshotInputV1 {
   readonly role: Exclude<RuntimeSnapshotMessageRoleV1, "tool">;
   readonly contentKinds?: readonly string[];
@@ -250,7 +255,7 @@ export function normalizePiRuntimeEventV1(
       body: event.body === undefined ? undefined : { text: event.body.text },
     }));
   }
-  if (event.type === "message_update" && event.role === "tool") {
+  if (event.type === "message_update" && isToolRole(event.role)) {
     throw new TypeError("tool result messages do not support message_update");
   }
   if (event.type === "messages_snapshot") {
