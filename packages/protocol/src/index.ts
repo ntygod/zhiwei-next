@@ -8,6 +8,7 @@ import type {
 
 export * from "./sha256.ts";
 export * from "./lossless-json.ts";
+export * from "./local-diagnostics-v1.ts";
 export * from "./runtime-event-v1.ts";
 export * from "./runtime-event-stream-v1.ts";
 
