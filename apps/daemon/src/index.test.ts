@@ -139,6 +139,46 @@ test("real CLI process authenticates the actual daemon and safe lifecycle errors
   await replacement.listen(); await replacement.close();
 });
 
+test("complete request headers are bounded before authorization, including late denied fields", async t => {
+  const port = await availablePort();
+  const server = createDaemonServer({ port, token }); await server.listen();
+  const prefix = `GET /health HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nAuthorization: Bearer ${token}\r\n`;
+  const cases: readonly [string, string, number][] = [
+    ["origin", "Origin: null", 403],
+    ["authorization", `Authorization: Bearer ${"b".repeat(64)}`, 401],
+    ["host", "Host: attacker.invalid", 403],
+    ["content length", "Content-Length: 0", 400],
+    ["transfer encoding", "Transfer-Encoding: chunked", 400],
+    ["expect", "Expect: 100-continue", 400],
+  ];
+  try {
+    await t.test("exactly 64 fields succeeds; 65 fields is rejected", async () => {
+      assert.match(await rawRequest(port, prefix + "x:\r\n".repeat(62) + "\r\n"), /^HTTP\/1.1 200 /);
+      const response = await rawRequest(port, prefix + "x:\r\n".repeat(63) + "\r\n");
+      assert.match(response, /^HTTP\/1.1 400 /);
+      assert.match(response, /"code":"invalid_request"/);
+      assert.match(response, /cache-control: no-store/i);
+    });
+    for (const [label, header, boundedStatus] of cases) await t.test(label, async () => {
+      // At the allowed count, the last field must still reach its specific security check.
+      assert.match(await rawRequest(port, prefix + "x:\r\n".repeat(61) + header + "\r\n\r\n"), new RegExp(`^HTTP/1.1 ${boundedStatus} `));
+      for (const fillers of [997, 998, 1100]) {
+        const request = prefix + "x:\r\n".repeat(fillers) + header + "\r\n\r\n";
+        assert(Buffer.byteLength(request) < 8192, "count limit must work below the byte cap");
+        const response = await rawRequest(port, request);
+        assert.match(response, /^HTTP\/1.1 400 /);
+        assert.match(response, /"code":"invalid_request"/);
+        assert.doesNotMatch(response, /100 Continue|attacker\.invalid|bbbbbbbb/);
+      }
+    });
+    await t.test("byte cap still rejects one oversized field", async () => {
+      const response = await rawRequest(port, prefix + `x: ${"a".repeat(8192)}\r\n\r\n`);
+      assert.match(response, /^HTTP\/1.1 400 /);
+      assert.doesNotMatch(response, /aaaaaaaa/);
+    });
+  } finally { await server.close(); }
+});
+
 test("daemon executable refuses invalid configuration without leaking environment values", () => {
   const marker = "SYNTHETIC_CREDENTIAL_MUST_NOT_LOG";
   for (const env of [

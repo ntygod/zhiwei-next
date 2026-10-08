@@ -25,6 +25,8 @@
 - `packages/protocol/src/local-diagnostics-v1.ts` 只承载有限 DTO、凭据文本格式与 health 解析、错误枚举，不包含授权策略或 Node I/O。原 Runtime Event v1 的字段/版本/fixture 不变。
 - `runCli(args, output, config)` 的配置显式传入；只有可执行 entrypoint 读取环境，测试不修改全局环境。成功输出重建后的四个常量 health 字段；远端 JSON、错误正文、header、URL、异常和未知命令参数都不会原样打印。
 
+Daemon 请求与 doctor 响应都保留 8192-byte HTTP parser 上限，关闭 Node 默认的 header 数量静默截断，以完整 `rawHeaders` 的 name/value pair 数计数。每条消息最多 64 个字段（重复字段分别计数）；第 65 个起在服务端认证/路由或客户端状态/内容处理前拒绝，分别返回 `400 invalid_request` 与 `invalid_response`。64 字段为当前仅需少量诊断字段的通道保留余量，不扩大字节接收上限；迟置的 Origin、重复 Authorization/Host/Content-Type、body/Expect 或 Content-Encoding 不能藏在截断后。客户端显式发送完整 `Host: 127.0.0.1:<port>`，包括 80，不依赖 Node 省略默认端口的自动格式化。
+
 | 类别 | 行为 |
 |---|---|
 | `invalid_configuration` | listen / HTTP I/O 前失败，检查地址、端口、凭据格式 |
@@ -47,8 +49,10 @@ Bearer 只认证客户端，不认证 Daemon：能抢占本地端口的进程仍
 
 `apps/daemon/src/index.test.ts` 使用真实 loopback HTTP、原始 TCP HTTP 请求和独立 CLI/Daemon 子进程；`apps/cli/src/index.test.ts` 使用真实 HTTP/畸形协议/重定向目标服务器；协议测试验证闭合字段与 accessor 拒绝。所有凭据和敏感标记是合成数据，子进程只得到显式测试环境。
 
-覆盖合法 health/meta/doctor；无/错/重复授权、Host、Origin/null、不同 peer、方法/路径/消息体、parser/超大 headers、畸形配置、无重定向命中、UTF-8/JSON/schema/未知字段、超大/截断响应、等待与连接回收、真实 SIGTERM 关闭、端口复用和拒绝 upgrade/CONNECT/parser-error 后半开客户端不阻塞关闭。Node 22.23.1 已先复现旧实现三条漏洞，再由这些负例反转。
+覆盖合法 health/meta/doctor；无/错/重复授权、Host、Origin/null、不同 peer、方法/路径/消息体、parser/超大 headers、64/65 字段边界、超过旧 Node 截断点的迟置字段、畸形配置、无重定向命中、UTF-8/JSON/schema/未知字段、超大/截断响应、等待与连接回收、真实 SIGTERM 关闭、端口复用和拒绝 upgrade/CONNECT/parser-error 后半开客户端不阻塞关闭。Node 22.23.1 已先复现旧实现三条漏洞及 header 截断绕过，再由这些负例反转。
 
 默认验证 `npm run check`，另运行原 `check-execution-plan.mjs`、`check-current-decisions.mjs` 和 `current-decisions.test.mjs`。严格类型检查覆盖新增文件与全部既有源码/测试/声明。Runtime 动态矩阵须沿用真实 CI；本地没有 Docker，未运行动态矩阵，静态 fixture 通过不能代替它。最终 HEAD 独立 R3、Ready CI、受保护合入和来源回读另行记录在 primary PR。
+
+port 80 的回归在隔离子进程检查 doctor 实际创建的 Node 请求 Host，并在连接前销毁请求；不绑定特权端口或修改权限。本地未运行完整 port 80 listen 往返，其他动态端口的真实 Daemon/doctor 往返已覆盖；支持的配置范围仍为 1..65535。
 
 回滚为 revert 本切片，无数据库迁移或持久凭据；回滚会恢复旧匿名接口风险，不能视为安全等价替代。

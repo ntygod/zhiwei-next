@@ -44,10 +44,13 @@ export function checkDaemonHealth(input: DoctorConfigInput): Promise<DiagnosticR
     const outgoing = request({
       hostname: "127.0.0.1", family: 4, port: config.port, path: "/health", method: "GET", agent: false,
       maxHeaderSize: 8192,
-      headers: { authorization: `Bearer ${config.token}`, accept: "application/json", connection: "close" },
+      headers: { host: `127.0.0.1:${config.port}`, authorization: `Bearer ${config.token}`, accept: "application/json", connection: "close" },
     }, response => {
       const status = response.statusCode ?? 0;
-      if (status === 401 || status === 403) {
+      // Check the complete name/value-pair count before trusting status or any field.
+      if (response.rawHeaders.length > 64 * 2) {
+        finish({ ok: false, code: "invalid_response" });
+      } else if (status === 401 || status === 403) {
         finish({ ok: false, code: status === 401 ? "unauthorized" : "forbidden" });
       } else if (status >= 300 && status < 400) {
         finish({ ok: false, code: "redirect_refused" });
@@ -75,6 +78,8 @@ export function checkDaemonHealth(input: DoctorConfigInput): Promise<DiagnosticR
       }
       response.on("error", () => finish({ ok: false, code: "invalid_response" }));
     });
+    // Keep all headers within maxHeaderSize; reject count overflow instead of truncating.
+    outgoing.maxHeadersCount = 0;
     outgoing.on("error", (error: NodeJS.ErrnoException) => {
       const code = error.code === "HPE_HEADER_OVERFLOW" ? "response_too_large"
         : error.code?.startsWith("HPE_") ? "invalid_response" : "daemon_unavailable";

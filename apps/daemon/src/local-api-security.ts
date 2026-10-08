@@ -37,6 +37,9 @@ export function checkDiagnosticRequest(
   request: IncomingMessage,
   config: DaemonConfig,
 ): { readonly status: number; readonly code: DiagnosticErrorCode } | undefined {
+  // rawHeaders contains name/value pairs. The server disables silent count truncation,
+  // but retains the 8192-byte parser cap so this complete view is also byte-bounded.
+  if (request.rawHeaders.length > 64 * 2) return { status: 400, code: "invalid_request" };
   const headers = request.headersDistinct;
   if (request.socket.localAddress !== config.host || request.socket.remoteAddress !== config.host
     || headers.host?.length !== 1 || headers.host[0] !== `${config.host}:${config.port}`

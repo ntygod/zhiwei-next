@@ -38,6 +38,9 @@ export function createDaemonServer(input: DaemonConfigInput = {}): LocalDaemon {
     }
   };
   const server = createServer({ maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: 5000 }, handleRequest);
+  // Zero disables Node's silent header-count truncation, not the byte parser cap.
+  // The request boundary rejects more than 64 complete fields before authorization.
+  server.maxHeadersCount = 0;
   // Otherwise Node answers Expect before the authenticated request boundary runs.
   server.on("checkContinue", handleRequest);
   server.on("checkExpectation", handleRequest);

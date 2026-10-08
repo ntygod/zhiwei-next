@@ -128,6 +128,34 @@ test("doctor separates unavailable network and malformed HTTP protocol", async (
   } finally { await new Promise<void>(resolve => raw.close(() => resolve())); }
 });
 
+test("complete response headers are bounded before doctor accepts status, type or body", async t => {
+  const body = JSON.stringify(health);
+  async function diagnose(headers: string): Promise<Awaited<ReturnType<typeof checkDaemonHealth>>> {
+    const server = createRawServer(socket => {
+      socket.once("data", () => socket.end(`HTTP/1.1 200 OK\r\n${headers}\r\n${body}`));
+    });
+    server.listen(0, "127.0.0.1"); await once(server, "listening");
+    const address = server.address(); assert(address && typeof address !== "string");
+    try { return await checkDaemonHealth({ baseUrl: `http://127.0.0.1:${address.port}`, token }); }
+    finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  }
+  const prefix = `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`;
+  await t.test("exactly 64 fields succeeds; 65 fields is rejected", async () => {
+    assert.deepEqual(await diagnose(prefix + "x:\r\n".repeat(62)), { ok: true, health });
+    assert.deepEqual(await diagnose(prefix + "x:\r\n".repeat(63)), { ok: false, code: "invalid_response" });
+  });
+  for (const header of ["Content-Type: text/plain", "Content-Encoding: gzip"]) await t.test(header, async () => {
+    for (const fillers of [61, 998, 999, 1100]) {
+      const headers = prefix + "x:\r\n".repeat(fillers) + header + "\r\n";
+      assert(Buffer.byteLength(headers) < 8192);
+      assert.deepEqual(await diagnose(headers), { ok: false, code: "invalid_response" });
+    }
+  });
+  await t.test("byte cap still rejects one oversized field", async () => {
+    assert.deepEqual(await diagnose(prefix + `x: ${"a".repeat(8192)}\r\n`), { ok: false, code: "response_too_large" });
+  });
+});
+
 test("CLI process errors never echo secret arguments, environment or invalid URLs", () => {
   const marker = "SYNTHETIC_CREDENTIAL_MUST_NOT_LOG";
   for (const [args, env, code] of [
@@ -140,6 +168,36 @@ test("CLI process errors never echo secret arguments, environment or invalid URL
     assert.equal(result.status, code);
     assert.doesNotMatch(result.stdout + result.stderr, new RegExp(`${marker}|${token}`));
   }
+});
+
+test("doctor preserves the explicit authority at port 80 without requiring a privileged listener", () => {
+  const result = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `
+    import http from 'node:http';
+    import { syncBuiltinESMExports } from 'node:module';
+    const original = http.request;
+    const baseline = original({ hostname: '127.0.0.1', port: 80, agent: false });
+    const defaultHost = baseline.getHeader('host');
+    baseline.on('error', () => {}); baseline.destroy();
+    const observed = [];
+    http.request = (...args) => {
+      const outgoing = original(...args);
+      observed.push({ port: args[0].port, host: outgoing.getHeader('host') });
+      // Inspect the actual Node-generated request header, then stop before connection.
+      outgoing.destroy();
+      return outgoing;
+    };
+    syncBuiltinESMExports();
+    const { checkDaemonHealth } = await import(process.argv[1]);
+    for (const port of [80, 4265]) {
+      await checkDaemonHealth({ baseUrl: 'http://127.0.0.1:' + port, token: 'a'.repeat(64), timeoutMs: 1 });
+    }
+    console.log(JSON.stringify({ defaultHost, observed }));
+  `, new URL("./doctor.ts", import.meta.url).href], { env: {}, encoding: "utf8", timeout: 3000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    defaultHost: "127.0.0.1",
+    observed: [{ port: 80, host: "127.0.0.1:80" }, { port: 4265, host: "127.0.0.1:4265" }],
+  });
 });
 
 test("doctor authenticates actual HTTP and prints only a validated health DTO", async () => {
