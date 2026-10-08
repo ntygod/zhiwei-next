@@ -6,13 +6,13 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-1b 包归属目录与合成实证
+## 当前工作：G-1c 会话输入与 Schema 演进实证
 
-2026-10-08 重新对账：`main@e2dfa854585cb8365c17ffea6b95a491ad8e8636` 已包含 PR #75 的 G-1a 提案/目录和 PR #69 的正式 SQLite Ledger。G-1a 仅交付决策资料，完整 G-1、正式 Worker/Daemon 和会话产品链仍未交付。
+2026-10-08 重新对账：`main@f1156747e94760e26f9ac3afdfc5accfbe52b98b` 已包含 PR #77 的 G-1b 静态包归属实验，以及 PR #75/#69 的 Proposed 架构资料和正式 SQLite Ledger。#76 已关闭；已合实验不是 D-10 接受，完整 G-1、正式 Worker/Daemon 和会话产品链仍未交付。
 
-当前 canonical execution 为 [Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)，唯一工作分支 `spike/76-invariant-ownership-evidence`。本切片交付 [单一目录与合成实验](../spikes/invariant-ownership/README.md)、由目录生成的[证据视图](../architecture/invariant-ownership-baseline.md)，以及从 0007 分出的 Proposed 包归属 ADR 0010。primary PR、最终 HEAD、真实 CI 和独立审查以 #76 实时关联为准；本记录不预填批准。
+当前 canonical execution 为 [Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)，唯一工作分支 `spike/78-session-schema-evidence`。[G-1c 决策实证](../spikes/g1-decision-evidence/README.md)补齐可独立完成的 D-01 许可输入/revision 合成实验与 D-02 真实临时 SQLite 候选升级、失败回滚、旧版拒新库和闭库备份恢复。D-02 复用原 validator，不复制断言，不注册生产迁移；manifest 范围明确限 table/index/trigger。primary PR、最终 HEAD、真实 CI 和独立审查以 #78 实时关联为准，不预填批准。
 
-实验范围为真实公开入口/精确测试的目录校验，以及固定合成 Adapter→protocol→临时 SQLite 组合。目录/能力重复、缺/多 owner、无效引用、Provider 声明禁用核心等被拒绝；不能外推为运行中 Provider Host 或 sandbox。D-01/D-02/D-10 仍 Proposed；不新增正式产品入口、Session、产品配置加载器、Schema、迁移或质量门。下一决策必须把完整 HEAD 的独立审查、实证、登记与机器投影闭合；完整 G-1 未完成，G-2…G-5 和 M0-2 不因本切片放行。
+D-01/D-02/D-10 及 ADR 0007—0010 继续 Proposed；原源快照、专项冻结 checker、Workflow 与质量门不变。D-10 旧 PR #77 批准仅是该实验的历史证据；后续有限接受必须有新的真实 evidence/review HEAD、ADR/登记一致性和最终完整 HEAD 审查。当前不新增 Session、产品配置加载器、正式 Schema、ProviderHost 或新协议，不放行 G-2…G-5/M0-2。真实数据保留、owner/升级并发和性能/硬件持久性分别待 D-04/D-09/D-03。
 
 以下 PR #71/#73/#69/#75 开发期间的文字及机器锚点是**历史快照**，保留供现有测试与审计定位；其中“当前”“未合并”“review-required”只描述当时，不表示本次 WIP 或对新 HEAD 的批准。不开展完整 G-6a 历史重构，不删除/放宽 Ledger 历史锚点测试。project-state 更新命中既有 Runtime 来源路径时，按现行合同取证，不为减少重采成本省略应有状态或修改门禁。
 

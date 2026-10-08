@@ -159,3 +159,10 @@
 本轮不改变上述 11 项状态，不把文档合入视作决策接受或完整 G-1 交付。未来接受决策时，必须同步本登记、结构化投影与当前冻结 Proposed 的专项校验，保留 ADR、相关 PR/完整 HEAD、审查和实验证据；不得先放宽检查再据此授权同一任务的受约束实现。
 
 G-1b / [Issue #76](https://github.com/ntygod/zhiwei-next/issues/76)补充[合成实验证据](../spikes/invariant-ownership/README.md)，由单一目录生成映射，并真实执行精确测试名与固定组合正负例。它支持后续有限 D-10 决策审查，不把目录、单一路径或静态拒绝升级为正式 Provider Host；D-10 继续 Proposed。
+
+
+## G-1c 合成输入与 Schema 实证（2026-10-08）
+
+[Issue #78](https://github.com/ntygod/zhiwei-next/issues/78)的[决策实证说明](../spikes/g1-decision-evidence/README.md)补充 D-01 许可输入/配置 revision 合成实验和 D-02 真实临时 SQLite 旧库升级/拒绝/回滚/恢复实验。D-02 的 manifest 实证明确限定 table/index/trigger；不是生产业务 Schema、公开 override 或全部 SQLite 对象保证。D-10 的已合 PR #77/完整 HEAD/真实审查身份单独列明，该旧批准不批准本轮 HEAD 或决策接受。
+
+11 项状态及结构化 source snapshot 均继续 Proposed，阶段 gate 保持 unverified。有限状态演进的 overlay 合同及负例只作受审建议，尚未实现；原专项 checker 和所有源快照断言保持不变。完整 G-1、#67 和后续产品任务不因此放行。
