@@ -4,7 +4,7 @@
 
 ## 当前 G-2a 导航（2026-10-08）
 
-G-3a 已由 PR #83 受保护合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #85，分支 `feat/84-protected-local-diagnostics`，canonical Issue #84。只保护现有 health/meta/doctor，配置与真实负例见[本地诊断](../architecture/local-diagnostics.md)。ADR 0012 初始 Proposed，须同 PR 真实独立决策审查，状态更新后的新完整 HEAD 再做独立 R3/fresh Ready；不继承 G-3a 批准。
+G-3a 已由 PR #83 受保护合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #85，分支 `feat/84-protected-local-diagnostics`，canonical Issue #84。只保护现有 health/meta/doctor，配置与真实负例见[本地诊断](../architecture/local-diagnostics.md)。ADR 0012 已按本 PR [真实有限决策审查](https://github.com/ntygod/zhiwei-next/pull/85#issuecomment-6069198884)记 Accepted，历史被审 HEAD/正文摘要见项目状态；状态更新后的新完整 HEAD 仍须全新独立 R3/fresh Ready，不继承历史候选或 G-3a 批准。
 
 D-04/D-08 聚合与 G-2 其余保留/路径/工具/模型边界仍未完成，不解锁 M0。保留原源 JSON、原 checker、Accepted ADR 与历史机器锚点。接续先核 live HEAD、全部 check、适用动态矩阵和当前 PR 来源；不要为了省略 recapture 改 gate。
 

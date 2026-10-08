@@ -1,6 +1,6 @@
 # ADR 0012：有限本地诊断通道
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-08
 - 范围：[Issue #84](https://github.com/ntygod/zhiwei-next/issues/84)，G-2 / D-08 的现有 health、meta、doctor 切片
 - 被取代关系：不取代 Accepted ADR；不接受 D-04、D-08 聚合决策
