@@ -14,9 +14,19 @@ export interface DaemonConfig {
   readonly token: string;
 }
 
+export class DaemonDiagnosticError extends Error {
+  readonly code: "invalid_configuration" | "daemon_unavailable" | "invalid_request";
+  constructor(code: DaemonDiagnosticError["code"]) {
+    super(code);
+    this.name = "DaemonDiagnosticError";
+    this.code = code;
+  }
+}
+
 export function readDaemonConfig(input: DaemonConfigInput): DaemonConfig | undefined {
-  const host = input.host ?? "127.0.0.1";
-  const port = input.port ?? "4265";
+  if (!input || typeof input !== "object") return undefined;
+  const host = input.host === undefined ? "127.0.0.1" : input.host;
+  const port = input.port === undefined ? "4265" : input.port;
   const text = typeof port === "number" ? String(port) : port;
   if (host !== "127.0.0.1" || typeof text !== "string" || !/^[1-9][0-9]{0,4}$/.test(text)
     || Number(text) > 65535 || !isDiagnosticToken(input.token)) return undefined;
@@ -37,7 +47,8 @@ export function checkDiagnosticRequest(
   const supplied = Buffer.from(authorization?.[0] ?? "", "utf8");
   if (authorization?.length !== 1 || supplied.length !== expected.length
     || !timingSafeEqual(supplied, expected)) return { status: 401, code: "unauthorized" };
-  if (request.headers["content-length"] !== undefined || request.headers["transfer-encoding"] !== undefined) {
+  if (request.headers["content-length"] !== undefined || request.headers["transfer-encoding"] !== undefined
+    || headers.expect !== undefined) {
     return { status: 400, code: "invalid_request" };
   }
   if (request.method !== "GET") return { status: 405, code: "method_not_allowed" };

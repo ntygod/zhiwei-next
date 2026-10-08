@@ -1,5 +1,9 @@
 # 信任、安全与边界
 
+## 当前有限实现
+
+[本地诊断 G-2a](local-diagnostics.md)保护现有 health/meta 与 doctor 的客户端认证、loopback/来源限制和安全错误输出，有限决策见 [ADR 0012](../adr/0012-protected-local-diagnostics.md)。Bearer 不认证服务端，不抵御可窃取凭据、抢占端口或改代码/文件的同机进程；不等同 OS/文件沙箱。以下 Policy、模型外发与长期数据规则仍是目标边界，不能从诊断实现推断已接入。D-04/D-08 和 G-2 整体未完成。
+
 ## 核心原则
 
 主动性、权限和执行是三件不同的事：

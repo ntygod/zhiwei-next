@@ -35,7 +35,7 @@ shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、N
 
 ## 完整源码检查与有限 Pi 类型面
 
-`npm run typecheck` 建立真实 TypeScript program，strict/noEmit/NodeNext/erasableSyntaxOnly/skipLibCheck=false。apps/packages 当前全部 53 个 `.ts` 文件（源码、测试和 fixture）是 roots；检查器独立遍历文件并比较 root 集合，防止通过 tsconfig.exclude 或收窄 include 绕过文件。导入的声明图同样检查。既有被测试的 `.mjs` fixture 辅助文件按真实 JS 推断，不手抄声明；本次未把 JS 迁移成新的正式生产模块。
+`npm run typecheck` 建立真实 TypeScript program，strict/noEmit/NodeNext/erasableSyntaxOnly/skipLibCheck=false。apps/packages 下全部 `.ts` 文件（源码、测试和 fixture）是 roots，数量由检查器实际遍历输出；检查器独立遍历文件并比较 root 集合，防止通过 tsconfig.exclude 或收窄 include 绕过文件。导入的声明图同样检查。既有被测试的 `.mjs` fixture 辅助文件按真实 JS 推断，不手抄声明；本次未把 JS 迁移成新的正式生产模块。
 
 新 `pi-client-types.test.ts` 消费官方 `@earendil-works/pi-coding-agent/client` 公共类型面。该公共子路径及全部传递声明已实际 strict NodeNext 编译，涵盖 RemoteSession 的 create/open/subscribe/submit/abort/reconnect/dispose 与 transcript snapshot/progress API；合成 lifecycle/options/prompt 正例不启动 Pi，也不发送请求。缺 API、错误 prompt 类型、错误 lifecycle operation 都由同一真实编译器拒绝。所有 Pi 类型只出现在 pi-adapter，且未从 Adapter 公共 barrel 向外导出。
 

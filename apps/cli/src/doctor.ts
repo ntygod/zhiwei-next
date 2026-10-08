@@ -14,10 +14,11 @@ interface DoctorConfig {
 }
 
 function readDoctorConfig(input: DoctorConfigInput): DoctorConfig | undefined {
-  const baseUrl = input.baseUrl ?? "http://127.0.0.1:4265";
+  if (!input || typeof input !== "object") return undefined;
+  const baseUrl = input.baseUrl === undefined ? "http://127.0.0.1:4265" : input.baseUrl;
   // Match BEFORE URL normalization: integer/hex/short IPv4, credentials and suffixes are refused.
   const match = typeof baseUrl === "string" ? /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/?$/.exec(baseUrl) : null;
-  const timeoutMs = input.timeoutMs ?? 2000;
+  const timeoutMs = input.timeoutMs === undefined ? 2000 : input.timeoutMs;
   if (!match || Number(match[1]) > 65535 || !isDiagnosticToken(input.token)
     || typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 5000) return undefined;
   return { port: Number(match[1]), token: input.token, timeoutMs };
@@ -36,6 +37,7 @@ export function checkDaemonHealth(input: DoctorConfigInput): Promise<DiagnosticR
       clearTimeout(timer);
       // Stop body consumption and close the socket on every result, including failure.
       outgoing.destroy();
+      chunks.length = 0;
       resolve(result);
     };
     // Direct numeric loopback HTTP: no DNS, proxy discovery, cookies, redirect or decompression.
@@ -57,6 +59,7 @@ export function checkDaemonHealth(input: DoctorConfigInput): Promise<DiagnosticR
         finish({ ok: false, code: "invalid_response" });
       } else {
         response.on("data", (chunk: Buffer) => {
+          if (finished) return;
           bytes += chunk.length;
           if (bytes > 4096) finish({ ok: false, code: "response_too_large" });
           else chunks.push(chunk);
@@ -72,7 +75,11 @@ export function checkDaemonHealth(input: DoctorConfigInput): Promise<DiagnosticR
       }
       response.on("error", () => finish({ ok: false, code: "invalid_response" }));
     });
-    outgoing.on("error", () => finish({ ok: false, code: "daemon_unavailable" }));
+    outgoing.on("error", (error: NodeJS.ErrnoException) => {
+      const code = error.code === "HPE_HEADER_OVERFLOW" ? "response_too_large"
+        : error.code?.startsWith("HPE_") ? "invalid_response" : "daemon_unavailable";
+      finish({ ok: false, code });
+    });
     const timer = setTimeout(() => finish({ ok: false, code: "timeout" }), config.timeoutMs);
     outgoing.end();
   });

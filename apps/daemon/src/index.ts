@@ -1,7 +1,10 @@
-import { createServer, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import type { DiagnosticErrorV1, DiagnosticHealthV1, DiagnosticMetaV1 } from "../../../packages/protocol/src/index.ts";
-import { checkDiagnosticRequest, readDaemonConfig, type DaemonConfigInput } from "./local-api-security.ts";
+import { checkDiagnosticRequest, readDaemonConfig, DaemonDiagnosticError, type DaemonConfigInput } from "./local-api-security.ts";
+
+export { DaemonDiagnosticError } from "./local-api-security.ts";
+export type { DaemonConfigInput } from "./local-api-security.ts";
 
 export const bootstrapVersion = "0.0.0";
 
@@ -21,10 +24,10 @@ export interface LocalDaemon {
   close(): Promise<void>;
 }
 
-export function createDaemonServer(input: DaemonConfigInput): LocalDaemon {
+export function createDaemonServer(input: DaemonConfigInput = {}): LocalDaemon {
   const config = readDaemonConfig(input);
-  if (!config) throw new Error("invalid_configuration");
-  const server = createServer({ maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: 5000 }, (request, response) => {
+  if (!config) throw new DaemonDiagnosticError("invalid_configuration");
+  const handleRequest = (request: IncomingMessage, response: ServerResponse) => {
     const rejection = checkDiagnosticRequest(request, config);
     if (rejection) {
       writeJson(response, rejection.status, { protocolVersion: 1, error: { code: rejection.code } });
@@ -33,36 +36,56 @@ export function createDaemonServer(input: DaemonConfigInput): LocalDaemon {
     } else {
       writeJson(response, 200, { product: "ZhiWei Next", protocolVersion: 1, capabilities: ["health", "normalized-runtime-events"] });
     }
-  });
+  };
+  const server = createServer({ maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: 5000 }, handleRequest);
+  // Otherwise Node answers Expect before the authenticated request boundary runs.
+  server.on("checkContinue", handleRequest);
+  server.on("checkExpectation", handleRequest);
   server.maxRequestsPerSocket = 1;
+  // Do not let Node generate an unauthenticated default 503 for pipelined excess requests.
+  server.on("dropRequest", (_request, socket) => socket.destroy());
   server.setTimeout(2000, socket => socket.destroy());
   // HTTP parser errors can contain raw request bytes. Never serialize/log the error.
   server.on("clientError", (_error, socket) => {
-    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n");
+    if (!socket.destroyed && socket.writable && !socket.writableEnded) {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n", () => socket.destroy());
+    } else socket.destroy();
   });
   for (const event of ["upgrade", "connect"] as const) {
     server.on(event, (_request, socket) => {
-      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n");
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n", () => socket.destroy());
     });
   }
+  let state: "idle" | "starting" | "listening" | "closed" = "idle";
+  let closing: Promise<void> | undefined;
   return {
     listen: () => new Promise((resolve, reject) => {
-      const failed = () => { reject(new Error("daemon_unavailable")); };
+      if (state !== "idle") { reject(new DaemonDiagnosticError("invalid_request")); return; }
+      state = "starting";
+      const failed = () => { state = "closed"; reject(new DaemonDiagnosticError("daemon_unavailable")); };
       server.once("error", failed);
       server.listen(config.port, config.host, () => {
         server.removeListener("error", failed);
+        state = "listening";
         resolve();
       });
     }),
-    close: () => new Promise((resolve, reject) => {
-      server.closeAllConnections();
-      server.close(error => error ? reject(new Error("daemon_unavailable")) : resolve());
-    }),
+    close: () => {
+      if (closing) return closing;
+      if (state === "starting") return Promise.reject(new DaemonDiagnosticError("invalid_request"));
+      if (state !== "listening") { state = "closed"; return Promise.resolve(); }
+      state = "closed";
+      closing = new Promise((resolve, reject) => {
+        server.closeAllConnections();
+        server.close(error => error ? reject(new DaemonDiagnosticError("daemon_unavailable")) : resolve());
+      });
+      return closing;
+    },
   };
 }
 
 /** Environment is read only by the executable entrypoint, never hidden in reusable APIs. */
-export async function startDaemon(input: DaemonConfigInput): Promise<LocalDaemon> {
+export async function startDaemon(input: DaemonConfigInput = {}): Promise<LocalDaemon> {
   const daemon = createDaemonServer(input);
   await daemon.listen();
   return daemon;

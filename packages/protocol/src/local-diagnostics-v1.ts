@@ -34,9 +34,14 @@ export function isDiagnosticToken(value: unknown): value is string {
 
 export function parseDiagnosticHealthV1(value: unknown): DiagnosticHealthV1 | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (Object.keys(record).sort().join(",") !== "milestone,service,status,version"
-    || record.status !== "ok" || record.service !== "zhiwei-daemon"
+  if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return undefined;
+  const keys = Reflect.ownKeys(value);
+  if (keys.some(key => typeof key !== "string") || keys.sort().join(",") !== "milestone,service,status,version") return undefined;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Object.values(descriptors).some(descriptor => !("value" in descriptor) || !descriptor.enumerable)) return undefined;
+  const record = Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
+  if (
+    record.status !== "ok" || record.service !== "zhiwei-daemon"
     || record.version !== "0.0.0" || record.milestone !== "M0-bootstrap") return undefined;
   // Reconstruct the allowlisted result; never pass through response objects.
   return { status: "ok", service: "zhiwei-daemon", version: "0.0.0", milestone: "M0-bootstrap" };

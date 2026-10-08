@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-3a 固定工具链与完整类型检查
+## 当前工作：G-2a 受保护本地诊断
+
+canonical 为 [Issue #84](https://github.com/ntygod/zhiwei-next/issues/84)，唯一分支 `feat/84-protected-local-diagnostics`，primary 为 [PR #85](https://github.com/ntygod/zhiwei-next/pull/85)。起点 `main@830e14626aca89100a8b33d775ccf39c7781c828` 已交付 G-3a：PR #83 [最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/83#issuecomment-6067745177)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37834461723)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37835170413)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37835207070)与[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37835227793)分别记录，不批准新候选。
+
+本项只保护现有 Daemon health/meta 与 CLI doctor：literal loopback、明确客户端凭据、Host/Origin/方法/原始路径、有限超时/字节、闭合 health DTO 与不反射秘密的错误类别。[使用与测试](../architecture/local-diagnostics.md)和 [Proposed ADR 0012](../adr/0012-protected-local-diagnostics.md)给出兼容变化及可信进程边界。Bearer 不能认证服务端，抢占端口/读环境内存/改文件的同机能力不在保证内；凭据不授权未来数据/工具接口。
+
+Node 22.23.1 真实隔离 HTTP 先复现旧入口风险，新增负例验证拒绝；本地无 Docker，动态矩阵由原 CI 执行。有限 ADR 待真实独立决策审查后才可接受，之后新完整 HEAD 仍需独立 R3、fresh Ready CI、受保护交付及来源回读。D-04/D-08、G-2 整体以及文件路径/工具注入/Private 外发/正文与 Claim/cache/backup 保留未完成，不解锁 M0-3/4/5/7 或 #67。
+
+以下 G-3a、G-1 与更早段落保留为历史工作快照，包含当时的 Proposed/待审状态和机器锚点，不表示当前 WIP 或批准。
+
+## 历史工作：G-3a 固定工具链与完整类型检查
 
 canonical 为 [Issue #82](https://github.com/ntygod/zhiwei-next/issues/82)，唯一分支 `chore/82-formal-toolchain`，primary 为 [PR #83](https://github.com/ntygod/zhiwei-next/pull/83)。起点 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf` 已交付 G-1 有限基线：PR #81 [最终独立审查](https://github.com/ntygod/zhiwei-next/pull/81#issuecomment-6063364919)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37801655818)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37802221249)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37802251253)及[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37802274027)分开保存，不作为新候选的批准。
 

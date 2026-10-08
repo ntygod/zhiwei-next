@@ -15,7 +15,7 @@
 
 用户或可信启动器须明确给两个进程注入相同 `ZHIWEI_DIAGNOSTIC_TOKEN`，格式为 64 个 ASCII 十六进制字符（32 bytes 的编码）。长度/字符校验不证明随机性；实际部署须由用户安全提供高熵随机值。本实现不会生成、保存、展示或部署真实凭据。原来无配置即启动/doctor 的行为有意失败关闭；help/version 仍可独立使用。
 
-Daemon 只在配置有效后建立服务器，由封装的 listen 绑定已验证地址，不公开原始 listen options。每个请求先检查本地/远端 socket 地址、唯一且精确的 Host authority、Origin 不存在（包括 null 也拒绝）、唯一且精确的 Bearer Authorization；等长 token 用 timing-safe 比较。仅 GET 与原始 `/health`、`/v1/meta` 成功，不接受 body、absolute-form、query、encoded/normalized 路径、CORS、升级或 CONNECT。错误固定类别，不反射请求、header 或异常；响应 no-store，限制 header 和连接等待。
+Daemon 只在配置有效后建立服务器，由封装的 listen 绑定已验证地址，不公开原始 listen options。每个请求先检查本地/远端 socket 地址、唯一且精确的 Host authority、Origin 不存在（包括 null 也拒绝）、唯一且精确的 Bearer Authorization；等长 token 用 timing-safe 比较。仅 GET 与原始 `/health`、`/v1/meta` 成功，不接受 body、Expect、absolute-form、query、encoded/normalized 路径、CORS、升级或 CONNECT；Expect 不绕过认证边界，超出每连接一个请求的 pipelining 直接关闭。错误固定类别，不反射请求、header 或异常；响应 no-store，限制 header 和连接等待。
 
 CLI 使用 Node HTTP 的直接数字 loopback 请求，无代理自动发现、DNS、cookie、自动重定向或解压。所有配置在 I/O 前解析。全请求默认 2 秒 deadline（API 可显式传入 1..5000 ms 测试期限），headers 上限 8192 bytes，body 上限 4096 bytes。拒绝非 200、不支持的媒体类型/编码、非法 UTF-8/JSON、未知 health 字段和值；只重建闭合的已知 health DTO 后输出。所有完成/错误路径停止请求并关闭连接；配置、认证、来源拒绝、网络、超时、redirect、状态、响应格式/过大保持不同错误类别，CLI 失败返回 1，参数错误返回 2。
 
