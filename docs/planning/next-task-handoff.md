@@ -1,8 +1,14 @@
 # 下一执行上下文交接
 
-状态：当前导航为 Issue #84 / PR #85；下方 #82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
+状态：当前导航为 Issue #86 / `feat/86-pi-cli-runtime-contract`；下方 #84/#82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
 
-## 当前 G-2a 导航（2026-10-08）
+## 当前 G-3b 导航（2026-10-08）
+
+起点 main41b1f8a 已交付 G-3a / PR #83 与 G-2a / PR #85，交付链接见[项目状态](../harness/project-state.md)。#86 的唯一 primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)。ADR 0011/0013 与 D-07 已按[实际有限审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)接受，被审候选 37c6228 的所有历史文件保持原字节；随后才实现实际消费者 `scripts/probes/pi-rpc-state.mjs` 的[严格 CLI 合同](../architecture/pi-cli-state-contract.md)。禁止把 ./client 的 RemoteSession/CBOR 类型证明当成 JSONL 选择，禁止导入不支持的 root SDK 声明或换到 ./rpc-entry。
+
+真实复跑基线、文件哈希、准确命令与 wrapper 计数见 [D-07 证据](d07-cli-evidence.md)及[当前决议](current-decisions.md)。独立接受不等于新代码批准；实现后仍需最终完整 HEAD 的 R3、全部正式 checks、fresh CI / live 来源与 main 回读；[原 G-3 三条件](g3-baseline-acceptance.md)逐项保留实际未运行项，不预记完成。D-04/D-08 / G-2 与 M0-4/5 保持未完成，不修改源工作包或 Accepted ADR 语义，不创建 finalizer PR。
+
+## 历史 G-2a 导航（2026-10-08）
 
 G-3a 已由 PR #83 受保护合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`，证据见[项目状态](../harness/project-state.md)。当前唯一 primary 为 #85，分支 `feat/84-protected-local-diagnostics`，canonical Issue #84。只保护现有 health/meta/doctor，配置与真实负例见[本地诊断](../architecture/local-diagnostics.md)。ADR 0012 已按本 PR [真实有限决策审查](https://github.com/ntygod/zhiwei-next/pull/85#issuecomment-6069198884)记 Accepted，历史被审 HEAD/正文摘要见项目状态；状态更新后的新完整 HEAD 仍须全新独立 R3/fresh Ready，不继承历史候选或 G-3a 批准。
 

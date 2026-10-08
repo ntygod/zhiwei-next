@@ -99,6 +99,9 @@ jobs:
               "scripts/probes/pi-artifact-ci.mjs",
               "scripts/probes/pi-sdk-surface.mjs",
               "scripts/probes/pi-rpc-state.mjs",
+              "packages/pi-adapter/fixtures/pi-cli-state-contract.ts",
+              "packages/pi-adapter/fixtures/pi-cli-state-contract.test.ts",
+              "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs",
               "docs/spikes/pi-runtime-contract/README.md",
               "package.json",
               ".node-version",
@@ -443,6 +446,8 @@ jobs:
             scripts/probes/pi-artifact-ci.mjs \
             scripts/probes/pi-sdk-surface.mjs \
             scripts/probes/pi-rpc-state.mjs \
+            packages/pi-adapter/fixtures/pi-cli-state-contract.ts \
+            packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs \
             | tar -xf - -C "$BUNDLE"
           chmod -R a-w "$BUNDLE"
           chmod 0777 "$RESULT_DIR"

@@ -1,9 +1,10 @@
 # ADR 0011：G-3a 正式 TypeScript 工具链基线
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-08
+- 计划决策：D-07
 - 范围：[Issue #82](https://github.com/ntygod/zhiwei-next/issues/82)，G-3 / D-07 的有限工具链切片
-- 被取代关系：不取代任何 Accepted ADR；D-07 整体仍为 Proposed
+- 被取代关系：不取代任何 Accepted ADR；与 ADR 0013 共同承载 D-07 的有限版本与执行路径选择
 
 ## 背景
 
@@ -29,7 +30,9 @@
 
 安装需要访问官方 registry（或事先完整的校验缓存）；缺失、版本漂移和错误 API 必须失败。仅固定并验证当前工具链，不保证其他 Node/npm/TypeScript/Pi 版本。
 
-本 ADR 在完整证据与独立 R3 审查前保持 Proposed。G-3a 不等于全部 G-3 或 D-07 接受，不选择生产 SDK/RPC 执行路径，不实现 M0-4，不请求模型、真实凭证或用户数据。包安装与编译不是对第三方代码的安全沙箱；Runtime 仍按已有隔离 probes 验证。
+G-3a 已由 PR #83 交付的代码与本 ADR 的正式接受分别记录。版本/闭包由本 ADR 提案定义；官方 CLI JSONL Worker 路径由 [ADR 0013](0013-pi-cli-jsonl-worker.md)提案定义。两份 ADR 在同一 D-07 有限决策的真实独立审查前保持 Proposed，当前执行状态见[当前执行决议](../planning/current-decisions.md)。接受只覆盖版本和路径方向，不批准后续合同实现，不自动完成 G-3 或 M0-4。
+
+`./client` 是 RemoteSession/CBOR 的公共类型面，不能据此推断 stdio RpcClient 可用。Pi 根 SDK 的 46 个声明诊断保持未支持边界；CLI Worker 使用发布 manifest 的 `bin.pi` 与明确 Node executable，无须消费根 SDK 类型。包安装与编译不是对第三方代码的安全沙箱；Runtime 仍按已有隔离 probes 验证，不请求真实模型、凭证或用户数据。
 
 ## 回滚
 

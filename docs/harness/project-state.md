@@ -6,7 +6,19 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-2a 受保护本地诊断
+## 当前工作：G-3b CLI JSONL 路径与启动合同
+
+canonical 为 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，唯一分支 `feat/86-pi-cli-runtime-contract`。本项从 `main@41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415` 开始，唯一 Draft primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)，最终实现、决策/代码审查与交付都在该 PR 完成。
+
+G-2a 已由 PR #85 受保护交付：[最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/85#issuecomment-6069591715)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37849349835)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37849815421)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37849835830)及[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37849866325)分别记录。ADR 0012 Accepted 只覆盖现有诊断；D-04/D-08 聚合和 G-2 其他边界仍未完成，诊断凭据不授权未来数据/工具接口。
+
+D-07 及 ADR 0011/0013 已由[实际有限决策审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)接受，绑定 HEAD `37c6228ef9187b932a9648d472319bce31a4aef5` / proposalSha256 `b13ccee54ba167fc7553d517ad60154ebf7a0a88c2df8e1f87082d1c19d9d764`；2026-10-08T22:39:59Z 完整回读。[当前执行决议](../planning/current-decisions.md)保留历史摘要，两 ADR 只改唯一状态行。[证据说明](../planning/d07-cli-evidence.md)区分来源与 main41b1f8a 新复跑，被审候选保持全部 115 个历史文件原字节。接受后才实现[内部严格 CLI 合同](../architecture/pi-cli-state-contract.md)并接入现有零 prompt Artifact probe；固定启动/环境/目录、严格 JSONL、EOF+自然 close 成功边界与无秘密错误，不新增生产 Host/Session 或 M0-4/5 框架。[G-3 原卡逐项验收](../planning/g3-baseline-acceptance.md)保留尚待远端验证的条目。最终新完整 HEAD 仍需独立 R3、完整 check、fresh 动态/Ready/live 来源、受保护合入与回读，不继承决策批准。
+
+当前 PR #87 已按[Runtime 来源记录](../spikes/pi-runtime-contract/README.md#2026-10-08-pr-87-当前来源续期)保存并核对本 PR 成功 SDK 与 Worker 两个 attempts 的原 ZIP、唯一 JSON、严格 Checker 和完整对象相等。Worker 两次均在完整比较成功后由明确 guard 产生受控 CLI failure，非 Runtime 故障；原 CLI blob 已在 `ac9616a2153a83a48489567e613b468b908066d9` 精确恢复。来源更新不改变冻结内容或 D-07/ADR 已接受决策；最终完整 HEAD 仍须新独立 R3、fresh Ready CI 与真实 live provenance 成功。
+
+以下 G-2a 及更早段落是历史工作快照，保留原机器锚点和当时状态，不代表当前 WIP 或新候选批准。
+
+## 历史工作：G-2a 受保护本地诊断
 
 canonical 为 [Issue #84](https://github.com/ntygod/zhiwei-next/issues/84)，唯一分支 `feat/84-protected-local-diagnostics`，primary 为 [PR #85](https://github.com/ntygod/zhiwei-next/pull/85)。起点 `main@830e14626aca89100a8b33d775ccf39c7781c828` 已交付 G-3a：PR #83 [最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/83#issuecomment-6067745177)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37834461723)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37835170413)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37835207070)与[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37835227793)分别记录，不批准新候选。
 
@@ -109,14 +121,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本连续性表按现行 Harness 与 manifest 同步至 PR #85；PR #83 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
+本连续性表按现行 Harness 与 manifest 同步至 PR #87；PR #85 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 676494c0afe1729c7fb0f2381e1928b4baa8b477
-capture workflow             37839141100
-capture artifact             11577131301
-capture artifact digest      sha256:87b1373e9c21886d38f53b494a02ff530aebc3b67463eb4f7b24a9914df24604
+capture head                 98f105e3ee5b005ed3aa0d84ab59dc182b587897
+capture workflow             37859177527
+capture artifact             11585880248
+capture artifact digest      sha256:365376628508aac21a4a4bd4cda4c3d76ade93e1a1ef29d337b6425ea46d9b47
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
