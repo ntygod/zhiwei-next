@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-08
 -->
 
-## 当前工作：G-2a 受保护本地诊断
+## 当前工作：G-3b CLI JSONL 路径与启动合同
+
+canonical 为 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，唯一分支 `feat/86-pi-cli-runtime-contract`。本项从 `main@41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415` 开始；第一个实质提交后建立同一 Draft primary，最终实现、决策/代码审查与交付都在该 PR 完成。
+
+G-2a 已由 PR #85 受保护交付：[最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/85#issuecomment-6069591715)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37849349835)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37849815421)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37849835830)及[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37849866325)分别记录。ADR 0012 Accepted 只覆盖现有诊断；D-04/D-08 聚合和 G-2 其他边界仍未完成，诊断凭据不授权未来数据/工具接口。
+
+当前先完成 D-07 的有限决策候选：精确工具链 ADR 0011 与官方 CLI JSONL Worker ADR 0013 仍 Proposed，[当前执行决议](../planning/current-decisions.md)登记 Evidence Ready。[证据说明](../planning/d07-cli-evidence.md)区分历史实验来源与 main41b1f8a 新复跑；所有列名证据在独立决策审查前保持原字节。接受之后才实现内部严格编译启动/协议合同并接入现有零 prompt Artifact probe；不新增生产 Host/Session 或 M0-4/5 框架。最终新完整 HEAD 仍需独立 R3、完整 check、fresh 动态/Ready/live 来源、受保护合入与回读，不继承决策批准。
+
+以下 G-2a 及更早段落是历史工作快照，保留原机器锚点和当时状态，不代表当前 WIP 或新候选批准。
+
+## 历史工作：G-2a 受保护本地诊断
 
 canonical 为 [Issue #84](https://github.com/ntygod/zhiwei-next/issues/84)，唯一分支 `feat/84-protected-local-diagnostics`，primary 为 [PR #85](https://github.com/ntygod/zhiwei-next/pull/85)。起点 `main@830e14626aca89100a8b33d775ccf39c7781c828` 已交付 G-3a：PR #83 [最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/83#issuecomment-6067745177)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37834461723)、[受保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37835170413)、[来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37835207070)与[回读](https://github.com/ntygod/zhiwei-next/actions/runs/37835227793)分别记录，不批准新候选。
 

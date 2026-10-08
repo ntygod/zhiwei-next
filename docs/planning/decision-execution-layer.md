@@ -19,7 +19,7 @@ D-01、D-02、D-10 已依据 [PR #81 的逐项独立决策审查](https://github
 
 ## 严格 v1 表示
 
-顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围只配置 D-01/02/10 的 ADR 和实验入口；其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。
+顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围配置 D-01/02/10 的原 ADR/实验入口，以及 #86 机械追加的 D-07 → ADR 0011/0013 与 `scripts/toolchain.test.mjs`；其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。
 
 每个决议包括 id、status、history、adrs、proposal、evidence、decisionReview、disposition：
 
@@ -30,12 +30,12 @@ D-01、D-02、D-10 已依据 [PR #81 的逐项独立决策审查](https://github
 
 proposalSha256 采用递归键排序 JSON，绑定 decision ID、有限文字、所有 ADR 正文摘要、实验身份/文件摘要/观测结果及处置原因/替代关系。不是只 hash 标签。ADR 摘要只归一化唯一的“- 状态：”行，其他任何正文变化均需新摘要和重审；没有任意可忽略的证据段或注释洞。
 
-实验的 sourcePr 表示产生该实验的历史 PR；head 是本次复跑所使用的已存在完整源码快照，可能是包含该实验的 squash main，并非冒充原 PR head。本轮全部复跑于 main 9242e8c 的相同实验/产品源文件；ADR 和当前状态资料单独绑定本决议，不混入历史实验文件摘要。JSON 列明的测试代码、源模块和迁移文件始终校验其真实历史 Git blob。Evidence Ready 另要求当前候选文件与历史 blob、记录 hash 三方相等，漂移必须重新取证。Accepted/Rejected/Superseded 是历史决议终态，其历史证据不要求永远等于后续产品源码，也不因正常实现演进要求解锁终态。生成登记中的实验文件链接固定到 evidenceHead，避免用历史摘要指向已经变化的当前文件。清单不认证操作系统、Node 二进制、未列运行环境或全部未来依赖。
+实验的 sourcePr 表示产生该实验的历史 PR；head 是本次复跑所使用的已存在完整源码快照，可能是包含该实验的 squash main，并非冒充原 PR head。原 D-01/02/10 复跑于 main 9242e8c 的相同实验/产品源文件；D-07 的新历史快照复跑于 main 41b1f8a，实验分别源于 PR #83/#60/#64，详见 [D-07 证据说明](d07-cli-evidence.md)。ADR 和当前状态资料单独绑定本决议，不混入历史实验文件摘要。JSON 列明的测试代码、源模块和迁移文件始终校验其真实历史 Git blob。Evidence Ready 另要求当前候选文件与历史 blob、记录 hash 三方相等，漂移必须重新取证。Accepted/Rejected/Superseded 是历史决议终态，其历史证据不要求永远等于后续产品源码，也不因正常实现演进要求解锁终态。生成登记中的实验文件链接固定到 evidenceHead，避免用历史摘要指向已经变化的当前文件。清单不认证操作系统、Node 二进制、未列运行环境或全部未来依赖。
 
 ## 防止自引用和挪用审批
 
 1. 同一 primary PR 先提交 Evidence Ready 和完整有限 ADR/决议文字，形成真实可审 HEAD。
-2. 独立审查明确逐项审查 D-01、D-02、D-10 的范围与 proposalSha256，绑定该真实 HEAD。实验审查只能证明实验被审，不能代替决策接受。
+2. 独立审查明确逐项审查当前待接受决议（原 D-01、D-02、D-10；#86 追加 D-07）的范围与 proposalSha256，绑定该真实 HEAD。实验审查只能证明实验被审，不能代替决策接受。
 3. 随后同一分支记录真实 review URL、purpose、decisionId、范围摘要与被审 HEAD，并只改变状态/历史/审查记录及 ADR 状态行、生成登记。checker 必须从该历史 HEAD 读取真实 current-decisions.json、原源文件和 ADR 正文；范围或 ADR 改文会失败，须重新审查。被审 Evidence Ready HEAD 中的真实实验文件还必须与历史证据 hash 匹配，不能只比对 JSON 自声明。一个 D-10 的对象复制给 D-01 会因 ID/digest/历史内容不符失败。
 4. 记录审查的新完整 HEAD 再按旧有 R3 流程 cold review/CI/Ready/合并。最终 HEAD 批准是 PR 的真实事实，不需回填到被批准提交形成无限 hash 循环。不创建 no-op finalizer PR。
 

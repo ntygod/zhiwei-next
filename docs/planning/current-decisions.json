@@ -384,13 +384,735 @@
     },
     {
       "id": "D-07",
-      "status": "Proposed",
+      "status": "Evidence Ready",
       "history": [
-        "Proposed"
+        "Proposed",
+        "Evidence Ready"
       ],
-      "adrs": [],
-      "proposal": null,
-      "evidence": [],
+      "adrs": [
+        {
+          "path": "docs/adr/0011-formal-toolchain-baseline.md",
+          "sha256": "59fb32eb0886b9507282c5919ce52c4860c1265d2a7c4bdde8c5bcf0ca224c4c"
+        },
+        {
+          "path": "docs/adr/0013-pi-cli-jsonl-worker.md",
+          "sha256": "bc73c1c77d2af32df103b3d81659e24ef466d0713ed28213cb09343c58a34c20"
+        }
+      ],
+      "proposal": {
+        "selection": "固定 ADR 0011 精确工具链；选择 Pi 0.84.1 官方公开 bin.pi → dist/cli.js、明确 Node executable 与 --mode rpc 的 stdio JSONL Worker，作为 M0 后续正式 Adapter 的单一执行方向。",
+        "scope": [
+          "Node 22.23.1 / npm 10.9.8 / TypeScript 5.9.3 / @types/node 22.19.19 / Pi 0.84.1；147 项固定依赖闭包、完整 strict 源码及声明检查沿用 PR #83 的实证。",
+          "./client 是 RemoteSession/CBOR 类型面；它不证明 stdio RpcClient 可用。根 SDK 46 个声明诊断仍不支持，不切换 ./rpc-entry 或第二生产路径。",
+          "沿用 PR #60 SDK/RPC 与 PR #64 Worker 的来源表面、framing、恢复及部署实证；本轮仅在 main41b1f8a 历史快照复跑现有检查，未重复采集生命周期。",
+          "后续在同一 #86 primary 把内部严格编译的有限启动/JSONL 合同接到现有 pi-rpc-state 零 prompt 消费者；该实现不属于本次有限决策批准。"
+        ],
+        "nonGuarantees": [
+          "不把历史快照复跑称为 PR #83 原始运行；sourcePr 为实验真正来源，当前 evidence.head 为包含这些实验的后来 main。",
+          "不批准新实现或声明 G-3/M0-4/M0 完成；完整编译中的 57 source roots 不是 TAP 57 tests，过程 wrapper 计数按实际输出。",
+          "无 Docker 的本地运行只复验 committed fixture 与合成负例，不是 fresh Runtime capture 或当前 PR 的 live provenance，不外推真实 Provider/网络/用户数据。",
+          "环境 allowlist 和 --offline/--no-tools/--approve 不是 OS sandbox 或 blanket approval；恶意同 UID、文件/内存写读者和不可信初始 Node/包不在保证范围。",
+          "D-04/D-08、G-2 文件/工具/Private 外发/保留与 M0-3/4/5 仍待各自验收；本地诊断 token 不授予数据或工具权限。"
+        ],
+        "remainingGates": [
+          "同一 primary 的独立 D-07 决策审查必须绑定真实 Evidence Ready HEAD、两份 ADR 正文与 proposalSha256；sourcePr 不得等于新 primary；不得借实验批准接受决策。",
+          "独立接受前所有列名证据保持历史 blob/当前候选/hash 三方一致；接受后才修改 probe 并由真实子进程负例验证启动、环境、strict JSONL、关联、退出/deadline/cleanup 和秘密不出日志。",
+          "后续新完整 HEAD 需要独立 R3、完整 npm check、原计划/current-decision 正反测试、fresh 既有 CI 矩阵与当前 PR 来源验证，受保护合入及 main 回读。",
+          "按原 G-3 三完成条件逐项验收版本、无凭据固定闭包及兼容矩阵；不自动完成工作包，不修改冻结源 JSON/checker/历史登记或验收标准。"
+        ]
+      },
+      "evidence": [
+        {
+          "sourcePr": "https://github.com/ntygod/zhiwei-next/pull/83",
+          "head": "41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415",
+          "observedAt": "2026-10-08T22:18:56Z",
+          "node": "22.23.1",
+          "files": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "sha256": "540cb091f44e9882c929e285c4111b832f87a08d06d44b91ff85a530a8313406"
+            },
+            {
+              "path": ".node-version",
+              "sha256": "7d2df647f25529bd87500319c41564e032e2be642e565350fa6136d7a1ec4d10"
+            },
+            {
+              "path": ".npmrc",
+              "sha256": "b4ea99f73d68c12f437fc4853b2fec3db413ae8141c6f7ceab5fa35bbffd1456"
+            },
+            {
+              "path": "apps/cli/src/doctor.ts",
+              "sha256": "4563d1a5bc5d0c4b85a914b4d71cd2015921ceb3082a2e69e622617199d5826f"
+            },
+            {
+              "path": "apps/cli/src/index.test.ts",
+              "sha256": "00ca60c4885e96bcf650dfb479476736f9268de2b837af16039a87c02899380c"
+            },
+            {
+              "path": "apps/cli/src/index.ts",
+              "sha256": "eb1fd6fe33269c70f77b95d10a16aeec6cf92be0a006784730019003fcb08a37"
+            },
+            {
+              "path": "apps/daemon/src/index.test.ts",
+              "sha256": "f73820a4ee7bf6bbe69d2627319e54af9a0f64cfbd44aac9369966bdee9e1f53"
+            },
+            {
+              "path": "apps/daemon/src/index.ts",
+              "sha256": "a76e6aee924bbfe5affe19693a185db29f7cc1c33c869f0a3614804dfbc3f27b"
+            },
+            {
+              "path": "apps/daemon/src/local-api-security.ts",
+              "sha256": "c6b2d478685481ff34086316e8e0f2fb6a5488a974b2f152c0af0f40d0b558f8"
+            },
+            {
+              "path": "package-lock.json",
+              "sha256": "34c8f81503afaf21f3e86f7340315f7e7199462b21d27fdb5c78637093fbd2a1"
+            },
+            {
+              "path": "package.json",
+              "sha256": "a1092dab5112bf2b6ee8d58b8152a5b1348d95420b888257c86b83ff3e45cba9"
+            },
+            {
+              "path": "packages/cognition-core/src/index.test.ts",
+              "sha256": "5d5bc3436a793464ee76ce1938778c074ba4a86ff163532756054c1bf6c3a071"
+            },
+            {
+              "path": "packages/cognition-core/src/index.ts",
+              "sha256": "218c065e7f034afd095d71174186e6fead411e76288ae81551961d0de24b5b9a"
+            },
+            {
+              "path": "packages/context-compiler/src/index.test.ts",
+              "sha256": "b0cf6ef41c3c2e14489744eb2071f9864f78bad0e295a9888501752b1061d602"
+            },
+            {
+              "path": "packages/context-compiler/src/index.ts",
+              "sha256": "c816620445cdef644b674c57c65636a7d06e128082a0c92c7ad0886e0dd76499"
+            },
+            {
+              "path": "packages/domain/src/index.ts",
+              "sha256": "ea6dd01fcf985d7493ffc6640010be0c74434a4621d7189165b543bbd7c1fdd0"
+            },
+            {
+              "path": "packages/evals/src/index.ts",
+              "sha256": "afaa7655d2fc5a040904818057755b969106924fd8beb5df3999b3ad5f173cf5"
+            },
+            {
+              "path": "packages/memory-store/src/index.test.ts",
+              "sha256": "491ff7f57fe6118108dd6430c95167d54d0dde63dbaff89c2607e789cfecfc67"
+            },
+            {
+              "path": "packages/memory-store/src/index.ts",
+              "sha256": "07e2a1e891faedb2c9c3deac79d38fcb0be88c1beb9aff72337e2824c9451ad5"
+            },
+            {
+              "path": "packages/memory-store/src/migrations.ts",
+              "sha256": "e5c0822bf9cdb1168c7764844e18b80ee407dc63fd35532520c5f33e6ca919bd"
+            },
+            {
+              "path": "packages/memory-store/src/sqlite-observation-ledger-r2-fifth.test.ts",
+              "sha256": "0ffa74fdbc176059f5d812dee71eec4be35002af047440aa8e25b50833d71f03"
+            },
+            {
+              "path": "packages/memory-store/src/sqlite-observation-ledger-r2-third.test.ts",
+              "sha256": "0d274e2d2a3f0feba2ed5572f6f31a0ac39d3716742e7bf36de4572e17f3f848"
+            },
+            {
+              "path": "packages/memory-store/src/sqlite-observation-ledger.test.ts",
+              "sha256": "80df79aa911d85ed1dd191d5b743d8383b927ed5c52b786fe0c69efe1940d067"
+            },
+            {
+              "path": "packages/memory-store/src/sqlite-observation-ledger.ts",
+              "sha256": "b962702d7bab19b88fc3ca861eaeb97948a8d2fd0fcfee458e01ec041ec1ffe0"
+            },
+            {
+              "path": "packages/memory-store/src/sqlite-schema-sql.ts",
+              "sha256": "1247cb17435915fa54a454263f51586f6cc158b702ff377f175cfcc892179622"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-fixture.mjs",
+              "sha256": "b10a8c677ca86e75463f1cb672e56b5d6282512684ee7daf042c651b26ae6f13"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
+              "sha256": "e5c8b5146f4a6e6e24437601e1ea23118468ed40cd9c8c411d716e20d4da6144"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs",
+              "sha256": "476dbbfe2ff176ad120e1b6803d886bbff9955aca7e2e4f24d932525cfcf0153"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs",
+              "sha256": "db918649416601aad1b6a92b3415a139bf4230cdf32cb6b7c0d16c45000ad1d5"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "sha256": "a57684f71ed53a95e717e27d93b158492bba1cc9b0f808de4469cba98c09d76e"
+            },
+            {
+              "path": "packages/pi-adapter/src/index.test.ts",
+              "sha256": "4094b209beb9eedfdba92e7bbd3e5ce5329e76a4ec510f58d468954aca046c4f"
+            },
+            {
+              "path": "packages/pi-adapter/src/index.ts",
+              "sha256": "eb416dd607953a55244993657799bf523445e27b17740bd4b58c46b145bee638"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-r2-review-v1.test.ts",
+              "sha256": "45d8c74f25feb335df1bc8c0ac4019960bddfc42b85d6d9f0f28b4dd4cb8a55f"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-retry-correlation-v1.test.ts",
+              "sha256": "fc55025aafd18dbfa3189b1bc67c45d49d1e9d14886941fef5a53e7f79c236a9"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-session-replacement-v1.test.ts",
+              "sha256": "6928827621367515f9832b77c8b2cc065191d686bad270025660fa47637659eb"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-v1-core.ts",
+              "sha256": "3edb127b0eaec312f64b8f7593fbfba446ce7f6771c7b62ddc12daf4c038a519"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-v1.test.ts",
+              "sha256": "0f0621146b67267c02cf36b715f29455fc8243875e902761d610a76a675c8338"
+            },
+            {
+              "path": "packages/pi-adapter/src/normalized-runtime-event-v1.ts",
+              "sha256": "0d1613366e6db77e06fa998e7de34ea105727f08a61fe5286a5f13f03438192d"
+            },
+            {
+              "path": "packages/pi-adapter/src/pi-client-types.test.ts",
+              "sha256": "7d2bb108b52c55fdc815aac06a3c623d07347444c31b08123e4e7b509d61d9c7"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-context.ts",
+              "sha256": "b328c223a5b04086f380c8f0d15b5a1031eae379381656bf6f9971ddd0d2068d"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-failure-cancel.ts",
+              "sha256": "e69c97708587531dee6532e560d3c90a6a2d0fdceb5744e7a480032dae1fff84"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-failure-exhausted.ts",
+              "sha256": "35f588c458656de30e51eb5caa6d520be75d5a47c5dfd03486f4ba60d9e55ce4"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-failure-preflight.ts",
+              "sha256": "909ada3891020e164c6e1a83d29f57da6907caa3e4f4345b3851a93b6fe4aeb7"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-failure.ts",
+              "sha256": "9d01400faa6d4b3043730d50d1e5f547e9540da19a3628edbc2a9a5dbe80c07f"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-primary-command.ts",
+              "sha256": "d4d4b77e14e470545c707785998d801cc6ccb38ef3fa08d45aced5277141cfff"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-primary-tail.ts",
+              "sha256": "0fea6b869bfa40a59e211d02d2408c43d12983fac32e7ce12b835e5b87fa7827"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-primary-tools.ts",
+              "sha256": "53cc9c2a874722e4c9a4e8405261be5781b52807257657f64c029107fa787a6d"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-primary.ts",
+              "sha256": "6577fa3d4007a9763085cbce5387e1dd56957dc3b47f9c7028f1e8d20cb74758"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-replacement.ts",
+              "sha256": "1b3fa4a7ac823a6352a0372b3e262e9f606bba379c8d6972cb7ccf91c3fbc755"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture-retry-success.ts",
+              "sha256": "eba9e7149de8c17f71cdda1f85a71d27bf55f7e0f65923945674a4926f5f87c5"
+            },
+            {
+              "path": "packages/protocol/fixtures/normalized-runtime-event-v1.fixture.ts",
+              "sha256": "4fd5bf0869e39e9be8a947e73c7db8f1a590d3640335263de12a65e60532e17c"
+            },
+            {
+              "path": "packages/protocol/src/index.ts",
+              "sha256": "b88e8691e3ec8f55c88cb336277ece394de0767fc3611f015fbc65ac79bc4cfd"
+            },
+            {
+              "path": "packages/protocol/src/local-diagnostics-v1.test.ts",
+              "sha256": "f5bac7c9a7c918671e189c2736af3950785caeb0c59cdee7a518f7fb777e78ce"
+            },
+            {
+              "path": "packages/protocol/src/local-diagnostics-v1.ts",
+              "sha256": "b3f307b2c9ad9fa6782eb015135ed04374cfe5c6736bda25d01ba6dfacd05488"
+            },
+            {
+              "path": "packages/protocol/src/lossless-json.ts",
+              "sha256": "1f8ef0d811d8ff497fb6dc96f7e118f0ac93fc372a4d258c6ccd660cd8f459bb"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-payload-v1-core.ts",
+              "sha256": "2a9fe9496e682d45a28db3e91d4354f0bfbd309e7c4d667d082e8cd0256e76db"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-payload-v1.ts",
+              "sha256": "af4271fb8bc2b14a171a1b67c76f144bed973e1f9a5896e8eb6596f434a43688"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-r2-review-v1.test.ts",
+              "sha256": "32ad7db80dbe6137fb9565ad5566fdd555c7f469ab60c9f44dfc0d7176a7e652"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-retry-correlation-v1.test.ts",
+              "sha256": "5bdd1658471ee0b6a3478ececff057a48a3e559982d5db124f211a89081ee74a"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-session-replacement-v1.test.ts",
+              "sha256": "13cecdeede6afe8ed99f238b5a775fe41bcd78f12c848497b03dc477180ed656"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-stream-v1-core.ts",
+              "sha256": "4e652e93e6e3f5c6fb586fe321481d1cc195be3c96f814a2c94903fcc371090e"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-stream-v1.test.ts",
+              "sha256": "c90d96fca8619275ee05b96d75961be79eeeb37c4b932d168eddf9bfa99ff28f"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-stream-v1.ts",
+              "sha256": "b925a3c460c8f79a7d24801cc9d51f520faac7e75f9b6996fa29c642826cbf70"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-v1-core.ts",
+              "sha256": "32dc21b167336159a369bc154037041395005bcb7bd6ef5e5346372997834ccb"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-v1.test.ts",
+              "sha256": "f67bf9299334ce9ea729800bb7768667321ec05f57825b6ab08c9144cc8cfd72"
+            },
+            {
+              "path": "packages/protocol/src/runtime-event-v1.ts",
+              "sha256": "41d03bdfeacd85c86264968e26534de9b00232c9c6ca17a473daca0fb20ba918"
+            },
+            {
+              "path": "packages/protocol/src/sha256.ts",
+              "sha256": "d3543537fa3d15f394fcdae0c06889b4f2181ad1d4ed1ec671b7f658707870a0"
+            },
+            {
+              "path": "scripts/check-architecture.mjs",
+              "sha256": "3d1bd91d9e5e66f807686b314a5ccab34be7a89433dbe39a1dc1f763046130c0"
+            },
+            {
+              "path": "scripts/check-pi-artifact-result.mjs",
+              "sha256": "ab60d57eb5c52ef89366e90c96536ab53546a6a7c1cf38cadc3d34d046a663ea"
+            },
+            {
+              "path": "scripts/check-pi-sdk-rpc-parity-provenance.mjs",
+              "sha256": "d5809a65f59c0038df105538ed87e796a327d365d50b7244467c523a4dcb742c"
+            },
+            {
+              "path": "scripts/check-toolchain.mjs",
+              "sha256": "a013020ea830ba8be465f1bf28f8f2b30af3107b6be37c086b005b50cddced76"
+            },
+            {
+              "path": "scripts/diagnose-pi-root-types.mjs",
+              "sha256": "e0ba64ce3391eab97815f97656cee1104f47bfcdc3493f01fa335a62de2a0c23"
+            },
+            {
+              "path": "scripts/formal-toolchain.sh",
+              "sha256": "7cda36222e92f0218149bea8a7e49e1471e8fa711a9a27b5a4d9501b2a917d2c"
+            },
+            {
+              "path": "scripts/install-toolchain.mjs",
+              "sha256": "a0f85bcaf2814df846444bff62883300678430f7c8bfbff36582da88485ebcd6"
+            },
+            {
+              "path": "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "sha256": "15ecd0332fdb439b04ef4560de4a3aa250dad915ee03cb8aca61c0280a394f23"
+            },
+            {
+              "path": "scripts/probes/pi-artifact-ci.mjs",
+              "sha256": "b8c1f47c6e317584218b6ec34c3e99935ae2e576e45710bcb5e6dad15824e6da"
+            },
+            {
+              "path": "scripts/probes/pi-rpc-state.mjs",
+              "sha256": "52b988febc7ad3e443249cc0c47a3f994ca33e95df942b1a1f1c58e103363e1d"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-surface.mjs",
+              "sha256": "2651d0309f4415faeaa518cc9c3e15b9b927a1906160a1aebfc57970db1dd846"
+            },
+            {
+              "path": "scripts/toolchain-environment.mjs",
+              "sha256": "bf350f80809866d2fe8e4fdc631d22f6def64894a51faee57f10978d03350c9a"
+            },
+            {
+              "path": "scripts/toolchain.test.mjs",
+              "sha256": "efc11ae99de30014c1c2807a176a20bf45ef006cdeb577a413fc663104967565"
+            },
+            {
+              "path": "scripts/typecheck.mjs",
+              "sha256": "0c5c2b53ff061da335d548a6826a67368ec2bb23babf22b0defcc174bbf2b44b"
+            },
+            {
+              "path": "toolchain.json",
+              "sha256": "423b03d6f239f0a6bf001ed824d0eff0285cfc7e00b6d83f0d808a046a5bca05"
+            },
+            {
+              "path": "tsconfig.json",
+              "sha256": "b94f728f7a26ceb5a6a3467d7aed82dc6f106bc005fbd3155ac280da4ee31a3d"
+            }
+          ],
+          "runs": [
+            {
+              "command": "node --experimental-strip-types --test scripts/toolchain.test.mjs",
+              "entryPoint": "scripts/toolchain.test.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 6,
+                "passed": 6,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            },
+            {
+              "command": "node --experimental-strip-types --test scripts/typecheck.mjs",
+              "entryPoint": "scripts/typecheck.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            }
+          ]
+        },
+        {
+          "sourcePr": "https://github.com/ntygod/zhiwei-next/pull/60",
+          "head": "41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415",
+          "observedAt": "2026-10-08T22:18:56Z",
+          "node": "22.23.1",
+          "files": [
+            {
+              "path": ".github/workflows/pi-sdk-rpc-parity.yml",
+              "sha256": "0f5a570c6a695f90904359be71d45500cf37ff7b50638c2683bced5debf7b07a"
+            },
+            {
+              "path": ".node-version",
+              "sha256": "7d2df647f25529bd87500319c41564e032e2be642e565350fa6136d7a1ec4d10"
+            },
+            {
+              "path": ".npmrc",
+              "sha256": "b4ea99f73d68c12f437fc4853b2fec3db413ae8141c6f7ceab5fa35bbffd1456"
+            },
+            {
+              "path": "package-lock.json",
+              "sha256": "34c8f81503afaf21f3e86f7340315f7e7199462b21d27fdb5c78637093fbd2a1"
+            },
+            {
+              "path": "package.json",
+              "sha256": "a1092dab5112bf2b6ee8d58b8152a5b1348d95420b888257c86b83ff3e45cba9"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/manifest.json",
+              "sha256": "cee143ea7e71a70b48b0c8048839bb00b6f08c2c052652d6fb8100877bf2ab33"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-00-443405699ddd4616c78c6aff8be6c368917cbcb1295fedb862eec98e41e82225.b64",
+              "sha256": "443405699ddd4616c78c6aff8be6c368917cbcb1295fedb862eec98e41e82225"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-01-1c6d75c4a7e2ed1958aa729037fc7c4e9d785c3739d28d92a11cf3bf20db3a64.b64",
+              "sha256": "1c6d75c4a7e2ed1958aa729037fc7c4e9d785c3739d28d92a11cf3bf20db3a64"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-02-b1212b1afa8989ef3a8da5e528b70fd160f5ed8382ad3171874f920390e7081f.b64",
+              "sha256": "b1212b1afa8989ef3a8da5e528b70fd160f5ed8382ad3171874f920390e7081f"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-03-b6da21595679dc47deed3bb2330294d164387f502c5ce75d515bd658114e6060.b64",
+              "sha256": "b6da21595679dc47deed3bb2330294d164387f502c5ce75d515bd658114e6060"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-04-e8a50d04ce2b2252e6c2fba4db603f7977ed2855826e4bb008ef33a20a37a12e.b64",
+              "sha256": "e8a50d04ce2b2252e6c2fba4db603f7977ed2855826e4bb008ef33a20a37a12e"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/part-05-30bc6c8157c81bbfc5da609f13431fffac9d445a082ea4e0af46c30d13b1d9e5.b64",
+              "sha256": "30bc6c8157c81bbfc5da609f13431fffac9d445a082ea4e0af46c30d13b1d9e5"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs",
+              "sha256": "00c7bf5ec561aeccbc484695eef3a67a4554e623c9ff8e64da9942e52b1d5519"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs",
+              "sha256": "ea6cb1f52ad610bc404a9bae810bcea537f89a943d5185e4c752de546db56edf"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs",
+              "sha256": "3c31a55ff71dd32f2c88f7bbccbd274c2a30b2161edec2508af2c5a65376f5c9"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs",
+              "sha256": "1692a58b33079639fa0ab5c7ebd83ff6e0672855e7b57e681fc386a0694116c5"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs",
+              "sha256": "063da4f298fcf409c819ea00eb7e84d4504b0a0a0c8159afe2ad0327cc8eff27"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-checker-base.mjs",
+              "sha256": "8e60d677c93c49419b365f244108102dc4a9806b026c60a6eea181b46391580c"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "sha256": "a57684f71ed53a95e717e27d93b158492bba1cc9b0f808de4469cba98c09d76e"
+            },
+            {
+              "path": "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+              "sha256": "05db9c7c5d60f2d3d519e535996a758c432093b84ca6af603089f944bf3a03df"
+            },
+            {
+              "path": "scripts/check-pi-sdk-rpc-parity-result.mjs",
+              "sha256": "ce6375d2000f1ab51413d280875a723135b9aa5e1b5ae209e2a5bc01cbd15443"
+            },
+            {
+              "path": "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "sha256": "15ecd0332fdb439b04ef4560de4a3aa250dad915ee03cb8aca61c0280a394f23"
+            },
+            {
+              "path": "scripts/probes/pi-lifecycle-ci.mjs",
+              "sha256": "db5c2546005cbf8429afc359d562b8138b729a26e1df1da81a2861e5e9e3aa43"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-capture.mjs",
+              "sha256": "1c0168e05aefc993be6f61b8d317c468000f0b8961fe5e3089aa6d6f8a9a43d3"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-composite-capture.mjs",
+              "sha256": "00e399abffb1403356298e8ddbb7129d501bb6900e981708e54fbf6a86a810e9"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-contract.mjs",
+              "sha256": "37bc50080d4b549645da203e71dc6ebb482d31ee563e0575b1c933fb992fa13b"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs",
+              "sha256": "80a4a3f62d47e14557b84b595243d3d574bdddb92bf9733bd448df00061a6862"
+            },
+            {
+              "path": "toolchain.json",
+              "sha256": "423b03d6f239f0a6bf001ed824d0eff0285cfc7e00b6d83f0d808a046a5bca05"
+            }
+          ],
+          "runs": [
+            {
+              "command": "node --experimental-strip-types scripts/pi-sdk-rpc-parity-fixture.mjs --check",
+              "entryPoint": "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 0,
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            }
+          ]
+        },
+        {
+          "sourcePr": "https://github.com/ntygod/zhiwei-next/pull/64",
+          "head": "41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415",
+          "observedAt": "2026-10-08T22:19:26Z",
+          "node": "22.23.1",
+          "files": [
+            {
+              "path": ".github/workflows/pi-sdk-rpc-parity.yml",
+              "sha256": "0f5a570c6a695f90904359be71d45500cf37ff7b50638c2683bced5debf7b07a"
+            },
+            {
+              "path": ".node-version",
+              "sha256": "7d2df647f25529bd87500319c41564e032e2be642e565350fa6136d7a1ec4d10"
+            },
+            {
+              "path": ".npmrc",
+              "sha256": "b4ea99f73d68c12f437fc4853b2fec3db413ae8141c6f7ceab5fa35bbffd1456"
+            },
+            {
+              "path": "package-lock.json",
+              "sha256": "34c8f81503afaf21f3e86f7340315f7e7199462b21d27fdb5c78637093fbd2a1"
+            },
+            {
+              "path": "package.json",
+              "sha256": "a1092dab5112bf2b6ee8d58b8152a5b1348d95420b888257c86b83ff3e45cba9"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-contract.mjs",
+              "sha256": "00c7bf5ec561aeccbc484695eef3a67a4554e623c9ff8e64da9942e52b1d5519"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/pi-sdk-rpc-parity-fixture.mjs",
+              "sha256": "b10a8c677ca86e75463f1cb672e56b5d6282512684ee7daf042c651b26ae6f13"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-base-fixture.mjs",
+              "sha256": "9114567d466b8e0796e5f4a8fec8e46eff041c1cf2db4070509d156dcf408f05"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-capture-base.mjs",
+              "sha256": "ea6cb1f52ad610bc404a9bae810bcea537f89a943d5185e4c752de546db56edf"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture-base.mjs",
+              "sha256": "18c158afc4caf09664e06c1ec9ea4eac87215ce528f8a63aacad80cb681cc8d3"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
+              "sha256": "e5c8b5146f4a6e6e24437601e1ea23118468ed40cd9c8c411d716e20d4da6144"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.mjs",
+              "sha256": "3c31a55ff71dd32f2c88f7bbccbd274c2a30b2161edec2508af2c5a65376f5c9"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs",
+              "sha256": "4063e0ddbcf9ed0d531b98963b10aabc948e1cc8e9508b5e2f40f51bf5177aee"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker-base.mjs",
+              "sha256": "1692a58b33079639fa0ab5c7ebd83ff6e0672855e7b57e681fc386a0694116c5"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-legacy-checker.mjs",
+              "sha256": "063da4f298fcf409c819ea00eb7e84d4504b0a0a0c8159afe2ad0327cc8eff27"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest-v2.json",
+              "sha256": "cd5ec01ad09c2b3ea123e7dca5a3e10e6ce519bb498758519a4e7fb45c112a66"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-manifest.json",
+              "sha256": "2cb4d4289668836e877ce54e2324f8c94250d0a22a8555bffff74d316f5c29b0"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-capture.mjs",
+              "sha256": "9c70359e3da22740a29d2bcfa62ac02a32c7077a1ade52d569e22ebb4451f40b"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalized-checker-base.mjs",
+              "sha256": "8e60d677c93c49419b365f244108102dc4a9806b026c60a6eea181b46391580c"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.mjs",
+              "sha256": "e9d04943c4c721b4ca0bcfd0ef5c5a205a8aa3c6e14e7ca584731c209e174f8c"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs",
+              "sha256": "a567ec3b1428df93fab0fc8b12b7317471e7e522c056723521623a4c4dda7e15"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-part-00-bfcc1561e9cc08585e2675ecce0a2ccea0b2a14900a63a242f9884ab3286300f.b64",
+              "sha256": "bfcc1561e9cc08585e2675ecce0a2ccea0b2a14900a63a242f9884ab3286300f"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.mjs",
+              "sha256": "476dbbfe2ff176ad120e1b6803d886bbff9955aca7e2e4f24d932525cfcf0153"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs",
+              "sha256": "f370fb97b6a9270cf3c417418088a28ad18534a179fd615a516bfa58603d08fd"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provider-error-replacement.json",
+              "sha256": "a5505b9c86b86af3a78068eb8440158361866600f41f922fb39d5ece840b3811"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-sdk-provenance-base.mjs",
+              "sha256": "db918649416601aad1b6a92b3415a139bf4230cdf32cb6b7c0d16c45000ad1d5"
+            },
+            {
+              "path": "packages/pi-adapter/fixtures/pi-upstream-baseline.json",
+              "sha256": "a57684f71ed53a95e717e27d93b158492bba1cc9b0f808de4469cba98c09d76e"
+            },
+            {
+              "path": "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
+              "sha256": "05db9c7c5d60f2d3d519e535996a758c432093b84ca6af603089f944bf3a03df"
+            },
+            {
+              "path": "scripts/pi-sdk-rpc-parity-fixture.mjs",
+              "sha256": "15ecd0332fdb439b04ef4560de4a3aa250dad915ee03cb8aca61c0280a394f23"
+            },
+            {
+              "path": "scripts/probes/pi-lifecycle-ci.mjs",
+              "sha256": "db5c2546005cbf8429afc359d562b8138b729a26e1df1da81a2861e5e9e3aa43"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-contract.mjs",
+              "sha256": "37bc50080d4b549645da203e71dc6ebb482d31ee563e0575b1c933fb992fa13b"
+            },
+            {
+              "path": "scripts/probes/pi-sdk-rpc-parity-faux-extension.mjs",
+              "sha256": "80a4a3f62d47e14557b84b595243d3d574bdddb92bf9733bd448df00061a6862"
+            },
+            {
+              "path": "toolchain.json",
+              "sha256": "423b03d6f239f0a6bf001ed824d0eff0285cfc7e00b6d83f0d808a046a5bca05"
+            }
+          ],
+          "runs": [
+            {
+              "command": "node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs",
+              "entryPoint": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-jsonl-reader.test.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            },
+            {
+              "command": "node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs",
+              "entryPoint": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-normalizer.test.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            },
+            {
+              "command": "node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs",
+              "entryPoint": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            },
+            {
+              "command": "node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
+              "entryPoint": "packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs",
+              "result": {
+                "exitCode": 0,
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "todo": 0
+              }
+            }
+          ]
+        }
+      ],
       "decisionReview": null,
       "disposition": null
     },

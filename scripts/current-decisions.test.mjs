@@ -17,13 +17,16 @@ const files = new Map();
 const blobs = new Map();
 // Synthetic fixtures are built from recorded historical evidence, so the tests themselves do not freeze later product files.
 // The first repository integration test still validates the actual current filesystem through `real`.
-const fixtureEvidenceHeads = new Map(baseline.decisions.flatMap((d) => d.evidence.flatMap((e) => e.files.map((f) => [f.path, e.head]))));
+const fixtureEvidenceHeads = new Map(baseline.decisions.filter((d) => d.id !== "D-07").flatMap((d) => d.evidence.flatMap((e) => e.files.map((f) => [f.path, e.head]))));
 function cachedRead(path) { if (!files.has(path)) { const content = fixtureEvidenceHeads.has(path) ? cachedBlob(fixtureEvidenceHeads.get(path), path) : real.read(path); files.set(path, path.startsWith("docs/adr/") ? content.replace(/^- 状态：[^\n]+$/m, "- 状态：Proposed") : content); } return files.get(path); }
 function cachedBlob(head, path) { const key = `${head}:${path}`; if (!blobs.has(key)) blobs.set(key, real.blob(head, path)); return blobs.get(key); }
 const REVIEW_HEAD = "1234567890abcdef1234567890abcdef12345678"; // Synthetic only; never published or claimed to exist.
 function fixture({ accepted = false } = {}) {
   const data = structuredClone(baseline);
   for (const d of data.decisions.filter((d) => ["D-01", "D-02", "D-10"].includes(d.id))) { d.status = "Evidence Ready"; d.history = ["Proposed", "Evidence Ready"]; d.decisionReview = null; d.disposition = null; }
+  // Preserve the original D-01/02/10 synthetic suite independently of later D-07 evidence.
+  const d07 = data.decisions.find((d) => d.id === "D-07");
+  Object.assign(d07, { status: "Proposed", history: ["Proposed"], proposal: null, evidence: [], decisionReview: null, disposition: null });
   const overrides = new Map();
   const historical = new Map();
   const io = {
@@ -232,7 +235,7 @@ function cliWorkspace(run) {
   try {
     execFileSync("git", ["clone", "--shared", "--quiet", root, directory], { stdio: "pipe" });
     // Exercise this worktree's proposed CLI even before it is committed; history remains real.
-    for (const path of ["scripts/check-current-decisions.mjs", "scripts/current-decisions.mjs", "scripts/write-current-decisions-view.mjs"]) fs.copyFileSync(join(root, path), join(directory, path));
+    for (const path of ["scripts/check-current-decisions.mjs", "scripts/current-decisions.mjs", "scripts/write-current-decisions-view.mjs", OVERLAY_PATH, VIEW_PATH, ...baseline.decisions.flatMap((d) => d.adrs.map((a) => a.path))]) fs.copyFileSync(join(root, path), join(directory, path));
     const target = join(directory, VIEW_PATH); const source = join(directory, SOURCE.path);
     const before = fs.readFileSync(source);
     const execute = () => spawnSync(process.execPath, ["scripts/check-current-decisions.mjs", "--write-view"], { cwd: directory, encoding: "utf8" });
@@ -323,3 +326,61 @@ test("real CLI revalidates written view before reporting successful source prese
   assert.match(result.stderr, /Generated current decision register drift/);
   assert.ok(!result.stdout.includes("Original source/checker bytes preserved."));
 }));
+
+// D-07 uses its own historical snapshot. Do not make the old D-01/02/10
+// synthetic approvals depend on newer product files or assume simultaneous evidence.
+function d07Fixture({ accepted = false } = {}) {
+  const data = structuredClone(baseline);
+  const d = data.decisions.find((decision) => decision.id === "D-07");
+  Object.assign(d, { status: "Evidence Ready", history: ["Proposed", "Evidence Ready"], decisionReview: null });
+  const overrides = new Map();
+  const historical = new Map();
+  for (const evidence of d.evidence) for (const file of evidence.files) overrides.set(file.path, cachedBlob(evidence.head, file.path));
+  for (const adr of d.adrs) overrides.set(adr.path, real.read(adr.path).replace(/^- 状态：[^\n]+$/m, "- 状态：Proposed"));
+  const io = {
+    read: (path) => overrides.has(path) ? overrides.get(path) : path === VIEW_PATH ? renderCurrentDecisions(data) : real.read(path),
+    blob: (head, path) => historical.has(`${head}:${path}`) ? historical.get(`${head}:${path}`) : cachedBlob(head, path),
+  };
+  if (accepted) {
+    historical.set(`${REVIEW_HEAD}:${OVERLAY_PATH}`, JSON.stringify(data));
+    for (const path of [SOURCE.path, SOURCE.checkerPath, SOURCE.registerPath, ...d.adrs.map((adr) => adr.path), ...d.evidence.flatMap((e) => e.files.map((f) => f.path))]) historical.set(`${REVIEW_HEAD}:${path}`, io.read(path));
+    d.status = "Accepted"; d.history.push("Accepted");
+    for (const adr of d.adrs) overrides.set(adr.path, io.read(adr.path).replace("- 状态：Proposed\n", "- 状态：Accepted\n"));
+    d.decisionReview = { purpose: "decision-accepted", decisionId: "D-07", primaryPr: "https://github.com/ntygod/zhiwei-next/pull/999", evidenceHead: REVIEW_HEAD, reviewedHead: REVIEW_HEAD, reviewUrl: "https://github.com/ntygod/zhiwei-next/pull/999#issuecomment-123456789", proposalSha256: proposalDigest(d), observedAt: "2026-10-08T22:00:00Z" };
+  }
+  return { data, d, overrides, historical, io };
+}
+function rejectsD07(name, mutate, error, options) {
+  test(`D07 ${name}`, () => { const f = d07Fixture(options); mutate(f); assert.throws(() => validateCurrentDecisions(f.data, f.io), error); });
+}
+test("D07 finite evidence-ready choice retains older accepted decisions without accepting new behavior", () => {
+  const f = d07Fixture(); const result = validateCurrentDecisions(f.data, f.io);
+  assert.deepEqual(result.accepted, ["D-01", "D-02", "D-10"]);
+  assert.equal(result.currentProductApplicabilityEvaluated, false);
+  assert.equal(result.stageCompletionEvaluated, false);
+  assert.equal(f.d.decisionReview, null);
+  assert.deepEqual(f.d.adrs.map((a) => a.path), ["docs/adr/0011-formal-toolchain-baseline.md", "docs/adr/0013-pi-cli-jsonl-worker.md"]);
+});
+test("D07 synthetic terminal acceptance binds the finite choice and both ADRs to prior evidence-ready bytes", () => {
+  const f = d07Fixture({ accepted: true }); const result = validateCurrentDecisions(f.data, f.io);
+  assert.deepEqual(result.accepted, ["D-01", "D-02", "D-07", "D-10"]);
+  assert.equal(result.githubApprovalAuthenticated, false);
+});
+rejectsD07("requires both toolchain and CLI ADRs", (f) => f.d.adrs.pop(), /Decision\/ADR ownership/);
+rejectsD07("cannot substitute unrelated ADR", (f) => f.d.adrs[1] = f.data.decisions[0].adrs[0], /Decision\/ADR ownership/);
+rejectsD07("requires its actual toolchain experimental entry", (f) => f.d.evidence = f.d.evidence.filter((e) => !e.runs.some((r) => r.entryPoint === "scripts/toolchain.test.mjs")), /decision-specific experimental path/);
+rejectsD07("cannot change historical probe before decision review", (f) => { const path = "scripts/probes/pi-rpc-state.mjs"; assert.ok(f.d.evidence.some((e) => e.files.some((file) => file.path === path))); f.overrides.set(path, "synthetic new consumer implementation\n"); }, /current evidence file drift/);
+rejectsD07("cannot rehash new implementation as unchanged historical proof", (f) => { const e = f.d.evidence.find((e) => e.files.some((file) => file.path === "scripts/probes/pi-rpc-state.mjs")); const file = e.files.find((file) => file.path === "scripts/probes/pi-rpc-state.mjs"); file.sha256 = sha256("new implementation\n"); f.overrides.set(file.path, "new implementation\n"); }, /historical evidence blob drift/);
+rejectsD07("cannot use fake acceptance before independent review", (f) => { f.d.status = "Accepted"; f.d.history.push("Accepted"); for (const a of f.d.adrs) f.overrides.set(a.path, f.io.read(a.path).replace("- 状态：Proposed\n", "- 状态：Accepted\n")); }, /decision review/);
+for (const number of [83, 60, 64]) rejectsD07(`experiment PR${number} cannot be the decision primary`, (f) => { f.d.decisionReview.primaryPr = `https://github.com/ntygod/zhiwei-next/pull/${number}`; f.d.decisionReview.reviewUrl = `${f.d.decisionReview.primaryPr}#issuecomment-123456789`; }, /Experiment PR cannot/, { accepted: true });
+rejectsD07("accepted review must bind actual historical files in decision candidate", (f) => f.historical.set(`${REVIEW_HEAD}:scripts/probes/pi-rpc-state.mjs`, "unreviewed implementation\n"), /reviewed-HEAD evidence file drift/, { accepted: true });
+rejectsD07("accepted CLI ADR cannot acquire unreviewed guarantees", (f) => { const adr = f.d.adrs[1]; f.overrides.set(adr.path, f.io.read(adr.path) + "Unreviewed security guarantee.\n"); }, /ADR content drift/, { accepted: true });
+rejectsD07("copied D01 review cannot accept CLI decision", (f) => f.d.decisionReview = structuredClone(f.data.decisions[0].decisionReview), /another decision/, { accepted: true });
+test("D07 accepted direction permits later consumer evolution without endorsing current code", () => {
+  const f = d07Fixture({ accepted: true }); const digest = proposalDigest(f.d);
+  f.overrides.set("scripts/probes/pi-rpc-state.mjs", "synthetic later consumer\n");
+  const result = validateCurrentDecisions(f.data, f.io);
+  assert.ok(result.accepted.includes("D-07"));
+  assert.equal(proposalDigest(f.d), digest);
+  assert.equal(result.currentProductApplicabilityEvaluated, false);
+});
