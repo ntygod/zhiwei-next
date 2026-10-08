@@ -194,9 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    // PR85 recapture-only guard: both checkers and full equality already passed.
-    // Controlled CLI failure preserves upload-after-compare evidence, not a Runtime failure.
-    throw new Error("PR85 recapture-only guard after complete comparison success");
     return;
   }
   if (outputIndex >= 0) {
