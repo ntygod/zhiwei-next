@@ -17,6 +17,10 @@ D-01、D-02、D-10 已依据 [PR #81 的逐项独立决策审查](https://github
 
 [G-1 原卡逐项验收](g1-baseline-acceptance.md)独立列出三项实质条件和失败路径。状态登记后的新完整 HEAD 尚需全新独立 cold review、fresh Ready CI、合入及来源回读，旧评论不批准这些未来事实。#67 整体与 M0 未完成，下一 G-2/G-3 工作候选仅在本 PR 完成后启动。
 
+## D-07 的后续有限接受
+
+#86 / PR #87 在未修改 115 个列名历史文件的候选 HEAD `37c6228ef9187b932a9648d472319bce31a4aef5` 上，完成 [D-07 独立决策审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)。评论于 2026-10-08T22:39:40Z 发布、22:39:59Z 完整回读；绑定 proposalSha256 `b13ccee54ba167fc7553d517ad60154ebf7a0a88c2df8e1f87082d1c19d9d764`。ADR 0011/0013 仅更新状态行，有限选择与所有历史证据不变。接受之后才改造当前 CLI 消费者；终态历史校验允许这种演进，但新实现及整个 G-3 交付仍需自身验证，旧审查不批准新代码。D-01/02/10 的记录不变。
+
 ## 严格 v1 表示
 
 顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围配置 D-01/02/10 的原 ADR/实验入口，以及 #86 机械追加的 D-07 → ADR 0011/0013 与 `scripts/toolchain.test.mjs`；其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。

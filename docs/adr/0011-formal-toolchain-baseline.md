@@ -1,6 +1,6 @@
 # ADR 0011：G-3a 正式 TypeScript 工具链基线
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-08
 - 计划决策：D-07
 - 范围：[Issue #82](https://github.com/ntygod/zhiwei-next/issues/82)，G-3 / D-07 的有限工具链切片

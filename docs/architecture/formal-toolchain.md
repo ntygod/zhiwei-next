@@ -1,6 +1,6 @@
 # G-3a 正式工具链与支持边界
 
-当前候选属于 [Issue #82](https://github.com/ntygod/zhiwei-next/issues/82) / [PR #83](https://github.com/ntygod/zhiwei-next/pull/83)，决策见 [Proposed ADR 0011](../adr/0011-formal-toolchain-baseline.md)。不是全部 G-3、D-07 或 M0-4 验收。
+G-3a 工具链已由 [Issue #82](https://github.com/ntygod/zhiwei-next/issues/82) / [PR #83](https://github.com/ntygod/zhiwei-next/pull/83)交付。随后 #86 / PR #87 的独立有限决策审查接受了 [ADR 0011](../adr/0011-formal-toolchain-baseline.md) 的精确版本及 [ADR 0013](../adr/0013-pi-cli-jsonl-worker.md) 的官方 CLI JSONL 方向，历史身份见[当前执行决议](../planning/current-decisions.md)。本页仍说明 G-3a 的工具链保证；新[CLI 状态探针合同](pi-cli-state-contract.md)及 [G-3 原卡验收](../planning/g3-baseline-acceptance.md)分别记录实现和未完成验证，不等于 M0-4。
 
 ## 精确支持版本
 
@@ -39,7 +39,7 @@ shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、N
 
 新 `pi-client-types.test.ts` 消费官方 `@earendil-works/pi-coding-agent/client` 公共类型面。该公共子路径及全部传递声明已实际 strict NodeNext 编译，涵盖 RemoteSession 的 create/open/subscribe/submit/abort/reconnect/dispose 与 transcript snapshot/progress API；合成 lifecycle/options/prompt 正例不启动 Pi，也不发送请求。缺 API、错误 prompt 类型、错误 lifecycle operation 都由同一真实编译器拒绝。所有 Pi 类型只出现在 pi-adapter，且未从 Adapter 公共 barrel 向外导出。
 
-这不选择生产 Client/SDK/RPC 路径，不声称正式 RemoteSession 或 Worker 已接入。既有正式 normalizer 与所有包测试均同时被检查，而不是仅检查新增示例。
+这段类型检查不选择生产 Client/SDK/RPC 路径；D-07 选择官方 CLI JSONL 的独立证据见 ADR 0013，不由 RemoteSession/CBOR 的类型证明推导。不声称正式 RemoteSession 或 Worker 已接入。既有正式 normalizer 与所有包测试均同时被检查，而不是仅检查新增示例。
 
 ## 明确未支持的 root SDK 声明
 
@@ -49,7 +49,7 @@ shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、N
 - 6 个 @anthropic-ai/sdk 0.91.1 声明引用不存在的多层相对 undici-types 路径
 - 1 个 @google/genai 1.52.0 声明无条件引用缺失的 optional MCP peer
 
-独立复现命令 `npm run diagnose:pi-root-types` 返回非零并打印原始诊断；不属于根 check 的通过条件。没有修改第三方声明、关闭 skipLibCheck、过滤诊断、添加 ambient stub 或改用 Bundler 掩盖问题。公共 ./client 的绿不能证明 root SDK 类型兼容；G-3 后续若选择 root SDK，必须先独立解决这些确切缺陷并重跑矩阵。
+独立复现命令 `npm run diagnose:pi-root-types` 返回非零并打印原始诊断；不属于根 check 的通过条件。没有修改第三方声明、关闭 skipLibCheck、过滤诊断、添加 ambient stub 或改用 Bundler 掩盖问题。公共 ./client 的绿不能证明 root SDK 类型兼容；当前选择的 CLI 合同不消费这些声明。若将来改变已接受方向选择 root SDK，须独立解决这些确切缺陷、显式 supersede 决策并重跑矩阵。
 
 ## 验证、CI 与未覆盖边界
 

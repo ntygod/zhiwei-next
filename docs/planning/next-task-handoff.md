@@ -4,9 +4,9 @@
 
 ## 当前 G-3b 导航（2026-10-08）
 
-起点 main41b1f8a 已交付 G-3a / PR #83 与 G-2a / PR #85，交付链接见[项目状态](../harness/project-state.md)。#86 同一实质 primary 先形成 ADR 0011/0013 与 D-07 Evidence Ready，由真实独立决策审查接受，再实现实际消费者 `scripts/probes/pi-rpc-state.mjs` 的严格 CLI 合同。禁止在接受前改动列名历史证据；禁止把 ./client 的 RemoteSession/CBOR 类型证明当成 JSONL 选择，禁止导入不支持的 root SDK 声明或换到 ./rpc-entry。
+起点 main41b1f8a 已交付 G-3a / PR #83 与 G-2a / PR #85，交付链接见[项目状态](../harness/project-state.md)。#86 的唯一 primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)。ADR 0011/0013 与 D-07 已按[实际有限审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)接受，被审候选 37c6228 的所有历史文件保持原字节；随后才实现实际消费者 `scripts/probes/pi-rpc-state.mjs` 的[严格 CLI 合同](../architecture/pi-cli-state-contract.md)。禁止把 ./client 的 RemoteSession/CBOR 类型证明当成 JSONL 选择，禁止导入不支持的 root SDK 声明或换到 ./rpc-entry。
 
-真实复跑基线、文件哈希、准确命令与 wrapper 计数见 [D-07 证据](d07-cli-evidence.md)及[当前决议](current-decisions.md)。独立接受不等于新代码批准；实现后仍需最终完整 HEAD 的 R3、全部正式 checks、fresh CI / live 来源与 main 回读。D-04/D-08 / G-2 与 M0-4/5 保持未完成，不修改源工作包或 Accepted ADR 语义，不创建 finalizer PR。
+真实复跑基线、文件哈希、准确命令与 wrapper 计数见 [D-07 证据](d07-cli-evidence.md)及[当前决议](current-decisions.md)。独立接受不等于新代码批准；实现后仍需最终完整 HEAD 的 R3、全部正式 checks、fresh CI / live 来源与 main 回读；[原 G-3 三条件](g3-baseline-acceptance.md)逐项保留实际未运行项，不预记完成。D-04/D-08 / G-2 与 M0-4/5 保持未完成，不修改源工作包或 Accepted ADR 语义，不创建 finalizer PR。
 
 ## 历史 G-2a 导航（2026-10-08）
 

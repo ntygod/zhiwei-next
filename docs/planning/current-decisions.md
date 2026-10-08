@@ -165,9 +165,9 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 
 ## D-07
 
-当前状态：**Evidence Ready**
+当前状态：**Accepted**
 
-状态路径：Proposed → Evidence Ready
+状态路径：Proposed → Evidence Ready → Accepted
 
 - ADR：[docs/adr/0011-formal-toolchain-baseline.md](../../docs/adr/0011-formal-toolchain-baseline.md)；正文摘要（仅归一化状态行）：`59fb32eb0886b9507282c5919ce52c4860c1265d2a7c4bdde8c5bcf0ca224c4c`
 - ADR：[docs/adr/0013-pi-cli-jsonl-worker.md](../../docs/adr/0013-pi-cli-jsonl-worker.md)；正文摘要（仅归一化状态行）：`bc73c1c77d2af32df103b3d81659e24ef466d0713ed28213cb09343c58a34c20`
@@ -355,7 +355,7 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 - 命令：`node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-provenance.test.mjs`；exit 0，tests/pass 1/1，fail/skip/todo 0/0/0
 - 命令：`node --experimental-strip-types --test packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle-fixture.mjs`；exit 0，tests/pass 1/1，fail/skip/todo 0/0/0
 
-正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
+决策审查记录：[decision-accepted](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)；被审 HEAD `37c6228ef9187b932a9648d472319bce31a4aef5`；绑定 D-07 / `b13ccee54ba167fc7553d517ad60154ebf7a0a88c2df8e1f87082d1c19d9d764`；记录观测 2026-10-08T22:39:59Z。其真实性/完整范围须查远端原文；该历史记录不批准后续完整 HEAD。
 
 ## D-08
 

@@ -1,6 +1,6 @@
 # D-07：官方 CLI 路径的历史证据复跑
 
-关联 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，候选 [ADR 0011](../adr/0011-formal-toolchain-baseline.md) / [ADR 0013](../adr/0013-pi-cli-jsonl-worker.md)。两份 ADR 仍 Proposed；[当前执行决议](current-decisions.md)中的 D-07 是 Evidence Ready，尚无独立决策接受记录。
+关联 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，候选 [ADR 0011](../adr/0011-formal-toolchain-baseline.md) / [ADR 0013](../adr/0013-pi-cli-jsonl-worker.md)。以下记录是被审 HEAD `37c6228ef9187b932a9648d472319bce31a4aef5` 的 Evidence Ready 历史说明。之后两份 ADR 与 D-07 已由[真实有限决策审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)接受，评论 22:39:40Z 发布、22:39:59Z 完整回读；[当前执行决议](current-decisions.md)保留 proposalSha256 与原历史证据，后续实现仍需新完整 HEAD 的 R3。
 
 ## 真实身份与复跑方法
 

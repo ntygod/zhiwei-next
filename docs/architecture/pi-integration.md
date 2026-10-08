@@ -6,6 +6,10 @@ Pi 是知微默认 Agent Runtime，但不是产品本体、长期记忆真源或
 
 当前固定的是 **M0 契约基线**，不是生产依赖承诺。正式 `NormalizedRuntimeEvent v1` 由 `docs/architecture/normalized-runtime-event-v1.md` 与 ADR 0005 定义，已经由 Issue #49 / PR #66 合入；Issue #56 只消费最新 `main` 上的正式协议。
 
+## 当前有限执行选择
+
+D-07 及 ADR 0011/0013 已接受精确工具链和官方 `bin.pi` CLI JSONL Worker 的单一路径方向；[当前执行决议](../planning/current-decisions.md)保留有限范围与历史证据。#86 的[内部状态探针合同](pi-cli-state-contract.md)只被现有零 prompt Artifact probe 消费，使用严格编译 TS、明确目录/环境、两请求及完整 EOF/close 边界；不是 M0-4 生产 Session 接线或 M0-5 Supervisor。`./client` 的 RemoteSession/CBOR 类型证明不等于 stdio RpcClient；root SDK 声明仍有 46 个不支持诊断。新代码仍需本 PR 最终独立 R3 / fresh CI，不继承历史批准。
+
 ## 当前基线与证据
 
 ```text

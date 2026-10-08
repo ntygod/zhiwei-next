@@ -27,6 +27,7 @@ const cacheDir = join(tempRoot, "npm-cache");
 const packDir = join(tempRoot, "pack");
 const installDir = join(tempRoot, "install");
 const workspaceDir = join(tempRoot, "workspace");
+const rpcStateDir = join(tempRoot, "rpc-state");
 const npmrcPath = join(tempRoot, "npmrc");
 
 const attempts = [];
@@ -571,6 +572,7 @@ await Promise.all([
   mkdir(packDir, { recursive: true }),
   mkdir(installDir, { recursive: true }),
   mkdir(workspaceDir, { recursive: true }),
+  mkdir(rpcStateDir, { mode: 0o700 }),
   mkdir(join(tempRoot, "tmp"), { recursive: true }),
 ]);
 await writeFile(
@@ -693,8 +695,8 @@ try {
 
   const probeEnvironment = childEnvironment({
     PI_PACKAGE_DIR: packageDir,
-    PI_EXECUTABLE: executable,
     PI_PROBE_CWD: workspaceDir,
+    PI_PROBE_STATE_DIR: rpcStateDir,
   });
   const sdkProbe = parseJson(
     "sdk-probe",
@@ -708,7 +710,7 @@ try {
   const rpcProbe = parseJson(
     "rpc-probe",
     (
-      await runCommand("rpc-probe", process.execPath, [join(repoRoot, "scripts/probes/pi-rpc-state.mjs")], {
+      await runCommand("rpc-probe", process.execPath, ["--experimental-strip-types", join(repoRoot, "scripts/probes/pi-rpc-state.mjs")], {
         env: probeEnvironment,
         timeoutMs: 60000,
       })

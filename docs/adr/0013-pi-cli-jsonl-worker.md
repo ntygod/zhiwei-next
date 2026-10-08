@@ -1,6 +1,6 @@
 # ADR 0013：Pi 官方 CLI JSONL Worker 路径
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-08
 - 计划决策：D-07
 - 范围：[Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，G-3 / D-07 的版本与单一路径选择
