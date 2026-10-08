@@ -190,11 +190,11 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
 source run attempt           2
-source artifact              11550710794
-source artifact digest       sha256:2db63423bd12a588919b5ece4cdecc41e7faec7e754ec2d3c43c73cc5266c035
+source artifact              11553691472
+source artifact digest       sha256:5c50686a8610d0b5da6ab72e28c5d457c88448b8e76aa40dfc01b02a44dbd609
 comparison run attempt       1
-comparison artifact          11550421552
-comparison artifact digest   sha256:51983f7ad8fbd26ce479ad99d7f3caa5fac4be5baa048c22c2f39a5df3f2b381
+comparison artifact          11553287747
+comparison artifact digest   sha256:10ba0c4e0a888c36335ad9ca0fd3b3f28833fd11c0bb75210261357ae9c55b73
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -203,7 +203,7 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-PR #77 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
+PR #79 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 

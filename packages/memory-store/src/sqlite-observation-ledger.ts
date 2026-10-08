@@ -848,14 +848,15 @@ function captureSchemaManifest(
 
 function buildExpectedSchemaManifest(
   migrations: readonly ObservationLedgerMigration[],
+  testTableNames?: readonly string[],
 ): ObservationLedgerSchemaManifest {
   if (migrations.length > 0) assertObservationLedgerMigrationSet(migrations);
   const reference = new DatabaseSync(":memory:");
   try {
     reference.exec(OBSERVATION_LEDGER_MIGRATION_SCHEMA_SQL);
     for (const migration of migrations) reference.exec(migration.sql);
-    const tableNames =
-      migrations.length === 0 ? (["schema_migrations"] as const) : SCHEMA_TABLES;
+    const tableNames = testTableNames ??
+      (migrations.length === 0 ? (["schema_migrations"] as const) : SCHEMA_TABLES);
     return captureSchemaManifest(reference, tableNames);
   } finally {
     reference.close();
@@ -1465,6 +1466,34 @@ export class SqliteObservationLedgerV1 {
       sourceSurface: options.sourceSurface ?? null,
     };
   }
+}
+
+/**
+ * @internal Synthetic schema-evolution experiment only. Never exported by the
+ * public index or used by open/read/append. Reuses the production manifest
+ * capture/comparison; it cannot replace a Ledger instance's private manifest.
+ */
+export function createObservationLedgerSchemaVerifierForTest(
+  migrations: readonly ObservationLedgerMigration[],
+  tableNames: readonly string[],
+): (database: DatabaseSync) => void {
+  // These names enter PRAGMA string arguments in the existing private capture.
+  // Keep this seam deliberately narrower than SQLite identifiers; do not let a
+  // test-only parameter become an arbitrary SQL interpolation mechanism.
+  if (
+    !Array.isArray(tableNames) || tableNames.length === 0 ||
+    tableNames.some((name) => typeof name !== "string" || !/^[a-z][a-z0-9_]*$/.test(name)) ||
+    new Set(tableNames).size !== tableNames.length
+  ) {
+    throw new ObservationLedgerCorruptionError("Synthetic manifest table names are invalid.");
+  }
+  const expected = buildExpectedSchemaManifest(migrations, tableNames);
+  const actualNames = expected.objects.filter((object) => object.type === "table")
+    .map((object) => object.name).sort();
+  if (JSON.stringify(actualNames) !== JSON.stringify([...tableNames].sort())) {
+    throw new ObservationLedgerCorruptionError("Synthetic manifest must cover every reference table.");
+  }
+  return (database) => requireSchemaManifest(database, expected);
 }
 
 /** @internal Test-only seam; not exported from the memory-store public index. */
