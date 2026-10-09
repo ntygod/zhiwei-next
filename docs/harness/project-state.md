@@ -6,7 +6,19 @@ status: active
 updated: 2026-10-09
 -->
 
-## 当前工作：G-2 接入前安全与保留实证
+## 当前工作：D-04 / D-08 决议登记结构准备
+
+canonical 为 [Issue #92](https://github.com/ntygod/zhiwei-next/issues/92)，唯一分支 `chore/92-decision-registration-preparation`，primary 为 [PR #93](https://github.com/ntygod/zhiwei-next/pull/93)。起点 `main@b7478fa9c7267e8c512a40bba33b8d67c320bf0d` 已含 PR #91，#90 已关闭。2026-10-09 开工回读无开放 Incident、pause=false，无其他开放 primary；#67/#44/#15 保留。
+
+本项为[当前决议层](../planning/decision-execution-layer.md#d-04--d-08-登记准备)补齐 D-04/ADR0014、D-08/ADR0015 的精确归属、Proposed 正文摘要与共用实验入口约束，添加内存结构正反例。没有执行安全合成实验、没有登记实验证据或新的决策接受；proposal/evidence/review 仍为空，两个 ADR 保持 Proposed。当前完整 HEAD 的正常测试、独立 R3、CI/来源及受保护交付以本 primary PR 的实际结果为准。
+
+PR #91 的实验交付不接受 D-04/D-08；本项结构测试同样不替代实际实验证据或其审查。既有作者与独立审查实际复跑实验的要求保持原文，不新增豁免，不声称平台限制已经解除。G-2 仍待决议与原卡验收，G-5 继续等待 G-2，M0-2 继续等待 G-5。不接入真实数据/凭据或模型，不改生产代码、Workflow 或质量门。
+
+当前 PR #93 已按[Runtime 来源续期记录](../spikes/pi-runtime-contract/README.md#2026-10-09-pr-93-当前来源续期)保存并核对本 PR 的成功 SDK 原 ZIP 与 Worker 两个 attempts 的原 ZIP、唯一 JSON、严格 Checker 和完整对象相等。Worker 两次均在真实完整比较成功后由明确三行 guard 产生受控 CLI failure；CLI 已恢复原 blob，来源元数据不改变 frozen content、validator 或任何接受谓词。最终完整 HEAD 的独立 R3、fresh Ready/live 来源及受保护交付仍须实际完成。
+
+以下 PR #91 开发期文字为历史快照；其中 Draft/待审仅描述当时状态，不是当前 WIP，也不批准本项新 HEAD。
+
+## 历史工作：G-2 接入前安全与保留实证
 
 canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，primary 为 [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。2026-10-09 本地从 `0d89f786326b51dff36b1f06f8958f2e746565a1` 接手，已回读无开放 Incident、pause=false，唯一开放 primary 是 #91；#67/#44/#15 保留。ADR0014/D-04 与 ADR0015/D-08 仍 Proposed。当前[接入前实证](../planning/g2-preintegration-evidence.md)补齐重建/恢复记录的可信绑定，修复后的 90 项合成测试通过；Private 等拒绝仍为接收器零连接/请求/字节，旧 inline 备份仍可直接回读，因此清除只报告 partial。PR 保持 Draft，新完整 HEAD 的独立 R3、当前 PR 来源与其余交付门均待实际结果；本地结果不表示远端平台限制已经解除。
 
@@ -151,10 +163,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 c3e7387075b7268e1b5d2d2e1638fa51eaa3ae7c
-capture workflow             37871492885
-capture artifact             11589908249
-capture artifact digest      sha256:f0c661e0eda227e91eb4216637470e00720a36d078728199afe2adeccdfe55d4
+capture head                 7e74796a98a8f981c00eb4cdbbdfbd2d870702b9
+capture workflow             37897885161
+capture artifact             11601046447
+capture artifact digest      sha256:9492b4ef5378ec690d336fcec8fac804dd2fd61b14c6e4f30c1bf569e0f67a64
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

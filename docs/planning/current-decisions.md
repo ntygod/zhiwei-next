@@ -145,6 +145,7 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 
 状态路径：Proposed
 
+- ADR：[docs/adr/0014-data-retention-boundary.md](../../docs/adr/0014-data-retention-boundary.md)；正文摘要（仅归一化状态行）：`107257f80170b3f9c9259e368f3f4bce4b870ed7dba3eac898793570b1272ac5`
 正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
 
 ## D-05
@@ -363,6 +364,7 @@ Evidence Ready 只表示有限证据待决策审查；Accepted 只覆盖该项�
 
 状态路径：Proposed
 
+- ADR：[docs/adr/0015-preintegration-safety-boundary.md](../../docs/adr/0015-preintegration-safety-boundary.md)；正文摘要（仅归一化状态行）：`0a4def9ee9f76d88a8999be79231900b4c836b8379b1d9015b53592031e9b855`
 正式决策审查：尚无；实验 PR 的批准不用于接受本决议。
 
 ## D-09

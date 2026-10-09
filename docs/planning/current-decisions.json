@@ -352,7 +352,12 @@
       "history": [
         "Proposed"
       ],
-      "adrs": [],
+      "adrs": [
+        {
+          "path": "docs/adr/0014-data-retention-boundary.md",
+          "sha256": "107257f80170b3f9c9259e368f3f4bce4b870ed7dba3eac898793570b1272ac5"
+        }
+      ],
       "proposal": null,
       "evidence": [],
       "decisionReview": null,
@@ -1132,7 +1137,12 @@
       "history": [
         "Proposed"
       ],
-      "adrs": [],
+      "adrs": [
+        {
+          "path": "docs/adr/0015-preintegration-safety-boundary.md",
+          "sha256": "0a4def9ee9f76d88a8999be79231900b4c836b8379b1d9015b53592031e9b855"
+        }
+      ],
       "proposal": null,
       "evidence": [],
       "decisionReview": null,
