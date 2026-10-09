@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>知微 · 认知工作台演示</title>
+<link rel="stylesheet" href="style.css"><script defer src="model.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">跳到工作区</a>
+<div class="demo-banner"><strong>交互原型 · 合成演示数据</strong><span>不连接模型或真实账户 · 操作仅保留在本页内存 · 不代表产品已实现或结果已验证</span></div>
+<div class="shell">
+<aside class="sidebar" aria-label="主导航">
+<a href="#today" class="brand"><span class="brand-mark">知</span><span>知微<small>让每次合作，接得上。</small></span></a>
+<div class="workspace-label">个人工作空间 <span>演示</span></div>
+<nav><a href="#today" data-nav="today">◷ <span>今天</span></a><a href="#project" data-nav="project">▦ <span>项目</span><span class="nav-count">1</span></a><a href="#memory" data-nav="memory">◇ <span>记忆</span></a></nav>
+<div class="side-project"><p class="eyebrow">正在协作</p><a href="#project"><span class="project-dot"></span> 秋日工作坊</a><p>筹备一场小而扎实的交流</p></div>
+<div class="side-bottom"><div id="nav-status">进行中 0 · 待审批 0</div><a href="#settings" data-nav="settings">⚙ 设置与演示控制</a><small>本页没有真实权限或后台任务</small></div>
+</aside>
+<div class="content"><header class="topbar"><div><span class="muted">个人空间</span><span class="crumb">/</span><strong id="breadcrumb">今天</strong></div><span class="local-badge">○ 离线演示</span></header>
+<main id="main" tabindex="-1"></main>
+<footer>知微维护目标与认知，Pi 负责单次执行。此处只演示交互，不运行 Pi。</footer>
+</div></div>
+<div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+<dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+</body></html>
