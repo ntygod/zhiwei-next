@@ -3,10 +3,24 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-10-08
+updated: 2026-10-09
 -->
 
-## 当前工作：G-3b CLI JSONL 路径与启动合同
+## 当前工作：G-4 可执行场景与证据运行器
+
+canonical 为 [Issue #88](https://github.com/ntygod/zhiwei-next/issues/88)，唯一分支 `feat/88-executable-scenario-evidence`；从 `main@b5115d47a091f2c954e29a9963257c218bc11032` 开始。原 [G-4 工作卡](../planning/engineering-execution.md#g-4--可执行场景与证据运行器基线)要求 clock/ID/model/I/O 可注入、失败/跳过/未运行分开、证据绑定 HEAD/环境/场景版本和拒绝伪通过的运行器自测。当前只运行已实现 Ledger 的组件场景；不能把 E0-02/03/04 局部覆盖、合成模型或运行器自测算作完整 M0 产品链路。其余原场景未实现时保持未运行，24 场景及历史 S 别名、原工作包快照和 checker 不变。
+
+[G-4 有限场景证据与用法](../planning/g4-scenario-evidence.md)说明实际 public Ledger 调用、四端口注入、超时进程清理和来源绑定；默认测试覆盖真实合成 I/O 与拒绝伪通过。新候选仍待最终完整 HEAD 验证、独立审查和受保护交付。
+
+G-3 已由 PR #83/#87 完成原三条件并受保护交付，逐项边界见 [G-3 验收](../planning/g3-baseline-acceptance.md)。PR #87 的 [最终完整 HEAD 独立 R3](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6071231663)、[fresh Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37861022790)、[SDK/Worker live 来源](https://github.com/ntygod/zhiwei-next/actions/runs/37861022754)、[保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37861429039)和 [main 来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37861447771)均已完成。合入 main `b5115d47a091f2c954e29a9963257c218bc11032` 单父为 `41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415`，tree `8ec253c519cc85cd5ffcc012c7c716380ced6576` 精确等于受审 HEAD `729e46d5bab48357a28b02945816f4b10eaaa062`。#86 已完成关闭，旧工作分支已回收；此历史批准不批准 G-4 新代码。
+
+G-4 按原 G-1/G-3 依赖就绪；G-2 的文件/Private 外发/工具信任/保留与 D-04/D-08 仍未完成，G-5 继续等待 G-2/G-4，M0-2 仍受 G-5 约束。root SDK 的 46 声明诊断、生产 Host/Session 与 M0-4/5 均未由 G-3 消除或实现。新候选仍要完整检查、最终 HEAD 新独立审查、适用动态/来源门及受保护交付，未预记完成。
+
+当前 PR #89 已按[Runtime 来源记录](../spikes/pi-runtime-contract/README.md#2026-10-09-pr-89-当前来源续期)保存并核对本 PR 成功 SDK 与 Worker 两个 attempts 的原 ZIP、唯一 JSON、严格 Checker 和完整对象相等。Worker 两次均在完整比较成功后由明确三行 guard 产生受控 CLI failure，非 Runtime 故障；原 CLI blob 已在 `d18f8b6cdac6d8ec9788123036e9a400e21fa71b` 精确恢复。来源更新不改变冻结内容、Phase A 或 D-07/ADR 已接受决策；最终完整 HEAD 仍须新独立 R3、fresh Ready CI 与真实 live provenance 成功。
+
+以下 G-3b 与更早段落是历史工作快照，保留原机器锚点和当时待验证状态，不代表当前 WIP 或本候选批准。
+
+## 历史工作：G-3b CLI JSONL 路径与启动合同
 
 canonical 为 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，唯一分支 `feat/86-pi-cli-runtime-contract`。本项从 `main@41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415` 开始，唯一 Draft primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)，最终实现、决策/代码审查与交付都在该 PR 完成。
 
@@ -121,14 +135,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本连续性表按现行 Harness 与 manifest 同步至 PR #87；PR #85 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
+本连续性表按现行 Harness 与 manifest 同步至 PR #89；PR #87 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 98f105e3ee5b005ed3aa0d84ab59dc182b587897
-capture workflow             37859177527
-capture artifact             11585880248
-capture artifact digest      sha256:365376628508aac21a4a4bd4cda4c3d76ade93e1a1ef29d337b6425ea46d9b47
+capture head                 982d9ab720078ac13ce9b087a1a602a9c3147157
+capture workflow             37863369941
+capture artifact             11587361169
+capture artifact digest      sha256:b34bab9ce03cd3e183e8dada8223448dd4e38366ca6472db765139290b8e72c6
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

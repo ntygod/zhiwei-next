@@ -46,7 +46,8 @@
     "typecheck": "node scripts/typecheck.mjs",
     "check:toolchain": "node scripts/check-toolchain.mjs && node --test scripts/toolchain.test.mjs",
     "install:toolchain": "sh scripts/formal-toolchain.sh install",
-    "diagnose:pi-root-types": "node scripts/diagnose-pi-root-types.mjs"
+    "diagnose:pi-root-types": "node scripts/diagnose-pi-root-types.mjs",
+    "eval:scenarios": "node --experimental-strip-types scripts/run-scenarios.mjs"
   },
   "packageManager": "npm@10.9.8",
   "devDependencies": {
