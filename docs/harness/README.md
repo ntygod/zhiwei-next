@@ -19,6 +19,8 @@
 
 ## 事实源
 
+design-v2 的开发入口为[整体设计](../planning/design-baseline.md)与[当前交接](../planning/next-task-handoff.md)。`development-plan.json` 是新任务/依赖/场景/旧包映射源，`implementation-plan.md` 是生成视图；`npm run check:design-plan` 增量检查一致性并含负例。原冻结计划、决议检查及所有既有 CI/批准门保留；新检查不认证产品完成或远端批准，不替换旧门。当前阶段以配置和 project-state 机器块一致的 P 编号为准，旧 M0—M7 只保留历史与过渡映射。
+
 | 问题 | 事实源 |
 |---|---|
 | 最终产品方向 | `docs/product/` |

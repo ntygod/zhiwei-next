@@ -1,3 +1,5 @@
+> 历史规划：design-v2 已重新安排产品顺序。本文原任务/场景/证据保留，不再作为选工作入口；当前见 [完整设计](design-baseline.md)、[开发任务](implementation-plan.md) 与 [过渡映射](design-transition.md)。
+
 # M0 执行细化：能观察
 
 > 文档状态：Issue #72 的执行细化提案，随本项 PR 合入后生效；不是实现完成记录、ADR 批准或 PR 审查结论。

@@ -1,12 +1,22 @@
 # 项目状态
 
 <!-- zhiwei-project-state
-milestone: M0
+milestone: P0
 status: active
 updated: 2026-10-09
 -->
 
-## 当前工作：D-04 / D-08 决议登记结构准备
+## 当前方向：完整认知 Agent / design-v2（2026-10-09）
+
+所有者明确要求整体调整项目、定案完整设计并给后续 AI/人可执行计划。本次 canonical 为 [#94](https://github.com/ntygod/zhiwei-next/issues/94)，分支 `docs/94-cognitive-agent-design`，起点 main `1872955c8d5fffc7c2477f62343fc38224b4f0da`；PR #91/#93 已合入，无开放 Incident 或其他 primary PR。#67/#44/#15 保留。
+
+新的[设计入口](../planning/design-baseline.md)、[P0—P5 路线](../planning/roadmap.md)与[完整任务卡](../planning/implementation-plan.md)在本 PR 经独立审查合入后替代旧 M0—M7 排期。当前仍只有 Bootstrap/有限实验实现，本次不实现产品代码、不接真实数据/模型、不宣称新场景已通过。31 个必需任务、5 个条件扩展、32 个新场景与旧 60 包映射由 development-plan.json 管理；阶段导航改为 P0，风险/批准/CI/来源门均保持原规则。
+
+新 ADR0016/0017 待独立设计接受；D-04/D-08 的旧有限登记与原 G-2 验收仍是 P0-01，原 G-5 基线由 P0-02 承接。设计方向已明确，生产能力仍须对应任务接线验收。完整 HEAD 的实际检查/批准/Ready/受保护合入以 primary PR 回读为准，不预填成功。
+
+以下旧“当前”段落为有日期的历史与机器锚点，不再是活跃队列。真实下一步见[交接](../planning/next-task-handoff.md)；本次保留旧冻结计划、已接受决议与测试，不依赖新设计降低自身门禁。
+
+## 历史工作：D-04 / D-08 决议登记结构准备
 
 canonical 为 [Issue #92](https://github.com/ntygod/zhiwei-next/issues/92)，唯一分支 `chore/92-decision-registration-preparation`，primary 为 [PR #93](https://github.com/ntygod/zhiwei-next/pull/93)。起点 `main@b7478fa9c7267e8c512a40bba33b8d67c320bf0d` 已含 PR #91，#90 已关闭。2026-10-09 开工回读无开放 Incident、pause=false，无其他开放 primary；#67/#44/#15 保留。
 

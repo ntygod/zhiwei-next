@@ -1,3 +1,5 @@
+> 历史规划：design-v2 已重新安排产品顺序。本文原任务/场景/证据保留，不再作为选工作入口；当前见 [完整设计](design-baseline.md)、[开发任务](implementation-plan.md) 与 [过渡映射](design-transition.md)。
+
 # ZhiWei Next 执行计划 v1
 
 > 生效范围：本文件随 Issue #70 / PR #71 经现行门禁合入 main 后，作为 M0—M7 的执行基线；分支中的候选尚未生效。它细化现有路线图，不替代已接受 ADR 或治理规则；第 7 节保留源提案的 11 项 Proposed，当前执行状态以[唯一决议投影](current-decisions.md)为准。本文件不是实现完成记录，也不是 PR #69 的审查批准。

@@ -1,3 +1,5 @@
+> 历史规划：design-v2 已重新安排产品顺序。本文原任务/场景/证据保留，不再作为选工作入口；当前见 [完整设计](design-baseline.md)、[开发任务](implementation-plan.md) 与 [过渡映射](design-transition.md)。
+
 # 执行计划来源与验证说明
 
 ## 来源与范围
