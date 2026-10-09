@@ -1,8 +1,16 @@
 # 下一执行上下文交接
 
-状态：当前导航为 Issue #86 / `feat/86-pi-cli-runtime-contract`；下方 #84/#82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
+状态：当前导航为 Issue #88 / `feat/88-executable-scenario-evidence`；下方 #86/#84/#82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
 
-## 当前 G-3b 导航（2026-10-08）
+## 当前 G-4 导航（2026-10-09）
+
+原 G-1/G-3 前置已受保护交付，起点 main `b5115d47a091f2c954e29a9963257c218bc11032`；G-3 最终证据与精确树身份见[项目状态](../harness/project-state.md)和[G-3 原卡验收](g3-baseline-acceptance.md)。唯一 canonical 为 [#88](https://github.com/ntygod/zhiwei-next/issues/88)，feature branch `feat/88-executable-scenario-evidence`；primary PR 和最新完整 HEAD 必须实时回读。
+
+按原 [G-4 卡](engineering-execution.md#g-4--可执行场景与证据运行器基线)实现已有场景的执行、注入和证据；只调用现有公开模块，不把未来场景伪跑为成功。E0-02/03/04 的 Ledger 组件覆盖必须标 partial，原 24 场景和 S 别名不能重命名或当成验证等价。失败、跳过、未运行及故意错误/超时/未知场景/缺证据自测都要真实区分；输出绑定真实源 HEAD、环境与场景版本。原计划 JSON/checker、Accepted 决议历史、固定迁移和生产模块合同保持不变。
+
+G-5 仍依赖未完成 G-2/G-4，M0-2 仍等 G-5；本项不实现生产 Host/Session、真实模型/数据/凭据或未来产品场景。最终 HEAD 必须新独立 R3、完整 check、适用动态矩阵、当前 PR 来源与 fresh Ready/受保护交付。#67 原文保持，不用父项记录无关 CI 诊断。
+
+## 历史 G-3b 导航（2026-10-08）
 
 起点 main41b1f8a 已交付 G-3a / PR #83 与 G-2a / PR #85，交付链接见[项目状态](../harness/project-state.md)。#86 的唯一 primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)。ADR 0011/0013 与 D-07 已按[实际有限审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)接受，被审候选 37c6228 的所有历史文件保持原字节；随后才实现实际消费者 `scripts/probes/pi-rpc-state.mjs` 的[严格 CLI 合同](../architecture/pi-cli-state-contract.md)。禁止把 ./client 的 RemoteSession/CBOR 类型证明当成 JSONL 选择，禁止导入不支持的 root SDK 声明或换到 ./rpc-entry。
 

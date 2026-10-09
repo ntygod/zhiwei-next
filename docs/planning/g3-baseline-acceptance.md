@@ -1,5 +1,15 @@
 # G-3 原工作卡逐项验收
 
+## 已核实交付（2026-10-09 回读）
+
+PR #87 已于 2026-10-08T23:48:19Z 受保护合入 main `b5115d47a091f2c954e29a9963257c218bc11032`，单父 `41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415`、tree `8ec253c519cc85cd5ffcc012c7c716380ced6576` 与最终受审 HEAD `729e46d5bab48357a28b02945816f4b10eaaa062` 完全一致。[最终 R3](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6071231663)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37861022790)、[SDK/Worker 与 live 来源](https://github.com/ntygod/zhiwei-next/actions/runs/37861022754)、[保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37861429039)、[Main Provenance](https://github.com/ntygod/zhiwei-next/actions/runs/37861447771) 与 [#86 完成记录](https://github.com/ntygod/zhiwei-next/issues/86) 分别留证。
+
+原三条件现有完整有限证据：支持版本/CLI JSONL 方向由 D-07 与 ADR0011/0013 接受；147 项固定闭包、无凭据与实际消费者严格合同经 6 工具链组/59 strict roots/312 行为（含 123 CLI）及独立攻击检查验证；没有依赖升级，九项真实动态矩阵及 fresh Ready/live 来源、最终审查、受保护交付都已完成。root SDK 的 46 声明诊断仍不支持，不等于新生产 Host/Session 或 M0-4/5 已实现。
+
+因此仅原 G-4 的 G-1/G-3 前置现已满足。G-5 仍需 G-2/G-4，M0-2 仍依赖 G-5。下面保留 PR #87 开发时的逐项表和未运行说明作为历史；不以旧候选批准后续代码，也不改冻结工作包或历史决议证据。
+
+## 历史：PR #87 开发期验收
+
 关联 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86) / [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)。原工作卡事实源仍是冻结 [work-packages.json](work-packages.json) 的 G-3；本页只把原条件对应到真实证据，不修改条件或自动生成完成状态。
 
 | 原完成条件 | 已有证据 | 仍需确认 |

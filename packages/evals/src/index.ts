@@ -17,3 +17,9 @@ export function defineScenario(scenario: CognitionScenario): CognitionScenario {
   if (scenario.steps.length === 0) throw new Error("a scenario needs at least one step");
   return Object.freeze({ ...scenario, steps: Object.freeze([...scenario.steps]) });
 }
+
+export { SCENARIOS, SCENARIO_ALIASES, SCENARIO_VERSION } from "./catalog.ts";
+export { runScenarioSuite } from "./scenario-runner.ts";
+export type { ScenarioReport, ScenarioExecutor, RunScenarioOptions } from "./scenario-runner.ts";
+export { createNodeScenarioExecutor } from "./node-executor.ts";
+export { observeScenarioProvenance, observeToolchainVersions } from "./observed-provenance.ts";

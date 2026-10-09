@@ -3,10 +3,20 @@
 <!-- zhiwei-project-state
 milestone: M0
 status: active
-updated: 2026-10-08
+updated: 2026-10-09
 -->
 
-## 当前工作：G-3b CLI JSONL 路径与启动合同
+## 当前工作：G-4 可执行场景与证据运行器
+
+canonical 为 [Issue #88](https://github.com/ntygod/zhiwei-next/issues/88)，唯一分支 `feat/88-executable-scenario-evidence`；从 `main@b5115d47a091f2c954e29a9963257c218bc11032` 开始。原 [G-4 工作卡](../planning/engineering-execution.md#g-4--可执行场景与证据运行器基线)要求 clock/ID/model/I/O 可注入、失败/跳过/未运行分开、证据绑定 HEAD/环境/场景版本和拒绝伪通过的运行器自测。当前只运行已实现 Ledger 的组件场景；不能把 E0-02/03/04 局部覆盖、合成模型或运行器自测算作完整 M0 产品链路。其余原场景未实现时保持未运行，24 场景及历史 S 别名、原工作包快照和 checker 不变。
+
+G-3 已由 PR #83/#87 完成原三条件并受保护交付，逐项边界见 [G-3 验收](../planning/g3-baseline-acceptance.md)。PR #87 的 [最终完整 HEAD 独立 R3](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6071231663)、[fresh Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37861022790)、[SDK/Worker live 来源](https://github.com/ntygod/zhiwei-next/actions/runs/37861022754)、[保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37861429039)和 [main 来源核验](https://github.com/ntygod/zhiwei-next/actions/runs/37861447771)均已完成。合入 main `b5115d47a091f2c954e29a9963257c218bc11032` 单父为 `41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415`，tree `8ec253c519cc85cd5ffcc012c7c716380ced6576` 精确等于受审 HEAD `729e46d5bab48357a28b02945816f4b10eaaa062`。#86 已完成关闭，旧工作分支已回收；此历史批准不批准 G-4 新代码。
+
+G-4 按原 G-1/G-3 依赖就绪；G-2 的文件/Private 外发/工具信任/保留与 D-04/D-08 仍未完成，G-5 继续等待 G-2/G-4，M0-2 仍受 G-5 约束。root SDK 的 46 声明诊断、生产 Host/Session 与 M0-4/5 均未由 G-3 消除或实现。新候选仍要完整检查、最终 HEAD 新独立审查、适用动态/来源门及受保护交付，未预记完成。
+
+以下 G-3b 与更早段落是历史工作快照，保留原机器锚点和当时待验证状态，不代表当前 WIP 或本候选批准。
+
+## 历史工作：G-3b CLI JSONL 路径与启动合同
 
 canonical 为 [Issue #86](https://github.com/ntygod/zhiwei-next/issues/86)，唯一分支 `feat/86-pi-cli-runtime-contract`。本项从 `main@41b1f8a4f2bb710ec6d94a0df95e9dc4c2e0e415` 开始，唯一 Draft primary 为 [PR #87](https://github.com/ntygod/zhiwei-next/pull/87)，最终实现、决策/代码审查与交付都在该 PR 完成。
 
