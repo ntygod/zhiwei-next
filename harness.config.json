@@ -3,7 +3,7 @@
   "project": "zhiwei-next",
   "mode": "ai-primary",
   "operatingMode": "public-free-ruleset",
-  "currentMilestone": "M0",
+  "currentMilestone": "P0",
   "defaultBranch": "main",
   "humanReviewRequired": false,
   "pullRequestRequired": true,

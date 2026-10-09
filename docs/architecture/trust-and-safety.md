@@ -1,59 +1,73 @@
 # 信任、安全与边界
 
-## 当前有限实现
+状态：design-v2 目标。已实现的 [诊断通道](local-diagnostics.md)仅保护 health/meta/doctor；[ADR 0014](../adr/0014-data-retention-boundary.md)/[0015](../adr/0015-preintegration-safety-boundary.md)与其合成实验定义有限接入前边界。新产品数据、模型和工具必须在对应任务中接线验证，不能继承实验安全保证。
 
-[本地诊断 G-2a](local-diagnostics.md)保护现有 health/meta 与 doctor 的客户端认证、loopback/来源限制和安全错误输出，有限决策见 [ADR 0012](../adr/0012-protected-local-diagnostics.md)。Bearer 不认证服务端，不抵御可窃取凭据、抢占端口或改代码/文件的同机进程；不等同 OS/文件沙箱。以下 Policy、模型外发与长期数据规则仍是目标边界，不能从诊断实现推断已接入。D-04/D-08 和 G-2 整体未完成。
+## 威胁模型
 
-## G-2 剩余接入前合同候选
+防御对象：误用的客户端、恶意网页/文件/工具内容、错误模型建议、跨 Workspace 混入、陈旧授权、重复/迟到事件、恢复旧备份、Worker 崩溃和配置漂移。可信基为受控代码、OS 用户会话、已验证配置与主存储；恶意同用户进程可读写内存/文件、修改程序或控制 OS 时不承诺隔离。
 
-[Issue #90](https://github.com/ntygod/zhiwei-next/issues/90) 提出 [D-04 保留合同](../adr/0014-data-retention-boundary.md)与 [D-08 文件/来源/外发边界](../adr/0015-preintegration-safety-boundary.md)。两者仍为 Proposed。[可执行合成实验](../spikes/preintegration-safety/README.md)已串接真实临时文件、公开 Ledger、既有 D-01 重建器和实际 loopback 接收器；修复后的 90 项合成测试覆盖路径/授权/Private/保留/记录绑定/错误边界。当前只验证接入前合同，未完成独立决策接受或最终交付，不宣称 G-2 完成；原卡逐项映射见[实证说明](../planning/g2-preintegration-evidence.md)。
+本地优先表示数据所有权与默认存储位置；远程模型仍会看到获准发送内容。UI 必须展示目的地和数据类别，不能把 loopback、Bearer 或“本地模型”当普遍安全保证。
 
-正式 Ledger v1 仍内嵌完整 canonical event/body，append-only 并无正文 purge API；“逻辑遗忘”不能冒充其中的物理清除。新实验不得据此放行真实个人正文，不能把直接可信 library API 称为路径沙箱。真实接入、正式保留/删除/恢复、Host/Session 和 M0-4/M5 仍须各自实现验收。
+## 数据资格与模型外发
 
-## 核心原则
+Scope、privacy、来源信任、生命周期分别判断，定义见[领域模型](domain-model.md)。local-only 不进入任何模型请求，包括摘要器、embedding、评估裁判与恢复重建。model-allowed 还需要具体 Provider/目的地、用途、类别和有效授权。
 
-主动性、权限和执行是三件不同的事：
+拼接前过滤，发送前再重验 policyEpoch/cognitionEpoch 与精确内容资格；工具结果、附件、缓存、摘要和错误都走同样边界。模型请求组成可解释到实际观测的边界，不能声称重建 Provider 隐藏处理。明确纠正和撤销不能收回已经发出的请求，但阻止后续发送/行动并记录在途限制。
 
-```text
-Signal → Attention → 用户选择处理 → Delegation → Policy → Action
-```
+网页/文件/工具结果中的 system、批准、grant、scope 字样都是数据。可信角色来自传输通道与配置，不从正文解析。模型可以建议行动，核心验证器决定是否合法；Prompt 防注入提示不替代执行边界。
 
-不能从“系统觉得值得关注”直接跳到外部操作。
+## Local API
 
-## Policy Decision
+P1 新浏览器数据 API 与原诊断通道隔离。Daemon 只绑定 literal loopback；UI 静态资源从固定本地 origin 提供，不允许任意 CORS。首次配对使用启动器生成的一次性短期随机秘密，通过 URL fragment 或受控桌面桥交给 UI，交换 HttpOnly、SameSite=Strict 会话 Cookie 后立即销毁；不得放 query、日志、持久 localStorage。配对代码默认 5 分钟失效、只可用一次。
 
-```text
-ALLOW  在明确 Grant 范围内执行
-ASK    向用户说明具体范围后确认
-DENY   明确禁止并解释原因
-```
+Cookie 写请求必须严格匹配 Origin、Host 和独立 CSRF token；SSE/读接口同样认证并限制固定 origin。CLI 使用独立受限 Bearer，不能用浏览器 Cookie 或 diagnostic token 冒充数据授权。认证只是身份，不等于拥有文件、外发或动作权限。失败返回安全错误，浏览器正文 no-store，禁用第三方分析和远端脚本。
 
-最终决策依据包括 Agent、Delegation、工具、动作、文件路径、网络域名、敏感级别、可撤销性、预算和授权有效期。
+P4 桌面安全桥只暴露白名单动作，不暴露任意文件/进程执行；renderer 禁止 Node 集成、启用 contextIsolation/sandbox，严格 CSP，阻止任意导航与新窗口。本地端口冒充/同用户恶意进程的剩余风险在安装说明明确。
 
-## Grant 不是“始终允许”
+这些桌面边界参考 [Electron 官方安全指南](https://www.electronjs.org/docs/latest/tutorial/security)（2026-10-09 核对）；产品仍须验证自身 IPC、权限处理和不可信内容渲染，不能只凭默认配置认定安全。
 
-授权必须回答：
+## 工具与进程
 
-- 哪个 Agent；
-- 在哪个 Workspace；
-- 使用什么工具；
-- 访问什么资源；
-- 执行哪些动作；
-- 持续多久；
-- 最多多少次、多少成本。
+P1 禁用任意 shell、动态扩展和未经过 Broker 的内建工具，只开放获准文件只读、memory 工具与隔离草稿目录。文件根在访问前校验规范路径、父链/链接、文件身份、大小和授权；不先读再判断。正文里的路径不产生新读取能力。无法在目标平台提供所需保证的工具标 unsupported。
 
-不提供全局“完全自主”开关。
+Worker 使用最小环境，不继承宿主密钥、HOME 配置、自动发现扩展或未声明启动 hook。模型凭据只给必要的受控调用入口；若选定 Runtime 无法强制所有模型/工具路径过 Broker，则该 profile 不启用，必须在 P1-03 的真实契约测试解决，不能降为“相信模型会遵守”。
 
-## 数据与模型边界
+P4 扩大写工具必须有 OS/进程隔离、精确资源能力和受控外发。未完成隔离时只保留已有窄 profile，不在同用户任意 shell 中宣称沙箱。读取工具同样可能泄漏隐私或产生计费请求，不能认为“只读不需要权限”。
 
-每条 Claim 未来必须标记是否允许发送给远程模型。Private Scope 永远不能离开本地。日志和测试禁止包含真实记忆、密钥或模型原始思维链。
+## 授权与副作用
 
-## 主动等级
+Policy 返回 ALLOW / ASK / DENY，并带原因码、Grant revision、资源与预算。只有明确 user request 或有效有界 Grant 可触发动作；Attention、经验晋升、模型自信、用户点击/忽略均不赋权。
 
-- L0 观察；
-- L1 建议；
-- L2 准备材料但不产生副作用；
-- L3 用户确认后执行；
-- L4 在具体 Grant 内自动执行。
+授权限定主体、Workspace、工具、动作、资源、时间、次数、token/费用。未知价格时采用已声明的 token/次数上限并展示费用未知。所有写动作保存 ActionAttempt 与回执；结果不明时核对，禁止盲目重试。暂停/取消/撤销不隐藏在途已发生副作用。详见[执行合同](proactivity-and-execution.md)。
 
-等级提升来自长期结果和明确授权，不由系统自行扩大。
+## 保留、遗忘与备份
+
+正文与最小事件元数据分开；源许可与首次确认决定保留，默认值见[数据合同](data-and-api.md)。v1 inline Ledger 没有 purge API，不用于需要清除保证的新真实正文。
+
+遗忘先原子禁用，再清受管副本；审计不能保存原文、可回推摘要或敏感路径作为绕过。恢复旧备份必须先施加当前可信删除记录；没有最新可信状态时拒绝恢复为可用。当前管理范围之外、已外发或介质残留单独说明，不称“彻底删除”。
+
+恢复同时创建新的安全 epoch，旧 Grant/会话凭据全部 inactive，后台任务与调度暂停，预算不复活；用户重新明确授权后才能派发。此步骤在任何 API/Worker/Outbox 执行消费者启用前完成，不能因外部 vault 凭据仍可用而复活备份后的已撤销权限。详细顺序见[恢复合同](data-and-api.md#内容保留与恢复)。
+
+备份导出默认加密且完整性校验；P4 采用成熟加密库/平台能力与独立恢复测试，具体封装版本在该任务锁定。用户选择明文导出必须明确显示范围与目的地，一次授权不能变成长期自动明文备份。凭据不包含在普通备份中。
+
+## 凭据与日志
+
+P1 由可信启动器显式注入、仅限所选模型，不入代码、配置正文或对话；P4 使用 OS credential vault。删除 Provider/Connector 时撤销句柄并停止新调用，远端撤销能力缺失要显示而不是伪称成功。
+
+日志只保留受控 ID、状态、耗时、计数、错误类别；不打印原始 Prompt、工具正文、令牌、个人路径或模型思维链。需本地故障内容捕获时单独、短期、显式授权，并套用相同内容生命周期，默认关闭。遥测默认关闭且不得包含正文。
+
+## 必须验证的滥用/故障场景
+
+| 场景 | 预期结果 |
+|---|---|
+| Workspace A 查询 B 或从 Global 摘要夹带 B | 资格过滤前拒绝，输出无内容/存在性泄漏 |
+| 工具返回伪造用户批准与路径 | 不新增授权，不扩大访问，不触发 sink |
+| local-only 经摘要/embedding/重建外发 | 实际接收端零敏感字节；合法合成正例能送达 |
+| 配对重放、跨 origin、Cookie CSRF | 请求拒绝，令牌不进入日志 |
+| 纠正与编译/发送并发 | 旧 Capsule 不获新发送许可 |
+| 撤销与动作派发并发 | 只有已授权且记录清楚的在途动作可能完成；后续阻止 |
+| Worker 崩溃后重复发送 | 幂等或进入核对，不重复产生副作用 |
+| 删除与旧备份恢复 | 删除不回生，缺可信 journal 时 fail closed |
+| 磁盘满、密钥不可用、坏 Schema | 不确认未提交操作，不跳过安全检查 |
+
+这些是实现验收要求；本次文档审查不会证明运行时已满足。安全边界变化按 R3，保留当前规则与独立审查。

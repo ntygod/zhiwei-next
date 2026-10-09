@@ -4,9 +4,9 @@
 
 ## 不变量
 
-- 先按 Scope 做硬过滤，再做相关性、优先级或预算排序。
-- 只有当前可消费的 active Claim 可以进入胶囊；`superseded`、`expired`、`forgotten` 永不注入。
-- `private` 数据默认不得发送给远程模型。
+- 先按 Scope、隐私、生命周期、有效时间与依赖版本做资格过滤，再做相关性、优先级或预算排序。
+- 胶囊的事实区只接受当前可消费的 active Claim；`superseded`、`expired`、`forgotten` 永不注入。WorkingState、Episode、Procedure、Hypothesis 等材料按各自资格和任务门进入明确标识的区域，争议与假设不能伪装成确定事实。
+- 旧 `private` 与新 `local-only` 数据不得进入任何模型请求，包括本地模型、摘要器、embedding 和评估模型；其他内容仍须明确外发授权。
 - 同一 Claim 在同一胶囊中只出现一次。
 - 每条注入项保留来源标识和选择理由，支持“为什么使用这条记忆”。
 - 胶囊创建后在当前 Turn 内不可变；中途产生的新记忆只能影响下一次编译。
@@ -20,7 +20,9 @@
 
 ## 当前范围
 
-Context 注入不属于 M0。当前代码只用于锁定零泄漏和不可变胶囊等长期不变量，不扩展为完整检索编排器。
+当前代码仍是零泄漏/不可变胶囊哨兵；P0 不启用 Context 注入。P1-06 按[认知合同](../../docs/architecture/cognitive-loop.md)与[任务卡](../../docs/planning/implementation-plan.md)交付正式编译/注入；Procedure 的正式消费等待 P2 的适用性与晋升门。检索编排、模型调用和持久化仍由调用方负责，本包不变为 Agent Loop。
+
+胶囊不可变不代表永远可以发送或消费：调用边界必须在发送、结果接收/物化/发布时重验 epoch 与依赖；失效的胶囊作废重编，不原位修改或继续使用。
 
 ## 测试
 

@@ -5,7 +5,7 @@
 ## 边界
 
 - 只依赖 `domain` 与 Runtime-neutral `protocol`；不得导入 Pi SDK、应用层或 UI 类型。
-- Store 保存调用方已经构造的领域对象或 `NormalizedRuntimeEvent v1`；写入和读回都必须通过正式协议 parser，不从文本提取记忆或判断任务成功。
+- Store 保存调用方已经构造的领域对象或正式版本的事件；现有 `NormalizedRuntimeEvent v1` 写读继续使用原 parser，新合同必须使用匹配版本的正式 parser，未知版本拒绝。不从文本提取记忆或判断任务成功。
 - Observation Ledger 是 append-only 证据层；已写 Observation 或 Runtime Event 不做原地语义修改。
 - 派生索引、缓存、FTS 和向量不是事实真源，必须可重建。
 
@@ -26,7 +26,9 @@
 
 ## 当前范围
 
-M0 只实现 `NormalizedRuntimeEvent v1` Observation Ledger、Workspace/Session 查询和回放。不要提前加入 FTS5、Embedding、图谱、自动记忆提取或完整 Claim Repository。现有内存 Claim 接口仅是架构哨兵，不应在 M0 横向扩张。
+当前 P0 只取得现有 v1 Ledger 的接入前/规模/恢复基线；现有内存 Claim 仍为架构哨兵。P1-02 按[数据合同](../../docs/architecture/data-and-api.md)以明确新版本和前向迁移实现正文生命周期与认知事务，P1-05 才接 FTS5/记忆服务；条件检索增强按 X2-01 的实测门，不提前引入图/向量服务。
+
+上方既有 v1 行、Schema 与迁移完整性细则继续约束原 v1 公开入口，不因新规划放松。新正文/聚合合同使用独立版本入口与相应完整性校验；不得向 v1 塞引用、增加 override 或改写 0001。v2 的授权清除与恢复必须符合 ADR0014/0017 和新任务 R3 证据，不从设计接受推导真实清除能力。
 
 ## 测试
 

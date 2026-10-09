@@ -1,47 +1,30 @@
 # 产品路线图
 
-路线图按能力门槛，而不是按发布日期划分。上一阶段的验收场景没有通过，不进入下一阶段。
+版本：design-v2，依据 [ADR 0016](../adr/0016-cognitive-agent-product-baseline.md) / [0017](../adr/0017-cognitive-state-and-delivery-contracts.md)。本路线在独立审查合入后替代旧 M0—M7 排期。原阶段/工作包保留历史证据，不再作为选工作入口。
 
-## M0：能观察
+## 阶段与用户结果
 
-规范化 Pi 生命周期，建立 Workspace、Session、Observation、SQLite Ledger、最小 CLI 和真实会话回放。
+| 阶段 | 用户可感知结果 | 交付范围 | 明确不做 |
+|---|---|---|---|
+| P0 接入前置 | 真实接入前知道保证了什么、尚未证明什么 | 原安全有限决议/验收、规模/恢复基线、代表任务夹具 | 不宣称可用 Agent |
+| P1 连续协作 Alpha | 在工作台开始/继续跨日任务，记忆可查可改，结果可验 | UI、任务/Session、受控 Pi、正文生命周期、手动记忆、上下文、Outcome/Episode | 自动学习、后台自主写 |
+| P2 可验证学习 | 使用经验后确实更好，错误经验可停用 | 自动候选、Procedure 试用/晋升、采用与收益、学习审阅 | 权限自增长、模型训练 |
+| P3 主动协作 | 在合适时机准备和提醒，能控制打扰 | Commitment、调度、只读连接器、Attention、今天页 | 无 Grant 的外部写 |
+| P4 完整桌面 v1 | 可安装、长期使用、有界后台委托、可恢复 | 写 Connector、预算/撤销、后台恢复、Windows 桌面、凭据、备份/升级 | 任意 shell 自主权、多用户 |
+| P5 跨 Runtime 扩展 | 第二 Runtime 和外部 Agent 使用同一认知 | 稳定 API/MCP、Codex Adapter、兼容与跨运行体验 | 无证据的任意 Provider 支持 |
 
-## M1：记得对
+P1 就交付完整的一条合作流程，P4 才是完整本地产品 v1。P5 是扩展目标；向量、额外桌面平台、第三种 Runtime、插件、同步与移动审批见条件任务，不是当前必需依赖。
 
-实现 MemoryCandidate、MemoryClaim、provenance、Scope、FTS5、remember/search/correct/forget/explain。
+## 顺序原则
 
-## M2：保持连续
+先证明最窄可用链路，再扩大能力。每阶段依赖前阶段的用户结果和安全边界，内部按照任务 DAG；准备性文档/界面原型可以提前，但不能把未通过入口的能力发布给真实数据。一次只推进一个 canonical 用户结果与 primary PR。
 
-实现 Context Compiler、固定预算的 Context Capsule、Goal/工作状态和本轮记忆解释。
+不再先把所有记忆类型、通用 Provider 或完整配置系统铺满。Outcome 与基础权限提前到 P1，自动学习 P2，主动性 P3；桌面打包 P4，但产品界面不等到 P4。已有 Runtime、Ledger、工具链与诊断继续复用。
 
-## M3：能够学习
+每阶段退出标准见[验收标准](acceptance-criteria.md)，逐任务字段、依赖与旧 60 项映射见[开发计划](implementation-plan.md)。阶段门失败时保留成果、定位最小问题并修复，不通过下调阈值/跳测使当前变更合入。
 
-实现 Outcome 验证、自动候选、Procedure Candidate、晋升/退役和任务后学习审阅。
+## 当前起点
 
-## M4：想得早
+当前设计任务 #94；实现仍是 Bootstrap。P0 首项按旧接受协议完成 D-04/D-08 有限实证登记与原卡验收，之后取得 G-5 所需基线。概念方向已由 design-v2 选择；剩余实验证明不是再次开放产品方向讨论。
 
-实现常驻 Daemon、Scheduler、DUE/FOLLOW_UP/CONFLICT Attention、收件箱、冷却与反馈。默认不执行外部动作。
-
-## M5：做得稳
-
-实现 Delegation、PolicyGrant、预算、暂停恢复、Sandbox Profile 和后台 Pi Worker。
-
-## M6：成为完整产品
-
-实现桌面端、Today、Workspace、Memory、Attention、Delegation、Audit、安装升级、备份导出和核心连接器。
-
-## M7：成为跨 Agent 认知层
-
-稳定 Cognition Protocol，接入 Codex、Claude、MCP、可选加密同步和移动端审批。
-
-## 共同验收红线
-
-- Workspace 泄漏为零；
-- 未授权副作用为零；
-- 用户纠正后旧结论停止生效；
-- 所有认知和行动具备解释链；
-- 不以旧知微功能覆盖率衡量进度。
-
-## 执行计划导航
-
-[M0—M7 执行计划](execution-plan.md) 将本路线图展开为稳定工作包、直接依赖、阶段门、近期任务卡和决策清单。它不将工作包数量换算为工期，不改变上述阶段顺序，也不把规划状态写成已实现。实际进度以当前 canonical Issue、primary PR、代码和验证证据为准；Proposed 决策须按现行 ADR 与独立审查要求定案。
+没有可靠工期依据，不承诺按工作包数量计算的日期。完成 P1-09 后根据实际吞吐、返工和平台验证成本更新预期。进展以 [当前交接](next-task-handoff.md)、Issue/PR 和实际场景为准。

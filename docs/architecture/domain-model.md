@@ -1,66 +1,84 @@
 # 领域模型
 
-## 核心对象
+状态：design-v2 目标。当前 MemoryScope/MemoryKind 是 Bootstrap 表达；P1-01 更新领域类型，持久结构以新迁移实现，不改写已发布 Runtime v1。
 
-| 对象 | 含义 |
-|---|---|
-| Workspace | 长期项目或生活领域，首要隔离边界 |
-| Session | 一次交互或后台执行 |
-| Observation | 不可变的原始证据 |
-| MemoryCandidate | 可能值得长期保存、尚未成为事实的候选 |
-| MemoryClaim | 带证据、作用域、版本和生命周期的长期认知 |
-| Goal | 有状态、期限和完成条件的目标 |
-| Procedure | 经多次真实执行验证的可复用做法 |
-| AttentionItem | 值得用户关注的候选事项 |
-| Delegation | 用户授权 Agent 执行的任务契约 |
-| PolicyGrant | 对工具、资源、时间和预算的具体授权 |
-| Outcome | 行动的真实结果 |
-| Artifact | 文件、报告、代码变更等产物 |
+## 身份与正交维度
 
-## 证据链
+持久对象使用不可复用 ID、UTC 时间，由边界注入。可变聚合有 revision；命令带 expectedRevision 和 idempotencyKey。引用指向精确版本。同幂等键同内容返回原结果，不同内容拒绝。
+
+| 维度 | 定义 | 约束 |
+|---|---|---|
+| Scope | global / workspace(workspaceId) / task(workspaceId,taskId) / session(workspaceId,sessionId) | workspace 不漂移，短期范围不自动升级 |
+| privacy | model-allowed / local-only | 前者仍需外发授权；后者不发送给任何模型，包括本地模型 |
+| sourceTrust | user-direct / verified-tool / external-content / model-derived | 来源可信不保证内容为真；网页指令不变用户指令 |
+| epistemic | asserted / verified / inferred | ACTIVE 不代表绝对真；inferred 只能作假设使用 |
+| validity | validFrom/validUntil 与 recordedAt 分开 | 记录时间不替代事实生效时间 |
+
+local-only 可由本地确定性规则处理；未来放宽到本地模型须明确新数据策略和确认。Global 也经授权/隐私过滤。摘要、连接、索引、上下文继承来源最严格的隐私与范围，跨 Workspace 资料不能合并成可共享摘要。
+
+## 对象合同
+
+| 对象 | 必需数据 | Owner / 阶段 |
+|---|---|---|
+| Workspace | 名称、目的、数据策略 revision、默认运行 profile | workspace service / P1 |
+| Session | workspace、类型、contract revision、Runtime 关联、状态 | session service / P1 |
+| Observation | 来源/事件、scope/privacy、时间、获准正文或不可变引用、完整性 | Ledger / v1 已有，正文策略 P0/P1 |
+| Episode | taskAttempt、起止、目标快照、行动/产物/结果引用、未决项、可重建摘要 | cognition-core / P1 |
+| MemoryCandidate | 命题/类型、证据版本、提取器版本、接受条件、过期 | cognition-core / P1 手动/P2 自动 |
+| MemoryClaim | 内容、kind、epistemic、支持/反驳证据、scope/privacy、有效时间、版本/生命周期 | cognition-core / P1 |
+| Hypothesis | 可证伪命题、依据、替代解释、待验证问题、期限/状态 | cognition-core / P1 |
+| Goal | 期望、完成标准、优先级、期限、范围、确认来源、状态 | cognition-core / P1 |
+| Task | goal 可空、请求、acceptanceChecks、限制、intentRevision、attempt 列表、状态 | task service / P1 |
+| WorkingState | Task revision、当前步骤、已知/未知、待输入、下一步、依据 | cognition-core / P1 |
+| Commitment | 责任人、承诺动作、到期/触发、来源、提醒策略、状态 | cognition-core / P3 |
+| Procedure | 类别、前提、步骤、验证器、失败/禁止边界、证据、试用统计、版本 | cognition-core / P2 |
+| ContextCapsule | 请求/任务/配置身份、精确引用、有序正文/引用、选择原因、预算、认知水位 | context-compiler / P1 |
+| DecisionRecord | 类型、依据、候选动作摘要、决定/原因码、策略版本 | coordinator / P1 |
+| MemoryUse | exposure/adoption/outcome/benefit 的分别记录与关联 | cognition-core / P1/P2 |
+| Outcome | taskAttempt、criteriaResults、结果、验证方法/证据/人/时间 | cognition-core / P1 |
+| AttentionItem | 目标/承诺、触发依据、whyNow、建议、过期/去重、反馈 | attention service / P3 |
+| Delegation | Task、Grant、预算、调度、暂停/取消策略、恢复点 | execution service / P4 |
+| PolicyGrant | 主体、范围、资源、动作、外发、次数/成本/时间、撤销 epoch | policy service / P1 有限/P4 后台 |
+| ActionAttempt | 动作摘要、授权决定、幂等键、外部回执/核对状态 | execution service / P4 |
+| Artifact | 内容/引用、版本/校验、scope/privacy、创建任务、验证 | artifact store / P1 |
+
+EnvironmentSnapshot 与 CapabilityProfile 首先是从 Observation、能力声明和实际错误产生的 read model，保存新鲜度、来源、已验证范围。不是让模型直接改写的世界真相；未证明的能力标 unavailable。
+
+## 认知生命周期
+
+Claim kind 首版为 fact/preference/constraint/decision。Goal/Task/Procedure 是独立聚合，不用 Claim kind 代替它们的生命周期。Episode 整理经历，摘要变化不能覆盖底层证据。
+
+Claim：ACTIVE → SUPERSEDED / DISPUTED / EXPIRED / FORGOTTEN。纠正事务写入新版本、旧版本 superseded、依赖失效与 Outbox。DISPUTED 只能在冲突区并列呈现，不作为确定事实；inferred 通过 Hypothesis 路径进入验证，不进入事实区。
+
+Candidate：PENDING → ACCEPTED / REJECTED / EXPIRED。按来源/命题/提取器版本去重。直接“记住某偏好”可引用原话形成 asserted Claim；模型摘要不能作为唯一依据形成事实，验证必须指向独立检查或明确确认。
+
+Hypothesis：OPEN → SUPPORTED / REFUTED / EXPIRED / WITHDRAWN。SUPPORTED 仍须通过接受规则才能生成 verified Claim。假设可指导读取、实验或澄清，不能赋权或扩大范围。
+
+## 目标、任务与结果
 
 ```text
-Observation
-   ↓ 支持
-MemoryCandidate
-   ↓ 接受 / 验证
-MemoryClaim
-   ↓ 影响
-Context / Attention / Delegation
-   ↓ 产生
-Outcome
-   ↓ 更新
-Goal / Procedure / Claim Confidence
+Goal: PROPOSED → ACTIVE ↔ PAUSED → ACHIEVED | ABANDONED
+Task: CREATED → READY → RUNNING → VERIFYING → COMPLETED | PARTIAL | FAILED | UNVERIFIABLE
+                         ↘ WAITING_INPUT / WAITING_APPROVAL / PAUSED → READY
+       非终态 → CANCELLING → CANCELLED 或 NEEDS_RECONCILIATION
 ```
 
-## MemoryClaim 生命周期
+重试生成新 attempt；同 attempt 恢复须证明 checkpoint 有效且无重复副作用。Runtime settled 只允许进入 VERIFYING。Goal 完成依赖目标标准，不是子任务退出数。用户改目标生成新 revision，受影响任务重检/取消；模型不得自行放宽标准。
 
-```text
-ACTIVE
-├─ 新版本替代 → SUPERSEDED
-├─ 可靠冲突   → DISPUTED
-├─ 到达有效期 → EXPIRED
-└─ 用户遗忘   → FORGOTTEN
-```
+Task 的 intentRevision 在请求、目标、验收或授权范围发生语义变化时递增；普通运行状态的 revision/CAS 与它分开。每次派发绑定 taskAttempt、intentRevision、cognitionEpoch、policyEpoch、recoveryEpoch 和精确依赖版本，避免把普通进度更新误判为目标变化。
 
-`FORGOTTEN` 必须立即从所有可检索投影中移除。物理清除范围由用户的数据策略决定。
+NEEDS_RECONCILIATION 经可信回执或明确用户核对后进入 VERIFYING，再按已发生结果转为 CANCELLED/PARTIAL/FAILED 等终态；继续工作须新 attempt 与有效授权。PAUSED 只能在停止新派发且运行体已确认到达可暂停边界后显示，不能把仍不可取消的在途外部动作伪装为已暂停。
 
-## 作用域
+PolicyGrant 状态为 ACTIVE/REVOKED/EXPIRED/INACTIVE；恢复旧备份统一产生新的 recoveryEpoch，历史 Grant 仅作审计且不得转回 ACTIVE，用户重新授权创建新 Grant。它与正常 Worker 重启（保留未撤销的当前授权并重验）不是同一种恢复。
 
-- Global：稳定身份和通用偏好；
-- Workspace：项目决定、约束、目标和经验；
-- Task：未来长期委托中的局部上下文；
-- Session：短期连续性；
-- Private：仅本地规则使用，不发送给模型。
+Outcome 为 completed/partial/failed/cancelled/unverifiable；每个 criterion 分别 pass/fail/unknown/not-applicable 并解释。人类确认与工具成功均是有界证据，不能扩写为未检查项通过。新证据产生新 Outcome revision。
 
-任何读取必须先过滤作用域，再做相关性排序。
+## 依赖失效
 
-## 关键不变量
+持久有向依赖为 source version → claim/summary/procedure/context/plan/attention。纠正/遗忘同步提高 cognitionEpoch，撤销提高 policyEpoch，并设置不可用标记。读取和发送检查 epoch/精确版本；Outbox 异步清索引和重算，不能等待全图重算才阻止旧内容。
 
-1. Claim 必须有至少一条 Observation 证据。
-2. Agent 推断默认只能生成 Candidate。
-3. 用户明确纠正创建新 Claim，并将旧 Claim 置为 SUPERSEDED。
-4. SUPERSEDED、EXPIRED、FORGOTTEN 不得进入 Context Capsule。
-5. 同一轮 Context Capsule 创建后保持不可变。
-6. 失败任务不能产生成功 Procedure。
-7. AttentionItem 本身不能产生外部副作用。
+历史 Capsule 不原位编辑；尚未发送的作废重编，已发送的不能撤回远端所见，下一模型/工具边界须停止受影响任务或重开。结果接收、正文物化、Artifact/Outcome/Episode 提交及 UI 发布同样重验派发绑定，不能假定一定还有下一次工具调用。因纠正迟到的结果只能按保留许可作为失效历史，不可成为当前 completed 结果；因遗忘迟到的派生正文不得重新成为可用内容或进入学习，只留获准最小拒收元数据。删除正文后摘要不能兜底作证，重建返回明确 unavailable。
+
+## 不变量
+
+无证据不能形成可用 Claim；纠正优先于陈旧派生；先 scope/privacy/lifecycle 后排序；模型不扩大 Grant；失败/未知不计成功；索引可重建；解释保存行动/依据/结果摘要，禁止原始思维链。自动验收见[验收标准](../planning/acceptance-criteria.md)。
