@@ -65,6 +65,23 @@ function validate(data) {
     assert.ok(nonempty(phase.title) && nonempty(phase.gate));
     assert.ok(data.tasks.some((task) => task.phase === phase.id && task.kind === "required"), `Empty phase ${phase.id}`);
   }
+  for (const task of data.tasks.filter((entry) => entry.kind === "required")) {
+    const phaseIndex = data.phases.findIndex((phase) => phase.id === task.phase);
+    const ancestors = new Set();
+    function collect(id) {
+      for (const dependency of taskMap.get(id).depends) {
+        if (!ancestors.has(dependency)) { ancestors.add(dependency); collect(dependency); }
+      }
+    }
+    collect(task.id);
+    assert.ok([...ancestors].every((id) => data.phases.findIndex((phase) => phase.id === taskMap.get(id).phase) <= phaseIndex), `${task.id}: dependency from a later phase`);
+    if (phaseIndex > 0) {
+      const previous = data.phases[phaseIndex - 1].id;
+      for (const prerequisite of data.tasks.filter((entry) => entry.kind === "required" && entry.phase === previous)) {
+        assert.ok(ancestors.has(prerequisite.id), `${task.id}: missing previous phase gate ${prerequisite.id}`);
+      }
+    }
+  }
   unique(ids(data.legacyMap), "legacy mapping");
   assert.deepEqual(ids(data.legacyMap).sort(), ids(legacy.work_packages).sort(), "Legacy work must not disappear");
   for (const mapping of data.legacyMap) {
@@ -106,6 +123,7 @@ for (const mutate of [
   (p) => { p.tasks[0].rollback = ""; },
   (p) => { p.tasks[0].contracts = ["../../secret"]; },
   (p) => { p.status = "complete"; },
+  (p) => { p.tasks.find((task) => task.id === "P1-01").depends = []; },
 ]) { const changed = structuredClone(plan); mutate(changed); assert.throws(() => validate(changed)); }
 
 assert.equal(createHash("sha256").update(read("docs/planning/work-packages.json")).digest("hex"), "3f5bb54e33fa4c31420df04cf9a167142dac78fd5cd57481222dbdf01afd8ec5", "Historical plan changed");
@@ -118,4 +136,4 @@ assert.ok(args.length === 0 || (args.length === 1 && args[0] === "--write"), "Us
 const output = "docs/planning/implementation-plan.md";
 if (args[0] === "--write") writeFileSync(resolve(root, output), render(plan));
 assert.equal(read(output), render(plan), "Generated task plan drift; run --write");
-console.log(`Design plan: ${plan.tasks.length} tasks, ${plan.scenarios.length} scenarios, ${plan.legacyMap.length} legacy mappings; DAG and 9 negative checks OK. Product completion NOT evaluated.`);
+console.log(`Design plan: ${plan.tasks.length} tasks, ${plan.scenarios.length} scenarios, ${plan.legacyMap.length} legacy mappings; DAG, phase gates and 10 negative checks OK. Product completion NOT evaluated.`);

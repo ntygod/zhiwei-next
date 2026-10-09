@@ -28,7 +28,7 @@ local-only 可由本地确定性规则处理；未来放宽到本地模型须明
 | MemoryClaim | 内容、kind、epistemic、支持/反驳证据、scope/privacy、有效时间、版本/生命周期 | cognition-core / P1 |
 | Hypothesis | 可证伪命题、依据、替代解释、待验证问题、期限/状态 | cognition-core / P1 |
 | Goal | 期望、完成标准、优先级、期限、范围、确认来源、状态 | cognition-core / P1 |
-| Task | goal 可空、请求、acceptanceChecks、限制、attempt 列表、状态 | task service / P1 |
+| Task | goal 可空、请求、acceptanceChecks、限制、intentRevision、attempt 列表、状态 | task service / P1 |
 | WorkingState | Task revision、当前步骤、已知/未知、待输入、下一步、依据 | cognition-core / P1 |
 | Commitment | 责任人、承诺动作、到期/触发、来源、提醒策略、状态 | cognition-core / P3 |
 | Procedure | 类别、前提、步骤、验证器、失败/禁止边界、证据、试用统计、版本 | cognition-core / P2 |
@@ -65,13 +65,19 @@ Task: CREATED → READY → RUNNING → VERIFYING → COMPLETED | PARTIAL | FAIL
 
 重试生成新 attempt；同 attempt 恢复须证明 checkpoint 有效且无重复副作用。Runtime settled 只允许进入 VERIFYING。Goal 完成依赖目标标准，不是子任务退出数。用户改目标生成新 revision，受影响任务重检/取消；模型不得自行放宽标准。
 
+Task 的 intentRevision 在请求、目标、验收或授权范围发生语义变化时递增；普通运行状态的 revision/CAS 与它分开。每次派发绑定 taskAttempt、intentRevision、cognitionEpoch、policyEpoch、recoveryEpoch 和精确依赖版本，避免把普通进度更新误判为目标变化。
+
+NEEDS_RECONCILIATION 经可信回执或明确用户核对后进入 VERIFYING，再按已发生结果转为 CANCELLED/PARTIAL/FAILED 等终态；继续工作须新 attempt 与有效授权。PAUSED 只能在停止新派发且运行体已确认到达可暂停边界后显示，不能把仍不可取消的在途外部动作伪装为已暂停。
+
+PolicyGrant 状态为 ACTIVE/REVOKED/EXPIRED/INACTIVE；恢复旧备份统一产生新的 recoveryEpoch，历史 Grant 仅作审计且不得转回 ACTIVE，用户重新授权创建新 Grant。它与正常 Worker 重启（保留未撤销的当前授权并重验）不是同一种恢复。
+
 Outcome 为 completed/partial/failed/cancelled/unverifiable；每个 criterion 分别 pass/fail/unknown/not-applicable 并解释。人类确认与工具成功均是有界证据，不能扩写为未检查项通过。新证据产生新 Outcome revision。
 
 ## 依赖失效
 
 持久有向依赖为 source version → claim/summary/procedure/context/plan/attention。纠正/遗忘同步提高 cognitionEpoch，撤销提高 policyEpoch，并设置不可用标记。读取和发送检查 epoch/精确版本；Outbox 异步清索引和重算，不能等待全图重算才阻止旧内容。
 
-历史 Capsule 不原位编辑；尚未发送的作废重编，已发送的不能撤回远端所见，下一模型/工具边界须停止受影响任务或重开。删除正文后摘要不能兜底作证，重建返回明确 unavailable。
+历史 Capsule 不原位编辑；尚未发送的作废重编，已发送的不能撤回远端所见，下一模型/工具边界须停止受影响任务或重开。结果接收、正文物化、Artifact/Outcome/Episode 提交及 UI 发布同样重验派发绑定，不能假定一定还有下一次工具调用。因纠正迟到的结果只能按保留许可作为失效历史，不可成为当前 completed 结果；因遗忘迟到的派生正文不得重新成为可用内容或进入学习，只留获准最小拒收元数据。删除正文后摘要不能兜底作证，重建返回明确 unavailable。
 
 ## 不变量
 

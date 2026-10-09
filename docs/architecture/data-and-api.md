@@ -27,6 +27,8 @@ Adapter 检查来源域与稳定关联，Store 验协议/哈希/顺序。receive
 
 Runtime 序列按 source stream 排序；不存在跨来源天然全局时间序。产品 eventCursor 使用数据库单调提交序号。重复事件相同内容幂等，不同内容拒绝；缺号、失去上游记录、坏尾片标 gap/incomplete 并停止依赖该区间的验证。
 
+保存来源顺序不要求永久保存已失效正文。每份输入/结果绑定 Task.intentRevision、attempt 与 cognition/policy/recovery epoch；内容物化前检查，发布可见引用/Artifact/Outcome/Episode 的事务内再 CAS 校验。失效的 staged 内容不可读、不进备份/学习并进入清除队列；遗忘后迟到的正文不重新引入真源，来源流只追加获准的无正文拒收记录。单纯 Runtime settled 不绕过此屏障。
+
 Outbox 与业务事务一同写入，订阅服务至少一次发布；消费者按 eventId 去重、提交 cursor。背压时保存状态事件与最终内容，临时 Token 可以丢弃并通过最终快照恢复；不能丢弃唯一任务结果。落后超过保留窗口返回 cursor_expired，客户端取有水位的快照再继续，不拼接不一致历史。
 
 ## 并发与持久作业
@@ -44,6 +46,8 @@ P1 一个 Worker；任务级串行命令队列。取消先提交意图/提升 ep
 逻辑遗忘事务先写 deletion_journal、提高 epoch、禁用对象/依赖再回应；物理清除是独立有状态作业，遍历内容、FTS、缓存、产物副本、数据库/WAL、受管备份。只报告逐项已清除/待到期/失败/范围外；应用级文件删除不保证 SSD 取证不可恢复。
 
 备份默认关闭；P4 可选择每日 7 份、每周 4 份、每月 3 份，界面明确最大恢复跨度。保留当前可信 deletion journal 于独立于被恢复备份的恢复状态区，保留至相关备份均失效。恢复先隔离、校验版本/完整性，再以最新 journal 施加失效，最后重建投影并切换。拿不到足够新状态时保持不可用，不用备份自身状态证明“没有遗忘”。不能抵御恶意管理员同时回滚全部可信状态，产品明确此边界。
+
+恢复不恢复运行授权：切换前生成新的 recoveryEpoch，使所有备份中的 Grant 与会话凭据 inactive；排队/运行中的 Delegation 和调度执行转为 PAUSED/WAITING_APPROVAL，不恢复剩余额度或自动继续。原记录只作历史审计。旧 Outbox 可以恢复业务状态投影，但其历史事件不得唤醒外部执行；每个新派发都要求当前 recoveryEpoch 的新明确授权。先完成此隔离，再启用 API/Worker/调度器。即使 OS vault 仍有凭据，也不能重用旧 Grant。测试必须覆盖“备份时有效→之后撤销/收紧→恢复旧库”的路径。
 
 ## Local API v1
 
