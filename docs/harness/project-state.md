@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-09
 -->
 
-## 当前工作：G-4 可执行场景与证据运行器
+## 当前工作：G-2 接入前安全与保留实证
+
+canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。已回读无开放 Incident/PR、pause=false，只有 main，#67/#44/#15 原任务保留。初始实质提交提出 ADR0014/D-04 与 ADR0015/D-08；两者 Proposed，实际接入前合成实验待完成。新完整 HEAD 的验证、独立 R3、当前 PR 来源及受保护交付均待真实结果，不预记完成。
+
+范围为真实临时文件读取、来源/Private 外发拒绝、本地可观察接收器、公开 protocol/Ledger 元数据和既有 D-01 重建器的保留/不可用证据；不改生产 Schema，不实现 Host/Session/M0-4/M5，不接入真实正文/凭据。现有严格决议层禁止实验来源 PR 同时作为新决议 primary PR，因此本任务仅交付实验和 Proposed 合同；受保护合入后在新的实质决议任务接受 D-04/D-08 并按原 G-2 卡验收。不伪造来源、不放宽 validator。
+
+G-4 已由 [PR #89](https://github.com/ntygod/zhiwei-next/pull/89)于 2026-10-09T01:23:47Z 受保护交付。main `ab6052efbb84abe6f87bc6758bfd7e8143b73964` 单父 `b5115d47a091f2c954e29a9963257c218bc11032`，tree `096e87c035d022b85e4a950ef146ed04ef3e004a` 与最终受审 HEAD `ce80dcb5e69ae678c2eb67a65bffc9143a9e20e6` 一致；[最终 R3](https://github.com/ntygod/zhiwei-next/pull/89#issuecomment-6072285575)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37869203320)、[保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37869555453)和 [main 来源](https://github.com/ntygod/zhiwei-next/actions/runs/37869569146)均完成，#88 已关闭、旧分支已回收。三场景 PARTIAL/21 not-run 的边界保持；旧批准不批准本次安全实验。
+
+G-1/G-3/G-4 原有限条件已交付，G-2 的保留/文件/外发/工具合同与 D-04/D-08 仍待完成；G-5 继续等待 G-2，M0-2 等待 G-5。下面保留 G-4 与更早开发期的状态及机器锚点，不能作为当前 WIP 或新候选批准。
+
+## 历史工作：G-4 可执行场景与证据运行器
 
 canonical 为 [Issue #88](https://github.com/ntygod/zhiwei-next/issues/88)，唯一分支 `feat/88-executable-scenario-evidence`；从 `main@b5115d47a091f2c954e29a9963257c218bc11032` 开始。原 [G-4 工作卡](../planning/engineering-execution.md#g-4--可执行场景与证据运行器基线)要求 clock/ID/model/I/O 可注入、失败/跳过/未运行分开、证据绑定 HEAD/环境/场景版本和拒绝伪通过的运行器自测。当前只运行已实现 Ledger 的组件场景；不能把 E0-02/03/04 局部覆盖、合成模型或运行器自测算作完整 M0 产品链路。其余原场景未实现时保持未运行，24 场景及历史 S 别名、原工作包快照和 checker 不变。
 

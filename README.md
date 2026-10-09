@@ -37,7 +37,9 @@ Pi Adapter → Pi Agent Runtime
 
 这一阶段只解决一件事：将 Pi 生命周期规范化为知微自己的不可变 Observation，并能够可靠保存、查询和回放。记忆提取、向量检索、主动提醒和桌面端均不属于 M0。
 
-`NormalizedRuntimeEvent v1` 与 SQLite Ledger 已通过 PR #66/#69 合入。G-1 有限决议与逐项验收已由 PR #81 合入 `main@4a565f0f26ba747275d4a024e0f1211b24f65acf`；D-01/02/10 仅在[登记的范围](docs/planning/current-decisions.md)内 Accepted。G-3a [正式工具链](docs/architecture/formal-toolchain.md)已由 PR #83 合入 `main@830e14626aca89100a8b33d775ccf39c7781c828`。当前 [Issue #84 / PR #85](https://github.com/ntygod/zhiwei-next/pull/85)保护现有 health/meta 与 doctor 的[有限本地诊断通道](docs/architecture/local-diagnostics.md)，需要用户明确配置凭据。G-2/G-3、D-04/D-07/D-08 整体仍未完成，root SDK 声明仍有明确未支持缺陷；#67、M0 与正式 Worker/Daemon 链仍未完成。
+`NormalizedRuntimeEvent v1` 与 SQLite Ledger 已通过 PR #66/#69 合入。G-1 有限架构基线由 PR #81 完成；D-01/02/10 仅在[登记范围](docs/planning/current-decisions.md)内 Accepted。G-3 正式工具链与 CLI JSONL 路径由 PR #83/#87 完成，D-07 有限接受；root SDK 的 46 个声明诊断仍不支持。G-4 场景证据运行器已由 PR #89 交付，仅三个 Ledger 场景 PARTIAL，另外 21 项未运行，不等于完整 M0 产品场景。
+
+G-2a 的 [health/meta/doctor 保护](docs/architecture/local-diagnostics.md)已由 PR #85 交付，需用户或可信启动器显式配置诊断凭据。当前 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)补齐接入前文件、Private 外发、工具信任和保留实证；[安全合同候选](docs/architecture/trust-and-safety.md)及 D-04/D-08 仍 Proposed。G-2 整体未完成，G-5 继续等待 G-2，M0-2 继续等待 G-5；#67、正式 Host/Session/Worker/Daemon 链与 M0 整体未完成。
 
 详细计划见：
 

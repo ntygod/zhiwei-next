@@ -4,6 +4,12 @@
 
 [本地诊断 G-2a](local-diagnostics.md)保护现有 health/meta 与 doctor 的客户端认证、loopback/来源限制和安全错误输出，有限决策见 [ADR 0012](../adr/0012-protected-local-diagnostics.md)。Bearer 不认证服务端，不抵御可窃取凭据、抢占端口或改代码/文件的同机进程；不等同 OS/文件沙箱。以下 Policy、模型外发与长期数据规则仍是目标边界，不能从诊断实现推断已接入。D-04/D-08 和 G-2 整体未完成。
 
+## G-2 剩余接入前合同候选
+
+[Issue #90](https://github.com/ntygod/zhiwei-next/issues/90) 提出 [D-04 保留合同](../adr/0014-data-retention-boundary.md)与 [D-08 文件/来源/外发边界](../adr/0015-preintegration-safety-boundary.md)。两者仍为 Proposed，计划使用真实临时文件、公开 Ledger、现有合成重建器和本地可观察接收器取证。当前提交只是有限提案，未完成新实验或决策接受，不宣称 G-2 完成。
+
+正式 Ledger v1 仍内嵌完整 canonical event/body，append-only 并无正文 purge API；“逻辑遗忘”不能冒充其中的物理清除。新实验不得据此放行真实个人正文，不能把直接可信 library API 称为路径沙箱。真实接入、正式保留/删除/恢复、Host/Session 和 M0-4/M5 仍须各自实现验收。
+
 ## 核心原则
 
 主动性、权限和执行是三件不同的事：
