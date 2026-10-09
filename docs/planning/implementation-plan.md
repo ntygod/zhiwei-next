@@ -93,7 +93,7 @@
 
 **触及：**`packages/evals`、`packages/memory-store`、`docs/planning`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)。
 
 **完成条件：**
 
@@ -120,7 +120,7 @@
 
 **触及：**`packages/domain`、`packages/cognition-core`、`packages/protocol`。
 
-**合同：**[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)。
+**合同：**[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[detailed-design.md](../../docs/architecture/detailed-design.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)。
 
 **完成条件：**
 
@@ -147,7 +147,7 @@
 
 **触及：**`packages/memory-store`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[domain-model.md](../../docs/architecture/domain-model.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[domain-model.md](../../docs/architecture/domain-model.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -174,7 +174,7 @@
 
 **触及：**`packages/pi-adapter`、`apps/daemon`。
 
-**合同：**[pi-integration.md](../../docs/architecture/pi-integration.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[pi-integration.md](../../docs/architecture/pi-integration.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -201,7 +201,7 @@
 
 **触及：**`apps/daemon`、`apps/cli`、`packages/memory-store`、`packages/protocol`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[domain-model.md](../../docs/architecture/domain-model.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[domain-model.md](../../docs/architecture/domain-model.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)。
 
 **完成条件：**
 
@@ -228,7 +228,7 @@
 
 **触及：**`packages/cognition-core`、`packages/memory-store`、`apps/daemon`。
 
-**合同：**[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)。
+**合同：**[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)。
 
 **完成条件：**
 
@@ -255,7 +255,7 @@
 
 **触及：**`apps/daemon`、`packages/context-compiler`、`packages/pi-adapter`。
 
-**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[domain-model.md](../../docs/architecture/domain-model.md)。
+**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -282,7 +282,7 @@
 
 **触及：**`packages/cognition-core`、`apps/daemon`、`packages/evals`。
 
-**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)。
 
 **完成条件：**
 
@@ -309,7 +309,7 @@
 
 **触及：**`apps/web`、`apps/daemon`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[product-vision.md](../../docs/product/product-vision.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[product-vision.md](../../docs/product/product-vision.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -336,7 +336,7 @@
 
 **触及：**`packages/evals`、`docs/planning`。
 
-**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[product-vision.md](../../docs/product/product-vision.md)。
+**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[product-vision.md](../../docs/product/product-vision.md)、[detailed-design.md](../../docs/architecture/detailed-design.md)。
 
 **完成条件：**
 
@@ -363,7 +363,7 @@
 
 **触及：**`packages/cognition-core`、`apps/daemon`。
 
-**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[domain-model.md](../../docs/architecture/domain-model.md)。
+**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[domain-model.md](../../docs/architecture/domain-model.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -390,7 +390,7 @@
 
 **触及：**`packages/cognition-core`、`apps/daemon`。
 
-**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -417,7 +417,7 @@
 
 **触及：**`packages/evals`、`packages/cognition-core`、`apps/daemon`。
 
-**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -444,7 +444,7 @@
 
 **触及：**`apps/web`、`apps/daemon`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -471,7 +471,7 @@
 
 **触及：**`packages/evals`、`docs/planning`。
 
-**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -498,7 +498,7 @@
 
 **触及：**`packages/cognition-core`、`apps/daemon`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[data-and-api.md](../../docs/architecture/data-and-api.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[data-and-api.md](../../docs/architecture/data-and-api.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -525,7 +525,7 @@
 
 **触及：**`apps/daemon`、`apps/web`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -552,7 +552,7 @@
 
 **触及：**`apps/daemon`、`apps/web`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -579,7 +579,7 @@
 
 **触及：**`apps/daemon`、`packages/cognition-core`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -606,7 +606,7 @@
 
 **触及：**`apps/web`、`packages/evals`、`docs/planning`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -633,7 +633,7 @@
 
 **触及：**`apps/daemon`、`packages/cognition-core`、`packages/memory-store`、`apps/web`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -660,7 +660,7 @@
 
 **触及：**`apps/daemon`、`packages/pi-adapter`。
 
-**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)。
+**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -687,7 +687,7 @@
 
 **触及：**`apps/daemon`、`apps/web`。
 
-**合同：**[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)。
+**合同：**[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -714,7 +714,7 @@
 
 **触及：**`apps/daemon`、`apps/web`。
 
-**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[proactivity-and-execution.md](../../docs/architecture/proactivity-and-execution.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -741,7 +741,7 @@
 
 **触及：**`apps/desktop`、`apps/web`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -768,7 +768,7 @@
 
 **触及：**`apps/desktop`、`apps/daemon`、`packages/memory-store`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -795,7 +795,7 @@
 
 **触及：**`packages/evals`、`docs/planning`、`apps/desktop`。
 
-**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[product-vision.md](../../docs/product/product-vision.md)。
+**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[product-vision.md](../../docs/product/product-vision.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[persistence-and-recovery.md](../../docs/architecture/persistence-and-recovery.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -822,7 +822,7 @@
 
 **触及：**`packages/protocol`、`apps/daemon`、`packages/evals`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[system-architecture.md](../../docs/architecture/system-architecture.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[system-architecture.md](../../docs/architecture/system-architecture.md)、[detailed-design.md](../../docs/architecture/detailed-design.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)。
 
 **完成条件：**
 
@@ -849,7 +849,7 @@
 
 **触及：**`packages/codex-adapter`、`apps/daemon`、`packages/evals`。
 
-**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[pi-integration.md](../../docs/architecture/pi-integration.md)。
+**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[pi-integration.md](../../docs/architecture/pi-integration.md)、[detailed-design.md](../../docs/architecture/detailed-design.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)。
 
 **完成条件：**
 
@@ -876,7 +876,7 @@
 
 **触及：**`packages/evals`、`apps/web`、`docs/planning`。
 
-**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[system-architecture.md](../../docs/architecture/system-architecture.md)。
+**合同：**[acceptance-criteria.md](../../docs/planning/acceptance-criteria.md)、[system-architecture.md](../../docs/architecture/system-architecture.md)、[detailed-design.md](../../docs/architecture/detailed-design.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)。
 
 **完成条件：**
 
@@ -905,7 +905,7 @@
 
 **触及：**`packages/context-compiler`、`packages/memory-store`。
 
-**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)。
+**合同：**[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[learning-and-evaluation.md](../../docs/architecture/learning-and-evaluation.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)。
 
 **完成条件：**
 
@@ -933,7 +933,7 @@
 
 **触及：**`apps/desktop`、`packages/evals`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -961,7 +961,7 @@
 
 **触及：**`apps/daemon`、`packages/protocol`、`packages/memory-store`。
 
-**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[data-and-api.md](../../docs/architecture/data-and-api.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
 
 **完成条件：**
 
@@ -989,7 +989,7 @@
 
 **触及：**`packages/claude-adapter`、`packages/dsh-adapter`、`packages/evals`。
 
-**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)。
+**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 
@@ -1017,7 +1017,7 @@
 
 **触及：**`apps/daemon`、`packages/protocol`。
 
-**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)。
+**合同：**[system-architecture.md](../../docs/architecture/system-architecture.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[runtime-coordination.md](../../docs/architecture/runtime-coordination.md)。
 
 **完成条件：**
 

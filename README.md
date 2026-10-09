@@ -9,6 +9,7 @@
 - [完整设计总览](docs/planning/design-baseline.md)
 - [产品与使用场景](docs/product/product-vision.md)、[交互设计](docs/product/ui-design.md)
 - [系统架构](docs/architecture/system-architecture.md)、[领域模型](docs/architecture/domain-model.md)
+- [详细架构设计与模块合同](docs/architecture/detailed-design.md)
 - [认知循环](docs/architecture/cognitive-loop.md)、[学习与评估](docs/architecture/learning-and-evaluation.md)
 - [主动与执行](docs/architecture/proactivity-and-execution.md)、[数据与接口](docs/architecture/data-and-api.md)、[安全](docs/architecture/trust-and-safety.md)
 - [P0—P5 路线图](docs/planning/roadmap.md)、[完整任务卡](docs/planning/implementation-plan.md)、[验收标准](docs/planning/acceptance-criteria.md)

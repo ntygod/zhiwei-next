@@ -2,6 +2,8 @@
 
 状态：design-v2 目标。当前 MemoryScope/MemoryKind 是 Bootstrap 表达；P1-01 更新领域类型，持久结构以新迁移实现，不改写已发布 Runtime v1。
 
+字段落库、索引与事务见[持久化详设](persistence-and-recovery.md)，跨进程身份与运行 fence 见[运行详设](runtime-coordination.md)。领域对象的语义以本文为准，物理实现不能把 Runtime role、lease 或缓存身份当作长期事实/授权。
+
 ## 身份与正交维度
 
 持久对象使用不可复用 ID、UTC 时间，由边界注入。可变聚合有 revision；命令带 expectedRevision 和 idempotencyKey。引用指向精确版本。同幂等键同内容返回原结果，不同内容拒绝。

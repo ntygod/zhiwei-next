@@ -17,7 +17,7 @@
 | 上下文 | session_contract、request_snapshot、context_member、memory_use | 快照持久化后才派发 |
 | 执行 | grant、policy_decision、action_attempt、budget_reservation、job_lease | 授权重验/预算预留/attempt 登记先于副作用 |
 | 学习与主动 | procedure_version、trial、learning_job、attention_item、feedback | 作业幂等、反馈与冷却同事务 |
-| 恢复 | outbox、consumer_cursor、deletion_journal、config_revision | 状态已提交后才发布，不从通知成功推断事务成功 |
+| 恢复 | outbox、consumer_cursor、deletion_projection、config_revision，以及独立 recovery.log | 控制意图先行、业务提交后发布，不从通知成功推断事务成功 |
 
 FTS5、向量、UI projection 都是可丢弃投影，有 schemaVersion、sourceWatermark、cognitionEpoch。关系用 SQLite 表，首版不加图数据库。内容随机 ID 不包含原始路径/文本；摘要属于敏感派生数据，按来源策略处理。
 
@@ -43,7 +43,7 @@ P1 一个 Worker；任务级串行命令队列。取消先提交意图/提升 ep
 
 长期证据片段是明确选定、带来源/许可的独立 content object，不是摘要兜底。源许可不允许保留片段时，引用过期使 Claim 不可用或等待新证据。事实有效期与文件保留期分别检查。
 
-逻辑遗忘事务先写 deletion_journal、提高 epoch、禁用对象/依赖再回应；物理清除是独立有状态作业，遍历内容、FTS、缓存、产物副本、数据库/WAL、受管备份。只报告逐项已清除/待到期/失败/范围外；应用级文件删除不保证 SSD 取证不可恢复。
+逻辑遗忘先将最小失效意图持久化到独立恢复控制日志，再由产品事务写投影、提高 epoch、禁用对象/依赖后回应；两处写入不假装原子，故障时先对账再开放相关读取/执行，顺序见[持久化详设](persistence-and-recovery.md)。物理清除是独立有状态作业，遍历内容、FTS、缓存、产物副本、数据库/WAL、受管备份。只报告逐项已清除/待到期/失败/范围外；应用级文件删除不保证 SSD 取证不可恢复。
 
 备份默认关闭；P4 可选择每日 7 份、每周 4 份、每月 3 份，界面明确最大恢复跨度。保留当前可信 deletion journal 于独立于被恢复备份的恢复状态区，保留至相关备份均失效。恢复先隔离、校验版本/完整性，再以最新 journal 施加失效，最后重建投影并切换。拿不到足够新状态时保持不可用，不用备份自身状态证明“没有遗忘”。不能抵御恶意管理员同时回滚全部可信状态，产品明确此边界。
 
@@ -51,46 +51,9 @@ P1 一个 Worker；任务级串行命令队列。取消先提交意图/提升 ep
 
 ## Local API v1
 
-传输采用 loopback HTTP JSON 命令 + SSE 事件。浏览器会话认证与 CLI Bearer 各有权限域；现有 diagnostic token 仅用于原诊断路由。详细认证见[安全合同](trust-and-safety.md)。
+完整命令/查询/事件目录、DTO、状态码、权限、幂等、scope cursor 与兼容规则统一在[本地接口详设](local-api-contract.md)。接口仍是未来目标，现有诊断 token 不授予数据能力；Runtime v1、ProductEvent v1、Local API v1 和 Store Schema 分别版本化。
 
-命令统一 envelope：
-
-```json
-{
-  "schemaVersion": 1,
-  "commandId": "opaque-id",
-  "idempotencyKey": "opaque-id",
-  "workspaceId": "workspace-id",
-  "expectedRevision": 3,
-  "payload": {}
-}
-```
-
-创建类 expectedRevision 为 0；无聚合写入的查询不需要该字段。回应包含 commandId、committedRevision、eventCursor、result；拒绝返回固定 code、safeMessage、retryable、diagnosticId，不回显密钥/原文。事务成功后响应丢失，以同键重试得到原结果。
-
-| 操作 | 请求重点 | 结果/事件 |
-|---|---|---|
-| POST /v1/workspaces | name、purpose、dataPolicyRevision | Workspace、workspace.created |
-| POST /v1/tasks | request、goalRef、acceptanceChecks、executionProfile | Task、task.created |
-| POST /v1/tasks/:id/commands | continue/pause/cancel/respond、目标 revision | Task revision、task.state_changed |
-| GET /v1/tasks/:id | scope 已认证 | 状态、产物引用、进度水位 |
-| POST /v1/memory/search | query、scope、validAt、knownAt、limit | 合格结果与来源/版本，最多 50 |
-| POST /v1/memory/commands | remember/correct/forget、targetVersion、evidenceRefs | 新版本/失效水位，memory.changed |
-| GET /v1/memory/:id/explanation | 精确版本/获准范围 | 来源、有效性、影响；不泄漏不可见对象存在性 |
-| POST /v1/grants | 主体、动作、资源、外发、时间/次数/预算 | Grant、grant.changed |
-| POST /v1/grants/:id/revoke | expectedRevision | 新 epoch，grant.revoked |
-| POST /v1/attention/:id/feedback | handled/snooze/irrelevant/disable、until | 持久反馈与新版本 |
-| GET /v1/artifacts/:id | 授权与内容版本 | 有界内容或 unavailable |
-| GET /v1/events | scope、afterCursor | 事件流、心跳，无模型调用 |
-| POST /v1/backup、/restore | 具体路径/授权/manifest | 作业状态；P4 才启用 |
-
-请求大小默认 1 MiB；附件走独立获准内容入口，单文件默认 20 MiB，超限显式拒绝。SSE 心跳为传输存活信号，不写成业务进展、不消耗模型 Token。每个事件含 schemaVersion/eventId/cursor/workspaceId/type/aggregateId/revision/occurredAt/payload，发送前按 scope 过滤。
-
-## 错误与协议版本
-
-固定错误族：validation、unauthenticated、forbidden、not_found、revision_conflict、idempotency_conflict、unsupported、budget_exceeded、unavailable、corruption、incomplete、cancelled、needs_reconciliation。越权对象查询返回不揭示存在性的 not_found；审计内部仍记录权限拒绝。
-
-新增可选字段是兼容扩展，未知 enum/必需语义拒绝；破坏性变更使用新主版本及明确升级路径。新客户端不得假定旧 Daemon 支持写操作：先能力协商。Runtime v1 和 Local API v1 属不同协议，版本不混用。
+内部数据库 cursor 是提交位置，外部 cursor 是绑定当前主体/范围/恢复世代的不透明 token；不能把位置当权限。未提交操作不返回 committed，未知/过期/损坏/取消和副作用待核对有不同结果，不以成功状态掩盖。
 
 ## 性能与保证
 

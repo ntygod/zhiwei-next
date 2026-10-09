@@ -90,7 +90,8 @@
       ],
       "contracts": [
         "docs/architecture/data-and-api.md",
-        "docs/planning/acceptance-criteria.md"
+        "docs/planning/acceptance-criteria.md",
+        "docs/architecture/persistence-and-recovery.md"
       ],
       "outcome": "用现有公开入口取得规模、持久性与恢复基线，并给新场景准备合成数据。",
       "acceptance": [
@@ -125,7 +126,9 @@
       ],
       "contracts": [
         "docs/architecture/domain-model.md",
-        "docs/architecture/cognitive-loop.md"
+        "docs/architecture/cognitive-loop.md",
+        "docs/architecture/detailed-design.md",
+        "docs/architecture/cognitive-pipelines.md"
       ],
       "outcome": "代码准确表达五类记忆、假设、目标与任务，提供纯状态转换。",
       "acceptance": [
@@ -160,7 +163,9 @@
       "contracts": [
         "docs/architecture/data-and-api.md",
         "docs/architecture/domain-model.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "真源能够安全保存/纠正/遗忘新产品对象，正文与元数据分别管理。",
       "acceptance": [
@@ -196,7 +201,9 @@
       ],
       "contracts": [
         "docs/architecture/pi-integration.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "一个真实 Pi 任务在明确目录、环境和权限下执行，全部工具/外发受控。",
       "acceptance": [
@@ -233,7 +240,10 @@
       ],
       "contracts": [
         "docs/architecture/data-and-api.md",
-        "docs/architecture/domain-model.md"
+        "docs/architecture/domain-model.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/persistence-and-recovery.md"
       ],
       "outcome": "用户可发起、取消、查询、重启继续任务，并通过订阅获得真实状态。",
       "acceptance": [
@@ -270,7 +280,9 @@
       ],
       "contracts": [
         "docs/architecture/domain-model.md",
-        "docs/architecture/cognitive-loop.md"
+        "docs/architecture/cognitive-loop.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/persistence-and-recovery.md"
       ],
       "outcome": "remember/search/correct/forget/explain 可从真实用户路径使用。",
       "acceptance": [
@@ -307,7 +319,9 @@
       ],
       "contracts": [
         "docs/architecture/cognitive-loop.md",
-        "docs/architecture/domain-model.md"
+        "docs/architecture/domain-model.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "Agent 能基于项目状态与合格记忆选择继续、澄清或执行，并解释依据。",
       "acceptance": [
@@ -343,7 +357,10 @@
       ],
       "contracts": [
         "docs/architecture/cognitive-loop.md",
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md"
       ],
       "outcome": "每个任务给可检查的 Outcome，并留下经历和记忆使用信号。",
       "acceptance": [
@@ -379,7 +396,9 @@
       "contracts": [
         "docs/product/ui-design.md",
         "docs/product/product-vision.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "用户在浏览器完整走通开始、继续、查看依据、纠正和检查产物。",
       "acceptance": [
@@ -413,7 +432,8 @@
       ],
       "contracts": [
         "docs/planning/acceptance-criteria.md",
-        "docs/product/product-vision.md"
+        "docs/product/product-vision.md",
+        "docs/architecture/detailed-design.md"
       ],
       "outcome": "完成首个跨日合作产品证明，给用户可运行的受限 Alpha。",
       "acceptance": [
@@ -462,7 +482,9 @@
       ],
       "contracts": [
         "docs/architecture/learning-and-evaluation.md",
-        "docs/architecture/domain-model.md"
+        "docs/architecture/domain-model.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "任务后自动提出有来源的记忆候选，并发现冲突。",
       "acceptance": [
@@ -495,7 +517,9 @@
         "apps/daemon"
       ],
       "contracts": [
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "做法具有明确前提、检查与失败边界，可试用/暂停/回滚。",
       "acceptance": [
@@ -529,7 +553,9 @@
         "apps/daemon"
       ],
       "contracts": [
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "能区分记忆出现、实际采用和有证据的改进。",
       "acceptance": [
@@ -563,7 +589,9 @@
       ],
       "contracts": [
         "docs/product/ui-design.md",
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "用户看懂学到了什么，能否定、停用与恢复合适版本。",
       "acceptance": [
@@ -597,7 +625,9 @@
       ],
       "contracts": [
         "docs/planning/acceptance-criteria.md",
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "用保留任务证明经验学习的范围与收益。",
       "acceptance": [
@@ -634,7 +664,10 @@
       ],
       "contracts": [
         "docs/architecture/proactivity-and-execution.md",
-        "docs/architecture/data-and-api.md"
+        "docs/architecture/data-and-api.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "获准承诺与环境变化可持久唤醒任务，不轮询模型。",
       "acceptance": [
@@ -668,7 +701,10 @@
       ],
       "contracts": [
         "docs/architecture/proactivity-and-execution.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "用户显式导入/订阅的 ICS 事件成为有来源的时间信号。",
       "acceptance": [
@@ -702,7 +738,10 @@
       ],
       "contracts": [
         "docs/architecture/proactivity-and-execution.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "选定仓库的任务/PR 变化可关联项目目标。",
       "acceptance": [
@@ -736,7 +775,10 @@
         "packages/cognition-core"
       ],
       "contracts": [
-        "docs/architecture/proactivity-and-execution.md"
+        "docs/architecture/proactivity-and-execution.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "系统选择静默、准备或提醒，并能解释为什么现在。",
       "acceptance": [
@@ -772,7 +814,10 @@
       ],
       "contracts": [
         "docs/product/ui-design.md",
-        "docs/planning/acceptance-criteria.md"
+        "docs/planning/acceptance-criteria.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/local-api-contract.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "用户可处理提醒，并证明价值高于噪声。",
       "acceptance": [
@@ -811,7 +856,10 @@
       ],
       "contracts": [
         "docs/architecture/proactivity-and-execution.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "用户把具体任务交给后台，能审批/撤销/停止。",
       "acceptance": [
@@ -845,7 +893,10 @@
       ],
       "contracts": [
         "docs/architecture/system-architecture.md",
-        "docs/architecture/proactivity-and-execution.md"
+        "docs/architecture/proactivity-and-execution.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "后台任务可恢复，配置变化不制造重复行动或漂移。",
       "acceptance": [
@@ -879,7 +930,10 @@
       ],
       "contracts": [
         "docs/architecture/trust-and-safety.md",
-        "docs/architecture/proactivity-and-execution.md"
+        "docs/architecture/proactivity-and-execution.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "获准草稿可以安全发布到指定文件目标。",
       "acceptance": [
@@ -913,7 +967,10 @@
       ],
       "contracts": [
         "docs/architecture/proactivity-and-execution.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "能在指定仓库创建/更新明确 Issue/PR 内容并可靠核对回执。",
       "acceptance": [
@@ -948,7 +1005,10 @@
       ],
       "contracts": [
         "docs/product/ui-design.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "Windows 11 x64 用户拥有托盘、通知、启动与安全凭据体验。",
       "acceptance": [
@@ -983,7 +1043,10 @@
       ],
       "contracts": [
         "docs/architecture/data-and-api.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "用户可以导出、备份、升级并在失败后恢复，遗忘不会复活。",
       "acceptance": [
@@ -1018,7 +1081,10 @@
       ],
       "contracts": [
         "docs/planning/acceptance-criteria.md",
-        "docs/product/product-vision.md"
+        "docs/product/product-vision.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/persistence-and-recovery.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "提供可安装、可长期使用、有清楚能力边界的完整个人 Agent v1。",
       "acceptance": [
@@ -1057,7 +1123,10 @@
       ],
       "contracts": [
         "docs/architecture/data-and-api.md",
-        "docs/architecture/system-architecture.md"
+        "docs/architecture/system-architecture.md",
+        "docs/architecture/detailed-design.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/local-api-contract.md"
       ],
       "outcome": "外部 Agent 可在相同治理下使用记忆与任务，不绕过真源。",
       "acceptance": [
@@ -1092,7 +1161,10 @@
       ],
       "contracts": [
         "docs/architecture/system-architecture.md",
-        "docs/architecture/pi-integration.md"
+        "docs/architecture/pi-integration.md",
+        "docs/architecture/detailed-design.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/local-api-contract.md"
       ],
       "outcome": "在一个真实第二 Runtime 上证明认知层与执行层可分离。",
       "acceptance": [
@@ -1127,7 +1199,10 @@
       ],
       "contracts": [
         "docs/planning/acceptance-criteria.md",
-        "docs/architecture/system-architecture.md"
+        "docs/architecture/system-architecture.md",
+        "docs/architecture/detailed-design.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/local-api-contract.md"
       ],
       "outcome": "用户可选择已验证 Runtime，失败与差异透明。",
       "acceptance": [
@@ -1161,7 +1236,8 @@
       ],
       "contracts": [
         "docs/architecture/cognitive-loop.md",
-        "docs/architecture/learning-and-evaluation.md"
+        "docs/architecture/learning-and-evaluation.md",
+        "docs/architecture/cognitive-pipelines.md"
       ],
       "outcome": "仅在实测漏召回时增加本地向量/混合检索。",
       "acceptance": [
@@ -1194,7 +1270,8 @@
       ],
       "contracts": [
         "docs/product/ui-design.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "为新增 macOS/Linux 平台建立独立支持矩阵。",
       "acceptance": [
@@ -1228,7 +1305,8 @@
       ],
       "contracts": [
         "docs/architecture/data-and-api.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/deployment-and-operations.md"
       ],
       "outcome": "经独立设备/密钥 ADR 后提供最小审批和必要状态同步。",
       "acceptance": [
@@ -1262,7 +1340,8 @@
         "packages/evals"
       ],
       "contracts": [
-        "docs/architecture/system-architecture.md"
+        "docs/architecture/system-architecture.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "逐一证明更多执行 Runtime 满足相同边界。",
       "acceptance": [
@@ -1295,7 +1374,8 @@
       ],
       "contracts": [
         "docs/architecture/system-architecture.md",
-        "docs/architecture/trust-and-safety.md"
+        "docs/architecture/trust-and-safety.md",
+        "docs/architecture/runtime-coordination.md"
       ],
       "outcome": "只有固定组合无法满足实际扩展需求时设计受隔离宿主。",
       "acceptance": [
