@@ -52,11 +52,12 @@ function render() {
   const empty = state.scenario === 'empty' && page !== 'settings';
   main.innerHTML = controls() + stateNotice() + (empty ? `<section class="card empty"><div class="symbol" aria-hidden="true">◇</div><h1>还没有开始的项目</h1><p class="muted">用一份合成项目，体验如何把目标、结果与记忆连起来。</p>${button('recover', '载入工作坊演示', 'primary')}</section>` : ({ today, project, memory, settings }[page])());
 }
-function openDialog(html) { dialogTrigger = document.activeElement; document.querySelector('#dialog-content').innerHTML = html; dialog.showModal(); }
+function openDialog(html) { if (!dialog.open) dialogTrigger = document.activeElement; document.querySelector('#dialog-content').innerHTML = html; dialog.showModal(); }
 function closeDialog() { dialog.close(); pendingRevision = null; }
 const dialogEnd = (primary = '') => `<div class="button-row">${button('close', '返回')}${primary}</div>`;
-function inspect(id) { const a = state.attempts.find(a => a.id === id); if (!a) return; openDialog(`<p class="eyebrow">合成产物 / 第 ${a.id} 次尝试</p><h2 id="dialog-title">方案有了，证据还不完整。</h2>${a.stale ? '<div class="notice"><strong>陈旧结果</strong><br>引用的预算已被替代。即使给出反馈，也不能恢复为当前有效结果。</div>' : ''}<h3>1. 主结论</h3><p>按 ${money(a.budget)} 草拟的方案尚不能认定已完成。</p><h3>2. 产物</h3><p>工作坊筹备草稿 · 模拟合计 ${money(a.budget === 100000 ? 92000 : 76000)}。未导出、未发送。</p><h3>3. 验证证据</h3><ul class="checklist"><li>预算依据：合成项目决定 ${money(a.budget)}</li><li>报价来源：缺失，模拟估算不是报价凭证</li><li>场地回执：缺失，未核对档期</li></ul><h3>4. 未完成项</h3><p>取得真实报价与档期确认。原型不执行这两项，也不会模拟“已通过”验证。</p><div class="notice info">你的反馈只表示主观评价，不会把待核验变为已验证成功。</div><div id="feedback-status" role="status">${state.feedback ? `当前反馈：${state.feedback}。结果仍待核验。` : ''}</div><div class="button-row">${button('feedback:符合要求', '符合要求', '', disabled() || a.stale || a.id !== latest().id)}${button('feedback:需要修改', '需要修改', '', disabled() || a.stale || a.id !== latest().id)}</div>${dialogEnd()}`); }
+function inspect(id) { const a = state.attempts.find(a => a.id === id); if (!a) return; openDialog(`<p class="eyebrow">合成产物 / 第 ${a.id} 次尝试</p><h2 id="dialog-title">方案有了，证据还不完整。</h2>${a.stale ? '<div class="notice"><strong>陈旧结果</strong><br>引用的预算已被替代。即使给出反馈，也不能恢复为当前有效结果。</div>' : ''}<h3>1. 主结论</h3><p>按 ${money(a.budget)} 草拟的方案尚不能认定已完成。</p><h3>2. 产物</h3><p>工作坊筹备草稿 · 模拟合计 ${money(a.budget === 100000 ? 92000 : 76000)}。未导出、未发送。</p><h3>3. 验证证据</h3><ul class="checklist"><li>预算依据：合成项目决定 ${money(a.budget)}</li><li>报价来源：缺失，模拟估算不是报价凭证</li><li>场地回执：缺失，未核对档期</li></ul><h3>4. 未完成项</h3><p>取得真实报价与档期确认。原型不执行这两项，也不会模拟“已通过”验证。</p><div class="notice info">你的反馈只表示主观评价，不会把待核验变为已验证成功。</div><div id="feedback-status" role="status">${a.feedback ? `本次尝试反馈：${a.feedback}。结果仍待核验。` : ''}</div><div class="button-row">${button('feedback:符合要求', '符合要求', '', disabled() || a.stale || a.id !== latest().id)}${button('feedback:需要修改', '需要修改', '', disabled() || a.stale || a.id !== latest().id)}</div>${dialogEnd()}`); }
 document.addEventListener('click', event => {
+  if (event.target.closest('.skip')) { event.preventDefault(); main.focus(); return; }
   const target = event.target.closest('[data-action]'); if (!target || target.disabled) return;
   const [action, value] = target.dataset.action.split(':');
   if (action === 'close') return closeDialog();
@@ -65,7 +66,7 @@ document.addEventListener('click', event => {
   if (action === 'inspect') return inspect(Number(value));
   if (action === 'attempt') { selectedAttempt = Number(value); render(); main.focus(); return; }
   if (action === 'start' || action === 'stop' || action === 'finish') { dispatch({ type: action }, action === 'start' ? '已开启新演示尝试。' : action === 'stop' ? '演示尝试已中断。' : '演示执行结束，结果仍待核验。'); selectedAttempt = latest().id; render(); main.focus(); return; }
-  if (action === 'feedback') { state = transition(state, { type: 'feedback', value }); document.querySelector('#feedback-status').textContent = `当前反馈：${state.feedback}。结果仍待核验。`; return; }
+  if (action === 'feedback') { state = transition(state, { type: 'feedback', value, attemptId: latest().id }); document.querySelector('#feedback-status').textContent = `当前反馈：${state.feedback}。结果仍待核验。`; return; }
   if (action === 'recover') { dispatch({ type: 'scenario', value: 'normal' }, '已恢复正常演示快照。'); main.focus(); return; }
   if (action === 'panel') return openDialog(`<h2 id="dialog-title">本次工作与依据</h2>${contextContent()}${dialogEnd()}`);
   if (action === 'learning') return openDialog(`<h2 id="dialog-title">经验要经过验证，才能成为做法。</h2><p>这次结果仍缺证据，不会自动生成一条“成功经验”。</p><ol><li>先保留任务、采用依据和结果。</li><li>可信结果可以提出可撤销的候选做法。</li><li>经过试用与收益验证，再考虑晋升。</li></ol><p class="subtle">这是 P2 目标的说明，不是已实现的自动学习。</p>${dialogEnd()}`);

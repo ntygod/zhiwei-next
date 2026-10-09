@@ -10,9 +10,9 @@ updated: 2026-10-09
 
 ### 准备性界面原型 #98
 
-PR #97 已合入 main `e08ef068f3c0075a11155be50a871f8d851ed24c`。所有者授权按新设计自主推进；当前 canonical 为 [Issue #98](https://github.com/ntygod/zhiwei-next/issues/98)，唯一分支 `docs/98-cognitive-workbench-prototype`。依据路线图允许提前的准备性界面原型，新建 [workbench-v2](../design/workbench-v2/README.md)，保留旧样例；仅合成页面内存数据演示目标、产物检查、预算纠正、旧结果陈旧与新尝试。
+PR #97 已合入 main `e08ef068f3c0075a11155be50a871f8d851ed24c`。所有者授权按新设计自主推进；当前 canonical 为 [Issue #98](https://github.com/ntygod/zhiwei-next/issues/98)，唯一分支 `docs/98-cognitive-workbench-prototype`，primary [Draft PR #99](https://github.com/ntygod/zhiwei-next/pull/99)。依据路线图允许提前的准备性界面原型，新建 [workbench-v2](../design/workbench-v2/README.md)，保留旧样例；仅合成页面内存数据演示目标、产物检查、预算纠正、旧结果陈旧与新尝试。
 
-没有接入 API/Runtime/模型/真实数据，不建立凭据或真实授权，不改变正式任务 DAG、不登记 P1 完成。P0-01 的原有限实证与接受要求仍保持；本项不运行或替代受限旧安全实验。原型状态测试与正式 check 分别验证；浏览器启动受环境 socket EPERM 阻塞，交互/视觉/缩放检查未完成，不以静态检查替代。最终 HEAD 独立 R3、现有 CI 与来源流程以 primary PR 实证为准。
+没有接入 API/Runtime/模型/真实数据，不建立凭据或真实授权，不改变正式任务 DAG、不登记 P1 完成。P0-01 的原有限实证与接受要求仍保持；本项不运行或替代受限旧安全实验。原型状态测试与正式 check 分别验证；浏览器启动受环境 socket EPERM 阻塞，交互/视觉/缩放检查未完成，不以静态检查替代。独立审查已推动修复反馈归属、弹层返回焦点和跳过导航路由；真实浏览器验证未完成前保持 Draft blocked。恢复条件是获得受支持且可读取原型的浏览器环境，不用别名/隧道绕过拒绝。最终 HEAD 独立 R3、现有 CI 与来源流程以 primary PR 实证为准。
 
 以下详细架构段落保留为设计交付背景，不再表示活跃分支。
 

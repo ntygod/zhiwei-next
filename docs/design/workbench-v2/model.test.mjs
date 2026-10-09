@@ -16,7 +16,7 @@ test('new attempts use corrected context and never turn execution or feedback in
   assert.deepEqual(apply(s, { type: 'start' }), s);
   s = apply(s, { type: 'finish' }); assert.equal(s.attempts[1].status, 'review');
   assert.deepEqual(apply(s, { type: 'finish' }), s);
-  s = apply(s, { type: 'feedback', value: '符合要求' }); assert.equal(s.attempts[1].status, 'review');
+  s = apply(s, { type: 'feedback', value: '符合要求', attemptId: 2 }); assert.equal(s.attempts[1].status, 'review');
   assert.deepEqual(apply(s, { type: 'start' }), s);
 });
 test('interruption preserves history and retry is a distinct attempt', () => {
@@ -42,4 +42,13 @@ test('prototype has no network or persistence primitives and does not touch prod
   const html = await readFile(new URL('./index.html',import.meta.url),'utf8');
   assert.match(html,/connect-src 'none'/); assert.match(html,/合成演示数据/);
   for(const file of ['app.js','model.js']) { const source = await readFile(new URL(file,import.meta.url),'utf8'); assert.doesNotMatch(source,/\b(fetch|XMLHttpRequest|WebSocket|EventSource|localStorage|sessionStorage|indexedDB|sendBeacon)\b/); }
+});
+
+test('feedback is bound to the selected attempt and does not leak to historical artifacts', () => {
+  let s = apply(apply(initial(), {type:'correct', revision:1}),{type:'start'});
+  s = apply(s,{type:'finish'});
+  assert.deepEqual(apply(s,{type:'feedback',value:'符合要求',attemptId:1}),s);
+  s = apply(s,{type:'feedback',value:'符合要求',attemptId:2});
+  assert.equal(s.attempts[1].feedback,'符合要求');
+  assert.equal(s.attempts[0].feedback,null);
 });

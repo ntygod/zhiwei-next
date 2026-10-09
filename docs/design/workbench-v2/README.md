@@ -28,8 +28,8 @@
 
 ## 验证
 
-独立原型测试：`node --test docs/design/workbench-v2/model.test.mjs`。根目录完整验证仍为 `npm run check`；运行前必须检查调用链不包含受限实验，不通过跳过原门禁获取绿色结果。
+独立原型测试：`node --test docs/design/workbench-v2/model.test.mjs docs/design/workbench-v2/interaction.test.mjs`。根目录完整验证仍为 `npm run check`；运行前必须检查调用链不包含受限实验，不通过跳过原门禁获取绿色结果。
 
-浏览器验收应覆盖取消/确认/重复点击/中断新尝试、返回与弹窗 Escape、空/异常情景、键盘焦点、窄屏、200% 缩放及无网络请求。具体已运行证据在 primary PR；此说明不预填通过。
+浏览器验收应覆盖取消/确认/重复点击/中断新尝试、返回与弹窗 Escape、空/异常情景、键盘焦点、窄屏、200% 缩放及无网络请求。专用测试包含确定性状态转换与 VM 事件逻辑替身；后者不是 DOM 或浏览器。当前真实浏览器启动因 socket EPERM 受阻，视觉、实际键盘焦点、窄屏与 200% 缩放未验证；[Draft PR #99](https://github.com/ntygod/zhiwei-next/pull/99) 保留该阻塞，不以静态分析代替 UI 验收。恢复条件是获得可正常启动并读取本目录的受支持浏览器环境。
 
 回滚：revert 本项提交；没有生产数据与配置迁移，旧原型保持原字节。
