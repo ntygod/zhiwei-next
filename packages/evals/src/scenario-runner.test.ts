@@ -43,3 +43,49 @@ test("G-4 rejects status-only and missing evidence, unknown identifiers and alia
     await assert.rejects(runScenarioSuite({ ...provenance, select: [id] }, { execute: async () => { throw new Error("must not run"); } }), /Unknown canonical/);
   }
 });
+
+test("G-4 reports skipped separately and never upgrades unavailable or unselected scenarios", async () => {
+  let calls = 0;
+  const report = await runScenarioSuite({ ...provenance, select: ["E0-02", "E1-01"], skip: { "E0-02": "explicit test selection", "E1-01": "cannot hide unavailable capability" } }, {
+    execute: async () => { calls += 1; },
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(report.totals, { passed: 0, failed: 0, skipped: 1, "not-run": 23 });
+  assert.equal(report.results.find(result => result.id === "E1-01")?.reason, "required-product-capability-unavailable");
+  assert.equal(report.results.find(result => result.id === "E0-03")?.reason, "not-selected");
+  await assert.rejects(runScenarioSuite({ ...provenance, skip: { "E0-02": " " } }, { execute: async () => undefined }), /Skip needs/);
+});
+
+test("G-4 deterministic real evidence rejects deliberate false output and evidence deletion", async () => {
+  const options = { ...provenance, select: ["E0-02"] };
+  const first = await runScenarioSuite(options, createNodeScenarioExecutor());
+  const second = await runScenarioSuite(options, createNodeScenarioExecutor());
+  assert.deepEqual(first, second, "same fixture/environment/source yields comparable evidence");
+  const evidence = first.results.find(result => result.id === "E0-02")?.evidence;
+  assert.ok(evidence);
+  const mutations: readonly unknown[] = [
+    { ...evidence, reopened: [] },
+    { ...evidence, after: evidence.after.map(row => ({ ...row, fingerprint: "0".repeat(64) })) },
+    { ...evidence, insertedCounts: [2] },
+    { ...evidence, integrity: [] },
+    { ...evidence, closedBeforeReopen: false },
+    { ...evidence, scenarioId: "E0-03" },
+    { ...evidence, reopened: undefined },
+    { ...evidence, extraStatus: "passed" },
+  ];
+  for (const mutation of mutations) {
+    const report = await runScenarioSuite(options, { execute: async () => mutation });
+    assert.equal(report.totals.failed, 1);
+    assert.equal(report.totals.passed, 0);
+  }
+  const wrongFixture = await runScenarioSuite({ ...options, fixture: { now: "2026-02-01T00:00:00.000Z", idPrefix: "other-synthetic", modelReply: "other-command" } }, { execute: async () => evidence });
+  assert.equal(wrongFixture.totals.failed, 1, "evidence is bound to fixture clock, IDs, and model output");
+});
+
+test("G-4 validates duplicate selection, bounds, and full source IDs before I/O", async () => {
+  const executor = { execute: async (): Promise<unknown> => { throw new Error("must not execute"); } };
+  await assert.rejects(runScenarioSuite({ ...provenance, select: ["E0-02", "E0-02"] }, executor), /Duplicate/);
+  for (const timeoutMs of [0, -1, 60_001, NaN, Infinity, 1.5]) await assert.rejects(runScenarioSuite({ ...provenance, timeoutMs }, executor), /timeout/);
+  await assert.rejects(runScenarioSuite({ ...provenance, source: { ...provenance.source, head: "abc" } }, executor), /complete source/);
+  await assert.rejects(runScenarioSuite({ ...provenance, source: { ...provenance.source, kind: "observed-git", clean: false } }, executor), /Uncommitted/);
+});

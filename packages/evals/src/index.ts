@@ -22,4 +22,4 @@ export { SCENARIOS, SCENARIO_ALIASES, SCENARIO_VERSION } from "./catalog.ts";
 export { runScenarioSuite } from "./scenario-runner.ts";
 export type { ScenarioReport, ScenarioExecutor, RunScenarioOptions } from "./scenario-runner.ts";
 export { createNodeScenarioExecutor } from "./node-executor.ts";
-export { observeScenarioProvenance, observeToolchainVersions } from "./observed-provenance.ts";
+export { observeScenarioProvenance, observeToolchainVersions, requireUnchangedScenarioSource } from "./observed-provenance.ts";

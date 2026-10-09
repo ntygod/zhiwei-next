@@ -14,7 +14,7 @@ export interface ScenarioEnvironment {
   readonly platform: string;
   readonly arch: string;
   readonly sqlite: string;
-  readonly isolation: "worker-thread-synthetic-temp-sqlite" | "injected-test";
+  readonly isolation: "child-process-synthetic-temp-sqlite" | "injected-test";
 }
 export interface RunnerProvenance {
   readonly source: SourceIdentity;
@@ -53,6 +53,8 @@ export interface RunScenarioOptions extends RunnerProvenance {
 export const CATALOG_SHA256 = createHash("sha256").update(JSON.stringify({ SCENARIOS, SCENARIO_ALIASES, SCENARIO_VERSION })).digest("hex");
 
 export async function runScenarioSuite(options: RunScenarioOptions, executor: ScenarioExecutor): Promise<ScenarioReport> {
+  if (options.source.kind === "observed-git" && !options.source.clean) throw new TypeError("Uncommitted source cannot bind execution to HEAD");
+  if (options.source.kind !== "observed-git" && options.source.kind !== "fixture") throw new TypeError("Unknown source identity kind");
   const ids = new Set<string>(SCENARIOS.map(scenario => scenario.id));
   const select = options.select ?? SCENARIOS.map(scenario => scenario.id);
   for (const id of [...select, ...Object.keys(options.skip ?? {})]) {
