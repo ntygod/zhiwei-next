@@ -14,6 +14,10 @@ import { fileURLToPath } from "node:url";
 import { openSqliteObservationLedgerV1 } from "../../../packages/memory-store/src/index.ts";
 import { canonicalJsonV1 } from "../../../packages/protocol/src/index.ts";
 import {
+  assembleSyntheticInput, createSyntheticContentStore, createSyntheticRevisionStore,
+  syntheticRevision,
+} from "../session-reconstruction/experiment.mjs";
+import {
   createSyntheticComposition, FIXTURE, projectSyntheticFailure, readSyntheticFile,
   safeSyntheticBoundary, syntheticMetadataEvent,
 } from "./experiment.mjs";
@@ -317,6 +321,67 @@ test("actual live and old SQLite snapshot both reconstruct through exported D-01
     assert.equal(result.value.realModelInputProven, false);
   }
 });
+function alternateRecord(messages, requestId = "synthetic-g2-request") {
+  const revisions = createSyntheticRevisionStore(syntheticRevision());
+  return assembleSyntheticInput({ revisions, pin: revisions.beginRequest(requestId),
+    contentStore: createSyntheticContentStore(), messages,
+    downstream: { runtime: "absent-in-fixture", provider: "absent-in-fixture" },
+  }).record;
+}
+function replaceRecord(f, operation, record) {
+  const path = join(f.root, operation === "reconstruct" ? "record.json" : "backup/snapshot.json");
+  const saved = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, canonicalJsonV1(operation === "reconstruct" ? record : { ...saved, record }));
+}
+for (const [operation, authority] of [["reconstruct", "reconstructPublic"], ["restore", "restorePublic"]]) {
+  for (const [name, messages, requestId] of [
+    ["inline Private content", [{ role: "user", text: FIXTURE.privateBody, storage: "inline" }]],
+    ["additional inline content", [
+      { role: "user", text: FIXTURE.publicBody, storage: "reference" },
+      { role: "assistant", text: FIXTURE.privateBody, storage: "inline" },
+    ]],
+    ["another request identity", [{ role: "user", text: FIXTURE.publicBody, storage: "reference" }],
+      "synthetic-other-request"],
+  ]) {
+    test(`${operation} rejects a self-consistent record with ${name}`, async (t) => {
+      const f = fixture(t);
+      // The normal D-01 assembler supplies a valid shape and matching content/request hashes.
+      // Those hashes do not grant access to a different composition record.
+      replaceRecord(f, operation, alternateRecord(messages, requestId));
+      const result = await f[operation](f.request(), f.authorities[authority]);
+      rejected(result, "CONTENT_INVALID");
+      assert.deepEqual(f.reconstructionCounts(), { calls: 0, referenceResolutions: 0 });
+      assert.deepEqual(f.audit(), [{ operation, code: "CONTENT_INVALID" }]);
+      noLeaks([result, f.audit()], f.root);
+    });
+  }
+  test(`${operation} rejects a changed record before accessing its body source`, async (t) => {
+    const f = fixture(t);
+    replaceRecord(f, operation, alternateRecord([
+      { role: "user", text: FIXTURE.publicBody, storage: "reference" },
+    ], "synthetic-other-request"));
+    const sourcePath = join(f.root, operation === "reconstruct" ? "body/public.txt" : "backup/inline-snapshot.sqlite");
+    unlinkSync(sourcePath);
+    const result = await f[operation](f.request(), f.authorities[authority]);
+    rejected(result, "CONTENT_INVALID");
+    assert.deepEqual(f.reconstructionCounts(), { calls: 0, referenceResolutions: 0 });
+    assert.equal(existsSync(sourcePath), false, "Rejected restore must not create a replacement database");
+    noLeaks([result, f.audit()], f.root);
+  });
+  test(`${operation} accepts the same record with different JSON key order and whitespace`, async (t) => {
+    const f = fixture(t);
+    const path = join(f.root, operation === "reconstruct" ? "record.json" : "backup/snapshot.json");
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    const record = operation === "reconstruct" ? saved : saved.record;
+    const reordered = Object.fromEntries(Object.entries(record).reverse());
+    writeFileSync(path, JSON.stringify(operation === "reconstruct" ? reordered : { ...saved, record: reordered }, null, 2));
+    const result = await f[operation](f.request(), f.authorities[authority]);
+    assert.equal(result.ok, true);
+    assert.equal(result.value.request.messages[1].content, FIXTURE.publicBody);
+    assert.deepEqual(f.reconstructionCounts(), { calls: 1, referenceResolutions: 1 });
+    noLeaks(f.audit(), f.root);
+  });
+}
 test("persisted logical forget blocks materialization, stale cache, egress and both reconstructions", async (t) => {
   const sink = await receiver(t);
   const f = fixture(t, sink);

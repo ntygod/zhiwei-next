@@ -48,6 +48,10 @@
 
 受控 `restore` 在 forget 前确实从该 SQLite 副本读取正文并经现有 D-01 API 重建同一个请求；forget 后，即使副本完全未变，也必须在打开副本和调用 D-01 前返回 `FORGOTTEN`。固定次数计数可验证 D-01 实际调用与 reference resolver；缺失 live body 会让真实 resolver 返回 unavailable，由原 D-01 拒绝，再投影为 `CONTENT_UNAVAILABLE`，不会偷偷读取仍存在的 cache 或 backup。
 
+持久化的 D-01 record 也属于不可信输入。可信合成宿主在初始化时独立保留完整 canonical record；`reconstruct` 和 `restore` 在读取正文/打开备份数据库前，先比较磁盘 record 与该可信绑定。不一致返回固定 `CONTENT_INVALID`，不调用 D-01 或 reference resolver；一致时只将原始冻结 record 交给重建器。记录自己的正文/request hash 即使自洽，也不能为替换内容、增加消息或另一 request identity 授权。JSON 空白与键顺序不影响 canonical 比较。
+
+这项绑定只证明固定合成组合的记录完整性。可信基线不从待检查 record 或旧备份派生；它不是持久签名服务、跨进程身份或恢复授权方案，不扩大对恶意同进程/内存修改者的保证。
+
 `control/revocations.json` 只存固定 schema、水位和受控资源名，不存正文、正文摘要、路径或异常。最新可信水位与该 journal 的摘要留在测试宿主内存，独立于旧 backup manifest；该摘要只检查无正文控制记录的一致性，不是来源认证或正文 hash。恢复缺失 journal、旧水位、同水位篡改、损坏格式、缺失独立可信 anchor 均失败关闭。备份状态/版本/水位缺失、未知或越过可信当前水位也拒绝。
 
 该内存 anchor 不证明生产持久化：新进程不能从旧备份自认证“这是最新状态”。本实验通过丢失 anchor 后所有读取/恢复拒绝，表达缺少独立恢复授权的阻塞；未实现可信持久 anchor 的跨进程恢复。journal 的写入/rename 已实际执行，但未测试 fsync、断电、跨库提交或多进程故障，不能以此接受这些保证。
@@ -75,13 +79,14 @@ git diff --check
 
 实验为 `.mjs`，与原 D-01 一样 opt-in，不属于根 `npm run check` 的测试发现范围；不是在产品 `tsconfig` 中新增了未类型检查的生产代码。禁止将实验测试数加进根测试数，也不能仅凭根门禁绿色声称本实验已运行。
 
-2026-10-09 的本轮工作树验证：80 个实验测试通过，0 fail / skip / TODO；固定 CLI 成功，非法参数返回 2，安全摘要无正文/路径/假凭据标记。测试命令由 `env -i` 的干净环境运行，node 使用已固定的正式工具链；没有安装、升级或放宽类型检查。最终完整 HEAD 的根门禁、独立 R3、CI 与集成证据由同一 primary PR 另行绑定，本工作树记录不替代最终复跑。
+2026-10-09 修复后的工作树验证：90 个实验测试通过，0 fail / skip / TODO，包含原 80 项及 10 项记录绑定回归；固定 CLI 成功，非法参数返回 2，安全摘要无正文/路径/假凭据标记。使用固定 Node 22.23.1 的 Linux 容器，源码只读、临时目录独立、无外网，`env -i` 不继承宿主凭据。镜像为 `node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3`。本记录不表示远端 Agent 的平台限制已经解除；最终完整 HEAD 的根门禁、独立 R3、CI 与集成证据仍由同一 primary PR 另行绑定。
 
 | 场景组 | 测试证据 |
 |---|---|
 | 文件 | 有效 bytes；20 类非法路径；同前缀兄弟目录；根/祖先/目录/叶子 symlink；hardlink；非普通/缺失/过大；打开前后/读取后替换；就地修改 |
 | 来源/外发 | 实际 Public 接收正例；Private/mixed/未分类/工具/跨 Workspace/未知资源零输出；schema/字段/目的地异常；假 token；工具指令仅为数据；坏 cache |
 | 保留/恢复 | 公开 Ledger 元数据 append/replay；真实 inline 旧副本和不可 DELETE；D-01 live/backup 正例；forget 后各入口拒绝；分权 unlink；partial 失败；迟到 duplicate；缺 reference；缺/旧/损坏控制状态；未知备份状态 |
+| 记录绑定 | live/backup 的自洽替换记录、追加 inline 消息、另一 request identity 均拒绝；缺正文/备份时仍先拒绝失配记录；D-01/resolver 零调用、无正文审计；相同记录换 JSON 顺序/空白仍成功 |
 | 脱敏 | 真实 Ledger 原始路径/cause；恶意 Error getter；只含固定操作/代码的审计；CLI 正例与非法参数 |
 
 回滚：移除本目录即可，无生产 Schema/迁移/数据/权限改变。不得因为撤回实验而撤回 [ADR 0012](../../adr/0012-protected-local-diagnostics.md) 的现有诊断保护，也不得把回滚视为撤销已经发生的真实物理删除。

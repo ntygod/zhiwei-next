@@ -176,8 +176,10 @@ export function createSyntheticComposition({ transport = async () => {}, cleanup
     messages: [{ role: "user", text: FIXTURE.publicBody, storage: "reference" }],
     downstream: { runtime: "absent-in-fixture", provider: "absent-in-fixture" },
   });
+  // Trusted composition state, independent of the files and their self-declared hashes.
+  const trustedRecordJson = canonicalJsonV1(record);
   writeFileSync(join(root, "cache/public.txt"), FIXTURE.publicBody, { flag: "wx" });
-  writeFileSync(join(root, "record.json"), canonicalJsonV1(record), { flag: "wx" });
+  writeFileSync(join(root, "record.json"), trustedRecordJson, { flag: "wx" });
   const backup = { schema: "synthetic-g2-backup-v1", watermark: 0, resource: "public",
     status: "complete", record };
   writeFileSync(join(root, "backup/snapshot.json"), canonicalJsonV1(backup), { flag: "wx" });
@@ -259,6 +261,10 @@ export function createSyntheticComposition({ transport = async () => {}, cleanup
     return text;
   }
   const boundary = (op, action) => safeSyntheticBoundary(op, action, audit);
+  function checkedRecord(candidate) {
+    if (canonicalJsonV1(candidate) !== trustedRecordJson) fail("CONTENT_INVALID");
+    return record;
+  }
   function rebuild(savedRecord, body) {
     reconstructionCounts.calls += 1;
     try {
@@ -296,11 +302,12 @@ export function createSyntheticComposition({ transport = async () => {}, cleanup
       return boundary("reconstruct", () => {
         authorize("reconstruct", request, token);
         active(request.resources);
+        const savedRecord = checkedRecord(JSON.parse(readText(root, "record.json")));
         let body;
         try { body = materialize("public"); }
         catch (error) { if (failures.get(error) !== "CONTENT_UNAVAILABLE") throw error; }
         // An absent reference reaches D-01's real resolver and fails there. Never substitute cache/backup.
-        return rebuild(JSON.parse(readText(root, "record.json")), body);
+        return rebuild(savedRecord, body);
       });
     },
     forget(request, token) {
@@ -344,6 +351,7 @@ export function createSyntheticComposition({ transport = async () => {}, cleanup
         if (saved.schema !== "synthetic-g2-backup-v1" || saved.status !== "complete"
           || saved.resource !== "public" || !Number.isSafeInteger(saved.watermark)
           || saved.watermark < 0 || saved.watermark > latest.watermark) fail("CONTENT_UNAVAILABLE");
+        const savedRecord = checkedRecord(saved.record);
         const filePath = join(root, "backup/inline-snapshot.sqlite");
         directoryChain(root, filePath);
         const stat = lstatSync(filePath, { bigint: true });
@@ -353,7 +361,7 @@ export function createSyntheticComposition({ transport = async () => {}, cleanup
         try { body = restored.readSession(FIXTURE.workspace, "synthetic-session")[0]?.event.data.body?.text; }
         finally { restored.close(); }
         if (typeof body !== "string" || sha256HexUtf8(body) !== sha256HexUtf8(FIXTURE.publicBody)) fail("CONTENT_UNAVAILABLE");
-        return rebuild(saved.record, body);
+        return rebuild(savedRecord, body);
       });
     },
     // Models absent independent authority on restart, not an untrusted request option.

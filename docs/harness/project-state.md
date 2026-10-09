@@ -8,9 +8,11 @@ updated: 2026-10-09
 
 ## 当前工作：G-2 接入前安全与保留实证
 
-canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，primary 为 [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。已回读无开放 Incident/PR、pause=false，只有 main，#67/#44/#15 原任务保留。ADR0014/D-04 与 ADR0015/D-08 仍 Proposed。当前[接入前实证](../planning/g2-preintegration-evidence.md)已实现真实路径读取、受控传输和保留/恢复消费者；80 项合成测试通过，Private 等拒绝为接收器零连接/请求/字节，旧 inline 备份仍可直接回读因此清除只报告 partial。新完整 HEAD 的验证、独立 R3、当前 PR 来源及受保护交付均待真实结果，不预记完成。
+canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，primary 为 [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。2026-10-09 本地从 `0d89f786326b51dff36b1f06f8958f2e746565a1` 接手，已回读无开放 Incident、pause=false，唯一开放 primary 是 #91；#67/#44/#15 保留。ADR0014/D-04 与 ADR0015/D-08 仍 Proposed。当前[接入前实证](../planning/g2-preintegration-evidence.md)补齐重建/恢复记录的可信绑定，修复后的 90 项合成测试通过；Private 等拒绝仍为接收器零连接/请求/字节，旧 inline 备份仍可直接回读，因此清除只报告 partial。PR 保持 Draft，新完整 HEAD 的独立 R3、当前 PR 来源与其余交付门均待实际结果；本地结果不表示远端平台限制已经解除。
 
 范围为真实临时文件读取、来源/Private 外发拒绝、本地可观察接收器、公开 protocol/Ledger 元数据和既有 D-01 重建器的保留/不可用证据；不改生产 Schema，不实现 Host/Session/M0-4/M5，不接入真实正文/凭据。现有严格决议层禁止实验来源 PR 同时作为新决议 primary PR，因此本任务仅交付实验和 Proposed 合同；受保护合入后在新的实质决议任务接受 D-04/D-08 并按原 G-2 卡验收。不伪造来源、不放宽 validator。
+
+当前 PR 的既有 SDK/Worker 原 ZIP、完整内容及来源身份已按[PR #91 取证记录](../spikes/pi-runtime-contract/README.md#2026-10-09-pr-91-当前来源整合)重新核对并写入 Manifest；没有修改 Runtime 内容、比较器或来源校验条件。这与安全实验的 90 项验证分别记录，不替代最终独立审查或 Ready/live gate。
 
 G-4 已由 [PR #89](https://github.com/ntygod/zhiwei-next/pull/89)于 2026-10-09T01:23:47Z 受保护交付。main `ab6052efbb84abe6f87bc6758bfd7e8143b73964` 单父 `b5115d47a091f2c954e29a9963257c218bc11032`，tree `096e87c035d022b85e4a950ef146ed04ef3e004a` 与最终受审 HEAD `ce80dcb5e69ae678c2eb67a65bffc9143a9e20e6` 一致；[最终 R3](https://github.com/ntygod/zhiwei-next/pull/89#issuecomment-6072285575)、[Ready CI](https://github.com/ntygod/zhiwei-next/actions/runs/37869203320)、[保护合并](https://github.com/ntygod/zhiwei-next/actions/runs/37869555453)和 [main 来源](https://github.com/ntygod/zhiwei-next/actions/runs/37869569146)均完成，#88 已关闭、旧分支已回收。三场景 PARTIAL/21 not-run 的边界保持；旧批准不批准本次安全实验。
 
@@ -149,10 +151,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 982d9ab720078ac13ce9b087a1a602a9c3147157
-capture workflow             37863369941
-capture artifact             11587361169
-capture artifact digest      sha256:b34bab9ce03cd3e183e8dada8223448dd4e38366ca6472db765139290b8e72c6
+capture head                 c3e7387075b7268e1b5d2d2e1638fa51eaa3ae7c
+capture workflow             37871492885
+capture artifact             11589908249
+capture artifact digest      sha256:f0c661e0eda227e91eb4216637470e00720a36d078728199afe2adeccdfe55d4
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

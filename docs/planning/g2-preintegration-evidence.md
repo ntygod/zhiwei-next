@@ -9,6 +9,7 @@
 - 路径读取器返回真实临时普通文件的受限字节；非法路径、链接与可检测替换不能返回正文。
 - 合成可信调用上下文与正文分离；已授权 Public fixture 经固定传输到真实 loopback HTTP 接收器，Private/未知分类/跨 Workspace/伪造授权在调用传输前拒绝，观察请求、连接和字节数。
 - 现有公开 protocol 与 SQLite Ledger 保存最小合成事件，正文独立放在受控临时文件；既有 D-01 重建器实际使用许可引用。
+- 重建/恢复记录先与可信初始化 record 核对；自洽的替换内容、额外消息或另一请求身份在正文访问和 D-01 调用前拒绝，不以记录自身 hash 代替授权。
 - 遗忘后实际读取、陈旧缓存、发送、重建与旧备份恢复都不能返回被撤回正文。物理 unlink 只证明列名文件不可再读，保留的旧 inline Ledger 备份仍可由直接可信底层 API 回读，因此结果只能是 partial。
 
 这些是有实际 I/O 的接入前合同实证。它们不是 Daemon/Pi Worker/生产模型或真实用户文件入口；正式库调用本身仍是受信任能力，不是路径沙箱。实验代码不应被产品包导入。
@@ -40,7 +41,7 @@ node --test scripts/current-decisions.test.mjs
 node scripts/check-execution-plan.mjs
 ```
 
-2026-10-09 作者在干净环境精确 Node 22.23.1 下执行 80 项新实验，0 fail/skip/TODO；固定 CLI 和非法参数路径通过。这是工作树结果，最终完整 HEAD 仍须重新验证。
+2026-10-09 本地接手后，在固定 Node 22.23.1 的无外网 Linux 容器中执行修复后的 90 项实验（原 80 项 + 10 项记录绑定回归），0 fail/skip/TODO；固定 CLI 和非法参数路径通过。环境和有限范围见[实验记录](../spikes/preintegration-safety/README.md)。这是工作树结果，最终完整 HEAD 的独立审查和其余门禁仍须实际完成；不继承远端中止的审查。
 
 新增实验为显式 opt-in；不属于默认 apps/packages 测试发现。实验测试、全仓行为测试、当前决议层测试必须分别计数，不能相加宣传覆盖。执行命令、完整 HEAD、真实结果和原始来源证明在 primary PR 记录，未运行项不计成功。新增实验不改变旧 CI、validator、源规划或历史 Accepted 证据。
 
