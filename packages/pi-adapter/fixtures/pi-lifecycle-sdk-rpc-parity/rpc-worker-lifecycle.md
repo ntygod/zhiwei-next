@@ -26,7 +26,7 @@ artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09
 byte-identical attempts      true
 ```
 
-Both controlled PR #93 Draft recapture attempts completed Worker capture, Fresh sanitization validation, committed-base validation and Artifact upload successfully. Their Workflow and Worker Job results remain `failure` because a temporary recapture-only guard failed the compare step only after formal Fresh/committed complete-object equality succeeded. The final repository restores the normal compare path. Ready-PR **Worker v2 live provenance** reads both immutable attempts, validates the exact Worker Job step outcomes, Artifact IDs/names/digests, downloads both ZIPs, extracts the unique `result.json`, checks byte identity, applies the current full normalizer and requires complete equality with the committed v2 object.
+Both controlled PR #95 Draft recapture attempts completed Worker capture, Fresh sanitization validation, committed-base validation and Artifact upload successfully. Their Workflow and Worker Job results remain `failure` because a temporary recapture-only guard failed the compare step only after formal Fresh/committed complete-object equality succeeded. The final repository restores the normal compare path. Ready-PR **Worker v2 live provenance** reads both immutable attempts, validates the exact Worker Job step outcomes, Artifact IDs/names/digests, downloads both ZIPs, extracts the unique `result.json`, checks byte identity, applies the current full normalizer and requires complete equality with the committed v2 object.
 
 ## Current committed identity
 

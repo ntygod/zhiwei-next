@@ -33,4 +33,6 @@
 
 ## 当前范围
 
-M0 只建立可信 Observation 链路；不要在本包加入记忆注入、Prompt 增强、主动提醒或跨 Agent 抽象。
+当前 P0 只复用/核验可信 Observation 链路，不启用新的产品执行。P1-03 按[任务卡](../../docs/planning/implementation-plan.md)交付受控 Worker，P1-06 才消费经过资格、预算和授权验证的不可变 ContextCapsule；只负责传输/记录实际输入，不自行选择记忆或改写认知状态。
+
+上下文注入必须遵守[认知合同](../../docs/architecture/cognitive-loop.md)的发送与迟到结果屏障。主动决策、学习、权限语义仍在各自核心/组合边界；不得在 Pi Adapter 内建设通用跨 Agent 框架或静默增强 Prompt。
