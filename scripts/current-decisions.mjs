@@ -21,13 +21,17 @@ export const IDS = Array.from({ length: 11 }, (_, i) => `D-${String(i + 1).padSt
 const ADRS = {
   "D-01": ["docs/adr/0008-session-record-reconstruction-boundary.md"],
   "D-02": ["docs/adr/0009-ledger-schema-evolution-boundary.md"],
+  "D-04": ["docs/adr/0014-data-retention-boundary.md"],
   "D-07": ["docs/adr/0011-formal-toolchain-baseline.md", "docs/adr/0013-pi-cli-jsonl-worker.md"],
+  "D-08": ["docs/adr/0015-preintegration-safety-boundary.md"],
   "D-10": ["docs/adr/0007-hard-core-soft-shell-ownership.md", "docs/adr/0010-package-owned-invariant-catalog.md"],
 };
 const ENTRY_POINTS = {
   "D-01": "docs/spikes/session-reconstruction/experiment.test.mjs",
   "D-02": "packages/memory-store/fixtures/schema-evolution/experiment.test.mjs",
+  "D-04": "docs/spikes/preintegration-safety/experiment.test.mjs",
   "D-07": "scripts/toolchain.test.mjs",
+  "D-08": "docs/spikes/preintegration-safety/experiment.test.mjs",
   "D-10": "docs/spikes/invariant-ownership/experiment.test.mjs",
 };
 const TERMINAL = ["Accepted", "Rejected", "Superseded"];
