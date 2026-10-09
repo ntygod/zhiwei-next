@@ -12,7 +12,7 @@ updated: 2026-10-09
 
 新的[设计入口](../planning/design-baseline.md)、[P0—P5 路线](../planning/roadmap.md)与[完整任务卡](../planning/implementation-plan.md)在本 PR 经独立审查合入后替代旧 M0—M7 排期。当前仍只有 Bootstrap/有限实验实现，本次不实现产品代码、不接真实数据/模型、不宣称新场景已通过。31 个必需任务、5 个条件扩展、32 个新场景与旧 60 包映射由 development-plan.json 管理；阶段导航改为 P0，风险/批准/CI/来源门均保持原规则。
 
-新 ADR0016/0017 待独立设计接受；D-04/D-08 的旧有限登记与原 G-2 验收仍是 P0-01，原 G-5 基线由 P0-02 承接。设计方向已明确，生产能力仍须对应任务接线验收。完整 HEAD 的实际检查/批准/Ready/受保护合入以 primary PR 回读为准，不预填成功。
+新 ADR0016/0017 已依据 [PR95 独立设计接受](https://github.com/ntygod/zhiwei-next/pull/95#issuecomment-6078063023)登记 Accepted，审查 HEAD 为 `a590da1510577f3c7dd8efef720db13f6108debb`。旧备份授权不复活、迟到结果提交屏障及 P4 范围三个审查项已关闭。D-04/D-08 的旧有限登记与原 G-2 验收仍是 P0-01，原 G-5 基线由 P0-02 承接；设计方向明确，生产能力仍须接线验收。登记后的最终 HEAD 仍需独立 R3、Ready/live 与保护合入，实际结果以 [PR #95](https://github.com/ntygod/zhiwei-next/pull/95) 回读为准，不预填成功。
 
 以下旧“当前”段落为有日期的历史与机器锚点，不再是活跃队列。真实下一步见[交接](../planning/next-task-handoff.md)；本次保留旧冻结计划、已接受决议与测试，不依赖新设计降低自身门禁。
 

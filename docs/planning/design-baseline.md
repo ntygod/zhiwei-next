@@ -1,6 +1,6 @@
 # 知微完整 Agent 设计基线
 
-版本：2026-10-09 / design-v2。工作项：[#94](https://github.com/ntygod/zhiwei-next/issues/94)。本次交付设计与开发合同，不实现产品能力。合并前是待审候选；通过 [ADR 0016](../adr/0016-cognitive-agent-product-baseline.md) 的独立审查并合入后，作为后续开发方向。
+版本：2026-10-09 / design-v2。工作项：[#94](https://github.com/ntygod/zhiwei-next/issues/94)，primary [PR #95](https://github.com/ntygod/zhiwei-next/pull/95)。本次交付设计与开发合同，不实现产品能力。ADR0016/0017 已通过[独立设计接受](design-acceptance.md)；PR 经最终审查与门禁合入后，作为后续开发方向。
 
 ## 一句话目标
 
