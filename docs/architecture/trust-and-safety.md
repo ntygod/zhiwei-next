@@ -2,6 +2,8 @@
 
 状态：design-v2 目标。已实现的 [诊断通道](local-diagnostics.md)仅保护 health/meta/doctor；[ADR 0014](../adr/0014-data-retention-boundary.md)/[0015](../adr/0015-preintegration-safety-boundary.md)与其合成实验定义有限接入前边界。新产品数据、模型和工具必须在对应任务中接线验证，不能继承实验安全保证。
 
+具体执行落点见[派发/迟到结果屏障](runtime-coordination.md)、[控制日志与恢复](persistence-and-recovery.md)、[API 身份/cursor](local-api-contract.md)和[部署/备份来源](deployment-and-operations.md)。加密成功或记录内部自洽都不能替代独立可信来源与当前授权。
+
 ## 威胁模型
 
 防御对象：误用的客户端、恶意网页/文件/工具内容、错误模型建议、跨 Workspace 混入、陈旧授权、重复/迟到事件、恢复旧备份、Worker 崩溃和配置漂移。可信基为受控代码、OS 用户会话、已验证配置与主存储；恶意同用户进程可读写内存/文件、修改程序或控制 OS 时不承诺隔离。

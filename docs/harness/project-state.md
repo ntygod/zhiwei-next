@@ -8,6 +8,12 @@ updated: 2026-10-09
 
 ## 当前方向：完整认知 Agent / design-v2（2026-10-09）
 
+### 当前人类输入：详细架构 #96
+
+PR #95 已保护合入 main `14398486e4009e70180fb5291d8b4ede62e8b664`，Issue #94 已关闭，设计与计划完成。所有者随后要求“需要详细的架构设计”；本轮 canonical 为 [#96](https://github.com/ntygod/zhiwei-next/issues/96)，分支 `docs/96-detailed-architecture`，从该 main 起点补充[实施级架构](../architecture/detailed-design.md)。范围为模块/端口、进程/状态/时序、逻辑 Schema、事务/恢复、API/事件、认知算法与部署；不开始产品实现，不改变 P0 阶段或旧门禁。原 31+5 任务、32 场景和 60 项映射保持，任务合同导航增加详设引用。
+
+新增 ADR0018 在独立设计接受前保持 Proposed；设计 Schema 示例只在隔离数据库验证结构约束，不充当生产迁移/安全/性能验收。最终 HEAD 的 R3/CI/来源与合入结果以本 primary PR 实际记录为准。以下 #94 内容是已合入设计的连续性背景，不再表示活跃分支。
+
 所有者明确要求整体调整项目、定案完整设计并给后续 AI/人可执行计划。本次 canonical 为 [#94](https://github.com/ntygod/zhiwei-next/issues/94)，分支 `docs/94-cognitive-agent-design`，起点 main `1872955c8d5fffc7c2477f62343fc38224b4f0da`；PR #91/#93 已合入，无开放 Incident 或其他 primary PR。#67/#44/#15 保留。
 
 新的[设计入口](../planning/design-baseline.md)、[P0—P5 路线](../planning/roadmap.md)与[完整任务卡](../planning/implementation-plan.md)在本 PR 经独立审查合入后替代旧 M0—M7 排期。当前仍只有 Bootstrap/有限实验实现，本次不实现产品代码、不接真实数据/模型、不宣称新场景已通过。31 个必需任务、5 个条件扩展、32 个新场景与旧 60 包映射由 development-plan.json 管理；阶段导航改为 P0，风险/批准/CI/来源门均保持原规则。

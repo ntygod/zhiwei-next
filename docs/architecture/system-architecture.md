@@ -2,6 +2,8 @@
 
 状态：design-v2 目标；已实现范围见[过渡映射](../planning/design-transition.md)。历史 Runtime/SQLite 合同继续有效，下面不表示服务已经接线。
 
+实施级入口：[详细架构设计](detailed-design.md)。该入口按模块/端口、运行状态机、数据/事务/恢复、API/事件、认知算法、部署六个视图展开本总纲，并映射到已有任务与验收。
+
 ## 系统与三条循环
 
 ```mermaid

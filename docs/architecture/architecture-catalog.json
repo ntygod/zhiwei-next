@@ -1,0 +1,894 @@
+{
+  "schemaVersion": 1,
+  "kind": "detailed-architecture-design",
+  "status": "design-only",
+  "baselineHead": "14398486e4009e70180fb5291d8b4ede62e8b664",
+  "decision": "docs/adr/0018-detailed-coordination-and-persistence.md",
+  "documents": [
+    {
+      "id": "overview",
+      "path": "docs/architecture/detailed-design.md"
+    },
+    {
+      "id": "runtime",
+      "path": "docs/architecture/runtime-coordination.md"
+    },
+    {
+      "id": "persistence",
+      "path": "docs/architecture/persistence-and-recovery.md"
+    },
+    {
+      "id": "api",
+      "path": "docs/architecture/local-api-contract.md"
+    },
+    {
+      "id": "cognition",
+      "path": "docs/architecture/cognitive-pipelines.md"
+    },
+    {
+      "id": "operations",
+      "path": "docs/architecture/deployment-and-operations.md"
+    }
+  ],
+  "components": [
+    {
+      "id": "C01",
+      "name": "API Gateway",
+      "path": "apps/daemon/src/api",
+      "phase": "P1",
+      "tasks": [
+        "P1-04",
+        "P1-08"
+      ],
+      "scenarios": [
+        "Z09",
+        "Z12",
+        "Z18"
+      ],
+      "document": "api"
+    },
+    {
+      "id": "C02",
+      "name": "Command Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z05",
+        "Z10"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C03",
+      "name": "Cognitive Coordinator",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-06"
+      ],
+      "scenarios": [
+        "Z14",
+        "Z15"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C04",
+      "name": "Memory Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-05"
+      ],
+      "scenarios": [
+        "Z04",
+        "Z06",
+        "Z13"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C05",
+      "name": "Retrieval Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-05",
+        "P1-06"
+      ],
+      "scenarios": [
+        "Z13",
+        "Z14"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C06",
+      "name": "Context Compiler",
+      "path": "packages/context-compiler",
+      "phase": "P1",
+      "tasks": [
+        "P1-06"
+      ],
+      "scenarios": [
+        "Z14",
+        "Z15"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C07",
+      "name": "Policy Core",
+      "path": "packages/cognition-core",
+      "phase": "P1",
+      "tasks": [
+        "P1-03",
+        "P4-01"
+      ],
+      "scenarios": [
+        "Z09",
+        "Z27"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C08",
+      "name": "Dispatch Controller",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-03",
+        "P4-01",
+        "P4-02"
+      ],
+      "scenarios": [
+        "Z27",
+        "Z28",
+        "Z29"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C09",
+      "name": "Worker Supervisor",
+      "path": "apps/daemon/src/runtime",
+      "phase": "P1",
+      "tasks": [
+        "P1-03",
+        "P1-04",
+        "P4-02"
+      ],
+      "scenarios": [
+        "Z08",
+        "Z11",
+        "Z28"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C10",
+      "name": "Runtime Ingestor",
+      "path": "apps/daemon/src/runtime",
+      "phase": "P1",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z08",
+        "Z10",
+        "Z15"
+      ],
+      "document": "runtime"
+    },
+    {
+      "id": "C11",
+      "name": "Outcome Verifier",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-07"
+      ],
+      "scenarios": [
+        "Z16",
+        "Z17"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C12",
+      "name": "Learning Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P2",
+      "tasks": [
+        "P2-01",
+        "P2-02",
+        "P2-03",
+        "P2-04",
+        "P2-05"
+      ],
+      "scenarios": [
+        "Z19",
+        "Z20",
+        "Z21",
+        "Z22"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C13",
+      "name": "Attention Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P3",
+      "tasks": [
+        "P3-04",
+        "P3-05"
+      ],
+      "scenarios": [
+        "Z25",
+        "Z26"
+      ],
+      "document": "cognition"
+    },
+    {
+      "id": "C14",
+      "name": "Scheduler / Connector Host",
+      "path": "apps/daemon/src/infrastructure",
+      "phase": "P3",
+      "tasks": [
+        "P3-01",
+        "P3-02",
+        "P3-03"
+      ],
+      "scenarios": [
+        "Z23",
+        "Z24"
+      ],
+      "document": "operations"
+    },
+    {
+      "id": "C15",
+      "name": "Persistence Coordinator",
+      "path": "packages/memory-store",
+      "phase": "P1",
+      "tasks": [
+        "P1-02",
+        "P1-05",
+        "P4-06"
+      ],
+      "scenarios": [
+        "Z02",
+        "Z05",
+        "Z06",
+        "Z07",
+        "Z31"
+      ],
+      "document": "persistence"
+    },
+    {
+      "id": "C16",
+      "name": "Outbox / Projection",
+      "path": "apps/daemon/src/infrastructure",
+      "phase": "P1",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z10",
+        "Z12"
+      ],
+      "document": "persistence"
+    },
+    {
+      "id": "C17",
+      "name": "Client State",
+      "path": "apps/web",
+      "phase": "P1",
+      "tasks": [
+        "P1-08",
+        "P3-05",
+        "P4-05"
+      ],
+      "scenarios": [
+        "Z18",
+        "Z26",
+        "Z30"
+      ],
+      "document": "api"
+    },
+    {
+      "id": "C18",
+      "name": "Recovery / Backup Service",
+      "path": "apps/daemon/src/application",
+      "phase": "P1",
+      "tasks": [
+        "P1-02",
+        "P4-06"
+      ],
+      "scenarios": [
+        "Z07",
+        "Z31"
+      ],
+      "document": "operations"
+    }
+  ],
+  "ports": [
+    {
+      "id": "ProductStorePort",
+      "definition": "packages/memory-store",
+      "consumers": [
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C08",
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15",
+        "C16",
+        "C18"
+      ],
+      "operations": [
+        "readView",
+        "commitTransition",
+        "claimJob",
+        "readEventPage"
+      ],
+      "providerPath": "packages/memory-store"
+    },
+    {
+      "id": "ContentStorePort",
+      "definition": "packages/memory-store",
+      "consumers": [
+        "C15",
+        "C18"
+      ],
+      "operations": [
+        "reserve",
+        "stage",
+        "publish",
+        "readAuthorized",
+        "revoke",
+        "purge"
+      ],
+      "providerPath": "packages/memory-store"
+    },
+    {
+      "id": "RecoveryControlPort",
+      "definition": "packages/memory-store",
+      "consumers": [
+        "C04",
+        "C15",
+        "C18"
+      ],
+      "operations": [
+        "appendIntent",
+        "readHead",
+        "reconcile",
+        "beginRestore"
+      ],
+      "providerPath": "packages/memory-store"
+    },
+    {
+      "id": "RuntimePort",
+      "definition": "packages/protocol",
+      "consumers": [
+        "C09"
+      ],
+      "operations": [
+        "capabilities",
+        "start",
+        "events",
+        "abort",
+        "dispose"
+      ],
+      "providerPath": "packages/pi-adapter"
+    },
+    {
+      "id": "ModelInvocationPort",
+      "definition": "apps/daemon",
+      "consumers": [
+        "C03",
+        "C12",
+        "C13"
+      ],
+      "operations": [
+        "invokeStructured",
+        "cancel"
+      ],
+      "providerPath": "apps/daemon/src/infrastructure/model-broker"
+    },
+    {
+      "id": "ToolExecutionPort",
+      "definition": "apps/daemon",
+      "consumers": [
+        "C08"
+      ],
+      "operations": [
+        "describe",
+        "start",
+        "reconcile",
+        "cancel"
+      ],
+      "providerPath": "apps/daemon/src/infrastructure/tool-broker"
+    },
+    {
+      "id": "ConnectorPort",
+      "definition": "apps/daemon",
+      "consumers": [
+        "C14"
+      ],
+      "operations": [
+        "fetchChanges",
+        "normalizeSignal",
+        "dispose"
+      ],
+      "providerPath": "apps/daemon/src/infrastructure/connector-host"
+    },
+    {
+      "id": "CredentialPort",
+      "definition": "apps/daemon",
+      "consumers": [
+        "C08",
+        "C14",
+        "C18"
+      ],
+      "operations": [
+        "resolveHandle",
+        "revokeHandle"
+      ],
+      "providerPath": "apps/daemon/src/infrastructure/credential-provider"
+    },
+    {
+      "id": "EventSubscriptionPort",
+      "definition": "packages/protocol",
+      "consumers": [
+        "C17"
+      ],
+      "operations": [
+        "snapshot",
+        "subscribe",
+        "resume"
+      ],
+      "providerPath": "apps/daemon/src/api"
+    },
+    {
+      "id": "BackupCodecPort",
+      "definition": "apps/daemon",
+      "consumers": [
+        "C18"
+      ],
+      "operations": [
+        "encryptBundle",
+        "decryptBundle",
+        "validateInventory"
+      ],
+      "providerPath": "apps/daemon/src/infrastructure/backup-codec"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "T01",
+      "name": "接受命令",
+      "owner": "C02",
+      "store": "C15",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z05",
+        "Z10"
+      ]
+    },
+    {
+      "id": "T02",
+      "name": "提交认知",
+      "owner": "C04",
+      "store": "C15",
+      "tasks": [
+        "P1-05"
+      ],
+      "scenarios": [
+        "Z04",
+        "Z05",
+        "Z06"
+      ]
+    },
+    {
+      "id": "T03",
+      "name": "准备执行",
+      "owner": "C08",
+      "store": "C15",
+      "tasks": [
+        "P1-06"
+      ],
+      "scenarios": [
+        "Z14",
+        "Z15"
+      ]
+    },
+    {
+      "id": "T04",
+      "name": "摄取结果",
+      "owner": "C10",
+      "store": "C15",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z08",
+        "Z10",
+        "Z15"
+      ]
+    },
+    {
+      "id": "T05",
+      "name": "逻辑遗忘",
+      "owner": "C04",
+      "store": "C15",
+      "tasks": [
+        "P1-02",
+        "P1-05"
+      ],
+      "scenarios": [
+        "Z06",
+        "Z07"
+      ]
+    },
+    {
+      "id": "T06",
+      "name": "验证结果",
+      "owner": "C11",
+      "store": "C15",
+      "tasks": [
+        "P1-07"
+      ],
+      "scenarios": [
+        "Z15",
+        "Z16",
+        "Z17"
+      ]
+    },
+    {
+      "id": "T07",
+      "name": "预留动作",
+      "owner": "C08",
+      "store": "C15",
+      "tasks": [
+        "P1-03",
+        "P4-01"
+      ],
+      "scenarios": [
+        "Z27",
+        "Z29"
+      ]
+    },
+    {
+      "id": "T08",
+      "name": "派发登记",
+      "owner": "C08",
+      "store": "C15",
+      "tasks": [
+        "P1-03",
+        "P4-01"
+      ],
+      "scenarios": [
+        "Z27",
+        "Z28",
+        "Z29"
+      ]
+    },
+    {
+      "id": "T09",
+      "name": "动作结算",
+      "owner": "C08",
+      "store": "C15",
+      "tasks": [
+        "P4-02"
+      ],
+      "scenarios": [
+        "Z28",
+        "Z29"
+      ]
+    },
+    {
+      "id": "T10",
+      "name": "学习提交",
+      "owner": "C12",
+      "store": "C15",
+      "tasks": [
+        "P2-01",
+        "P2-02",
+        "P2-03"
+      ],
+      "scenarios": [
+        "Z19",
+        "Z20",
+        "Z21"
+      ]
+    },
+    {
+      "id": "T11",
+      "name": "主动反馈",
+      "owner": "C13",
+      "store": "C15",
+      "tasks": [
+        "P3-04",
+        "P3-05"
+      ],
+      "scenarios": [
+        "Z25",
+        "Z26"
+      ]
+    },
+    {
+      "id": "T12",
+      "name": "撤权/配置",
+      "owner": "C02",
+      "store": "C15",
+      "tasks": [
+        "P1-03",
+        "P4-01",
+        "P4-02"
+      ],
+      "scenarios": [
+        "Z09",
+        "Z27",
+        "Z28",
+        "Z31"
+      ]
+    },
+    {
+      "id": "T13",
+      "name": "消费确认",
+      "owner": "C16",
+      "store": "C15",
+      "tasks": [
+        "P1-04"
+      ],
+      "scenarios": [
+        "Z10",
+        "Z12"
+      ]
+    },
+    {
+      "id": "T14",
+      "name": "恢复启用",
+      "owner": "C18",
+      "store": "C15",
+      "tasks": [
+        "P1-02",
+        "P4-06"
+      ],
+      "scenarios": [
+        "Z07",
+        "Z31"
+      ]
+    }
+  ],
+  "packageLayers": [
+    {
+      "id": "domain",
+      "depends": []
+    },
+    {
+      "id": "protocol",
+      "depends": [
+        "domain"
+      ]
+    },
+    {
+      "id": "cognition-core",
+      "depends": [
+        "domain"
+      ]
+    },
+    {
+      "id": "context-compiler",
+      "depends": [
+        "domain"
+      ]
+    },
+    {
+      "id": "memory-store",
+      "depends": [
+        "domain",
+        "protocol"
+      ]
+    },
+    {
+      "id": "pi-adapter",
+      "depends": [
+        "domain",
+        "protocol"
+      ]
+    },
+    {
+      "id": "daemon",
+      "depends": [
+        "domain",
+        "protocol",
+        "cognition-core",
+        "context-compiler",
+        "memory-store",
+        "pi-adapter"
+      ]
+    },
+    {
+      "id": "web",
+      "depends": [
+        "protocol"
+      ]
+    },
+    {
+      "id": "desktop",
+      "depends": [
+        "protocol"
+      ]
+    },
+    {
+      "id": "cli",
+      "depends": [
+        "protocol"
+      ]
+    }
+  ],
+  "boundaryCases": [
+    {
+      "id": "B01",
+      "case": "同名Session跨Workspace关联",
+      "expected": "FK/资格拒绝",
+      "transactions": [
+        "T01"
+      ],
+      "scenarios": [
+        "Z03",
+        "Z09"
+      ]
+    },
+    {
+      "id": "B02",
+      "case": "普通状态revision与intentRevision分开",
+      "expected": "普通进度不作语义变更，旧intent结果拒绝",
+      "transactions": [
+        "T03",
+        "T04",
+        "T06"
+      ],
+      "scenarios": [
+        "Z15"
+      ]
+    },
+    {
+      "id": "B03",
+      "case": "最后请求在途后发生遗忘",
+      "expected": "迟到正文不发布/学习，staging清除",
+      "transactions": [
+        "T05",
+        "T06"
+      ],
+      "scenarios": [
+        "Z06",
+        "Z15"
+      ]
+    },
+    {
+      "id": "B04",
+      "case": "已登记但未知外部效果",
+      "expected": "UNKNOWN并核对，不盲重试",
+      "transactions": [
+        "T07",
+        "T08",
+        "T09"
+      ],
+      "scenarios": [
+        "Z28",
+        "Z29"
+      ]
+    },
+    {
+      "id": "B05",
+      "case": "撤权与派发竞争",
+      "expected": "admission gate定义先后；已在途另核对",
+      "transactions": [
+        "T08",
+        "T12"
+      ],
+      "scenarios": [
+        "Z27"
+      ]
+    },
+    {
+      "id": "B06",
+      "case": "控制日志已持久而产品事务失败",
+      "expected": "拒绝旧内容，重启先重放失效",
+      "transactions": [
+        "T05"
+      ],
+      "scenarios": [
+        "Z05",
+        "Z07"
+      ]
+    },
+    {
+      "id": "B07",
+      "case": "恢复旧备份/旧授权/旧隐私策略",
+      "expected": "重放收紧、新恢复世代、旧授权不生效",
+      "transactions": [
+        "T12",
+        "T14"
+      ],
+      "scenarios": [
+        "Z07",
+        "Z31"
+      ]
+    },
+    {
+      "id": "B08",
+      "case": "Outbox至少一次/客户端断线",
+      "expected": "幂等、scope绑定cursor和一致快照",
+      "transactions": [
+        "T13"
+      ],
+      "scenarios": [
+        "Z12"
+      ]
+    },
+    {
+      "id": "B09",
+      "case": "引文存在但模型命题反转",
+      "expected": "保留原话，未验证改写不进事实",
+      "transactions": [
+        "T02",
+        "T10"
+      ],
+      "scenarios": [
+        "Z19"
+      ]
+    },
+    {
+      "id": "B10",
+      "case": "重复成功样本或仅被注入的记忆",
+      "expected": "不晋升、不把unknown写收益",
+      "transactions": [
+        "T10"
+      ],
+      "scenarios": [
+        "Z20",
+        "Z21"
+      ]
+    },
+    {
+      "id": "B11",
+      "case": "同一主动事项来源版本更新",
+      "expected": "更新证据，不自动重发通知",
+      "transactions": [
+        "T11"
+      ],
+      "scenarios": [
+        "Z25",
+        "Z26"
+      ]
+    },
+    {
+      "id": "B12",
+      "case": "后台认知调用没有活跃用户attempt",
+      "expected": "明确cognitive_job owner和自己的lease，工具none",
+      "transactions": [
+        "T03",
+        "T10",
+        "T11"
+      ],
+      "scenarios": [
+        "Z19",
+        "Z25"
+      ]
+    }
+  ]
+}

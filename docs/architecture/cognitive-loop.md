@@ -2,6 +2,8 @@
 
 状态：design-v2；P1 实现基本执行与记忆使用，P2 增加学习性选择，P3/P4 扩大主动与委托。
 
+确定性步骤、抽取/排序/预算和来源处理见[认知流水线详设](cognitive-pipelines.md)；状态机、Owner、Worker 与提交顺序见[运行详设](runtime-coordination.md)。本页保留行为合同，详设不替代实际场景验证。
+
 ## 一次请求的端到端流程
 
 1. API 验证身份、Workspace、schema、幂等键与 revision；记录用户 Observation 和请求。

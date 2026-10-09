@@ -21,6 +21,8 @@
 
 design-v2 的开发入口为[整体设计](../planning/design-baseline.md)与[当前交接](../planning/next-task-handoff.md)。`development-plan.json` 是新任务/依赖/场景/旧包映射源，`implementation-plan.md` 是生成视图；`npm run check:design-plan` 增量检查一致性并含负例。原冻结计划、决议检查及所有既有 CI/批准门保留；新检查不认证产品完成或远端批准，不替换旧门。当前阶段以配置和 project-state 机器块一致的 P 编号为准，旧 M0—M7 只保留历史与过渡映射。
 
+[详细架构](../architecture/detailed-design.md)的 `architecture-catalog.json` 记录目标组件、端口、事务和场景映射；`npm run check:detailed-architecture` 检查引用/责任/包依赖和负例，并在隔离内存 SQLite 验证文档中的三表约束示例。该检查不执行产品迁移、不证明真实事务/删除/恢复已实现，仍保留全部既有检查。
+
 | 问题 | 事实源 |
 |---|---|
 | 最终产品方向 | `docs/product/` |
