@@ -14,6 +14,8 @@ canonical 为 [Issue #92](https://github.com/ntygod/zhiwei-next/issues/92)，唯
 
 PR #91 的实验交付不接受 D-04/D-08；本项结构测试同样不替代实际实验证据或其审查。既有作者与独立审查实际复跑实验的要求保持原文，不新增豁免，不声称平台限制已经解除。G-2 仍待决议与原卡验收，G-5 继续等待 G-2，M0-2 继续等待 G-5。不接入真实数据/凭据或模型，不改生产代码、Workflow 或质量门。
 
+当前 PR #93 已按[Runtime 来源续期记录](../spikes/pi-runtime-contract/README.md#2026-10-09-pr-93-当前来源续期)保存并核对本 PR 的成功 SDK 原 ZIP 与 Worker 两个 attempts 的原 ZIP、唯一 JSON、严格 Checker 和完整对象相等。Worker 两次均在真实完整比较成功后由明确三行 guard 产生受控 CLI failure；CLI 已恢复原 blob，来源元数据不改变 frozen content、validator 或任何接受谓词。最终完整 HEAD 的独立 R3、fresh Ready/live 来源及受保护交付仍须实际完成。
+
 以下 PR #91 开发期文字为历史快照；其中 Draft/待审仅描述当时状态，不是当前 WIP，也不批准本项新 HEAD。
 
 ## 历史工作：G-2 接入前安全与保留实证
@@ -161,10 +163,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 c3e7387075b7268e1b5d2d2e1638fa51eaa3ae7c
-capture workflow             37871492885
-capture artifact             11589908249
-capture artifact digest      sha256:f0c661e0eda227e91eb4216637470e00720a36d078728199afe2adeccdfe55d4
+capture head                 7e74796a98a8f981c00eb4cdbbdfbd2d870702b9
+capture workflow             37897885161
+capture artifact             11601046447
+capture artifact digest      sha256:9492b4ef5378ec690d336fcec8fac804dd2fd61b14c6e4f30c1bf569e0f67a64
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
