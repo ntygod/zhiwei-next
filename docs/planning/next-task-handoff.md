@@ -6,6 +6,8 @@
 
 所有者后续要求补齐实施级架构，由 [#96](https://github.com/ntygod/zhiwei-next/issues/96) 承接；当前先完成这份详细架构的审查/交付，再进入下方 P0 实现前置。入口是[详细架构设计](../architecture/detailed-design.md)，包含模块端口、数据/事务、API、时序、认知算法与部署。它不自动完成 P0-01 或任何产品工作包。
 
+ADR0018 已通过[真实独立设计接受](../architecture/architecture-acceptance.md)。开始下一实现任务前先确认 [PR #97](https://github.com/ntygod/zhiwei-next/pull/97) 已按最终 HEAD 门禁合入；选定任务已直接引用对应详设，按这些合同实施，不重新建立平行的一套协议/存储设计。
+
 1. [整体设计](design-baseline.md)、[产品愿景](../product/product-vision.md)、[路线图](roadmap.md)。
 2. [完整任务卡](implementation-plan.md)中要做的一项及其合同。
 3. [过渡映射](design-transition.md)了解旧成果/约束，目标目录最近的 AGENTS。

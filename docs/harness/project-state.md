@@ -12,7 +12,7 @@ updated: 2026-10-09
 
 PR #95 已保护合入 main `14398486e4009e70180fb5291d8b4ede62e8b664`，Issue #94 已关闭，设计与计划完成。所有者随后要求“需要详细的架构设计”；本轮 canonical 为 [#96](https://github.com/ntygod/zhiwei-next/issues/96)，分支 `docs/96-detailed-architecture`，从该 main 起点补充[实施级架构](../architecture/detailed-design.md)。范围为模块/端口、进程/状态/时序、逻辑 Schema、事务/恢复、API/事件、认知算法与部署；不开始产品实现，不改变 P0 阶段或旧门禁。原 31+5 任务、32 场景和 60 项映射保持，任务合同导航增加详设引用。
 
-新增 ADR0018 在独立设计接受前保持 Proposed；设计 Schema 示例只在隔离数据库验证结构约束，不充当生产迁移/安全/性能验收。最终 HEAD 的 R3/CI/来源与合入结果以本 primary PR 实际记录为准。以下 #94 内容是已合入设计的连续性背景，不再表示活跃分支。
+新增 ADR0018 已依据 [PR97 独立设计接受](https://github.com/ntygod/zhiwei-next/pull/97#issuecomment-6080136287)定案，审查 HEAD 为 `2d371a416e73c735a4dfa4feafa09776a6570e51`；后台认知动作/预算身份的阻塞已关闭，18组件/10端口/14事务/12边界映射与14负例一致。设计 Schema 示例只在隔离数据库验证结构约束，不充当生产迁移/安全/性能验收。登记后的最终 HEAD 仍需独立 R3/真实Ready来源/CI/合入，实际结果以 [PR #97](https://github.com/ntygod/zhiwei-next/pull/97) 为准。以下 #94 内容是已合入设计的连续性背景，不再表示活跃分支。
 
 所有者明确要求整体调整项目、定案完整设计并给后续 AI/人可执行计划。本次 canonical 为 [#94](https://github.com/ntygod/zhiwei-next/issues/94)，分支 `docs/94-cognitive-agent-design`，起点 main `1872955c8d5fffc7c2477f62343fc38224b4f0da`；PR #91/#93 已合入，无开放 Incident 或其他 primary PR。#67/#44/#15 保留。
 

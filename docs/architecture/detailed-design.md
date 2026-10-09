@@ -2,6 +2,8 @@
 
 版本：design-v2 / architecture-1，2026-10-09，工作项 #96。本文细化已接受的 ADR0016/0017；新增并发与恢复选择见 [ADR0018](../adr/0018-detailed-coordination-and-persistence.md)。这是一份实现合同，图中的目标模块不代表当前代码已经交付。
 
+ADR0018 已按[独立设计接受记录](architecture-acceptance.md)定案；最终交付状态以 [PR #97](https://github.com/ntygod/zhiwei-next/pull/97) 的当前 HEAD、CI 与合入记录为准。
+
 ## 1. 如何使用这份设计
 
 | 需要回答的问题 | 详细来源 | 对应实现 |

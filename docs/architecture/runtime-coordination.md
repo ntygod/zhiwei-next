@@ -15,11 +15,11 @@
 | executionUnitId | 一项执行或认知作业的运行单位 / Supervisor | task_attempt 或 cognitive_job 的精确 owner | 长期 Goal 或隐式新 Task |
 | runtimeSessionId | 上游实际创建 / Adapter 观测 | Runtime 类型/版本 | Worker 内存对象 |
 | workerInstanceId | 每次子进程 / Supervisor | 启动 profile、传输连接、leaseEpoch | PID（可复用） |
-| requestId | 每次实际模型请求 / 受控调用边界 | requestSnapshot、provider、attempt | Task 或 Turn |
+| requestId | 每次实际模型请求 / 受控调用边界 | executionUnit/owner、requestSnapshot、provider；来源 attempt 可空 | Task 或 Turn |
 | sourceStreamId | 一个协议声明的序列域 / Adapter | 来源表面、实例、序列规则 | 全局事件序 |
 | actionAttemptId | 一次可能有外部效果的动作 / Dispatch Controller | Grant、资源、幂等键 | toolCallId |
 
-Pi Prompt 可以包含多个 Agent Run，Run 可以包含多个 Turn；重试与会话替换不得被固定映射成新的用户 Task。Runtime 回调的自报 Workspace/Grant 字段不被信任；Daemon 通过实际连接的绑定表决定它属于哪个 attempt。
+Pi Prompt 可以包含多个 Agent Run，Run 可以包含多个 Turn；重试与会话替换不得被固定映射成新的用户 Task。Runtime 回调的自报 Workspace/Grant 字段不被信任；Daemon 通过实际连接的绑定表确定 executionUnit/owner，来源 attempt 可以为空。
 
 原生消息 role 与产品权限来源分开：Runtime 中 role=user 的编译消息不自动成为 user-direct 证据；只有认证 Gateway 接受的真实用户输入及其可追踪引用拥有该来源。工具成功只证明操作/传输事实，工具返回自由文本不自动成为 verified Claim。上游自带 ID 也不自动是可公开记录的安全字段，需受限映射/保留策略。
 
