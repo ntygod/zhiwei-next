@@ -21,9 +21,17 @@ D-01、D-02、D-10 已依据 [PR #81 的逐项独立决策审查](https://github
 
 #86 / PR #87 在未修改 115 个列名历史文件的候选 HEAD `37c6228ef9187b932a9648d472319bce31a4aef5` 上，完成 [D-07 独立决策审查](https://github.com/ntygod/zhiwei-next/pull/87#issuecomment-6070476496)。评论于 2026-10-08T22:39:40Z 发布、22:39:59Z 完整回读；绑定 proposalSha256 `b13ccee54ba167fc7553d517ad60154ebf7a0a88c2df8e1f87082d1c19d9d764`。ADR 0011/0013 仅更新状态行，有限选择与所有历史证据不变。接受之后才改造当前 CLI 消费者；终态历史校验允许这种演进，但新实现及整个 G-3 交付仍需自身验证，旧审查不批准新代码。D-01/02/10 的记录不变。
 
+## D-04 / D-08 登记准备
+
+[Issue #92](https://github.com/ntygod/zhiwei-next/issues/92) / [PR #93](https://github.com/ntygod/zhiwei-next/pull/93) 只为已存在的 Proposed ADR 0014/0015 增加精确归属、正文摘要和未来证据入口约束。两项状态与 history 保持 Proposed；proposal、evidence、decisionReview、disposition 保持空，ADR 正文和状态均不变。原 D-01/02/07/10 已接受资料不变。
+
+本项没有执行接入前安全合成实验，没有登记新实验证据，也没有逐项决策接受。[结构测试](../../scripts/current-decisions-preparation.test.mjs)只在内存中变异状态、路径、摘要和模拟审查；冻结源文本与 ADR 只作为只读 fixture 输入。测试不导入或执行实验，模拟 run/result/review 不写入真实登记或 GitHub 批准记录。原决议层完整测试仍另行执行，包含真实 Git 读取及临时目录/CLI 测试，不能与本项内存测试混称。
+
+结构准备及其 PR 的代码审查不接受 D-04/D-08，也不证明实验有效。真实实验证据、作者与独立审查实际复跑实验、逐项决策接受及最终 HEAD 治理仍按下文既有要求核实，不继承 PR #91 的实验批准。G-2 尚未完成，G-5/M0-2 仍受原依赖约束。回滚只撤回本项映射、Proposed ADR 绑定、生成视图及结构测试/说明，不改历史 Accepted 决议、原源快照或实验源。
+
 ## 严格 v1 表示
 
-顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围配置 D-01/02/10 的原 ADR/实验入口，以及 #86 机械追加的 D-07 → ADR 0011/0013 与 `scripts/toolchain.test.mjs`；其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。
+顶层仅允许 schemaVersion、kind、source、decisions。source 引用固定 main、原派生 JSON/原附件/原 checker/原登记的摘要。恰好 11 个已知 ID，无缺失、重复或额外字段。v1 的取证范围配置 D-01/02/10 的原 ADR/实验入口，以及 #86 机械追加的 D-07 → ADR 0011/0013 与 `scripts/toolchain.test.mjs`；#92 追加 D-04 → ADR 0014、D-08 → ADR 0015，两项精确入口均为 `docs/spikes/preintegration-safety/experiment.test.mjs`，当前仅登记 Proposed ADR 正文摘要。其他项保留 Proposed。未来需要推进其他决策时，明确扩展 schema/checker/正反测试，不能靠填任意路径绕过。
 
 每个决议包括 id、status、history、adrs、proposal、evidence、decisionReview、disposition：
 
