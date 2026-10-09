@@ -1,8 +1,16 @@
 # 下一执行上下文交接
 
-状态：当前导航为 Issue #88 / `feat/88-executable-scenario-evidence`；下方 #86/#84/#82/#80/#72/#69 内容是历史资料，不替代 live 对象核验。
+状态：当前导航为 Issue #90 / `spike/90-preintegration-safety`；下方旧任务是历史资料，须先回读真实对象。
 
-## 当前 G-4 导航（2026-10-09）
+## 当前 G-2 实证导航（2026-10-09）
+
+- 起点 main `ab6052efbb84abe6f87bc6758bfd7e8143b73964`；canonical #90；唯一分支 `spike/90-preintegration-safety`；唯一 primary 为 Draft [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)。
+- ADR0014/0015 仍 Proposed；本地从 `0d89f786326b51dff36b1f06f8958f2e746565a1` 接手，补齐重建/恢复记录的可信绑定，修复后 90 项合成测试通过，具体范围见 g2-preintegration-evidence.md。最终完整 HEAD 审查/来源/CI 尚待完成，PR 保持 Draft；本地结果不代表远端平台限制解除。当前只使用合成材料、临时文件/数据库和本地接收器，不能接入真实用户数据或凭据。
+- 本任务交付有限实证，不接受 D-04/D-08；既有 checker 要求来源 PR 与决议 PR 分离。后续用已合入历史证据在新的实质决议任务接受并验收原 G-2，禁止自我豁免或伪造 sourcePr。
+- G-4 已按原卡交付 #88/PR89，main tree 与最终 R3 HEAD 一致；三项 PARTIAL、21 not-run，不是完整 M0。G-5 等 G-2，M0-2 等 G-5。
+- 原工作包/source/checker、Accepted 决议及证据保持不变；实际状态与长期限制见 project-state 和 trust-and-safety。
+
+## 历史 G-4 导航（2026-10-09）
 
 原 G-1/G-3 前置已受保护交付，起点 main `b5115d47a091f2c954e29a9963257c218bc11032`；G-3 最终证据与精确树身份见[项目状态](../harness/project-state.md)和[G-3 原卡验收](g3-baseline-acceptance.md)。唯一 canonical 为 [#88](https://github.com/ntygod/zhiwei-next/issues/88)，feature branch `feat/88-executable-scenario-evidence`；primary PR 和最新完整 HEAD 必须实时回读。
 
