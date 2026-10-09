@@ -8,7 +8,7 @@ updated: 2026-10-09
 
 ## 当前工作：G-2 接入前安全与保留实证
 
-canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。已回读无开放 Incident/PR、pause=false，只有 main，#67/#44/#15 原任务保留。初始实质提交提出 ADR0014/D-04 与 ADR0015/D-08；两者 Proposed，实际接入前合成实验待完成。新完整 HEAD 的验证、独立 R3、当前 PR 来源及受保护交付均待真实结果，不预记完成。
+canonical 为 [Issue #90](https://github.com/ntygod/zhiwei-next/issues/90)，唯一分支 `spike/90-preintegration-safety`，primary 为 [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)，起点 `main@ab6052efbb84abe6f87bc6758bfd7e8143b73964`。已回读无开放 Incident/PR、pause=false，只有 main，#67/#44/#15 原任务保留。ADR0014/D-04 与 ADR0015/D-08 仍 Proposed。当前[接入前实证](../planning/g2-preintegration-evidence.md)已实现真实路径读取、受控传输和保留/恢复消费者；80 项合成测试通过，Private 等拒绝为接收器零连接/请求/字节，旧 inline 备份仍可直接回读因此清除只报告 partial。新完整 HEAD 的验证、独立 R3、当前 PR 来源及受保护交付均待真实结果，不预记完成。
 
 范围为真实临时文件读取、来源/Private 外发拒绝、本地可观察接收器、公开 protocol/Ledger 元数据和既有 D-01 重建器的保留/不可用证据；不改生产 Schema，不实现 Host/Session/M0-4/M5，不接入真实正文/凭据。现有严格决议层禁止实验来源 PR 同时作为新决议 primary PR，因此本任务仅交付实验和 Proposed 合同；受保护合入后在新的实质决议任务接受 D-04/D-08 并按原 G-2 卡验收。不伪造来源、不放宽 validator。
 

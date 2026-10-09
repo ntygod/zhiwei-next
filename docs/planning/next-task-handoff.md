@@ -4,8 +4,8 @@
 
 ## 当前 G-2 实证导航（2026-10-09）
 
-- 起点 main `ab6052efbb84abe6f87bc6758bfd7e8143b73964`；canonical #90；唯一分支 `spike/90-preintegration-safety`；primary PR 在首实质提交后创建。
-- ADR0014/0015 仍 Proposed，实验与所有最终审查/来源/CI 尚待完成。当前只使用合成材料、临时文件/数据库和本地接收器，不能接入真实用户数据或凭据。
+- 起点 main `ab6052efbb84abe6f87bc6758bfd7e8143b73964`；canonical #90；唯一分支 `spike/90-preintegration-safety`；唯一 primary 为 Draft [PR #91](https://github.com/ntygod/zhiwei-next/pull/91)。
+- ADR0014/0015 仍 Proposed；接入前实验 80 项作者测试已通过，具体范围见 g2-preintegration-evidence.md。最终完整 HEAD 审查/来源/CI 尚待完成。当前只使用合成材料、临时文件/数据库和本地接收器，不能接入真实用户数据或凭据。
 - 本任务交付有限实证，不接受 D-04/D-08；既有 checker 要求来源 PR 与决议 PR 分离。后续用已合入历史证据在新的实质决议任务接受并验收原 G-2，禁止自我豁免或伪造 sourcePr。
 - G-4 已按原卡交付 #88/PR89，main tree 与最终 R3 HEAD 一致；三项 PARTIAL、21 not-run，不是完整 M0。G-5 等 G-2，M0-2 等 G-5。
 - 原工作包/source/checker、Accepted 决议及证据保持不变；实际状态与长期限制见 project-state 和 trust-and-safety。
