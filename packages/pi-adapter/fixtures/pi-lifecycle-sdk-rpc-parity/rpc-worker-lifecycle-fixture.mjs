@@ -194,9 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    // PR97 recapture-only guard: preserve the historical failed-compare source shape.
-    // Both strict checkers and full-object equality above must pass before this failure.
-    throw new Error("PR97 recapture-only guard after successful complete Fixture comparison");
     return;
   }
   if (outputIndex >= 0) {

@@ -127,7 +127,7 @@ erDiagram
 |---|---|---|
 | policy_grant | PK id；scopeId、principal、revision、ruleRef、status、expiresAt、recoveryEpoch | 规则与资源描述是受保护内容；旧恢复世代的 Grant 永不匹配 |
 | policy_decision | PK id；actionId、grantRefs、policyRevision、fence、decision、reasonCode | ALLOW 只对精确 action 版本有效；不能充当长期 Grant |
-| action_attempt | PK id；attemptId、actionOrdinal、descriptorRef、idempotencyKey、state、receiptRef?、fence | UQ(attemptId,actionOrdinal)；外部 key 与参数版本绑定 |
+| action_attempt | PK id；executionUnitId、sourceTaskRef?、sourceAttemptId?、actionOrdinal、kind、descriptorRef、idempotencyKey、state、receiptRef?、fence | UQ(executionUnitId,actionOrdinal)；owner 来自该 unit，外部 key 与参数版本绑定；cognitive_job 仅可 model.invoke |
 | budget_reservation | PK id；grantId、actionId、token/count/cost caps、used、state | 同一额度事务预留；UNKNOWN 不自动释放为可复用额度 |
 | worker_binding | PK id；executionUnitId、instanceId、runtimeSessionRefs、leaseEpoch、profileRevision、state | 一个 active execution unit 对应一个 active binding；PID 仅诊断 |
 | durable_job | PK id；kind、scopeId、ownerRef、dueAt、priority、state、idempotencyKey | UQ(kind,idempotencyKey)；索引(state,dueAt,priority) |
@@ -191,7 +191,7 @@ CREATE UNIQUE INDEX one_active_attempt_example
 |---|---|---|---|
 | T01 接受命令 | createTask/用户消息 | command 幂等、Session/scope、数据许可；Observation 引用、Task/intent/初始attempt、receipt、Outbox | committedRevision + cursor；执行尚未开始 |
 | T02 提交认知 | remember/correct/accept | 证据可用/范围、旧 revision；新 ClaimVersion、旧版状态、依赖失效、epoch、lifecycle、Outbox | 新版本与失效水位 |
-| T03 准备执行 | Dispatch Controller | 对 task_attempt 验 Task/intent，对 cognitive_job 验 job/source版本；均验 Grant、read-set、notAfter，写 snapshot/context、必要的新 execution_unit/binding/lease 与预算预留 | 可派发的登记身份，不代表已发送 |
+| T03 准备执行 | Dispatch Controller | 对 task_attempt 验 Task/intent，对 cognitive_job 验 job/source版本；均验 Grant、read-set、notAfter，写 snapshot/context、必要的新 execution_unit/binding/lease 与预算上限/配置快照 | 已登记的执行准备，不代表额度已预留或请求已发送 |
 | T04 摄取结果 | Ingestor | 来源序列/身份、fence、内容资格；ObservationV2、checkpoint、状态/进度、Outbox | committedSequence；不等于 Outcome |
 | T05 逻辑遗忘 | Memory Service | 已 durable 的控制记录、授权范围；内容/对象 revoked、epoch、依赖禁用、清除作业、receipt | 逻辑遗忘已生效；物理清除单独报告 |
 | T06 验证结果 | Verifier | Task/criterion、当前 fence、artifact/evidence；Outcome、criterion、Episode、Task终态、learning_job、Outbox | 当前结果或明确 stale/revoked |
@@ -208,7 +208,9 @@ T14 的应用 owner 是 C18 Recovery / Backup Service，持久写入口仍是 C1
 
 T03 对 TaskAttempt 与 cognitive_job 使用不同的合法状态谓词：前者包含规划/执行，后者需已领取的作业 lease 与当前来源版本。它们共享持久请求/预算边界，但不能互相伪造 owner 或把后台模型调用计成新的用户任务。
 
-T03 的 NEW_UNIT 模式建立 binding/lease；MODEL_REQUEST 模式在现有合法 binding 下仅登记该次真实发送的快照与预算，不重复分配 Worker。Runtime 输入快照记录 Capsule/任务输入，模型请求快照记录实际可观测的有序组成并引用前者；只有真实模型发送边界产生 Exposure。
+T03 的 NEW_UNIT 模式建立 binding/lease；MODEL_REQUEST 模式在现有合法 binding 下仅登记该次待发送快照与预算限制，不重复分配 Worker，也不产生缺 actionId 的 reservation。T07 为该请求创建/幂等取得 action_attempt 并按 actionId 原子预留额度；T08 才接纳派发，T09 结算。不存在 T03/T07 双重扣额。Runtime 输入快照记录 Capsule/任务输入，模型请求快照记录实际可观测的有序组成并引用前者；只有真实模型发送边界产生 Exposure。
+
+后台 learning/attention 的 action 直接绑定 cognitive_job 的 executionUnitId；没有来源 Task 时 sourceTaskRef/sourceAttemptId 为空，不借用旧 attempt 或伪造用户 Task。该单元只允许 model.invoke，使用用户启用该目的时明确授予的模型/数据/额度 Grant；有可用来源不等于有模型外发授权。T07/T08/T09 覆盖 P1 的模型/工具调用与 P2/P3 的认知调用，不等到 P4 才有结算。
 
 ### CommitGuard 检查顺序
 

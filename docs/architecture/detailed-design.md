@@ -195,7 +195,7 @@ sequenceDiagram
   C->>S: 一致视图：任务、资格、策略、水位
   C->>C: 有界决策、选择与编译
   C->>B: 准备好的 ExecutionSpec / Capsule
-  B->>S: T03 保存请求快照、read-set、预算与 lease
+  B->>S: T03 保存请求快照、read-set、预算限制与 lease
   B->>R: 已登记且复验的 ExecutionSpec
   R->>S: 规范事件/内容经提交屏障进入 T04
   S-->>U: 持久进度 / 临时流另标

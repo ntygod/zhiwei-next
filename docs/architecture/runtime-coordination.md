@@ -137,6 +137,8 @@ Pi 的传输格式保持其原生事实；中立层的 bindingId/attemptId 来�
 
 内部请求包含调用者绑定、action kind、规范化资源描述、获准内容引用、预估预算和幂等键。可信调用者来自实际传输连接；正文中的 role/grant/Workspace 都不能覆盖它。
 
+ActionAttempt 绑定 executionUnitId，来源 Task/attempt 可以为空；认知作业只有 model.invoke 一种可派发 action。其 Grant 来自用户对该后台目的的明确配置/授权，不从来源 Outcome 自动继承。T03 只保存请求与预算限制，实际额度统一由 T07 按 actionId 预留，再经 T08/T09 派发与结算。
+
 ```mermaid
 sequenceDiagram
   participant R as Runtime

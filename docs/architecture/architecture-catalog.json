@@ -506,11 +506,17 @@
       "owner": "C08",
       "store": "C15",
       "tasks": [
-        "P1-06"
+        "P1-06",
+        "P1-03",
+        "P2-01",
+        "P3-04"
       ],
       "scenarios": [
         "Z14",
-        "Z15"
+        "Z15",
+        "Z17",
+        "Z19",
+        "Z25"
       ]
     },
     {
@@ -562,11 +568,17 @@
       "store": "C15",
       "tasks": [
         "P1-03",
-        "P4-01"
+        "P4-01",
+        "P1-06",
+        "P2-01",
+        "P3-04"
       ],
       "scenarios": [
         "Z27",
-        "Z29"
+        "Z29",
+        "Z17",
+        "Z19",
+        "Z25"
       ]
     },
     {
@@ -576,12 +588,18 @@
       "store": "C15",
       "tasks": [
         "P1-03",
-        "P4-01"
+        "P4-01",
+        "P1-06",
+        "P2-01",
+        "P3-04"
       ],
       "scenarios": [
         "Z27",
         "Z28",
-        "Z29"
+        "Z29",
+        "Z17",
+        "Z19",
+        "Z25"
       ]
     },
     {
@@ -590,11 +608,18 @@
       "owner": "C08",
       "store": "C15",
       "tasks": [
-        "P4-02"
+        "P4-02",
+        "P1-03",
+        "P1-06",
+        "P2-01",
+        "P3-04"
       ],
       "scenarios": [
         "Z28",
-        "Z29"
+        "Z29",
+        "Z17",
+        "Z19",
+        "Z25"
       ]
     },
     {
@@ -879,9 +904,12 @@
     {
       "id": "B12",
       "case": "后台认知调用没有活跃用户attempt",
-      "expected": "明确cognitive_job owner和自己的lease，工具none",
+      "expected": "cognitive_job 自有executionUnit/lease；仅model.invoke；T07按actionId预留，T08/T09派发结算，不伪造Task",
       "transactions": [
         "T03",
+        "T07",
+        "T08",
+        "T09",
         "T10",
         "T11"
       ],
@@ -890,5 +918,22 @@
         "Z25"
       ]
     }
-  ]
+  ],
+  "sharedDispatch": {
+    "ownerKinds": [
+      "task_attempt",
+      "cognitive_job"
+    ],
+    "actionIdentity": [
+      "executionUnitId",
+      "actionOrdinal"
+    ],
+    "preparationTransaction": "T03",
+    "reservationTransaction": "T07",
+    "dispatchTransaction": "T08",
+    "settlementTransaction": "T09",
+    "cognitiveJobActions": [
+      "model.invoke"
+    ]
+  }
 }

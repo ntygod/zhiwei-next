@@ -84,6 +84,18 @@ function validate(data) {
     refs(item.transactions, transactions, item.id);
     refs(item.scenarios, scenes, item.id);
   }
+  assert.deepEqual(data.sharedDispatch, {
+    ownerKinds: ["task_attempt", "cognitive_job"],
+    actionIdentity: ["executionUnitId", "actionOrdinal"],
+    preparationTransaction: "T03", reservationTransaction: "T07",
+    dispatchTransaction: "T08", settlementTransaction: "T09",
+    cognitiveJobActions: ["model.invoke"],
+  }, "Task and cognitive jobs must share an explicit action/budget identity");
+  for (const id of ["T03", "T07", "T08", "T09"]) {
+    const tx = data.transactions.find((item) => item.id === id);
+    assert.ok(["P1-06", "P2-01", "P3-04"].every((task) => tx.tasks.includes(task)), `${id}: missing foreground/background coverage`);
+    assert.ok(data.boundaryCases.find((item) => item.id === "B12").transactions.includes(id), `${id}: B12 missing shared dispatch boundary`);
+  }
   const overview = read("docs/architecture/detailed-design.md");
   const persistence = read("docs/architecture/persistence-and-recovery.md");
   for (const item of data.components) assert.ok(overview.includes(`| ${item.id} ${item.name} |`), `Component prose drift: ${item.id}`);
@@ -104,6 +116,9 @@ for (const mutate of [
   (data) => { data.boundaryCases[0].scenarios = ["Z99"]; },
   (data) => { data.status = "implemented"; },
   (data) => { data.ports.find((port) => port.id === "BackupCodecPort").consumers = ["C15"]; },
+  (data) => { data.sharedDispatch.ownerKinds = ["task_attempt"]; },
+  (data) => { data.sharedDispatch.reservationTransaction = "T03"; },
+  (data) => { data.transactions.find((tx) => tx.id === "T09").tasks = ["P4-02"]; },
 ]) {
   const changed = structuredClone(catalog); mutate(changed);
   assert.throws(() => validate(changed), "Malformed architecture catalog accepted");
@@ -143,4 +158,4 @@ try {
   const tables = db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE type='table'").get().n;
   assert.equal(tables, 3);
 } finally { db.close(); }
-console.log(`Detailed architecture: ${catalog.components.length} components, ${catalog.ports.length} ports, ${catalog.transactions.length} transactions, ${catalog.boundaryCases.length} boundary mappings, ${relativeLinks} relative links; 11 catalog negative checks and isolated SQL example constraints OK. Product implementation NOT verified.`);
+console.log(`Detailed architecture: ${catalog.components.length} components, ${catalog.ports.length} ports, ${catalog.transactions.length} transactions, ${catalog.boundaryCases.length} boundary mappings, ${relativeLinks} relative links; 14 catalog negative checks and isolated SQL example constraints OK. Product implementation NOT verified.`);
