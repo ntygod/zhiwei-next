@@ -12,7 +12,11 @@ canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分�
 
 范围为 domain/cognition-core/protocol 的正式 Scope、正交隐私/信任/认识状态、认知版本与纯转换、Observation v2 和 Local API DTO。保留 Bootstrap/v1 Ledger、固定迁移、Runtime 与 P0-03 Task/Outcome；只有合成测试消费新入口，无生产接线、模型、真实个人数据、外发或凭据。实现状态由[执行索引](execution-mode.json)记录，产品验收仍 `not_run`；原 P0-01/02、D-04/D-08、G-2/G-5 及真实启用门保持，受限实验不执行。
 
-唯一 Draft [PR111](https://github.com/ntygod/zhiwei-next/pull/111) 已创建，首提交 `7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8` 交付领域合同；认知纯转换和独立协议正在同一 PR 集成。领域30项、认知86项、协议60项及全仓 strict 类型检查通过，最终完整 `npm run check`、精确 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main provenance 仍须实际完成，未预记产品验收。
+唯一 Draft [PR111](https://github.com/ntygod/zhiwei-next/pull/111) 的实现提交 `0cc3d85c57f2b85d9bab16715b3d42b8c0e6cdd6` 已完成代码范围和开发验证：固定 Node22.23.1/npm10.9.8 完整 `npm run check` 原始 exit0，499/499 产品测试（新增71项）通过，严格类型94 roots。独立冷审发现并修复 Goal 结果跨标准伪造来源/控制证据重用，以及历史终态与新 Outcome revision 不能共存的兼容缺口；新增回归通过。正反补丁恢复基线精确 tree 后再正向恢复候选 tree 已验证。
+
+执行索引的 `implemented` 只引用已存在的本 PR 代码提交与开发证据，候选仍待最终精确 HEAD 新独立 R3、真实 Ready/live、完整 CI、保护合入与 main 回读；不是预填未来 merge SHA、已合入或产品验收。当前 PR 的 SDK 来源 `7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8` / run `38040347283` 与 Worker 来源 `0112810f62390a633d2690f30d4e3127b983d7a1` / run `38040583324` 两 attempts 已严格核验原 ZIP、来源身份与完整对象；临时 guard 已恢复原 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。最终当前 HEAD 仍须真实门禁，Draft 跳过不算通过。
+
+只有本 PR 保护合入并核验 main 后，下一独立实现才按原 P1-02 做真实临时 SQLite 产品存储/事务合同；不得提前把本内存 CAS 或 DTO 当持久提交、安全授权或场景验收。
 
 以下为历史工作快照，不是开放 WIP 或新选工入口。
 
