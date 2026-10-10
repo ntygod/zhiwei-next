@@ -23,7 +23,7 @@
 
 固定区块顺序沿用 C06：Task contract、Working state、Current knowledge、Experience/procedure、Open questions、Evidence references。基础文本和材料正文作为数据保持原值，不截断、摘要、润色或解释为指令。renderer 明确转义文本边界，标题、分隔符、required/争议标签、精确材料及 source refs 全部包含在计数文本中；同一材料只输出一次。
 
-计数分两层：基础固定框架（含固定空区标题）整体为 baseTokens；每一独立材料或不可拆冲突组以独立、完整、确定的带引用片段计数为 unitCost。独立成本加总用于保守、可解释的初选，不假设 tokenizer 对拼接可加。最终必须分别对完整记忆区串和完整基础+记忆串重新精确计数；不能只数正文、相信片段加总或漏掉最终引用区。所有固定标签的成本要么归基础框架、要么归唯一片段，不重复归账。Provider 原生协议变换不在渲染范围内，调用方显式 mandatoryProtocolOverhead 不得伪装成已观测的原生开销。
+计数分两层：基础固定框架（含固定空区标题）整体为 baseTokens；每一独立材料或不可拆冲突组以独立、完整、确定的带引用片段计数为 unitCost。独立成本加总用于保守、可解释的初选，不假设 tokenizer 对拼接可加。最终必须分别对完整记忆区串和完整基础+记忆串重新精确计数；不能只数正文、相信片段加总或漏掉最终引用区。所有固定标签的成本要么归基础框架、要么归唯一片段，不重复归账。具体文本边界：baseText 是带固定空槽/区标题的完整基础框架；fullText 是在这些槽内插入选中材料片段及来源片段后的全文；memoryText 按与 fullText 相同的区域顺序拼接所有插入片段，保留每个插入片段自己的分隔/标签/引用，但不再次包含 baseText 的固定区标题。无选中材料时 memoryText 必须为精确空串，fullText=baseText；counter 对空串须返回0，否则 token_count_error。Evidence references 的固定标题归 baseText，材料的精确来源行与相邻分隔归 memoryText；基础本身的引用仍归 baseText。不得用 tokens(fullText)-tokens(baseText) 代替 memoryText 的独立计数。Provider 原生协议变换不在渲染范围内，调用方显式 mandatoryProtocolOverhead 不得伪装成已观测的原生开销。
 
 实现时必须把 renderer 格式与版本固定在组件测试中，不能让调用方注入任意模板以绕过重计数。合成 exact counter 只证明该 counter 的组件行为，不声称获得真实 ModelProfile 计数能力。
 
@@ -42,7 +42,7 @@
 
 ## 5. 输出与不变性
 
-成功结果包含有序选中单元和精确 refs、固定渲染文本、逐项选中/排除原因、初始/required 转移/空类借用后的类别配额、片段初选成本、最终记忆/整体精确计数、输入预算及 counter/compiler/renderer 版本。最终删除原因独立标记 final_budget，不能沿用初选成功描述。返回深拷贝并深冻结的只读值，嵌套 refs/组成员无输入别名；调用方后续改动输入不改变结果，计算不修改输入或调用方计数器对象。
+成功结果包含有序选中单元和精确 refs、固定渲染文本、逐项选中/排除原因、初始/required 转移/空类借用后的类别配额、片段初选成本、最终记忆/整体精确计数、输入预算及 counter/compiler/renderer 版本。每个规范化身份/组必须只有一个最终状态与最终原因；先排除后借用成功时最终标 selected_by_borrow，旧排除只留在单独的阶段轨迹，不能同时出现在最终排除表。最终删除原因独立标记 final_budget，不能沿用初选成功描述。配额转移与借用账明确标记为初选历史：最终删除不重新分配或回填，另列 retainedInitialCost、removedInitialCost、finalExactTokens，保留逐单元原始借用归账以解释历史，不把已删除成本写成最终使用量。类别配额是预算上限，不是对非可加最终 token 的类别精确分摊；最终硬门只以完整 memoryText/fullText 的精确计数成立。返回深拷贝并深冻结的只读值，嵌套 refs/组成员无输入别名；调用方后续改动输入不改变结果，计算不修改输入或调用方计数器对象。
 
 错误分类为 invalid_input、budget_conflict、token_count_error；不制造可发送 Capsule 或“已授权”状态。预算选择不登记 Exposure，不能称已经注入真实模型。最终 metadata 为解释计算，不是 T03 请求快照、可重建性或发送凭据。
 
@@ -51,7 +51,7 @@
 - 零预算、负差额、NaN/Infinity/非安全整数、溢出；基础和 required 分别超限/恰好边界；4096、25% 与剩余额三种控制分支。
 - 60/25/15 整数余数与平局；required 超类别份额但总额可用、总额不可用；空类别借用和非空但放不下不得借出；大候选跳过后可选较小项。
 - 重复项、同身份异正文/来源/标记拒绝；不同版本保持精确 refs；平局与输入排列置换等价；冲突组缺员、跨类、required 传播、不可拆预算/移除。
-- 标题、分隔符、标签和 source refs 的成本；片段成本非可加时最终重计数捕获超额；只能删除最低 optional 整组；非单调 counter 仍有限终止；required-only 超额失败。
+- 空材料/零 memoryBudget 的 base-only、固定标题与材料来源区归账、先排除后借用/删除后的单一最终状态与历史账；标题、分隔符、标签和 source refs 的成本；片段成本非可加时最终重计数捕获超额；只能删除最低 optional 整组；非单调 counter 仍有限终止；required-only 超额失败。
 - counter 缺失/估算拒绝，抛错/非法返回/同文本不一致；空材料；输入深层不变、输出深不可变与无别名；无系统时间/随机/环境/Node/模型/网络/存储依赖；原哨兵保持。
 
 这些只能标为 Z14 的预算/选择组件证据，不修改 Z14/Z15 正式场景定义，不认证资格零泄漏、请求快照对应真实发送、撤销或结果屏障，不放行 P0-01/P0-02/D-04/D-08。实现任务须另行 npm run check、最终 HEAD 独立 R2 或更高实际风险审查和原 CI/来源门。
