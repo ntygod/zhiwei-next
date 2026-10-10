@@ -345,8 +345,11 @@ export function selectContextBudget(rawInput: BudgetSelectionInput): BudgetSelec
       metadata: { budget: { ...budget }, counter: { id: counter.id, version: counter.version, mode: "exact" }, compilerRevision: COMPILER_REVISION, rendererRevision: RENDERER_REVISION },
     } as BudgetSelectionSuccess);
   } catch (error) {
-    if (error instanceof SelectionError) return deepFreeze({ ok: false, error: error.error, reason: error.reason });
+    if (error instanceof SelectionError) {
+      // Multiple invalid fields must not expose which candidate was visited first.
+      return deepFreeze({ ok: false, error: error.error, reason: error.error === "invalid_input" ? "invalid_input" : error.reason });
+    }
     // Malformed host values (e.g. throwing property accessors) do not leak arbitrary messages.
-    return deepFreeze({ ok: false, error: "invalid_input", reason: "invalid_structure" });
+    return deepFreeze({ ok: false, error: "invalid_input", reason: "invalid_input" });
   }
 }
