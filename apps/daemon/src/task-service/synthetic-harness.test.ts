@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { access } from "node:fs/promises";
-import { join } from "node:path";
+import fs, { access } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { syncBuiltinESMExports } from "node:module";
 import { setImmediate as nextTick } from "node:timers/promises";
 import type { CriterionId, Task } from "../../../../packages/domain/src/index.ts";
-import { SyntheticCognitionStoreV2, type TaskExecutionPersistenceV1 } from "../../../../packages/memory-store/src/index.ts";
+import { SyntheticCognitionStoreV2, SyntheticRecoveryCoordinatorV2, type TaskExecutionPersistenceV1, type TaskPersistenceStoreV1 } from "../../../../packages/memory-store/src/index.ts";
 import type { LocalApiCommandV1, SessionCreateCommandV1 } from "../../../../packages/protocol/src/index.ts";
 import { createSessionDataClient, pairSyntheticSessionCli, runSessionCli } from "../../../cli/src/session-client.ts";
 import { createSyntheticWorkerTestPackage } from "../runtime/controlled-worker-test-fixture.ts";
@@ -14,7 +15,7 @@ import { syntheticTaskPrompt, syntheticTaskSessionContract } from "./application
 const context = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a" };
 function sessionCommand(): SessionCreateCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "session.create", contract: syntheticTaskSessionContract } }; }
 function taskCommand(sessionId: string): LocalApiCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "task.create", sessionId, executionProfile: syntheticTaskSessionContract.runtimeProfile, request: syntheticTaskPrompt, constraints: [], acceptanceChecks: [{ id: "criterion-synthetic" as CriterionId, revision: 1, description: "Independently verify synthetic output", required: true, method: "deterministic-test" }] } }; }
-function change(task: Task, kind: "task.cancel" | "task.retry" | "task.continue"): LocalApiCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: task.revision, payload: { kind, targetRef: { kind: "task", id: task.id, revision: task.revision } } }; }
+function change(task: Task, kind: "task.cancel" | "task.pause" | "task.retry" | "task.continue"): LocalApiCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: task.revision, payload: { kind, targetRef: { kind: "task", id: task.id, revision: task.revision } } }; }
 function create(h: SyntheticTaskSessionHarness) { const session = h.application.createSession(context, sessionCommand()); const command = taskCommand(session.value.aggregate.id), receipt = h.application.executeTask(context, command); return { taskId: receipt.value.aggregate.id, sessionId: session.value.aggregate.id, command, receipt }; }
 
 test("Committed history/idempotency survives restart and continuation creates a new attempt", async t => {
@@ -250,6 +251,7 @@ for (const window of ["cancelling", "settled"] as const) test(`A failed durable 
  // A second failed commit cannot discard custody or pretend the previously observed physical
  // close was durable. The next restart must retry the same binding before replacing the Store.
  const beforeRetry = rejectedCloses;
+ await assert.rejects(h.close(), /synthetic durable close write failure/);
  await assert.rejects(h.restart(), /synthetic durable close write failure/);
  assert.ok(rejectedCloses > beforeRetry); assert.equal(h.evidence(context, taskId).execution!.closed, false);
  failing = false; await h.restart(); await h.idle();
@@ -266,4 +268,186 @@ for (const window of ["cancelling", "settled"] as const) test(`A failed durable 
  assert.equal(current.attempts.length, 2); assert.equal(current.state, "VERIFYING");
  assert.notEqual(next.execution!.bindingId, retained.bindingId); assert.equal(next.execution!.closed, true);
  assert.equal(next.modelRequests.length, 1); assert.equal(next.runtimeInputs.length, 1);
+});
+
+for (const action of ["close", "restart", "interruptControlPlane", "reconcileRetainedWorkers"] as const) test(`Failed API close releases its operation flags for a real ${action} retry`, async t => {
+ const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close());
+ const api = h.api, original = api.close; let calls = 0;
+ api.close = async () => { if (++calls === 1) throw new Error("synthetic API close failure"); await original(); };
+ const failed = await Promise.allSettled([h.close(), h.close()]);
+ assert.ok(failed.every(result => result.status === "rejected")); assert.equal(calls, 1);
+ await h[action]();
+ if (action !== "close") { await h.restart(); await h.api.listen(); }
+ await h.close(); assert.ok(calls >= 2); await assert.rejects(h.restart());
+});
+
+test("Failed interrupt API close does not suspend an unfenced actual Worker", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); }); const { taskId } = create(h); await peer.waitForPrompt();
+ const original = h.api.close; h.api.close = async () => { throw new Error("synthetic interrupt pre-close failure"); };
+ await assert.rejects(h.interruptControlPlane(), /synthetic interrupt pre-close failure/); h.api.close = original;
+ await h.restart(); await h.idle();
+ assert.equal(h.evidence(context, taskId).execution!.closed, true); assert.equal(h.application.getTask(context, taskId).value.state, "UNVERIFIABLE");
+});
+
+for (const event of ["confirm-stop", "confirm-pause", "interrupted"] as const) test(`Durable close retains pending ${event} until its separate Task transaction succeeds`, async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ let failing = true, failures = 0;
+ t.after(async () => { failing = false; t.mock.restoreAll(); await h.close(); await peer.remove(); });
+ const getTasks = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "tasks")!.get!;
+ const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "tasks", function(this: SyntheticCognitionStoreV2): TaskPersistenceStoreV1 {
+   const port = getTasks.call(this) as TaskPersistenceStoreV1, execute = port.executeTask; getter.mock.restore();
+   t.mock.method(port, "executeTask", (...args: Parameters<TaskPersistenceStoreV1["executeTask"]>) => {
+     if (failing && args[1].payload.kind === "task.runtime" && args[1].payload.event === event) { failures++; throw new Error("synthetic Task settlement write failure"); }
+     return execute.apply(port, args);
+   }); return port;
+ });
+ const { taskId } = create(h); await peer.waitForPrompt();
+ if (event === "interrupted") await assert.rejects(h.restart(), /synthetic Task settlement write failure/);
+ else h.application.executeTask(context, change(h.application.getTask(context, taskId).value, event === "confirm-stop" ? "task.cancel" : "task.pause"));
+ await assert.rejects(h.idle(), /synthetic Task settlement write failure/);
+ const evidence = h.evidence(context, taskId).execution!; assert.equal(evidence.closed, true); assert.equal(evidence.closeEvidence?.closeObserved, true);
+ assert.equal(h.application.getTask(context, taskId).value.state, event === "confirm-stop" ? "CANCELLING" : "RUNNING");
+ const before = failures; await assert.rejects(h.close(), /synthetic Task settlement write failure/); assert.ok(failures > before);
+ failing = false; await h.restart(); await h.idle();
+ assert.equal(h.application.getTask(context, taskId).value.state, event === "confirm-stop" ? "CANCELLED" : event === "confirm-pause" ? "PAUSED" : "UNVERIFIABLE");
+ assert.equal(h.evidence(context, taskId).execution!.bindingId, evidence.bindingId);
+ await peer.releasePrompt(); h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.continue")); await h.idle();
+ assert.equal(h.application.getTask(context, taskId).value.state, "VERIFYING"); assert.notEqual(h.evidence(context, taskId).execution!.bindingId, evidence.bindingId);
+});
+
+for (const phase of ["coordinator-close", "open", "fence"] as const) test(`Interrupted ${phase} retries its exact control-plane phase before reading retained custody`, async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { t.mock.restoreAll(); await h.close(); await peer.remove(); }); const { taskId } = create(h); await peer.waitForPrompt();
+ let failed = false;
+ if (phase === "coordinator-close") {
+   const actual = SyntheticRecoveryCoordinatorV2.prototype.close;
+   t.mock.method(SyntheticRecoveryCoordinatorV2.prototype, "close", function(this: SyntheticRecoveryCoordinatorV2) { actual.call(this); if (!failed) { failed = true; throw new Error("synthetic replacement phase failure"); } });
+ } else if (phase === "open") {
+   const actual = SyntheticRecoveryCoordinatorV2.open;
+   t.mock.method(SyntheticRecoveryCoordinatorV2, "open", (...args: Parameters<typeof actual>) => { if (!failed) { failed = true; throw new Error("synthetic replacement phase failure"); } return actual(...args); });
+ } else {
+   const getTasks = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "tasks")!.get!;
+   const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "tasks", function(this: SyntheticCognitionStoreV2): TaskPersistenceStoreV1 {
+     const port = getTasks.call(this) as TaskPersistenceStoreV1, fence = port.fenceRestartedOwners; getter.mock.restore();
+     t.mock.method(port, "fenceRestartedOwners", () => { const result = fence.call(port); if (!failed) { failed = true; throw new Error("synthetic replacement phase failure"); } return result; }); return port;
+   });
+ }
+ await assert.rejects(h.interruptControlPlane(), /synthetic replacement phase failure/); assert.equal(failed, true);
+ assert.throws(() => h.application.getTask(context, taskId), { reason: "dependency_down" }); await assert.rejects(h.runTask(context, taskId));
+ await h.reconcileRetainedWorkers(); await h.idle();
+ assert.equal(h.application.getTask(context, taskId).value.state, "UNVERIFIABLE"); assert.equal(h.evidence(context, taskId).execution!.closed, true);
+ await h.restart(); assert.equal(h.application.getTask(context, taskId).recovery, undefined);
+});
+
+test("Failed retained close persistence keeps custody and permits a later close retry", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ let failing = true, failures = 0;
+ t.after(async () => { failing = false; t.mock.restoreAll(); await h.close(); await peer.remove(); }); const { taskId } = create(h); await peer.waitForPrompt(); await h.interruptControlPlane();
+ const getExecutions = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "executions")!.get!;
+ const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "executions", function(this: SyntheticCognitionStoreV2): TaskExecutionPersistenceV1 {
+   const port = getExecutions.call(this) as TaskExecutionPersistenceV1, close = port.recoverExecutionClose; getter.mock.restore();
+   t.mock.method(port, "recoverExecutionClose", (...args: Parameters<TaskExecutionPersistenceV1["recoverExecutionClose"]>) => { if (failing) { failures++; throw new Error("synthetic retained close write failure"); } return close.apply(port, args); }); return port;
+ });
+ await assert.rejects(h.close(), /synthetic retained close write failure/); assert.equal(h.evidence(context, taskId).execution!.closed, false);
+ await assert.rejects(h.reconcileRetainedWorkers(), /synthetic retained close write failure/); assert.equal(failures, 2);
+ failing = false; await h.close(); await h.close(); await assert.rejects(h.restart());
+});
+
+test("Uncertain coordinator close requires a verified reopen before final close succeeds", async t => {
+ const h = await createSyntheticTaskSessionHarness(); t.after(async () => { t.mock.restoreAll(); await h.close(); });
+ const actualClose = SyntheticRecoveryCoordinatorV2.prototype.close, actualOpen = SyntheticRecoveryCoordinatorV2.open;
+ let closes = 0, opens = 0;
+ t.mock.method(SyntheticRecoveryCoordinatorV2.prototype, "close", function(this: SyntheticRecoveryCoordinatorV2) { actualClose.call(this); if (++closes === 1) throw new Error("synthetic uncertain coordinator close"); });
+ t.mock.method(SyntheticRecoveryCoordinatorV2, "open", (...args: Parameters<typeof actualOpen>) => { if (++opens === 1) throw new Error("synthetic retry open failure"); return actualOpen(...args); });
+ await assert.rejects(h.close(), /synthetic uncertain coordinator close/); await assert.rejects(h.restart());
+ await assert.rejects(h.close(), /synthetic retry open failure/); await h.close(); assert.equal(opens, 2); assert.ok(closes >= 3);
+});
+
+test("Final temporary-root cleanup failure remains cleanup-only and a repeated close actually retries", async t => {
+ const h = await createSyntheticTaskSessionHarness(), { taskId } = create(h); t.after(async () => { t.mock.restoreAll(); await h.close(); });
+ const actual = fs.rm; let root = "", calls = 0;
+ t.mock.method(fs, "rm", async (...args: Parameters<typeof fs.rm>) => {
+   if (typeof args[0] === "string" && basename(args[0]).startsWith("zhiwei-task-session-fixture-")) { root = args[0]; if (++calls === 1) throw new Error("synthetic temporary cleanup failure"); }
+   return actual(...args);
+ });
+ await assert.rejects(h.close(), /synthetic temporary cleanup failure/); assert.ok(root); await access(root);
+ assert.throws(() => h.application.getTask(context, taskId), { reason: "dependency_down" }); await assert.rejects(h.restart()); await assert.rejects(h.runTask(context, taskId));
+ await h.close(); assert.equal(calls, 2); await assert.rejects(access(root), { code: "ENOENT" }); await h.close(); assert.equal(calls, 2);
+});
+
+for (const cleanupFailure of [false, true]) test(`Unallocated Supervisor ${cleanupFailure ? "failed" : "successful"} cleanup remains part of lifecycle custody`, async t => {
+ const peer = await createSyntheticWorkerTestPackage(), roots: string[] = [];
+ const actualCreate = SyntheticRecoveryCoordinatorV2.create, actualMkdtemp = fs.mkdtemp, actualRm = fs.rm;
+ let coordinator: SyntheticRecoveryCoordinatorV2 | undefined, supervisorRoot = "";
+ let signalPrepared!: () => void, releasePreparation!: () => void;
+ const prepared = new Promise<void>(resolve => { signalPrepared = resolve; }), gate = new Promise<void>(resolve => { releasePreparation = resolve; });
+ t.mock.method(SyntheticRecoveryCoordinatorV2, "create", (...args: Parameters<typeof actualCreate>) => { coordinator = actualCreate(...args); return coordinator; });
+ t.mock.method(fs, "mkdtemp", async (...args: Parameters<typeof fs.mkdtemp>) => {
+   const root = await actualMkdtemp(...args); if (typeof root === "string") roots.push(root);
+   if (typeof root === "string" && basename(root).startsWith("zhiwei-synthetic-worker-")) { supervisorRoot = root; signalPrepared(); await gate; }
+   return root;
+ });
+ t.mock.method(fs, "rm", async (...args: Parameters<typeof fs.rm>) => { if (cleanupFailure && args[0] === supervisorRoot) throw new Error("synthetic Supervisor cleanup failure"); return actualRm(...args); });
+ syncBuiltinESMExports();
+ const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => {
+   releasePreparation(); t.mock.restoreAll(); syncBuiltinESMExports();
+   if (cleanupFailure) {
+     // The subject must remain blocked by its permanently rejected cleanup promise. Test-only
+     // disposal of these captured, freshly created fixtures is not a successful harness close.
+     await assert.rejects(h.close(), { code: "cleanup" }); coordinator?.close();
+     for (const root of roots) await actualRm(root, { recursive: true, force: true });
+   } else await h.close();
+   await peer.remove();
+ });
+ const { taskId } = create(h); await prepared; const restarted = h.restart(); releasePreparation();
+ if (cleanupFailure) { await assert.rejects(restarted, { code: "cleanup" }); await assert.rejects(h.idle(), { code: "cleanup" }); await assert.rejects(h.close(), { code: "cleanup" }); await assert.rejects(h.runTask(context, taskId), { reason: "dependency_down" }); }
+ else { await restarted; await h.idle(); await h.api.listen(); }
+ assert.equal(h.evidence(context, taskId).execution, undefined); assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
+ await assert.rejects(access(join(peer.root, "handshake-started")), { code: "ENOENT" });
+});
+
+test("Retrying a pending replacement does not publish a listenable intermediate API", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { t.mock.restoreAll(); await h.close(); await peer.remove(); }); create(h); await peer.waitForPrompt();
+ const actualOpen = SyntheticRecoveryCoordinatorV2.open; let opens = 0;
+ t.mock.method(SyntheticRecoveryCoordinatorV2, "open", (...args: Parameters<typeof actualOpen>) => { if (++opens === 1) throw new Error("synthetic interrupted open"); return actualOpen(...args); });
+ await assert.rejects(h.interruptControlPlane(), /synthetic interrupted open/); const oldApi = h.api, restarted = h.restart();
+ while (opens < 2) await nextTick();
+ assert.equal(h.api, oldApi); await assert.rejects(h.api.listen()); await restarted; assert.notEqual(h.api, oldApi);
+ const origin = await h.api.listen(); await h.close(); await assert.rejects(fetch(`${origin}/v1/capabilities`));
+});
+
+test("A committed replacement attempt supersedes old pending settlement without closing the new binding", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ let failing = true; t.after(async () => { failing = false; t.mock.restoreAll(); await h.close(); await peer.remove(); });
+ const getTasks = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "tasks")!.get!;
+ const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "tasks", function(this: SyntheticCognitionStoreV2): TaskPersistenceStoreV1 {
+   const port = getTasks.call(this) as TaskPersistenceStoreV1, execute = port.executeTask; getter.mock.restore();
+   t.mock.method(port, "executeTask", (...args: Parameters<TaskPersistenceStoreV1["executeTask"]>) => { if (failing && args[1].payload.kind === "task.runtime" && args[1].payload.event === "interrupted") throw new Error("synthetic old settlement failure"); return execute.apply(port, args); }); return port;
+ });
+ const { taskId } = create(h); await peer.waitForPrompt(); await assert.rejects(h.restart(), /synthetic old settlement failure/); await assert.rejects(h.idle(), /synthetic old settlement failure/);
+ const before = h.application.getTask(context, taskId).value, oldBinding = h.evidence(context, taskId).execution!.bindingId, id = randomUUID();
+ h.application.executeTask(context, { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: before.revision, payload: { kind: "task.revise-request", targetRef: { kind: "task", id: taskId, revision: before.revision }, intentRevision: before.intent.revision, request: syntheticTaskPrompt, constraints: [], acceptanceChecks: before.intent.criteria.map(criterion => ({ ...criterion, revision: criterion.revision + 1, description: "Verify the revised synthetic acceptance requirement" })) } });
+ await assert.rejects(h.idle(), { reason: "dependency_down" });
+ const revised = h.application.getTask(context, taskId).value; assert.equal(revised.attempts.length, 2); assert.equal(revised.attempts[0]!.state, "CANCELLED");
+ failing = false; await h.reconcileRetainedWorkers(); await peer.releasePrompt(); await h.runTask(context, taskId); await h.idle();
+ const after = h.application.getTask(context, taskId).value; assert.equal(after.state, "VERIFYING"); assert.equal(after.attempts[1]!.id, revised.attempts[1]!.id); assert.notEqual(h.evidence(context, taskId).execution!.bindingId, oldBinding);
+});
+
+test("API publication remains pending when resumed replacement succeeds but retained close fails", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { t.mock.restoreAll(); await h.close(); await peer.remove(); }); create(h); await peer.waitForPrompt();
+ const actualOpen = SyntheticRecoveryCoordinatorV2.open; let failOpen = true, failClose = true;
+ t.mock.method(SyntheticRecoveryCoordinatorV2, "open", (...args: Parameters<typeof actualOpen>) => { if (failOpen) { failOpen = false; throw new Error("synthetic pending publication open failure"); } return actualOpen(...args); });
+ await assert.rejects(h.interruptControlPlane(), /synthetic pending publication open failure/); const oldApi = h.api;
+ const getExecutions = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "executions")!.get!;
+ const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "executions", function(this: SyntheticCognitionStoreV2): TaskExecutionPersistenceV1 {
+   const port = getExecutions.call(this) as TaskExecutionPersistenceV1, close = port.recoverExecutionClose; getter.mock.restore();
+   t.mock.method(port, "recoverExecutionClose", (...args: Parameters<TaskExecutionPersistenceV1["recoverExecutionClose"]>) => { if (failClose) { failClose = false; throw new Error("synthetic pending publication close failure"); } return close.apply(port, args); }); return port;
+ });
+ await assert.rejects(h.reconcileRetainedWorkers(), /synthetic pending publication close failure/); assert.equal(h.api, oldApi); await assert.rejects(h.api.listen());
+ await h.reconcileRetainedWorkers(); await h.idle(); assert.notEqual(h.api, oldApi);
+ const origin = await h.api.listen(); await h.close(); await assert.rejects(fetch(`${origin}/v1/capabilities`));
 });

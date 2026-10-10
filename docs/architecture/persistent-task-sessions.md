@@ -39,7 +39,9 @@
 
 ### 确定未启动与关闭证据兼容性
 
-P1-04 的可信 `not_spawned` 关闭证据及兼容决策见[受控 Worker 合同](controlled-pi-worker.md#p1-04-关闭证据-v1-的可选扩展)。未成功持久化关闭的 Supervisor custody 保留，后续重试实际收尾；HTTP listen/close 与生命周期队列按真实操作完成或失败收敛，单次拒绝不使后续操作永久继承旧 rejected promise。
+P1-04 的可信 `not_spawned` 关闭证据及兼容决策见[受控 Worker 合同](controlled-pi-worker.md#p1-04-关闭证据-v1-的可选扩展)。物理关闭的持久记录与 Task 的 confirm-stop/confirm-pause/interrupted 收尾是两个阶段；只有精确 binding 的必要领域收尾也已提交、旧 run 已结束、active 身份仍相同，才释放 Supervisor custody。暂时依赖错误解除且原资源仍可真实操作时，可重试这些阶段；单次外层拒绝不让队列永久继承旧 rejected promise。
+
+协调器替换中途失败须先完成真实 close/open/fence 再读 retained custody；进入最终 coordinator/root 清理阶段后仅允许继续 close，Task 接纳保持关闭。底层 close/dispose 本身永久 rejected、无法证明进程或清理事实时仍 fail closed，不声称所有关闭失败都会恢复，也不吞掉原错误。
 
 官方 Pi CLI+新扩展完整组合仍 `not_run`。加载真实扩展的合成协议进程不冒充官方 Agent Loop；工具/真实模型 Grant/action/预算生产接线不由该无工具 profile 认证。
 
@@ -48,6 +50,10 @@ P1-04 的可信 `not_spawned` 关闭证据及兼容决策见[受控 Worker 合�
 独立 loopback 数据 API 使用短期一次性配对码。Host 固定；浏览器写入严格校验 Origin、HttpOnly/SameSite=Strict Cookie 与独立 CSRF。浏览器 GET/SSE 若带 Origin 必须精确匹配；未带 Origin 时仅接受浏览器控制的 `Sec-Fetch-Site: same-origin`、`Sec-Fetch-Mode: cors|same-origin`、`Sec-Fetch-Dest: empty` 三项，缺失、跨站或导航请求拒绝。该读策略适配 [Fetch 的 Origin 规则](https://fetch.spec.whatwg.org/#append-a-request-origin-header)，不是放宽写入验证。CLI 独立 Bearer；诊断 token 与模型凭据不互用。所有读取和事件发布前校验 Scope。
 
 外部 cursor 用平台 AES-256-GCM，绑定 installation/principal/scope/recovery/projection/purpose/expiry。内存密钥丢失要求新快照，不丢失 Task/receipt。task/session 是独立产品 projection，不冒称认知 Outbox 的统一序号；快照和水位同 SQLite 读取事务。HTTP 快照每页至多 50 个 Session/Task summary，并维持 1 MiB 字节及结构预算；`nextCursor` 专用加密命名空间绑定相同 Scope、世代、提交水位和偏移。续页重新授权，水位变化返回 410 `snapshot_required`，绝不拼接不同时刻视图。CLI 完成所有页后才交付完整快照；`snapshotPages()` 允许有界逐页处理，完整内存聚合另限 16 MiB、每类 65536 项和 100 万结构节点，超过时明确失败，不限制持久创建数量。分页期间的页是暂存视图，失败须丢弃；完成后从首个 `asOfCursor` 接 SSE，所有页的该 token 均表示同一内部水位。当前服务每次续页仍读取完整 Store 快照；这是读取成本限制，不将 100 个资源冒充损坏。
+
+`task.execution_closed` 是独立产品事件 v1 的新增类型，payload 仅保留 `bindingId` 与 `executionRevision`。普通关闭及受信恢复从未闭合转为闭合时，在同一事务写入一次真实执行快照与产品 Outbox；exact replay 不再发事件。aggregate 使用当时 Task revision，不虚增领域版本，event owner 使用当时 Session owner，原绑定 lease 不改写。Store 双向核对每条闭合事实与事件、作用域及提交位置。
+
+该事件让 READY Task 的 `recovery.blocked` 解除也推进快照水位并可从 SSE 回放；成功关闭提交后立即唤醒，后续领域确认失败不能抹掉这条 durable 通知。客户端对已知 Task 的此非领域事件只接受当前 revision，不把它当作 Task 状态版本推进；旧严格 parser 遇到未知类型须 fail closed，不能静默漏掉恢复状态变化。它不修改冻结 NormalizedRuntimeEvent v1。
 
 SSE 在成功提交后唤醒并从持久 Outbox 回放；空闲心跳不查模型或轮询 Store。有界队列、慢消费者关闭、重复 eventId 和断线/cursor 重连明确处理。CLI 只经 API 查询/回放，不直读数据库。
 

@@ -273,8 +273,8 @@
 | entity_kind | session/task | P枚举及type-kind对应 | 真实Session或Task snapshot存在 | 完整保留 | T18 |
 | entity_id | 真实聚合ID | P标识，实际聚合和JSON一致 | 聚合所有版本/输入/Session历史反向要求事件 | 完整保留 | T04,T18 |
 | revision | 提交的实际聚合revision | 实际snapshot或Session历史精确；Task事件按1..N顺序；input/progress精确等于当时Task head，不能滞后引用已被后续版本替代的历史版本 | receipt段末和历史event_cursor双向匹配 | 完整保留 | T11,T15,T18 |
-| event_type | 六个正式产品事件类型 | P枚举；逐类型核验真实source；receipt只允许对应最终事件 | 不存在孤立progress/input/Task版本/Session事件 | 完整保留 | T04,T18,X10 |
-| owner_epoch | 实际事务owner，进度为绑定owner | Session事件同历史；Task/input/progress同snapshot/source且按cursor解析历史授权 | 对应Session历史owner在事件发生前已生效 | 完整保留 | T10,T15,T18 |
+| event_type | 七个正式产品事件类型 | P枚举；逐类型核验真实source；receipt只允许对应最终事件 | 不存在孤立progress/input/Task版本/Session事件；execution_closed双向锚closed历史 | 完整保留 | T04,T18,X10 |
+| owner_epoch | 实际事务owner，进度为绑定owner | Session事件同历史；Task/input/progress同snapshot/source且按cursor解析历史授权；execution_closed为当前授权Session owner，可大于旧execution lease owner | 对应Session历史owner在事件发生前已生效 | 完整保留 | T10,T15,T18 |
 | recovery_epoch | 当次独立控制世代 | 非负且<=当前；Session/history、内容fence、execution source相同 | 旧世代强制quarantined；不凭产品SQL增加控制世代 | 完整保留 | T15,T17,X11 |
 | occurred_at | 捕获的事务时间 | P规范ISO；精确Session历史/Task版本/input内容/source时间；不得早于历史授权 | 各来源时间和正文metadata相互校验 | 完整保留 | T01,T15,T18 |
 | publish_state | 初始pending；ack覆盖后published；恢复后quarantined | 旧世代必须quarantined；当前世代按同Workspace消费者最大cursor精确推导published/pending | 消费者前缀与发布状态双向约束，禁止无消费者published和当前世代假quarantine | 完整保留 | T17 |
@@ -338,7 +338,7 @@
 | scope_key | 从不可变execution根坐标逐项复制 | 每列精确等于root；FK；recovery受根和内容fence约束 | 完整root→连续历史→current反向关系 | 完整保留 | X01,X04,X11,XF07 |
 | state | ALLOCATED→READY→BUSY→DRAINING/STOPPED；真正观测或部分关闭可保留原状态 | 初始ALLOCATED；标量合法边；正文可用时还验证ready/dispatch/observed/close四类实际writer形状并拒绝重复无变化版本 | 最后状态决定active；依赖Task与输入匹配 | 标量保留；已删观测/关闭细节不重建 | X01,X05,XF01,XF02 |
 | dispatched | 初始0；实际BUSY边界转1；不回退 | SQL布尔+state组合；reader单调；可用body精确 | event/model只能依赖真实dispatched开放绑定 | 完整保留 | X03,X04,XF02 |
-| closed | 初始0；完整实际关闭证据才1 | SQL布尔+STOPPED等价；closed后禁止追加；可用body检查完整关闭证据 | root.active精确反向；新owner记录真实关闭不改旧lease | 标量保留；不能从失效正文重新证明物理关闭 | X05,XF02 |
+| closed | 初始0；完整实际关闭证据才1 | SQL布尔+STOPPED等价；closed后禁止追加；可用body检查完整关闭证据 | root.active精确反向；每个closed历史恰有execution_closed产品事件；新owner记录真实关闭不改旧lease | 标量保留；不能从失效正文重新证明物理关闭 | X05,XF02 |
 | content_id | 每次实际快照全新正文 | C+EC；角色不复用；初始依赖Task+input，后续依赖前快照+当前Task+同input，集合精确 | 每个快照正文只属一个执行角色；当前Task版本不倒退 | 引用/依赖角色保留 | X04,XF07 |
 | content_version | 固定1 | EC无条件=1 | 所有来源/引用精确 | 完整保留 | XF07 |
 | created_at | append事务时间 | 无条件ISO、不早于前版；精确content时间 | 初始等于root.created；末版等于root.updated | 完整保留 | X01,XF07 |
@@ -430,7 +430,7 @@
 | task.retry | CREATED,READY | 前attempt终态；必须新attempt；意图版本不变 |
 | task.continue | READY；CREATED,READY；CANCELLING,CANCELLED,CREATED,READY | 是否新attempt由既有状态决定；新attempt前必须终态；意图版本不变 |
 | task.revise-request | CREATED,READY；CANCELLING,CANCELLED,CREATED,READY | 必须新attempt；意图版本恰+1；可用正文检查新请求与标准精确对应命令 |
-| task.runtime | READY、RUNNING、VERIFYING、CANCELLED、PAUSED、UNVERIFIABLE；或VERIFYING,UNVERIFIABLE | event及真实execution evidence可用时再核验具体操作；effect-unknown等未实现路径不因DTO枚举而获得写入能力 |
+| task.runtime | READY、RUNNING、VERIFYING、CANCELLED、PAUSED、UNVERIFIABLE；或VERIFYING,UNVERIFIABLE | 按保留末态/命令段要求每版同一真实READY或closed binding依赖；VERIFYING要求settled来源；READY prepare不虚构执行证据；正文可用再核event/evidenceRefs；effects-unknown未实现路径无写入能力 |
 
 同attempt必须遵守当前writer可达的状态边，intent_revision不变；换attempt必须从终态进入CREATED。每个命令段的所有版本同owner和事务时间；版本事件按revision连续，段内不夹入其他Outbox事件，receipt精确指向最终state_changed。再授权事件紧邻命令首事件之前，因此最终receipt水位覆盖它，但不把它算成Task版本。
 
@@ -541,3 +541,15 @@ C.#resolveTargets处理既有 `RecoveryControlTargetV2` 的content目标时，�
 - R3-A05：allocation、READY、dispatch、source observation、event intake、model request 的 writer 实际调用 #checkFence；读取历史时在能辨识这些操作且原 spec 可用的范围内，用各自事务创建时间核原 notAfter。close/recover-close 与 exact replay 不要求当前 lease 仍有效。普通 close 和恢复 close 的 observedAt 都须位于 allocation.created_at 与本次记录时间之间，可用历史正文同样核验。正文失效后不重建 notAfter 或 close 原始证明。测试：`non-close execution observations cannot be committed at the historical lease deadline`、`historical model and event admissions must precede the original lease deadline`、`normal close rejects future and pre-allocation observations without committing`、`available close history rejects evidence observed after its own committed snapshot`；已有 expired replay/close 正例保留。
 - R3-A06：受控替换正文测试必须同步迁移入边并清理旧 target 的入边，避免 orphan dependency 提前失败掩盖 payload 缺陷。`managed execution body fixture preserves unchanged valid payloads and dependency roles` 分别证明 ALLOCATED、dispatched、closed、observed 的 unchanged-body 读取及重开正控；原负例继续使用同一修正夹具。
 - R3-A07：Runtime close evidence 可携带严格 `processDisposition: not_spawned`，由受控 adapter 关闭 spawn admission、等待 preparation 完成且确认从未产生 child 后提供。Store 仅接受原 ALLOCATED、未 dispatched、无 observed native Session/stream、无 EOF/close 观察的历史，追加 STOPPED；不伪造 EOF 或进程 close。可信恢复 custody 仍需精确原 spec/binding/revision，并受同一资格守卫。READY/BUSY/已有进程迹象拒绝，普通不完整 EOF 不能被推断为未启动。测试：`not-spawned close is complete only for undispatched unobserved ALLOCATED execution`、`trusted recovery accepts unspawned proof only for exact old ALLOCATED custody`；真实受控 Worker 场景由 daemon 集成测试覆盖。
+
+
+## 后续 R3 必要执行依赖与闭合投影修正
+
+- R3-B01：所有 `task.runtime` 命令段即使正文已清除，RUNNING 末态仍必须每版依赖同一旧 attempt 的 READY、未派发、未关闭执行快照；CANCELLED、PAUSED、UNVERIFIABLE 末态必须每版依赖真实 STOPPED/closed 快照。VERIFYING 继续由 settled receipt/source 双向规则覆盖；prepare 的 READY 不要求不存在的 execution。用户停止/切新 attempt 若确实读取了旧 attempt closed 事实，writer 同事务在每版持久化这一 exact 依赖，reader 按命令段和旧 attempt 反向核验。新 attempt 本身没有执行时不得借旧 attempt 的闭合充当其来源。时间不新增跨 Runtime 墙钟假设。
+  - 测试：`erased runtime command spans retain every required execution proof edge` 覆盖 start、settled、confirm-stop、confirm-pause、RUNNING/VERIFYING interrupted 的正控及逐版删边；`user stop and new-attempt commands retain the closed binding used by their decision` 覆盖用户取消和 retry 每版依赖；`a new attempt without an execution never borrows the previous attempt close proof` 保留无当前执行路径。
+- R3-B02：普通 close 或可信 recovery-close 的真实 false→closed 变化，追加 execution snapshot 并同事务发布一个 `task.execution_closed` 产品事件。payload 严格为 bindingId/executionRevision，aggregate 使用该事务当前 Task revision，不虚增 Task 历史。事件取当前 Session 授权 owner，原 execution lease 保持不变；closed 历史与事件双向一一对应，时间、Task当前head、scope、attempt、intent、recovery与必要Task依赖必须精确。它是控制面事实投影，不是 Runtime source event；不会伪造source sequence。partial close、exact replay不新增闭合事件。
+  - 测试：`physical close publishes one durable same-Task-revision product event and exact replay preserves its cursor`、`recovered READY closure advances the persisted projection cursor without inventing a Task version`、`retained execution close facts and projection events require one exact bidirectional link`。
+- R3-B03：闭合通常是后续独立事务，故其新cursor在settled事务最终Task事件之后；原settled ACK及Task receipt保留各自原始最终水位。SSE/投影消费者可通过新的持久事件刷新recovery状态，无须猜测同一水位对应不同快照。
+  - 测试：`later physical close does not rewrite the settled acknowledgement or Task command receipt`；API/CLI/真实custody订阅联动由对应应用集成测试负责。
+
+本段源码和合成回归属于候选修正；最终精确提交运行及独立 R3 仍另行记录，产品验收保持 `not_run`。

@@ -8,6 +8,7 @@ const workspace = "synthetic-workspace-a";
 const at = "2026-10-10T00:00:00.000Z";
 const snapshot = () => ({ schemaVersion: 1 as const, workspaceId: workspace, sessions: [], tasks: [], asOfCursor: "snapshot_cursor" });
 const event = (id = "event-2", revision = 2): ProductEventV1 => ({ schemaVersion: 1, eventId: id, workspaceId: workspace, aggregate: { kind: "task", id: "task-1", revision }, occurredAt: at, type: "task.state_changed", payload: { state: "READY", intentRevision: 1 } });
+const executionClosed = (id = "event-close", revision = 2): Extract<ProductEventV1, { type: "task.execution_closed" }> => ({ schemaVersion: 1, eventId: id, workspaceId: workspace, aggregate: { kind: "task", id: "task-1", revision }, occurredAt: at, type: "task.execution_closed", payload: { bindingId: "binding-1", executionRevision: 7 } });
 async function server(handler: (request: IncomingMessage, response: ServerResponse) => void) {
   const http = createServer(handler); await new Promise<void>(resolve => http.listen(0, "127.0.0.1", resolve)); const address = http.address(); assert.ok(address && typeof address !== "string");
   return { baseUrl: `http://127.0.0.1:${address.port}`, close: () => new Promise<void>((resolve, reject) => { http.closeAllConnections(); http.close(error => error ? reject(error) : resolve()); }) };
@@ -55,6 +56,63 @@ test("SSE reconnect preserves delivered cursor; tracker handles duplicate, stale
     const seeded = new SessionEventTracker({ ...snapshot(), tasks: [{ id: "task-1", workspaceId: workspace, sessionId: "session-1", revision: 2, intentRevision: 1, state: "READY", updatedAt: at }] });
     assert.throws(() => seeded.accept(event("event-4", 4)), isError("snapshot_required"));
     assert.equal(new SessionEventTracker().accept(event("first-observed", 9)), "applied", "unknown aggregates do not invent a starting revision");
+  } finally { await fixture.close(); }
+});
+test("Execution close applies at the known Task revision without masking missing domain revisions", () => {
+  const initial = { ...snapshot(), tasks: [{ id: "task-1", workspaceId: workspace, sessionId: "session-1", revision: 2, intentRevision: 1, state: "READY" as const, updatedAt: at }] };
+  const original = structuredClone(initial); const tracker = new SessionEventTracker(initial); const closed = executionClosed();
+  assert.equal(tracker.accept(closed), "applied"); assert.equal(tracker.accept(closed), "duplicate");
+  assert.throws(() => tracker.accept({ ...closed, type: "task.execution_closed", payload: { bindingId: "binding-1", executionRevision: 8 } }), isError("invalid_response"));
+  assert.throws(() => tracker.accept({ ...closed, type: "task.execution_closed", payload: { bindingId: "other-binding", executionRevision: 7 } }), isError("invalid_response"));
+  assert.throws(() => tracker.accept(event(closed.eventId, 2)), isError("invalid_response"));
+  const ahead = executionClosed("ahead-close", 3);
+  assert.throws(() => tracker.accept(ahead), isError("snapshot_required"), "close is not the next Task domain revision");
+  assert.throws(() => tracker.accept(event("domain-4", 4)), isError("snapshot_required"), "rejected close cannot fill a skipped domain revision");
+  assert.equal(tracker.accept(event("domain-3", 3)), "applied");
+  assert.equal(tracker.accept(ahead), "applied", "rejected close did not poison later ordered replay");
+  assert.equal(tracker.accept(ahead), "duplicate");
+  const stale = executionClosed("stale-close", 2);
+  assert.equal(tracker.accept(stale), "stale"); assert.equal(tracker.accept(stale), "duplicate");
+  assert.throws(() => tracker.accept(executionClosed("stale-close", 3)), isError("invalid_response"));
+  assert.equal(tracker.accept(event("domain-4", 4)), "applied", "stale close cannot roll back the domain watermark");
+  assert.deepEqual(initial, original, "an execution notification fabricates neither Task state nor Task revision");
+});
+test("First-observed execution close does not seed a Task domain revision", () => {
+  const tracker = new SessionEventTracker(); const closed = executionClosed("unknown-close", 9);
+  assert.equal(tracker.accept(closed), "applied"); assert.equal(tracker.accept(closed), "duplicate");
+  assert.equal(tracker.accept(event("first-domain", 2)), "applied", "the first actual domain event retains unseeded replay semantics");
+  assert.throws(() => tracker.accept(executionClosed("later-close", 9)), isError("snapshot_required"));
+  assert.throws(() => tracker.accept(event("domain-4", 4)), isError("snapshot_required"));
+  assert.equal(tracker.accept(event("domain-3", 3)), "applied");
+});
+test("CLI replays execution-close SSE at the unchanged Task revision and preserves its cursor", async () => {
+  const values = [event(), executionClosed(), executionClosed(), event("event-3", 3)];
+  const fixture = await server((request, response) => {
+    assert.equal(request.headers["last-event-id"], "previous_cursor");
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end(values.map((value, index) => `id: cursor_${index}\nevent: ${value.type}\ndata: ${JSON.stringify(value)}\n\n`).join(""));
+  });
+  try {
+    const output: string[] = [];
+    assert.equal(await runSessionCli(["replay", workspace, "previous_cursor", "3", "--json"], line => output.push(line), { baseUrl: fixture.baseUrl, credential }), 0);
+    assert.deepEqual(output.map(line => JSON.parse(line)), [
+      { event: values[0], cursor: "cursor_0" }, { event: values[1], cursor: "cursor_1" }, { event: values[3], cursor: "cursor_3" },
+    ]);
+  } finally { await fixture.close(); }
+});
+test("CLI rejects malformed execution-close aggregates and payloads from SSE", async () => {
+  const closed = executionClosed(); let value: unknown;
+  const fixture = await server((_request, response) => {
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end(`id: cursor\nevent: task.execution_closed\ndata: ${JSON.stringify(value)}\n\n`);
+  });
+  try {
+    const client = createSessionDataClient({ baseUrl: fixture.baseUrl, credential });
+    for (value of [
+      { ...closed, aggregate: { ...closed.aggregate, kind: "session" } },
+      { ...closed, payload: { bindingId: "binding-1", executionRevision: 0 } },
+      { ...closed, payload: { bindingId: "binding-1", executionRevision: 7, state: "CANCELLED" } },
+    ]) await assert.rejects(client.events(workspace, "previous_cursor").next(), isError("unsupported_protocol"));
   } finally { await fixture.close(); }
 });
 test("Unknown event versions, cursor gaps and expired sessions are explicit actionable failures", async () => {

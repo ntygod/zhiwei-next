@@ -170,7 +170,7 @@ CREATE TABLE task_outbox_v1 (
   entity_kind TEXT NOT NULL CHECK (entity_kind IN ('session', 'task')),
   entity_id TEXT NOT NULL CHECK (length(trim(entity_id)) > 0),
   revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 9007199254740991),
-  event_type TEXT NOT NULL CHECK (event_type IN ('session.created', 'session.owner_fenced', 'task.created', 'task.state_changed', 'task.input_committed', 'task.progress')),
+  event_type TEXT NOT NULL CHECK (event_type IN ('session.created', 'session.owner_fenced', 'task.created', 'task.state_changed', 'task.input_committed', 'task.progress', 'task.execution_closed')),
   owner_epoch INTEGER NOT NULL CHECK (owner_epoch BETWEEN 1 AND 9007199254740991),
   recovery_epoch INTEGER NOT NULL CHECK (recovery_epoch BETWEEN 0 AND 9007199254740991),
   occurred_at TEXT NOT NULL CHECK (length(trim(occurred_at)) > 0),

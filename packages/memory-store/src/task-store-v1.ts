@@ -206,6 +206,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       if (reduced.workingStates !== undefined && (!Array.isArray(reduced.workingStates) || reduced.workingStates.length !== reduced.versions.length)) this.#host.fail("validation");
       const versions = reduced.versions.map(value => parseSessionTaskV1(value)), final = versions.at(-1)!; this.#operationReduction(command, current, versions);
       if (activeExecution && !activeExecution.closed && versions.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempts.at(-1)!.id !== current?.attempts.at(-1)!.id)) this.#host.fail("conflict");
+      // A user command may also rely on observed closure to stop or replace an attempt.
+      // Retain that Store-owned fact, rather than leaving the reducer's true predicate ephemeral.
+      if (command.payload.kind !== "task.runtime" && activeExecution?.closed && current && activeExecution.attemptId === current.attempts.at(-1)!.id
+        && versions.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempts.at(-1)!.id !== current.attempts.at(-1)!.id)) {
+        const closed = this.#row("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? AND revision=? AND closed=1", activeExecution.bindingId, activeExecution.revision);
+        if (!closed || closed.task_id !== current.id || closed.attempt_id !== current.attempts.at(-1)!.id) this.#host.fail("corruption");
+        runtimeDependencies.push(ref(closed));
+      }
       const receipt: TaskStoreReceiptV1 = { schemaVersion: 1, commandId: command.commandId, status: "committed", aggregate: { kind: "task", id, revision: final.revision }, result: receiptResult(final) };
       parseLocalApiReceiptV1({ ...receipt, eventCursor: "validated" });
       const finalAttempt = final.attempts.at(-1)!;
@@ -625,6 +633,25 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
             string(task.session_id), integer(events[0]!.recovery_epoch), integer(events[0]!.cursor));
           if (!authority || authority.requires_reauthorization !== 0) throw new Error("new attempt authorization history missing");
         }
+        // Required execution roles are known from the retained command span even when
+        // its private evidenceRefs have been removed. All versions share the same proof.
+        const internal = receipt.command_kind === "task.runtime";
+        const starts = internal && snapshot.state === "RUNNING";
+        const closes = internal && ["CANCELLED", "PAUSED", "UNVERIFIABLE"].includes(string(snapshot.state));
+        const replaces = previous && range.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempt_id !== previous.attempt_id);
+        const priorExecution = previous && this.#row("SELECT * FROM task_execution_v1 WHERE task_id=? AND attempt_id=?", string(task.id), string(previous.attempt_id));
+        if (starts || closes || !internal && replaces && priorExecution) {
+          if (!previous || !priorExecution) throw new Error("required runtime execution missing");
+          const candidates = this.#rows(`SELECT s.* FROM task_execution_snapshot_v1 s JOIN task_content_dependency_v1 d
+            ON d.source_id=s.content_id AND d.source_version=s.content_version
+            WHERE d.target_id=? AND d.target_version=? AND s.binding_id=? AND s.task_id=? AND s.attempt_id=? AND s.intent_revision=?`,
+            string(range[0]!.content_id), integer(range[0]!.content_version), string(priorExecution.binding_id), string(task.id), string(previous.attempt_id), integer(previous.intent_revision))
+            .filter(source => starts ? source.state === "READY" && source.closed === 0 && source.dispatched === 0 && source.owner_epoch === snapshot.owner_epoch
+              : source.state === "STOPPED" && source.closed === 1 && integer(source.owner_epoch) <= integer(snapshot.owner_epoch));
+          if (candidates.length !== 1) throw new Error("required runtime binding proof missing");
+          for (const version of range) if (!this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?",
+            string(candidates[0]!.content_id), integer(candidates[0]!.content_version), string(version.content_id), integer(version.content_version))) throw new Error("runtime proof span incomplete");
+        }
         for (let revision = start + 1; revision <= end; revision++) {
           const version = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(task.id), revision);
           if (!version || version.scope_key !== task.scope_key || version.owner_epoch !== snapshot.owner_epoch || version.created_at !== snapshot.created_at) throw new Error("command version coverage mismatch");
@@ -772,7 +799,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         consumerHeads.set(string(row.workspace_id), Math.max(consumerHeads.get(string(row.workspace_id)) ?? 0, integer(row.cursor)));
       }
       let cursor = 0;
-      const sessionHeads = new Map<string, Row>(), taskEventHeads = new Map<string, number>(), versionEvents = new Set<string>(), inputEvents = new Set<string>();
+      const sessionHeads = new Map<string, Row>(), taskEventHeads = new Map<string, number>(), versionEvents = new Set<string>(), inputEvents = new Set<string>(), closedEvents = new Set<string>();
       for (const row of this.#rows("SELECT * FROM task_outbox_v1 ORDER BY cursor")) {
         const event = this.#eventRow(row).event;
         if (integer(row.cursor) <= cursor || row.event_id !== event.eventId || row.workspace_id !== event.workspaceId || row.entity_kind !== event.aggregate.kind || row.entity_id !== event.aggregate.id
@@ -817,7 +844,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           sessionHeads.set(event.aggregate.id, row);
         } else {
           const snapshot = this.#row("SELECT s.*,t.workspace_id,t.session_id FROM task_snapshot_v1 s JOIN task_v1 t ON t.id=s.task_id WHERE s.task_id=? AND s.revision=?", event.aggregate.id, event.aggregate.revision);
-          if (!snapshot || snapshot.workspace_id !== event.workspaceId || snapshot.owner_epoch !== row.owner_epoch) throw new Error("outbox task identity mismatch");
+          if (!snapshot || snapshot.workspace_id !== event.workspaceId || event.type !== "task.execution_closed" && snapshot.owner_epoch !== row.owner_epoch) throw new Error("outbox task identity mismatch");
           const authority = this.#row("SELECT * FROM session_revision_v1 WHERE session_id=? AND recovery_epoch<=? AND (event_cursor IS NULL OR event_cursor<?) ORDER BY revision DESC LIMIT 1",
             string(snapshot.session_id), integer(row.recovery_epoch), integer(row.cursor));
           if (!authority || authority.owner_epoch !== row.owner_epoch || authority.recovery_epoch !== row.recovery_epoch || authority.created_at! > row.occurred_at!
@@ -843,6 +870,17 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
               if (!content || content.created_at !== event.occurredAt || (parseStored(string(content.fence_json)) as { recoveryEpoch: number }).recoveryEpoch !== row.recovery_epoch) throw new Error("outbox input time mismatch");
               inputEvents.add(string(input.id)); break;
             }
+            case "task.execution_closed": {
+              if ((taskEventHeads.get(event.aggregate.id) ?? 0) !== event.aggregate.revision) throw new Error("execution close current task mismatch");
+              const source = this.#row("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? AND revision=?", event.payload.bindingId, event.payload.executionRevision);
+              const key = json([event.payload.bindingId, event.payload.executionRevision]);
+              if (!source || source.task_id !== event.aggregate.id || source.attempt_id !== snapshot.attempt_id || source.intent_revision !== snapshot.intent_revision
+                || source.state !== "STOPPED" || source.closed !== 1 || source.created_at !== event.occurredAt
+                || integer(source.owner_epoch) > integer(row.owner_epoch) || source.recovery_epoch !== row.recovery_epoch || closedEvents.has(key)
+                || !this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?",
+                  string(snapshot.content_id), integer(snapshot.content_version), string(source.content_id), integer(source.content_version))) throw new Error("execution close projection mismatch");
+              closedEvents.add(key); break;
+            }
             case "task.progress": {
               if ((taskEventHeads.get(event.aggregate.id) ?? 0) !== event.aggregate.revision) throw new Error("progress current task mismatch");
               const source = this.#row("SELECT * FROM task_execution_event_v1 WHERE commit_cursor=?", integer(row.cursor));
@@ -862,6 +900,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       }
       for (const snapshot of this.#rows("SELECT task_id,revision FROM task_snapshot_v1"))
         if (!versionEvents.has(json([snapshot.task_id, snapshot.revision]))) throw new Error("task version event missing");
+      for (const closed of this.#rows("SELECT binding_id,revision FROM task_execution_snapshot_v1 WHERE closed=1"))
+        if (!closedEvents.has(json([closed.binding_id, closed.revision]))) throw new Error("execution close event missing");
       for (const input of this.#rows("SELECT id FROM task_input_v1 WHERE kind='runtime_input'"))
         if (!inputEvents.has(string(input.id))) throw new Error("runtime input event missing");
 

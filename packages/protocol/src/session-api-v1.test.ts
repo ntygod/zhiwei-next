@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSessionContractV1, parseSessionCreateCommandV1, parseSessionV1, parseProductEventV1, parseSessionTaskV1, deserializeSessionCreateCommandV1, serializeSessionCreateCommandV1 } from "./session-api-v1.ts";
+import { parseSessionContractV1, parseSessionCreateCommandV1, parseSessionV1, parseProductEventV1, parseSessionTaskV1, deserializeProductEventV1, deserializeSessionCreateCommandV1, serializeSessionCreateCommandV1 } from "./session-api-v1.ts";
 const profile = () => ({ id: "synthetic-profile", revision: 1 });
 const contract = () => ({ schemaVersion: 1, runtimeProfile: profile(), modelProfile: profile(), toolProfile: profile(), policyProfile: profile(), dataProfile: profile(), compilerProfile: profile(), interactionKind: "interactive" });
 const create = () => ({ schemaVersion: 1, commandId: "command-1", idempotencyKey: "key-1", workspaceId: "synthetic-workspace-a", expectedRevision: 0, payload: { kind: "session.create", contract: contract() } });
@@ -26,6 +26,32 @@ test("Product events reject unknown vocabulary and cross-kind payloads without c
   assert.throws(() => parseProductEventV1({ ...event, payload: { ...event.payload, modelThinking: "not permitted" } }));
   assert.throws(() => parseProductEventV1({ ...event, aggregate: { ...event.aggregate, kind: "session" } }));
   assert.throws(() => parseProductEventV1({ ...event, occurredAt: "2026-02-30T00:00:00.000Z" }));
+});
+test("Execution-close ProductEvent v1 carries a detached binding revision without Task state", () => {
+  const event = { schemaVersion: 1, eventId: "event-close", workspaceId: "workspace-a", aggregate: { kind: "task", id: "task-1", revision: 2 }, occurredAt: "2026-10-10T00:00:00.000Z", type: "task.execution_closed", payload: { bindingId: "binding-1", executionRevision: 4 } };
+  const parsed = parseProductEventV1(event);
+  assert.deepEqual(parsed, event); assert.deepEqual(deserializeProductEventV1(JSON.stringify(parsed)), parsed);
+  assert.equal(parsed.aggregate.revision, 2); assert.ok(Object.isFrozen(parsed.payload)); assert.ok(Object.isFrozen(parsed.aggregate));
+  event.payload.bindingId = "changed"; event.aggregate.revision = 3;
+  assert.equal(parsed.aggregate.revision, 2); assert.deepEqual(parsed.payload, { bindingId: "binding-1", executionRevision: 4 });
+});
+test("Execution-close ProductEvent v1 rejects invalid aggregates, payloads and extensions", () => {
+  const event = { schemaVersion: 1, eventId: "event-close", workspaceId: "workspace-a", aggregate: { kind: "task", id: "task-1", revision: 2 }, occurredAt: "2026-10-10T00:00:00.000Z", type: "task.execution_closed", payload: { bindingId: "binding-1", executionRevision: 4 } };
+  for (const aggregate of [
+    { ...event.aggregate, kind: "session" }, { ...event.aggregate, kind: "execution" },
+    { ...event.aggregate, id: "" }, { ...event.aggregate, revision: 0 },
+    { ...event.aggregate, revision: 1.5 }, { ...event.aggregate, executionRevision: 4 },
+  ]) assert.throws(() => parseProductEventV1({ ...event, aggregate }));
+  for (const payload of [
+    { executionRevision: 4 }, { bindingId: "binding-1" }, { ...event.payload, bindingId: "" },
+    { ...event.payload, bindingId: 1 }, { ...event.payload, state: "CANCELLED" },
+    { ...event.payload, intentRevision: 1 }, { ...event.payload, closed: true },
+    ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "4", null].map(executionRevision => ({ ...event.payload, executionRevision })),
+  ]) assert.throws(() => parseProductEventV1({ ...event, payload }));
+  assert.throws(() => parseProductEventV1({ ...event, schemaVersion: 2 }));
+  assert.throws(() => parseProductEventV1({ ...event, type: "task.execution_reopened" }));
+  assert.throws(() => parseProductEventV1({ ...event, executionRevision: 4 }));
+  assert.throws(() => deserializeProductEventV1(JSON.stringify(event).replace('"executionRevision":4', '"executionRevision":3,"executionRevision":4')));
 });
 test("Task transport rejects multiple active attempts and current intent drift", () => {
   const intent = { revision: 1, request: "Synthetic report", constraints: [], criteria: [{ id: "criterion", revision: 1, description: "Synthetic check", required: true, method: "artifact" }] };

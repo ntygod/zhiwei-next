@@ -14,7 +14,7 @@ canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分�
 
 该候选在工作区不可访问后重新构建，历史组件结果没有作为新证据。后续已实现有界一致快照分页、浏览器同源读、实际 Supervisor custody 保留时的控制面中断恢复，以及正文撤销后仍保留的结构性历史校验。完整 OS Daemon 死亡且丢失 custody 后的 orphan 发现/回收仍 unsupported/not_run，不以 owner fencing 或 PID 推断进程关闭。
 
-独立审查持续检查持久字段完整性与真实合成进程边界。`cdb843377c742ff955d7f021e519eebfe36864f1` 的精确 HEAD 原完整 check 为959/959测试、144 strict roots（Node22.23.1/npm10.9.8），但独立 R3 仍为 BLOCKED，明确记录再授权反向关系、失效正文时间顺序、settlement反向来源、历史fence、关闭时间、确定未spawn的收尾、生命周期失败队列及测试正控八组问题。修复不得以完整check绿色取代这些反例；后续候选需逐项回归、原完整检查、全新独立 R3、Ready/live、保护合入与 main 回读，尚未交付。
+独立审查持续检查持久字段完整性与真实合成进程边界。`552f4d73679b28148355a63b827d3d0a0a509068` 的精确 HEAD 原完整 check 已确认 exit0：1019/1019测试、144 strict roots（Node22.23.1/npm10.9.8）；独立 R3 仍为 BLOCKED，保留四组已复现问题：close失败重试、物理关闭后领域确认失败、正文失效后runtime必要依赖、READY恢复投影无回放水位变化。先前各轮错误与修复记录均保留；覆盖清单和绿色检查不能替代这些失败路径的证明。后续候选需逐项回归、原完整检查、全新独立 R3、Ready/live、保护合入与 main 回读，尚未交付。
 
 执行索引 `implemented` 引用已存在代码；Z10/Z11/Z12 产品验收保持 `not_run`，官方 Pi CLI+新扩展完整进程组合也 `not_run`。P1-05 为下一实现，但须本 PR 完成交付与新 reconciliation 后才开工。成功验证/Episode 属于 P1-07；不靠模型查询进度，不开启后台自治。
 

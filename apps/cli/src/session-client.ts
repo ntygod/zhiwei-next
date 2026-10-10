@@ -160,11 +160,14 @@ export class SessionEventTracker {
     const event = parseProductEventV1(input); const fingerprint = canonicalJsonV1(event); const previous = this.#seen.get(event.eventId);
     if (previous !== undefined) { if (previous !== fingerprint) fail("invalid_response"); return "duplicate"; }
     const key = `${event.aggregate.kind}:${event.aggregate.id}`; const knownRevision = this.#revisions.get(key);
-    if (knownRevision !== undefined && event.aggregate.revision > knownRevision + 1) fail("snapshot_required");
+    const executionClosed = event.type === "task.execution_closed";
+    // Closing a binding cannot stand in for a missing Task domain revision.
+    if (knownRevision !== undefined && event.aggregate.revision > knownRevision + (executionClosed ? 0 : 1)) fail("snapshot_required");
     if (this.#seen.size >= 4096) fail("snapshot_required"); this.#seen.set(event.eventId, fingerprint);
     const revision = knownRevision ?? 0;
     if (event.aggregate.revision < revision) return "stale";
-    this.#revisions.set(key, event.aggregate.revision); return "applied";
+    if (!executionClosed) this.#revisions.set(key, event.aggregate.revision);
+    return "applied";
   }
 }
 /** Query/replay library entrypoint, intentionally separate from the diagnostic CLI credential domain. */

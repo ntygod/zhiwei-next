@@ -137,6 +137,7 @@ export function parseProductEventV1(input: unknown): ProductEventV1 {
       case "task.created": case "task.state_changed": keys(payload, ["state", "intentRevision"]); member(payload.state, sessionTaskStatesV1); revision(payload.intentRevision); if (aggregate.kind !== "task") invalid(); break;
       case "task.input_committed": keys(payload, ["attemptId", "ordinal"]); identifier(payload.attemptId); revision(payload.ordinal, true); if (aggregate.kind !== "task") invalid(); break;
       case "task.progress": keys(payload, ["phase"], ["checkpoint"]); member(payload.phase, ["queued", "working", "waiting", "verifying", "stopped"]); if (payload.checkpoint !== undefined) textValue(payload.checkpoint, 1024); if (aggregate.kind !== "task") invalid(); break;
+      case "task.execution_closed": keys(payload, ["bindingId", "executionRevision"]); identifier(payload.bindingId); revision(payload.executionRevision); if (aggregate.kind !== "task") invalid(); break;
       default: invalid();
     }
     return value as unknown as ProductEventV1;

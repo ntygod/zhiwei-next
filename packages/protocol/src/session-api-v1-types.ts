@@ -75,6 +75,8 @@ export type ProductEventV1 = ProductEventBaseV1 & (
   | Readonly<{ type: "task.created" | "task.state_changed"; payload: Readonly<{ state: TaskState; intentRevision: number }> }>
   | Readonly<{ type: "task.input_committed"; payload: Readonly<{ attemptId: string; ordinal: number }> }>
   | Readonly<{ type: "task.progress"; payload: Readonly<{ phase: "queued" | "working" | "waiting" | "verifying" | "stopped"; checkpoint?: string }> }>
+  /** A closed execution binding at the current Task revision; no Task transition is implied. */
+  | Readonly<{ type: "task.execution_closed"; aggregate: Readonly<{ kind: "task"; id: string; revision: number }>; payload: Readonly<{ bindingId: string; executionRevision: number }> }>
 );
 export interface SessionPairRequestV1 {
   readonly schemaVersion: 1;

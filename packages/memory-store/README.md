@@ -80,3 +80,8 @@ SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `c
 Execution allocation 同事务保存实际 global/workspace cognition/policy 四个不可变接纳 epoch，供历史 spec 精确投影校验；历史 lease 只与原事务时间比较，不因现在已到期否定过去合法记录。Task 相邻版本、跨 attempt 时间和新 attempt 的 Session 再授权在正文失效后仍双向检查；settled receipt 的来源关系不能通过改名跳过。
 
 受控 Runtime 的 `processDisposition: not_spawned` 证明只适用于关闭 spawn admission 后从未创建 child 的 ALLOCATED 执行。Store 要求未 dispatch、未观察 native Session/stream、无 EOF/close 迹象，再追加 STOPPED；原 ALLOCATED 事实保留。READY/BUSY 和未知进程状态不能借此收尾。完整字段与失效边界见[完整性覆盖清单](task-session-integrity-coverage.md)。
+
+
+必要的 execution proof 依赖不随命令正文清除而变成可选：start、关闭确认、interrupted 及确实依赖旧绑定闭合的用户停止/新 attempt 命令，都逐版本保留对应真实 snapshot。没有当前 attempt execution 的取消仍合法。
+
+真实 execution 首次完整闭合还会在同一事务发布 `task.execution_closed`，使用当前 Task revision 和严格 binding/execution revision 引用；旧 lease 不改写。它推进持久投影 cursor，使 custody 恢复解除 blocked 后可从 replay/SSE观察，exact replay不重复。后续独立关闭不会改写原 settled ACK 或命令 receipt 的历史水位。

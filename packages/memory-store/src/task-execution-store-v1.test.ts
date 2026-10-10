@@ -18,7 +18,7 @@ const contract: SessionContractV1 = { schemaVersion: 1, runtimeProfile: { id: "s
   toolProfile: { id: "none", revision: 1 }, policyProfile: { id: "synthetic-policy", revision: 1 }, dataProfile: { id: "synthetic-data", revision: 1 },
   compilerProfile: { id: "synthetic-compiler", revision: 1 }, interactionKind: "interactive" };
 function code(work: () => unknown, expected: string): void { assert.throws(work, (error: unknown) => error instanceof CognitiveStoreErrorV2 && error.code === expected); }
-function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?: TaskPersistenceBoundaryV1["runtimeSourceIdentity"], custody?: TaskPersistenceBoundaryV1["recoveryCustody"]) {
+function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?: TaskPersistenceBoundaryV1["runtimeSourceIdentity"], custody?: TaskPersistenceBoundaryV1["recoveryCustody"], automaticStop = false) {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-normal-execution-v1-")), dataRoot = join(root, "data"), controlRoot = join(root, "control");
   mkdirSync(dataRoot, { mode: 0o700 }); let counter = 0, now = T0, daemon = INSTANCE, rejectSettled = false;
   const reduce: TaskPersistenceBoundaryV1["reduce"] = (current, command, ctx) => {
@@ -32,10 +32,24 @@ function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?
     assert.ok(current);
     if (command.payload.kind === "task.runtime") {
       if (command.payload.event === "settled" && rejectSettled) throw new CognitiveStoreErrorV2("conflict");
-      const state = command.payload.event === "start" ? "RUNNING" : command.payload.event === "settled" ? "VERIFYING" : command.payload.event === "confirm-stop" ? "CANCELLED" : "READY";
+      if (command.payload.event === "interrupted") {
+        const intermediate = current.state === "RUNNING" ? parseSessionTaskV1({ ...change(current, "VERIFYING", ctx.now),
+          attempts: current.attempts.map((attempt, index) => index === current.attempts.length - 1 ? { ...attempt, state: "VERIFYING", updatedAt: ctx.now, completeness: "incomplete", pauseRequested: false } : attempt) }) : current;
+        const final = parseSessionTaskV1({ ...structuredClone(intermediate), revision: intermediate.revision + 1, state: "UNVERIFIABLE", updatedAt: ctx.now,
+          attempts: intermediate.attempts.map((attempt, index) => index !== intermediate.attempts.length - 1 ? attempt : { ...attempt, state: "UNVERIFIABLE", updatedAt: ctx.now,
+            outcomes: [{ id: ctx.outcomeId, revision: 1, taskId: current.id, attemptId: attempt.id, workspaceId: W, intentRevision: attempt.intent.revision,
+              status: "unverifiable", recordedAt: ctx.now, criteriaResults: attempt.intent.criteria.map(criterion => ({ taskId: current.id, attemptId: attempt.id,
+                workspaceId: W, intentRevision: attempt.intent.revision, criterionId: criterion.id, criterionRevision: criterion.revision, method: criterion.method,
+                checkedAt: ctx.now, explanation: "Synthetic interruption", status: "unknown", reason: "incomplete", evidence: [] })) }] }) });
+        return { versions: current.state === "RUNNING" ? [intermediate, final] : [final] };
+      }
+      const state = command.payload.event === "confirm-pause" ? "PAUSED" : command.payload.event === "start" ? "RUNNING" : command.payload.event === "settled" ? "VERIFYING" : command.payload.event === "confirm-stop" ? "CANCELLED" : "READY";
       return { versions: [change(current, state, ctx.now)] };
     }
-    if (command.payload.kind === "task.cancel") return { versions: [change(current, "CANCELLING", ctx.now)] };
+    if (command.payload.kind === "task.cancel") {
+      const cancelling = change(current, "CANCELLING", ctx.now);
+      return { versions: automaticStop && (!ctx.activeExecution || ctx.activeExecution.closed) ? [cancelling, change(cancelling, "CANCELLED", ctx.now)] : [cancelling] };
+    }
     if (command.payload.kind === "task.pause") {
       const next = change(current, "RUNNING", ctx.now);
       return { versions: [{ ...next, attempts: next.attempts.map((attempt, index) => index === next.attempts.length - 1 ? { ...attempt, pauseRequested: true } : attempt) }] };
@@ -290,7 +304,7 @@ test("new Session owner records exact custody close without rewriting old lease 
   assert.deepEqual(details.closeEvidence, recorded.evidence); assert.equal(details.binding.leaseEpoch, 1);
   assert.deepEqual(details.spec, recorded.spec); assert.equal(details.dispatched, true);
   assert.equal(f.store.tasks.getTask(W, f.taskId).value!.state, "RUNNING");
-  assert.equal(f.store.tasks.snapshot(W).commitCursor, cursor);
+  assert.equal(f.store.tasks.snapshot(W).commitCursor, cursor + 1);
   assert.deepEqual(recover(f, active.revision), closed); assert.deepEqual(recover(f, closed.revision), closed); assert.equal(observations, 1);
   code(() => recover(f, active.revision - 1), "revision_conflict");
   f.reopen(); assert.deepEqual(f.store.executions.readExecution(W, f.taskId), closed);
@@ -870,4 +884,119 @@ test("trusted recovery accepts unspawned proof only for exact old ALLOCATED cust
     assert.equal(recover(f, active.revision).closed, true); f.reopen();
     assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId)!.closeEvidence, recorded.evidence);
   });
+});
+
+test("erased runtime command spans retain every required execution proof edge", async t => {
+  for (const phase of ["start", "settled", "confirm-stop", "confirm-pause", "interrupted-running", "interrupted-verifying"] as const)
+    for (const remove of [false, true]) for (const position of phase === "interrupted-running" ? [0, 1] : [0]) await t.test(`${phase}/${position}/${remove ? "missing" : "intact"}`, t => {
+      const f = fixture(t); f.start(); let commandId = "command-start", first = 3;
+      if (phase === "settled" || phase === "interrupted-verifying") { const envelope = f.envelope(1, true); f.ingest(envelope); commandId = `settled:${envelope.event.eventId}`; first = 4; }
+      if (phase === "confirm-stop") {
+        f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "cancel-proof", idempotencyKey: "cancel-proof", workspaceId: W,
+          expectedRevision: 3, payload: { kind: "task.cancel", targetRef: { kind: "task", id: f.taskId, revision: 3 } } }); first = 5;
+      }
+      if (phase === "confirm-pause") { pauseRequest(f); first = 5; }
+      if (phase !== "start" && phase !== "settled") {
+        const close = f.close(), event = phase.startsWith("interrupted") ? "interrupted" : phase;
+        first = f.store.tasks.getTask(W, f.taskId).value!.revision + 1;
+        f.runtime(event as "interrupted" | "confirm-stop" | "confirm-pause", close.bindingId, close.revision); commandId = `command-${event}`;
+      }
+      removeExecutionBodies(f); assert.ok(f.store.tasks.replay(W).events.length); f.reopen(); assert.ok(f.store.tasks.replay(W).events.length);
+      if (!remove) return;
+      corruptExecutionRows(f, ["task_content_dependency_v1"], db => {
+        const target = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(f.taskId, first + position)!;
+        const receipt = db.prepare("SELECT * FROM task_receipt_v1 WHERE command_id=?").get(commandId)!; assert.ok(Number(receipt.revision) >= first + position);
+        const sourceTable = phase === "settled" ? "task_execution_event_v1" : "task_execution_snapshot_v1";
+        assert.equal(db.prepare(`DELETE FROM task_content_dependency_v1 WHERE target_id=? AND target_version=? AND source_id IN (SELECT content_id FROM ${sourceTable})`)
+          .run(target.content_id!, target.content_version!).changes, 1);
+      });
+      rejectCorruptExecution(f);
+    });
+});
+
+test("user stop and new-attempt commands retain the closed binding used by their decision", async t => {
+  for (const phase of ["cancel", "retry"] as const) for (const position of [0, 1]) for (const remove of [false, true]) await t.test(`${phase}/${position}/${remove ? "missing" : "intact"}`, t => {
+    const f = fixture(t, "model-allowed", undefined, undefined, true); f.allocate(); f.close();
+    f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "direct-cancel", idempotencyKey: "direct-cancel", workspaceId: W, expectedRevision: 2,
+      payload: { kind: "task.cancel", targetRef: { kind: "task", id: f.taskId, revision: 2 } } });
+    let first = 3;
+    if (phase === "retry") { f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "direct-retry", idempotencyKey: "direct-retry", workspaceId: W, expectedRevision: 4,
+      payload: { kind: "task.retry", targetRef: { kind: "task", id: f.taskId, revision: 4 } } }); first = 5; }
+    removeExecutionBodies(f); assert.ok(f.store.tasks.replay(W).events.length); f.reopen(); assert.ok(f.store.tasks.replay(W).events.length);
+    if (!remove) return;
+    corruptExecutionRows(f, ["task_content_dependency_v1"], db => {
+      const target = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(f.taskId, first + position)!;
+      assert.equal(db.prepare("DELETE FROM task_content_dependency_v1 WHERE target_id=? AND target_version=? AND source_id IN (SELECT content_id FROM task_execution_snapshot_v1 WHERE closed=1)")
+        .run(target.content_id!, target.content_version!).changes, 1);
+    }); rejectCorruptExecution(f);
+  });
+});
+
+test("physical close publishes one durable same-Task-revision product event and exact replay preserves its cursor", t => {
+  const f = fixture(t); f.start(); const before = f.store.tasks.snapshot(W), revision = f.store.tasks.getTask(W, f.taskId).value!.revision;
+  f.close(false); assert.equal(f.store.tasks.snapshot(W).commitCursor, before.commitCursor);
+  const closed = f.close(), after = f.store.tasks.snapshot(W), replay = f.store.tasks.replay(W, { afterCommitCursor: before.commitCursor });
+  assert.equal(after.commitCursor, before.commitCursor + 1); assert.equal(after.tasks[0]!.revision, revision);
+  assert.equal(replay.events.length, 1); assert.equal(replay.events[0]!.event.type, "task.execution_closed");
+  assert.deepEqual(replay.events[0]!.event.payload, { bindingId: closed.bindingId, executionRevision: closed.revision });
+  assert.equal(replay.events[0]!.event.aggregate.revision, revision);
+  assert.deepEqual(f.close(), closed); assert.equal(f.store.tasks.snapshot(W).commitCursor, after.commitCursor);
+  f.reopen(); assert.equal(f.store.tasks.snapshot(W).commitCursor, after.commitCursor);
+});
+
+test("recovered READY closure advances the persisted projection cursor without inventing a Task version", t => {
+  let recorded: CloseWitness | undefined;
+  const f = fixture(t, "model-allowed", undefined, { observedClose: () => recorded }); const ready = f.prepare(); recorded = closeWitness(f);
+  f.reopen(nextOwner.daemonInstanceId); const before = f.store.tasks.snapshot(W);
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.authority, "recovery-blocked");
+  recover(f, ready.revision); const after = f.store.tasks.snapshot(W), events = f.store.tasks.replay(W, { afterCommitCursor: before.commitCursor }).events;
+  assert.equal(after.commitCursor, before.commitCursor + 1); assert.deepEqual(after.tasks, before.tasks);
+  assert.equal(events.length, 1); assert.equal(events[0]!.event.type, "task.execution_closed"); assert.equal(events[0]!.event.aggregate.revision, 2);
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.authority, "closed");
+  f.reopen(); assert.equal(f.store.tasks.snapshot(W).commitCursor, after.commitCursor);
+});
+
+test("retained execution close facts and projection events require one exact bidirectional link", async t => {
+  for (const variant of ["missing", "duplicate", "wrong-binding", "open-snapshot", "wrong-task-revision", "wrong-owner", "wrong-time"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.start(); f.close(); removeExecutionBodies(f); assert.ok(f.store.tasks.replay(W).events.length);
+    corruptExecutionRows(f, ["task_outbox_v1"], db => {
+      const row = db.prepare("SELECT * FROM task_outbox_v1 WHERE event_type='task.execution_closed'").get()!, event = JSON.parse(String(row.event_json));
+      if (variant === "missing") db.prepare("DELETE FROM task_outbox_v1 WHERE cursor=?").run(row.cursor!);
+      else if (variant === "duplicate") {
+        event.eventId = "duplicated-close-event";
+        db.prepare(`INSERT INTO task_outbox_v1(event_id,workspace_id,entity_kind,entity_id,revision,event_type,owner_epoch,recovery_epoch,occurred_at,publish_state,event_json)
+          SELECT ?,workspace_id,entity_kind,entity_id,revision,event_type,owner_epoch,recovery_epoch,occurred_at,publish_state,? FROM task_outbox_v1 WHERE cursor=?`)
+          .run(event.eventId, canonicalJsonV1(event), row.cursor!);
+      } else {
+        if (variant === "wrong-binding") event.payload.bindingId = "missing-binding";
+        if (variant === "open-snapshot") event.payload.executionRevision = 2;
+        if (variant === "wrong-task-revision") event.aggregate.revision = 2;
+        if (variant === "wrong-time") event.occurredAt = T1;
+        db.prepare("UPDATE task_outbox_v1 SET event_json=?,revision=?,occurred_at=?,owner_epoch=? WHERE cursor=?")
+          .run(canonicalJsonV1(event), event.aggregate.revision, event.occurredAt, variant === "wrong-owner" ? 2 : row.owner_epoch!, row.cursor!);
+      }
+    }); rejectCorruptExecution(f);
+  });
+});
+
+test("later physical close does not rewrite the settled acknowledgement or Task command receipt", t => {
+  const f = fixture(t); f.start(); const envelope = f.envelope(1, true), settled = f.ingest(envelope);
+  const closed = f.close(); assert.equal(closed.closed, true);
+  const later = f.store.tasks.replay(W, { afterCommitCursor: settled.commitCursor });
+  assert.equal(later.events.length, 1); assert.equal(later.events[0]!.event.type, "task.execution_closed");
+  assert.ok(later.highWatermark > settled.commitCursor); assert.deepEqual(f.ingest(envelope), { ...settled, replay: true });
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  assert.equal(db.prepare("SELECT commit_cursor FROM task_receipt_v1 WHERE command_id=?").get(`settled:${envelope.event.eventId}`)!.commit_cursor, settled.commitCursor); db.close();
+  f.reopen(); assert.deepEqual(f.ingest(envelope), { ...settled, replay: true });
+});
+
+test("a new attempt without an execution never borrows the previous attempt close proof", t => {
+  const f = fixture(t, "model-allowed", undefined, undefined, true); f.allocate(); f.close();
+  for (const [kind, revision] of [["task.cancel", 2], ["task.retry", 4], ["task.cancel", 6]] as const)
+    f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: `${kind}-${revision}`, idempotencyKey: `${kind}-${revision}`, workspaceId: W,
+      expectedRevision: revision, payload: { kind, targetRef: { kind: "task", id: f.taskId, revision } } });
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  assert.equal(db.prepare(`SELECT count(*) AS n FROM task_content_dependency_v1 d JOIN task_snapshot_v1 t ON t.content_id=d.target_id AND t.content_version=d.target_version
+    JOIN task_execution_snapshot_v1 e ON e.content_id=d.source_id AND e.content_version=d.source_version WHERE t.revision IN (7,8)`).get()!.n, 0); db.close();
+  removeExecutionBodies(f); assert.ok(f.store.tasks.replay(W).events.length); f.reopen(); assert.ok(f.store.tasks.replay(W).events.length);
 });

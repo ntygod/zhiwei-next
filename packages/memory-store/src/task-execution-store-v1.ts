@@ -216,6 +216,14 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
     this.#insertSnapshot(row, revision, body, content, now);
     if (this.#host.db.prepare("UPDATE task_execution_v1 SET current_revision=?,active=?,updated_at=? WHERE binding_id=? AND current_revision=?")
       .run(revision, body.closed ? 0 : 1, now, row.binding_id!, row.current_revision!).changes !== 1) this.#host.fail("revision_conflict");
+    if (body.closed && !owned.body.closed) {
+      const event = parseProductEventV1({ schemaVersion: 1, eventId: this.#configured().ids.next("event"), workspaceId: row.workspace_id,
+        aggregate: { kind: "task", id: row.task_id, revision: integer(owned.current.task.current_revision) }, occurredAt: now,
+        type: "task.execution_closed", payload: { bindingId: body.binding.bindingId, executionRevision: revision } });
+      this.#host.db.prepare(`INSERT INTO task_outbox_v1(event_id,workspace_id,entity_kind,entity_id,revision,event_type,owner_epoch,recovery_epoch,occurred_at,publish_state,event_json)
+        VALUES(?,?,'task',?,?,'task.execution_closed',?,?,?,'pending',?)`).run(event.eventId, event.workspaceId, event.aggregate.id,
+          event.aggregate.revision, owned.current.session.owner_epoch!, this.#host.recoveryEpoch(), now, json(event));
+    }
     return this.#summary({ ...row, current_revision: revision }, body);
   }
   #insertSnapshot(row: Row, revision: number, body: Body, content: ContentRefV2, now: string): void {
