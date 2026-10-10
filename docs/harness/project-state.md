@@ -203,10 +203,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 8ca8446f848960bbf0bdaac49029b17b9d1637a6
-capture workflow             38017852560
-capture artifact             11656453345
-capture artifact digest      sha256:073a6427794415ff028f8545ab91ba6681ab2cad415b90b7dc09a5aa1d954aef
+capture head                 322bf58985c44307a2546b047eb3368839b52358
+capture workflow             38020190525
+capture artifact             11657289511
+capture artifact digest      sha256:dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
