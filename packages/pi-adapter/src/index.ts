@@ -61,3 +61,6 @@ export function normalizePiEvent(
   }
   return { ...shared, type: "session.closed", observation: { actor: "system", kind: "session_event", payload: { reason: event.reason ?? "unknown" } } };
 }
+
+export { createControlledPiWorkerClient, ControlledPiWorkerError } from "./controlled-worker-client.ts";
+export type { ControlledPiWorkerOptions, ControlledPiWorkerClient, ControlledPiCommandReceipt, ControlledPiCloseEvidence } from "./controlled-worker-client.ts";

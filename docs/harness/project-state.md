@@ -8,9 +8,9 @@ updated: 2026-10-10
 
 ## 当前工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
 
-canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker`，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
+canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker` / Draft [PR115](https://github.com/ntygod/zhiwei-next/pull/115)，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
 
-当前开发正式 CLI JSONL Worker 传输、Daemon Supervisor 与工具/模型 Broker；真实入口默认关闭，仅固定合成材料/接收器。新一方扩展合同见 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)，尚待独立决策接受；不把 unknown 边界的本地编译当上游 SDK 类型支持。root SDK46 诊断保留，精确工具链/官方入口不变。原 #90 及同等争议攻防动态实验不重跑，Z08/Z09 真实安全验收 `not_run`。
+当前开发正式 CLI JSONL Worker 传输、Daemon Supervisor 与工具/模型 Broker；真实入口默认关闭，仅固定合成材料/接收器。新一方扩展合同见 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)，已由独立有限决策审查接受，具体实现仍待最终 HEAD R3；不把 unknown 边界的本地编译当上游 SDK 类型支持。root SDK46 诊断保留，精确工具链/官方入口不变。原 #90 及同等争议攻防动态实验不重跑，Z08/Z09 真实安全验收 `not_run`。
 
 P1-04 承接真实 Session/Task/Attempt/输入及 WorkingState 存储，P1-06 消费 WorkingState；P1-07 基于 P1-04 精确历史完成 Outcome/Episode；P1-09 仅 Alpha 验收。本项不扩大 Task 存储范围或伪造持久授权。当前候选仍须完整原检查、最终独立 R3、本 PR Runtime 来源、Ready/live、保护合入与 main 回读。
 
@@ -253,14 +253,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #113；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #115；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 404427198a501998f9fd4ff17c3382812a66aa37
-capture workflow             38043223271
-capture artifact             11666279525
-capture artifact digest      sha256:9f13deb7e2c2191e602b702253dc3679a5dbd430bc0e0bcf0ecdb1a14d9d7121
+capture head                 bbed4d68dad41cbab176ea6a50b8f83b7cf4d494
+capture workflow             38046401917
+capture artifact             11666774064
+capture artifact digest      sha256:f20227db00a34e4d2511244d30a5b541915982dbc648b44ea7a847e3335433c9
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

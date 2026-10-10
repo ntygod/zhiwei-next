@@ -5,7 +5,7 @@ import {
   CognitiveProtocolError, parseExecutionFenceV1, parseExecutionSpecV1,
   parseRuntimeCapabilityProfileV1, parseRuntimeBindingV1, parseNormalizedRuntimeEnvelopeV1,
   parseRuntimeStopAcknowledgementV1, parseRuntimeProcessCloseEvidenceV1, parseRuntimeCommandAcceptanceV1,
-  canonicalNormalizedRuntimeEventV1,
+  canonicalNormalizedRuntimeEventV1, createNormalizedRuntimeEventV1,
   type ExecutionSpecV1, type RuntimeCapabilityProfileV1, type RuntimeBindingV1,
 } from "./index.ts";
 
@@ -175,4 +175,32 @@ test("dispatch acknowledgement retains request identity without pretending Runti
   reject(parseRuntimeCommandAcceptanceV1, { ...accepted, taskSucceeded: true });
   reject(parseRuntimeCommandAcceptanceV1, { ...accepted, status: "settled" });
   reject(parseRuntimeCommandAcceptanceV1, { ...rejected, errorCode: "arbitrary diagnostic text" });
+});
+
+test("reasoning omission is explicit in the neutral envelope without changing Runtime v1 or keeping body/hash", () => {
+  const fixtures = buildNormalizedRuntimeEventV1Fixture();
+  const message = fixtures.find(event => event.data.kind === "message.lifecycle" && event.data.phase === "ended" && event.data.role === "assistant")!;
+  const snapshot = fixtures.find(event => event.data.kind === "snapshot.messages")!;
+  assert.ok(message); assert.ok(snapshot);
+  const { eventId: messageId, idempotencyKey: messageKey, ...messageDraft } = message;
+  const { eventId: snapshotId, idempotencyKey: snapshotKey, ...snapshotDraft } = snapshot;
+  assert.equal(message.data.kind, "message.lifecycle");
+  if (message.data.kind !== "message.lifecycle" || message.data.phase !== "ended") throw new Error("Expected message fixture");
+  const events = [
+    createNormalizedRuntimeEventV1({ ...messageDraft, data: { ...message.data, contentKinds: ["text", "thinking"] } }),
+    createNormalizedRuntimeEventV1({ ...snapshotDraft, data: { kind: "snapshot.messages", messages: [{ role: "assistant", contentKinds: ["text", "thinking"], text: "Synthetic visible answer." }] } }),
+  ];
+  const marker = { category: "model-reasoning", reason: "not-retained" };
+  for (const event of events) {
+    const envelope = { schemaVersion: 1, bindingId: "binding-1", executionUnitId: "execution-synthetic-1", workerInstanceId: "worker-synthetic-1", sourceStreamId: "stream-1", event };
+    reject(parseNormalizedRuntimeEnvelopeV1, envelope);
+    const parsed = parseNormalizedRuntimeEnvelopeV1({ ...envelope, omissions: [marker] });
+    assert.deepEqual(parsed.omissions, [marker]);
+    assert.ok(Object.isFrozen(parsed.omissions)); assert.ok(Object.isFrozen(parsed.omissions![0]));
+    assert.equal(canonicalNormalizedRuntimeEventV1(parsed.event), canonicalNormalizedRuntimeEventV1(event));
+    assert.equal(Object.hasOwn(parsed.event, "omissions"), false);
+    for (const omissions of [[], [marker, marker], [{ category: "model-reasoning", reason: "unknown" }],
+      [{ category: "other", reason: "not-retained" }], [{ ...marker, body: "synthetic forbidden payload" }],
+      [{ ...marker, hash: "synthetic-forbidden-digest" }]]) reject(parseNormalizedRuntimeEnvelopeV1, { ...envelope, omissions });
+  }
 });

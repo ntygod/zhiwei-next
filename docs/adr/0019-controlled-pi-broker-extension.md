@@ -1,6 +1,7 @@
 # ADR 0019：受控 Pi Worker 的一方 Broker 扩展边界
 
-- 状态：Proposed
+- 状态：Accepted
+- 有限决策审查：[PR115 的独立审查记录](https://github.com/ntygod/zhiwei-next/pull/115#issuecomment-6096740729)绑定提案 sha256 `5ba41331c07c4891df4a1b0a14f4e4f739827d2402b4a382e574e459c7231699`；只接受合成运行时边界设计，不批准当前或未来实现代码。
 - 日期：2026-10-10
 - 工作项：[#114](https://github.com/ntygod/zhiwei-next/issues/114)，P1-03
 - 被取代关系：不取代 ADR0011/0013；保持精确工具链、官方 CLI JSONL 唯一路径和 root SDK 不支持的事实
@@ -19,9 +20,9 @@ Extension 接口是明确的运行时兼容边界：入口接收 `unknown`，核
 
 一方 extension 注册固定 native Provider，`stream` 与 `streamSimple` 都只向继承的专用 fd3 发送受限请求，不持有凭据、网络客户端或文件工具。其返回流每次只有一项有界模型请求；工具调用交还 Pi 原生循环。工具只注册固定文件只读、memory 读取、隔离草稿写入，处理函数也只走 fd3。没有 legacy Provider、默认模型或网络 fallback。
 
-fd3 是父进程创建并拥有的实际连接。请求正文不能指定 Workspace/Grant/执行绑定，Daemon 用连接绑定的不可变 ExecutionSpec 决定上下文。请求/响应有版本、严格形状、关联 ID、字节/次数/时间上限。收到 extension 握手以及真实 get_state/get_messages 一致观测后才 READY；加载失败或任何能力不符在 prompt 前失败。
+fd3 是父进程创建并拥有的实际连接。请求正文不能指定 Workspace/Grant/执行绑定，Daemon 用连接绑定的不可变 ExecutionSpec 决定上下文。请求/响应有版本、严格形状、关联 ID、字节/次数/时间上限。收到 extension 的实际 tools registry/active tools、Provider/model 身份与协议 revision 握手，以及真实 get_state/get_messages 一致观测后才 READY；加载失败或任何能力不符在 prompt 前失败。
 
-Host 仅发送固定 get_state/get_messages/prompt/abort，不提供任意 RPC。启动用精确 tools allowlist、关闭自动发现及 context files、独立空 HOME/agent/cwd/state，固定显式一方 extension。内建 llama.cpp 仍被上游加载这一事实须披露，不能声称零扩展或 OS 沙箱。实际模型请求记录包括 system prompt、消息/工具组成；不把仅发送给 Runtime 的输入当模型可见证据，不保留原始思维链或其 hash。
+Host 仅发送固定 get_state/get_messages/prompt/abort，不提供任意 RPC；prompt 本身会在普通 preflight 前解释扩展 slash commands，因此本 profile 在发送前拒绝以 slash command 或 shell shortcut 开头的 prompt，不把任意字符串都视为纯数据。启动固定包含 `--offline`（抑制上游网络刷新，不是 OS 网络隔离）、精确 tools allowlist、关闭自动发现及 context files、独立空 HOME/agent/cwd/state，固定显式一方 extension。内建 llama.cpp 仍被上游加载这一事实须披露，不能声称零扩展或 OS 沙箱。实际模型请求记录包括 system prompt、消息/工具组成；不把仅发送给 Runtime 的输入当模型可见证据，不保留原始思维链或其 hash。
 
 ## 当前启用边界
 

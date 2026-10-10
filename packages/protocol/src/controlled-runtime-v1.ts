@@ -105,6 +105,8 @@ export interface NormalizedRuntimeEnvelopeV1 {
   readonly workerInstanceId: string;
   readonly sourceStreamId: string;
   readonly event: NormalizedRuntimeEventV1;
+  /** Fixed omission metadata only. No reasoning body or substitute digest may be retained here. */
+  readonly omissions?: readonly Readonly<{ category: "model-reasoning"; reason: "not-retained" }>[];
 }
 export type RuntimeStopReasonV1 = "cancelled" | "timeout" | "budget_exceeded" | "protocol_error" | "configuration_changed" | "shutdown";
 /** Acknowledgement never proves that an external tool effect has been cancelled. */
@@ -271,12 +273,21 @@ export function parseRuntimeBindingV1(input: unknown): RuntimeBindingV1 {
 }
 export function parseNormalizedRuntimeEnvelopeV1(input: unknown): NormalizedRuntimeEnvelopeV1 {
   return wireBoundary(input, record => {
-    keys(record, ["schemaVersion", "bindingId", "executionUnitId", "workerInstanceId", "sourceStreamId", "event"]);
+    keys(record, ["schemaVersion", "bindingId", "executionUnitId", "workerInstanceId", "sourceStreamId", "event"], ["omissions"]);
     version(record.schemaVersion, controlledRuntimeSchemaVersion);
+    const event = parseNormalizedRuntimeEventV1(record.event);
+    const omissions = record.omissions === undefined ? undefined : list(record.omissions, 1, 1).map(item => {
+      const omission = object(item); keys(omission, ["category", "reason"]);
+      return { category: member(omission.category, ["model-reasoning"]), reason: member(omission.reason, ["not-retained"]) };
+    });
+    const hasThinkingMetadata = event.data.kind === "message.lifecycle"
+      ? "contentKinds" in event.data && event.data.contentKinds?.includes("thinking")
+      : event.data.kind === "snapshot.messages" && event.data.messages.some(message => message.contentKinds?.includes("thinking"));
+    if (hasThinkingMetadata && omissions === undefined) invalid();
     return {
       schemaVersion: controlledRuntimeSchemaVersion, bindingId: identifier(record.bindingId), executionUnitId: identifier(record.executionUnitId),
-      workerInstanceId: identifier(record.workerInstanceId), sourceStreamId: identifier(record.sourceStreamId),
-      event: parseNormalizedRuntimeEventV1(record.event),
+      workerInstanceId: identifier(record.workerInstanceId), sourceStreamId: identifier(record.sourceStreamId), event,
+      ...(omissions === undefined ? {} : { omissions }),
     };
   });
 }
