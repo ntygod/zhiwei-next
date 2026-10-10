@@ -44,7 +44,8 @@ PR #66  NormalizedRuntimeEvent v1 与来源绑定（已合并）
 历史    PR #95 重新绑定其 PR 来源；Runtime 内容身份不变
 历史    PR #97 重新绑定其 PR 来源；Runtime 内容身份不变
 历史    PR #101 重新绑定其 PR 来源；Runtime 内容身份不变
-当前    PR #103 重新绑定其 PR 来源；Runtime 内容身份不变
+历史    PR #103 重新绑定其 PR 来源；Runtime 内容身份不变
+当前    PR #105 重新绑定其 PR 来源；Runtime 内容身份不变
 ```
 
 历史标签只说明当时的证据强度，不代表当前能力回退。PR #64、#66 已经合并，Issue #32 的 Runtime 事实和正式协议继续保留。PR #71 在 2026-10-08 的 Ready gate 发现历史 Artifact 返回 404 后，重新采集并绑定当前 PR 的来源；不改写 Runtime 内容身份，不改变任何来源校验条件。
@@ -189,14 +190,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 8ca8446f848960bbf0bdaac49029b17b9d1637a6
-capture workflow             38017852560
-capture artifact             11656453345
-capture artifact digest      sha256:073a6427794415ff028f8545ab91ba6681ab2cad415b90b7dc09a5aa1d954aef
+capture head                 322bf58985c44307a2546b047eb3368839b52358
+capture workflow             38020190525
+capture artifact             11657289511
+capture artifact digest      sha256:dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3
 external Provider prompts    0
 ```
 
-该来源Run属于当前PR #103，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD是当前候选的严格祖先。Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
+该来源Run属于当前PR #105，Artifact内唯一`result.json`与committed Fixture逐字节相同；来源HEAD是当前候选的严格祖先。Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
 
 ## RPC Worker schema v2 当前合同
 
@@ -268,14 +269,14 @@ Worker Instance与Runtime Session分别关联；Host Signal Request不能替代�
 ### 当前v2身份与公开来源
 
 ```text
-source head                  7871f36fba3ca897476ce9beea18001e18ac6b02
-source workflow              38018143883
+source head                  a6276e631c66c3cd007fae1d5ab69182baaf4c5d
+source workflow              38020424100
 source run attempt           2
-source artifact              11657181065
-source artifact digest       sha256:fef86e16358c345ee2f5e2610326b7c499ffe4e72baa4f4da4e906fec8d29606
+source artifact              11658780184
+source artifact digest       sha256:82cdd31d1c527dc8002f46f881c69a2eb292e85169977b32087f914dbf06b813
 comparison run attempt       1
-comparison artifact          11656618653
-comparison artifact digest   sha256:e658b0283c4c756090bccf53fc6d781deab4fc5cea826498f78a8f1483492424
+comparison artifact          11658146643
+comparison artifact digest   sha256:013dc643a3a8ffa586d64581896fbc71db452efbba91b505135e461e083bf3c8
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -285,7 +286,7 @@ capture contract fingerprint 511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff3
 external Provider prompts    0
 ```
 
-PR #103 Draft中的两个受控recapture attempts均完成capture、Fresh validation、base validation和upload；在完整Fresh/committed对象相等后，受控compare步骤显式失败，因此Workflow/Worker Job保持可审计的failure形态。当前v2在新HEAD执行正式完整normalizer、负向mutation与Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
+PR #105 Draft中的两个受控recapture attempts均完成capture、Fresh validation、base validation和upload；在完整Fresh/committed对象相等后，受控compare步骤显式失败，因此Workflow/Worker Job保持可审计的failure形态。当前v2在新HEAD执行正式完整normalizer、负向mutation与Fresh/committed完整对象相等；Ready `rpc-worker-lifecycle-provenance.mjs`再实时验证attempt、Worker Job步骤、Artifact ID/name/digest、ZIP、唯一`result.json`和source HEAD ancestry。
 
 PR #71 历史续期记录：2026-10-08 的有效比较使用 run `37748698280` 的 attempts **2/3**。整轮重跑后 attempt 1 的 Artifact 已不可访问；仅重跑 RPC Worker job 后，attempts 2/3 的 Artifact 同时可读，下载的 `result.json` 逐字节一致。后续重复采集需先保存上一份证据，再验证单作业重跑后的两份公开 Artifact 都可读取，不能只保留日志中的 Artifact ID。当前 Workflow 的 Artifact 保留期为 14 天；到期后重新取证，不将本次 ID 当作永久在线证据。
 
@@ -529,3 +530,13 @@ Worker run `38018143883` 在 `7871f36fba3ca897476ce9beea18001e18ac6b02` 真实�
 两次原日志均先完成两个严格 Checker 与完整对象相等，再由明确三行 PR103 recapture-only guard 产生受控 CLI failure；不是 Runtime 故障或正常比较不相等。本补丁随比较器精确恢复原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90` 发布；原比较器对两份原 JSON 的正常完整 compare 已通过。原 ZIP 没有重新打包；Workflow、来源 validator、normalizer、base/wrapper、frozen content 和接受谓词无净变化，历史各节正文保留。
 
 本次仅续期现行 Runtime 来源，不执行受限实验或旧漏洞诊断，不恢复旧取消会话。最终新 HEAD 仍需核对原 blob 与 source ancestry、独立 R3 审查、原生完整 CI 与真实 Ready/live provenance；Draft 跳过的 live gate 不算通过。本来源不证明 Task 产品执行、持久 CAS 或 P1 正式接入已经交付。
+
+## 2026-10-10 PR #105 当前来源续期
+
+P0-04 规划 #104 按现行当前 PR 来源合同在同一 Draft PR 续期。SDK 使用 PR105 整体成功的 run `38020190525` attempt 1 / job `114119269089`，source `322bf58985c44307a2546b047eb3368839b52358`；Artifact `11657289511`，原 ZIP 为 10441 bytes，SHA-256 `dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3`。唯一 result.json 为 122178 bytes，SHA-256 `a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda252779603bc9e470034d`，与 committed 字节及完整对象相同。
+
+在添加受控 guard 前，同一 run 的正常 Worker job `114119269031` 已真实通过两个 Checker 和完整对象比较；原日志和 Artifact `11657484402` 保存为先决条件，不能冒充 failure-shape 来源。随后 Worker run `38020424100` 在 `a6276e631c66c3cd007fae1d5ab69182baaf4c5d` 真实执行 attempts 1/2（job `114120042582` / `114120375114`）。先保存 attempt 1 原 ZIP，再仅重跑该 Worker job；之后再次下载 attempt 1，与保存原件逐字节相同。comparison Artifact `11658146643` / 原 ZIP SHA-256 `013dc643a3a8ffa586d64581896fbc71db452efbba91b505135e461e083bf3c8`；source Artifact `11658780184` / 原 ZIP SHA-256 `82cdd31d1c527dc8002f46f881c69a2eb292e85169977b32087f914dbf06b813`。两 ZIP 各 5923 bytes，唯一 result.json 均为 72731 bytes / SHA-256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`，字节及完整对象相同，并等于 committed v2。
+
+两次原日志均先完成两个严格 Checker 与完整对象相等，再由明确三行 PR105 recapture-only guard 产生受控 CLI failure；不是 Runtime 故障或正常比较不相等。本补丁随比较器精确恢复原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90` 发布；原比较器对两份原 JSON 的正常完整 compare 已通过。原 ZIP 没有重新打包；Workflow、来源 validator、normalizer、base/wrapper、frozen content 和接受谓词无净变化，历史各节正文保留。
+
+这仅续期既有 Runtime 来源，不实现 P0-04 算法、不执行受限实验或旧漏洞诊断、不恢复旧取消会话。最终新 HEAD 仍须独立 R3、原生完整 CI 与真实 Ready/live provenance；Draft 跳过的 live gate 不算通过。来源不证明上下文资格、真实请求快照、Z14/Z15 或任何安全门已完成。
