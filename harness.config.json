@@ -376,6 +376,10 @@
     "scripts/check-main-provenance-dispatch.mjs",
     "scripts/check-pi-sdk-rpc-parity-result.mjs",
     "scripts/check-pi-sdk-rpc-client-messages-result.mjs",
-    "scripts/pi-sdk-rpc-parity-fixture.mjs"
+    "scripts/pi-sdk-rpc-parity-fixture.mjs",
+    "docs/harness/development-and-acceptance.md",
+    "docs/harness/execution-mode.json",
+    "scripts/check-execution-mode.mjs",
+    "scripts/check-execution-mode.test.mjs"
   ]
 }

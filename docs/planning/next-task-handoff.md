@@ -1,33 +1,23 @@
 # 下一开发上下文交接
 
-当前方向：design-v2 / P0，停止视觉打磨，持续推进核心。当前独立实现 work item [#106](https://github.com/ntygod/zhiwei-next/issues/106)，分支 `feat/106-context-budget-core`；PR/HEAD/CI 必须实时回读，不预填批准或合入。
+当前唯一工作是 [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，分离代码实现与产品验收。开始规则基于 main `e7077df36fe794e296008c7db88c175fb588013f`；本治理不实施产品，未保护合入前不得使用新模式。PR/HEAD/CI/批准须实时回读。
 
-## 先读什么
+## 先读
 
-1. [整体设计](design-baseline.md)、[详细架构 C05/C06](../architecture/detailed-design.md)、[认知流水线 §4–5](../architecture/cognitive-pipelines.md)。ADR0016—0018 已有独立设计接受，设计不是产品完成证明。
-2. [完整任务卡](implementation-plan.md)、[精确准备边界](core-preparation-boundary.md)、[P0-04 预算合同](context-budget-preparation.md)。
-3. 目标目录 AGENTS；Repository Reconciliation：人类新输入、Incident、primary PR、实际 main 与 HEAD。
+根/目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)、原 P1-01 [任务合同](implementation-plan.md#p1-01--建立认知与任务领域合同)、领域/数据/认知详设。依次区分真实实现依赖、用户稍后验收、真实启用许可。
 
-## 当前真实起点
+## 已交付与仍未证明
 
-#104 / PR105 已完成规划并受保护合入 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`，#104 已关闭；P0-04 精确准备合同对本独立任务生效，规则不在本次自改。
+- P0-03 PR103 已合入 `c32a13d65fbf484e099bca432502f03ba00a61e1`；P0-04 PR107 已合入 `e7077df36fe794e296008c7db88c175fb588013f`，固定工具链完整 check 428/428。它们是已测组件，不是产品验收。
+- P0-01 受原实验限制，P0-02 产品验收仍阻塞；D-04/D-08 Proposed、G-2/G-5 未通过。不得运行、重演、替代受限实验或换环境绕过，不把用户愿稍后验收当作平台解除限制。
+- PR99 已 closed unmerged，#98 原型暂停未交付，不恢复视觉打磨。
 
-PR103 已受保护合入 main `c32a13d65fbf484e099bca432502f03ba00a61e1`，#102 已关闭。P0-03 纯 Task/Attempt/Outcome 组件已交付：新增69测试、完整393测试通过；无生产消费者，不证明 Z03/Z16 端到端、P1-01 整体或真实持久 CAS/验证器。
+## 下一唯一实现
 
-Runtime v1、SQLite Ledger v1、固定工具链/CLI、有限诊断与场景运行器保留。D-04/D-08 仍 Proposed，P0-01/P0-02 未完成。不得重跑受限实验、替换环境规避限制或把旧批准延伸到新范围。
+本治理按旧规则完成独立 R3、完整 check、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源之后，另起独立 P1-01 canonical 实现上下文。直接交付正式领域/Scope/认知状态、Observation v2/Local API DTO；技术依赖 P0-03 已实现。限定合成输入与确定性类型/单测，保留 v1，不接生产消费者/迁移/模型或真实数据。完整范围与待验清单见唯一[分工合同](../harness/development-and-acceptance.md#真实技术依赖与下一实现)。不再为允许编码新造 P0 纯计算任务。
 
-## 下一可执行目标
+后续 P1-02 依赖 P1-01，按真实临时 SQLite 完整性/事务测试开发；不得把纯内存 CAS 当持久化证明。服务接线按其技术依赖继续，真实入口默认关闭，许可/验收未满足不得开放。
 
-[#106](https://github.com/ntygod/zhiwei-next/issues/106) / [PR107](https://github.com/ntygod/zhiwei-next/pull/107) 已实现预算合同指定的内存计算、固定渲染和35项独立测试，完整固定工具链 check 428/428通过；原规则要求完整 check、最终 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源。未实际通过前不宣称完成；不创建另一 integrator/finalizer PR。
+## 本治理交付检查
 
-P0-04 depends=[]，不依赖 P0-03 计算；输入已取得的合成材料，固定渲染和精确计数，结果不是可发送 Capsule 或资格证明。保留旧 compileContext 哨兵，不接生产、检索、存储、Runtime、模型或发送。仅是 Z14 组件证据，Z14/Z15 正式验收仍由 P1 链交付。
-
-P1-01 保留 P0-02/P0-03 并增加 P0-04，满足旧完整前阶段入口门，不伪称算法依赖；P1-06 保留 P1-05 并显式追加 P0-04。P0-01 原 D-04/D-08 实证登记、独立接受与 G-2 验收不变；P0-02 仍等待 P0-01/G-5，整个 P1 及以后正式接入链不越过安全/存储门。
-
-原型 [PR99](https://github.com/ntygod/zhiwei-next/pull/99)关闭未合并，源码 `dded6fd30d93a95deb9fe7724d153c19b02e295e`；#98 未交付，浏览器验收未完成，不恢复视觉工作或旧未提交补丁。
-
-## 工作纪律
-
-每次只领取就绪的一个用户结果；创建/复用 canonical Issue，分支含编号，第一个实质提交创建 Draft primary PR。任务卡中的测试/失败/恢复是最低具体证据，npm run check 与旧独立审查规则继续执行。当前设计 PR 不为自身降低门禁；新文件导航不代表旧测试可以删除。
-
-正常答复与进度优先向用户说明能力、限制与下一结果，不把历史 Runtime 身份和治理细节混进产品体验。#67/#44 原文保留，#15 独立维护；不批量创建远期 Issue。
+确认旧任务目录、design-plan validate/10 负例、冻结计划/安全决议不变；新 checker 是增量验证。最终 HEAD 旧完整检查与新检查、正反回滚演练、独立 R3、当前 PR Runtime 来源及全部现有 CI/保护流程均须真实完成。未运行/失败/跳过分别报告，下一任务从实时 main 重新对账，不继承旧 HEAD 批准。

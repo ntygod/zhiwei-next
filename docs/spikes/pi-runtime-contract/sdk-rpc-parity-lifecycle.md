@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #107 Draft固定容器Run `38022110861`已经成功完成Fresh Capture、两个Checker、committed Fixture校验和完整对象比较；其Artifact `11658418106`与committed Fixture逐字节绑定，当前Manifest因此处于`verified`状态。该Run的Capture HEAD `1d70a667e454e1698156aa84f0869def9560f379`是当前 provenance 候选的严格祖先。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #109 Draft 固定容器 Run `38037392722` 已经成功完成 Fresh Capture、两个 Checker、committed Fixture 校验和完整对象比较；其 Artifact `11663923009` 与 committed Fixture 逐字节绑定，SDK Manifest 继续处于 `verified` 状态。该 Run 的 Capture HEAD 为 `2ae982c3c62764ad69fe9290c2f3e6ba70679425`。当前 Worker 双 attempt 来源已按原合同续期；最终 provenance 候选仍须核验来源 ancestry 并通过真实 Ready/live 检查。
 
 Committed Fixture：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     1d70a667e454e1698156aa84f0869def9560f379
-workflow run     38022110861
-artifact id      11658418106
-artifact digest  sha256:26d9ca47fe61c72b4ab593f34cfd7df6613e2a95509c2c5c7c66bfacaef8dd57
+capture head     2ae982c3c62764ad69fe9290c2f3e6ba70679425
+workflow run     38037392722
+artifact id      11663923009
+artifact digest  sha256:309294280c6c37c1dd7df2321fd8700854ff510a743cdf8dbb7d017ea220d2bb
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38022110861`属于当前PR #107，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38037392722` 属于当前 PR #109，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源已按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 
