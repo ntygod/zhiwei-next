@@ -147,13 +147,50 @@
       "condition": null
     },
     {
+      "id": "P0-04",
+      "phase": "P0",
+      "kind": "required",
+      "title": "准备纯上下文预算与选择",
+      "depends": [],
+      "risk": "R2",
+      "paths": [
+        "packages/context-compiler",
+        "packages/domain"
+      ],
+      "contracts": [
+        "docs/architecture/detailed-design.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/architecture/cognitive-loop.md",
+        "docs/planning/core-preparation-boundary.md",
+        "docs/planning/context-budget-preparation.md"
+      ],
+      "outcome": "用已取得的合成内存材料验证 C06 的稳定选择、固定渲染与精确预算计算，供后续 P1-06 消费；结果不是可发送 ContextCapsule 或资格证明。",
+      "acceptance": [
+        "显式基础块、contextLimit/reservedOutput/mandatoryProtocolOverhead 与精确 TokenCounter 注入；精确 id/version/source refs、稳定序号、required 和不可拆冲突组仅为计算输入",
+        "按专篇定案 availableInput、4096/25%/余量上限、60/25/15 整数余数、required 占比、空类别借用、去重/异内容拒绝、跳过与最终重计数/最低可选组移除",
+        "确定性测试覆盖数值/计数器异常、基础与必需项超限、排序平局/输入排列、冲突组完整性、引用成本、深不可变与无输入修改；原 compileContext 导出和哨兵保持",
+        "仅报告 Z14 预算选择组件证据；不认证 Z14/Z15 端到端、材料资格、真实发送、请求快照或 P1 正式接入"
+      ],
+      "failures": [
+        "必需项不可截断或静默删除；无法满足预算显式 budget_conflict，计数异常不可 fallback 为估算",
+        "不引入 authorized/qualified 布尔许可、存储/检索/hydrate/网络/模型/Grant/Exposure/RequestSnapshot/fence 或 apps 消费者"
+      ],
+      "rollback": "通过受审 PR revert 纯组件；无生产消费者、迁移或持久数据，保留旧导出与哨兵。",
+      "nonGoals": "不做材料资格判定或 C05 检索编排，不接真实数据或生产入口，不执行/替代受限安全实验，不替换正式 C06 编译与发送流程。",
+      "scenarios": [
+        "Z14"
+      ],
+      "condition": null
+    },
+    {
       "id": "P1-01",
       "phase": "P1",
       "kind": "required",
       "title": "建立认知与任务领域合同",
       "depends": [
         "P0-02",
-        "P0-03"
+        "P0-03",
+        "P0-04"
       ],
       "risk": "R2",
       "paths": [
@@ -346,7 +383,8 @@
       "kind": "required",
       "title": "交付认知协调与受预算上下文",
       "depends": [
-        "P1-05"
+        "P1-05",
+        "P0-04"
       ],
       "risk": "R3",
       "paths": [
