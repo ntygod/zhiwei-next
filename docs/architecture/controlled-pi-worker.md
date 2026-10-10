@@ -2,6 +2,8 @@
 
 工作项 [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一 [PR115](https://github.com/ntygod/zhiwei-next/pull/115)。[ADR0019](../adr/0019-controlled-pi-broker-extension.md)补充一方运行时扩展边界；官方 CLI 方向仍由 ADR0013 决定。本页描述新代码的开发接线，不代表 Z08/Z09、安全接入或官方新组合已验收。
 
+P1-04 的持久 Task、输入/绑定和关闭证据接线见[持久任务与会话](persistent-task-sessions.md)，不把该合成组合升级为生产授权。
+
 ## 消费路径与责任
 
 ```text

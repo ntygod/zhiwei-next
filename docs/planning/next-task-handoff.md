@@ -2,6 +2,8 @@
 
 当前唯一实现为 [#116](https://github.com/ntygod/zhiwei-next/issues/116)，工作分支 `feat/116-persistent-task-sessions`，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。P1-03 / PR115 已保护合入并完成 main 来源回读，#114 关闭；完整基线 669 测试、120 strict roots。当前 P1-04 仍 `in_progress`，产品验收 `not_run`。
 
+当前工作区重建不冒称原已测试 tree 恢复；每个新候选重新类型/事务/进程/API 全量验证和全新独立 R3。原 Runtime 来源仅读取同一原 artifact，不重新采集。完整新候选尚未通过交付门前，不开始下一实现。
+
 ## 先读
 
 根/局部 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)、原 [P1-04 任务](implementation-plan.md#p1-04--接通-session任务摄取与事件-api)，以及数据、领域、运行协调、本地 API、持久化与部署合同。ADR0018/0019 的有限 Accepted 决策不扩大为真实启用。

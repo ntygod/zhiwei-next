@@ -16,6 +16,8 @@ P1-03 / [PR115](https://github.com/ntygod/zhiwei-next/pull/115) 已完成最终�
 
 基线正式 Node22.23.1/npm10.9.8 完整 check 已通过 669/669；当前开发变更仍须完成全部新事务/服务验证、当前 HEAD 新独立 R3、当前 PR 原 Runtime 来源、Ready/live 与保护合入。原 #90 及等价争议 Private/链接替换/备份攻防实验不运行；D-04/D-08、G-2/G-5、真实模型/账户/数据/部署均不启用。
 
+当前完整实现候选在临时工作区不可访问后重新构建；历史组件测试不计入新 HEAD 验证。新候选使用本地分批提交及精确内容快照，原比较器已本地恢复，当前 PR Runtime 原来源只允许读取原 artifact 重建证据，不重新采集。当前开发状态仍 `in_progress`，最终完整检查与独立审查待新树完成。
+
 ## 历史工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
 
 canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker` / Draft [PR115](https://github.com/ntygod/zhiwei-next/pull/115)，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
@@ -265,14 +267,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #115；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #117；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 bbed4d68dad41cbab176ea6a50b8f83b7cf4d494
-capture workflow             38046401917
-capture artifact             11666774064
-capture artifact digest      sha256:f20227db00a34e4d2511244d30a5b541915982dbc648b44ea7a847e3335433c9
+capture head                 2e1b741b6823e0ff27db07e1f591cc31eeabeb66
+capture workflow             38049123665
+capture artifact             11668144722
+capture artifact digest      sha256:87ab6c3171e2edf81a9761b1d1c811833b128c47bf34f1dad03afff64c42fd0b
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

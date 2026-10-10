@@ -13,7 +13,7 @@ import {
 } from "../../../../packages/protocol/src/index.ts";
 import { createControlledPiWorkerClient, type ControlledPiWorkerClient } from "../../../../packages/pi-adapter/src/index.ts";
 import {
-  createSyntheticControlledBroker, type SyntheticBrokerSnapshot,
+  createSyntheticControlledBroker, type SyntheticBrokerSnapshot, type SyntheticModelRequestRecord,
 } from "../infrastructure/controlled-broker.ts";
 
 export type SyntheticSupervisorErrorCode = "unsupported" | "invalid_request" | "binding_mismatch" | "state" | "cleanup";
@@ -64,6 +64,7 @@ export interface SyntheticWorkerSupervisorOptions {
   readonly scenario?: "text" | "tools";
   /** No prompt, capability, credential, path or model destination override. */
   readonly taskIdentity?: SyntheticTaskRuntimeIdentity;
+  readonly beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void;
 }
 
 /** No daemon HTTP route calls this factory. It can only dispatch its own generated synthetic input,
@@ -73,8 +74,9 @@ export interface SyntheticWorkerSupervisorOptions {
 export async function createSyntheticControlledWorkerSupervisor(input: SyntheticWorkerSupervisorOptions): Promise<SyntheticWorkerSupervisor> {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_request");
   const descriptors = Object.getOwnPropertyDescriptors(input);
-  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity"].includes(key)
+  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity", "beforeSyntheticModelReceive"].includes(key)
     || !descriptors[key] || !("value" in descriptors[key]) || !descriptors[key].enumerable)) fail("invalid_request");
+  if (input.beforeSyntheticModelReceive !== undefined && typeof input.beforeSyntheticModelReceive !== "function") fail("invalid_request");
   const scenario = input.scenario ?? "text";
   if (typeof input.packageDirectory !== "string" || typeof input.nodeExecutable !== "string" || !["text", "tools"].includes(scenario)) fail("invalid_request");
   let taskIdentity: SyntheticTaskRuntimeIdentity | undefined;
@@ -114,7 +116,7 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
   try {
     await mkdir(join(root, "workspace"), { mode: 0o700 });
     await mkdir(join(root, "state"), { mode: 0o700 });
-    broker = await createSyntheticControlledBroker(spec, { scenario });
+    broker = await createSyntheticControlledBroker(spec, { scenario, ...(input.beforeSyntheticModelReceive ? { beforeSyntheticModelReceive: input.beforeSyntheticModelReceive } : {}) });
   } catch {
     await rm(root, { recursive: true, force: true });
     throw new SyntheticSupervisorError("invalid_request");

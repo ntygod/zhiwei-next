@@ -1,6 +1,6 @@
 # 版本化认知持久化
 
-P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发入口为 `openSyntheticCognitionStoreV2`。名称有意标明当前仅合成开发；没有 Daemon、API、模型、Worker 或真实数据消费者。该入口不是启用许可，布尔 `authorized/accepted` 也不能开启生产能力。
+P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发入口为 `openSyntheticCognitionStoreV2`。名称有意标明当前仅合成开发；P1-04 增加默认关闭的合成 Daemon/API/Worker 组合，没有真实数据或外部模型消费者。该入口不是启用许可，布尔 `authorized/accepted` 也不能开启生产能力。
 
 ## 版本与支持范围
 
@@ -9,7 +9,7 @@ P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发
 - Claim：正文仅受管文件；SQL 保留不可变受控元数据/版本/证据。纠正使用持久 CAS，同事务新增版本、supersede、依赖失效、epoch、生命周期记录、Outbox。旧正文保留受政策约束的历史，不原位改成新事实。
 - 同一 Claim 版本的通用 dispute/expire 状态持久入口按原 M1-4 规划留给 P1-05；当前实现纠正、FORGET、control-first 收紧与按有效时间拒绝读取，没有任意状态 override。
 - Candidate、Hypothesis、Goal：正式 domain parser 验证的独立类型、规范正文、精确最小元数据投影和 revision history；指针、依赖、epoch、Outbox 同事务。ACCEPTED Candidate 必须走 `commitCandidateAcceptance` 与 Claim 同事务提交，独立提交拒绝；生命周期 revision 不得改写 Candidate 原正文。不是任意 JSON Repository，也不实现 P2 学习晋升。
-- Episode/WorkingState：有严格 codec/非正文投影；当前公开持久提交/读取返回固定 `unsupported`，因为WorkingState 持久依赖 P1-04 的真实 Task/Attempt 事务、由 P1-06 消费；Episode 由 P1-07 的 Outcome 消费者基于 P1-04 精确 Task/Attempt/Outcome 历史接线。P1-09 只负责 Alpha 端到端验收，不承担这两项存储实现。没有任意“引用已验证”开关。Procedure/P2、权限执行/预算/租约表不提前铺空壳。
+- Episode/WorkingState：有严格 codec/非正文投影；旧通用认知入口保持 `unsupported`。P1-04 专用 Task 事务已经写读绑定真实 Task/Attempt/Observation 的 WorkingState，由 P1-06 消费；Episode 由 P1-07 的 Outcome 消费者基于 P1-04 精确 Task/Attempt/Outcome 历史接线。P1-09 只负责 Alpha 端到端验收，不承担这两项存储实现。没有任意“引用已验证”开关。Procedure/P2、权限执行/预算/租约表不提前铺空壳。
 - 独立 evidence fragment 没有正式存储解析器时返回 `unsupported`，不会因为父 Observation 存在而接纳悬空 fragmentId。
 - v1→v2 转换要求显式 mapping；`fixtures/cognitive-v2` 保留两版 Fixture。版本转换不物化正文，不认证来源或授权，不迁移真实数据。
 
@@ -35,7 +35,7 @@ FORGET/SOURCE_SUPPRESS/PRIVACY_RESTRICT/RETENTION_SHORTEN/RESTORE_BEGIN 使用�
 
 `listManagedRecoveryCopies()` 将登记/未登记 snapshots 和 inactive generations 如实列为 pending/failed/purged。`purgeInactiveRecoveryCopies()` 是显式、整份副本清理：先在独立控制区持久撤销 snapshot 恢复资格，再删除精确受管正文/数据库/WAL/清单文件并同步目录；活动 generation 永远排除，inactive generation 清理持有其数据 mutex，永久空 mutex 与无正文审计身份保留。失败逐项报告，重试不撤销已持久的失效。它不接收任意路径，不做 P4 选择性重打包；没有副本或清除记录不能冒充执行过清除。使用恢复协调者的消费者必须调用其 `managedCopies(scope,ref)` 合并结果：任一仍保留的恢复副本使 backup 至少 pending；base store 的 backup/outside 只表达 base store 自身不拥有恢复目录。外部复制品、介质级残留仍在保证范围外。
 
-当前范围无存储的 Grant/会话凭据/执行 lease，不能从恢复历史取得执行权限。上述明文、受控合成 source/catalog 是 P1 最小开发闭环，也是 trusted-caller 接线合同。raw synthetic opener 本身不机械强制 active-generation 所有权；未来服务/Launcher 只能通过 coordinator 选择 generation，不得直接打开 inactive generation。当前没有任何生产消费者，也不是生产备份产品。P4 的 age/ZIP codec、vault、加密备份来源认证、跨安装导入与生产服务接线仍未实现。
+当前不存储 Grant/会话凭据；P1-04 的执行绑定、ownerEpoch 与输入记录只用于受控协调/历史核对，不能从恢复历史取得执行权限。上述明文、受控合成 source/catalog 是 P1 最小开发闭环，也是 trusted-caller 接线合同。raw synthetic opener 本身不机械强制 active-generation 所有权；未来服务/Launcher 只能通过 coordinator 选择 generation，不得直接打开 inactive generation。当前没有任何生产消费者，也不是生产备份产品。P4 的 age/ZIP codec、vault、加密备份来源认证、跨安装导入与生产服务接线仍未实现。
 
 ## 证据与限制
 
@@ -46,3 +46,28 @@ FORGET/SOURCE_SUPPRESS/PRIVACY_RESTRICT/RETENTION_SHORTEN/RESTORE_BEGIN 使用�
 恢复协调者目前只执行纯 manifest/activation 输入合同测试与严格类型检查；capture、隔离旧备份恢复、切换故障窗口、恢复副本清除及重启验收均为 `not_run`。这些路径已实现但没有动态通过证据，不能因 parser 测试通过就宣称 Z07 或整条 P1-02 产品验收完成。受限场景未写成绕过或跳过的可执行诊断。
 
 代码回退通过新受审 PR。已应用 0002 不能让旧软件直接打开，不做 down migration；迁移前一致副本与当前控制状态必须保留，失败事务回滚，后续只允许前向修复或满足当前 journal 的隔离恢复，绝不能回生已遗忘数据。
+
+
+## P1-04 合成 Task/Session 存储（Schema 3）
+
+[#116](https://github.com/ntygod/zhiwei-next/issues/116) 在相同 `product.sqlite` 追加固定 `0003_task_session_v1.sql`。`0001/0002`、Runtime v1 和既有 Ledger 入口不变；旧 v1/v2-only opener 拒绝更高版本。产品 opener 使用固定前向链，并在迁移同一事务中验证已有完整领域/正文投影。Schema、STRICT、索引/触发器 manifest、PRAGMA 及完整行校验继续 fail closed。没有迁移 override 或 down migration。
+
+`taskPersistence` 是合成组合根一次注入、固定捕获的同步无 I/O reducer、实例身份、内容政策和 ID 来源。HTTP 不接受 Task/Attempt/Outcome/历史对象或验证开关。`store.tasks` 从锁定的当前 Task 计算持久 CAS，独立检查正式 parser、连续 revision、不可变 intent/attempt/outcome 前缀和状态不变量。CREATED→READY、CANCELLING→CANCELLED 等所有中间版本都持久保存。状态、真实用户输入 Observation、WorkingState、幂等 receipt 与任务 Outbox 同事务，注入时钟每事务只读取一次。
+
+P1-04 没有任务成功验证器。Runtime settled 原子进入 VERIFYING，不能当成功；已实际停止的中断仅能产生 all-unknown/incomplete 的 UNVERIFIABLE Outcome。P1-07 才实现正式成功验证与 Episode 消费者。历史终态 attempt 和已有 Outcome 不原位重写。
+
+WorkingState 的旧通用认知入口保持 unsupported；专用 Task 入口保存真实 Task/attempt/intent/revision 及 Observation 证据。默认快照记录已提交 Task 状态；固定 reducer 也可返回与版本一一对应、非空 known/unknown/pendingInput/nextSteps 的完整状态。每个引用、时间、Scope、隐私与必要内容依赖均验证，独立更新必须伴随合法 Task revision，不开放任意覆写。
+
+SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `content_object` 生命周期。新 Daemon 先提高 Session ownerEpoch、发布 owner-fenced 状态、使旧 owner 写入失效，不自动派发。显式认证继续/重试登记新 attempt 后才能重新取得执行资格。旧 ALLOCATED/已派发绑定没有真实 EOF/close 证据时不能假设已停止；恢复 epoch 也不能充当无外部副作用证明。
+
+`store.executions` 先持久 ALLOCATED spec、实际 runtime_input 和 fence，再由可信主机启动；实际 READY 及单调扩展来源映射先于事件，dispatched 先于运行派发。完整 EOF/close 才显示 closed。模型请求的确切受控上下文在 receiver 前记录为独立 model_request，仅证明已捕获输入，不冒称发送 Exposure。`readExecutionDetails`、`listRuntimeInputs`、`listModelRequests` 从重开的受管正文重建真实输入。
+
+来源 transport 实现标识与原始 package 标识是不同命名空间。一次性 `runtimeSourceIdentity` 由可信组合根固定，随执行正文保存；Store 没有 Provider 特例、每事件映射器或客户端覆盖。完整 Worker/binding/native Session/source stream 身份逐项匹配。保留 Runtime v1 原始严格递增 source sequence；不同 Surface 可能共享上游计数器，数字跳跃本身不证明丢失，不重编号或伪造连续性。倒序、已占来源槽冲突拒绝，exact replay 返回原确认。settled 事件、checkpoint、Task VERIFYING、Outbox 与最终确认游标一次事务提交，失败全部回滚。
+
+任务事件是独立 `task-session-v1` 投影流，`task_outbox_v1` cursor 不是认知 Outbox 的通用数据库提交号。读快照、校验与 cursor 在同一 SQLite snapshot；消费者顺序推进并按 eventId 去重。当前没有删除/压缩事件的保留窗口，未知或跨 Workspace cursor 拒绝。外部不透明 token 的主体、Scope 和恢复 generation 绑定由 API 层负责。
+
+所有 Task/Session/输入/WorkingState/spec/envelope/model_request/命令比较资料都在受管文件，SQL 不复制永久正文或指纹。内部版本化正文 envelope 包含精确必要依赖，与 SQL 依赖投影比对；Session→命令→Task→执行/模型的闭包参与原 FORGET/隐私/保留/恢复控制。事务失败文件为不可读孤儿，原 collector 回收。最小 receipt 定位键按原合同留在受限数据库；可清除比较/结果正文到期或已清除后返回 unavailable，绝不重新执行，不把哈希称为匿名化。
+
+恢复协调者接受固定 `taskPersistence` 并传入每个重开 store；服务必须由协调者选择 active generation。RESTORE_BEGIN 隔离旧任务 Outbox、提高 Session epoch，不恢复运行授权。Schema 2 历史清单可以经明确前向迁移读取；清单解析成功不是恢复证明。现有 capture/备份攻击/隔离恢复/切换故障窗口等未运行路径保持 not_run；不执行旧 #90、Private 替换/备份攻击或等价受限诊断。
+
+验证仅使用虚构输入和真实隔离临时 SQLite；精确当前 HEAD 的 Node22.23.1/npm10.9.8 类型、事务、迁移、完整行、生命周期与正常进程重开结果在交付记录。产品验收始终 not_run，真实个人数据、模型、凭据、外部副作用和部署不启用。回退关闭新入口并排空 Worker，保留独立控制日志；不允许旧软件打开 Schema 3，也不通过恢复回生已遗忘正文，只能兼容软件或受审前向修复。

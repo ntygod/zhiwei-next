@@ -81,7 +81,7 @@ export type {
   StoredRuntimeEventV1,
 } from "./sqlite-observation-ledger.ts";
 
-// Synthetic development only; no daemon/API/runtime consumer is enabled.
+// Synthetic development only; real-data and external-model consumers remain disabled.
 export { SyntheticCognitionStoreV2, CognitiveStoreErrorV2, openSyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
 export type { SyntheticCognitionStoreOptionsV2, CognitionFenceV2, CognitiveStoreErrorCodeV2,
   StageCognitiveContentV2, CognitiveCommitReceiptV2, CognitiveOutboxEventV2 } from "./cognitive-store-v2.ts";
@@ -94,3 +94,6 @@ export type { SyntheticRecoveryOptionsV2, CreateSyntheticRecoveryOptionsV2,
   RestoreSyntheticSnapshotV2, SyntheticRecoveryReceiptV2, SyntheticSnapshotManifestV2,
   SyntheticRecoveryErrorCodeV2, ManagedSyntheticRecoveryCopyV2,
   ManagedSyntheticRecoveryPurgeResultV2 } from "./synthetic-recovery-v2.ts";
+
+export type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1, TaskStoreContextV1, TaskStoreCommandV1, TaskRuntimeCommandV1, TaskReductionContextV1, TaskReductionV1, TaskStoreCommitV1, TaskStoreReceiptV1, TaskStoreReadV1, TaskStoreSnapshotV1, TaskStoreReplayV1, TaskOutboxRowV1, RuntimeInputSnapshotV1, TaskInputCommitV1, TaskInputCommitResultV1 } from "./task-store-v1-types.ts";
+export type { TaskExecutionPersistenceV1, TaskExecutionReadV1, TaskExecutionEventCommitV1, TaskExecutionDetailsV1, TaskExecutionSourceIdentityV1, TaskModelRequestSnapshotV1, TaskModelRequestCommitV1 } from "./task-execution-v1-types.ts";

@@ -149,3 +149,19 @@ test("coverage status does not claim restricted adversarial or production author
   assert.deepEqual(controlledBrokerNotRun.map(row => row.scenario), ["durable-authority", "private-data", "injection", "link-substitution", "backup-recovery"]);
   assert(controlledBrokerNotRun.every(row => row.status === "not_run"));
 });
+
+test("Synchronous durable input commit precedes first-party synthetic reception", async () => {
+  let committed = false;
+  const broker = await createSyntheticControlledBroker(spec(), { now: () => NOW,
+    beforeSyntheticModelReceive(record) { assert.equal(record.requestId, "model-1"); committed = true; } });
+  try { const response = await broker.handle(modelRequest()); assert.equal(response.ok, true); assert.equal(committed, true); assert.equal(broker.snapshot().receiverRequests.length, 1); }
+  finally { await broker.dispose(); }
+});
+
+test("Failed or asynchronous durable input hook prevents synthetic reception", async () => {
+  for (const beforeSyntheticModelReceive of [() => { throw new Error("synthetic transaction rejected"); }, (() => Promise.resolve()) as unknown as () => void]) {
+    const broker = await createSyntheticControlledBroker(spec(), { now: () => NOW, beforeSyntheticModelReceive });
+    try { assert.equal((await broker.handle(modelRequest())).ok, false); assert.equal(broker.snapshot().receiverRequests.length, 0); }
+    finally { await broker.dispose(); }
+  }
+});
