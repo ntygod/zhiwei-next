@@ -194,8 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    // PR109 recapture-only guard: retain historical failed-attempt provenance after equality.
-    throw new Error("PR109 recapture-only guard after complete committed-object equality; restore before review.");
     return;
   }
   if (outputIndex >= 0) {

@@ -12,7 +12,7 @@ updated: 2026-10-10
 
 本独立 R3 治理仅定案[代码开发与产品验收分离](development-and-acceptance.md)。原任务/验收 DAG 保留；新增执行索引记录实现依赖与双状态，不复制任务内容。本治理仍走旧规则，保护合入后下一独立实现直接进入 P1-01，合成输入编写正式领域/协议代码；不再循环新增 P0 准备卡。P0-01/02、D-04/D-08、G-2/G-5 仍未验收，不执行受限实验、不授予真实数据/模型/外发/凭据/部署许可。最终 HEAD 批准/CI/合入均以实时 GitHub 为准。
 
-当前 Draft [PR109](https://github.com/ntygod/zhiwei-next/pull/109) 已通过固定工具链 428 项原产品测试及 111 项执行模式/原 PR 分类回归。独立预审发现的新规则路径分类缺口已通过迁入现有 `docs/harness/` 保护范围修复；原分类器/Workflow 不改。Worker 当前 PR 来源续期仍待精确临时采集变更许可，未写 guard、未重跑，不得 Ready 或用旧来源代替。
+当前 Draft [PR109](https://github.com/ntygod/zhiwei-next/pull/109) 已通过固定工具链 428 项原产品测试及 111 项执行模式/原 PR 分类回归。独立预审发现的新规则路径分类缺口已通过迁入现有 `docs/harness/` 保护范围修复；原分类器/Workflow 不改。明确获准后，Worker 当前 PR source `9b8b894421beb5992bdedc485eda0c41a73afabe` 的 run `38038329152` 已完成两次受控采集，原 ZIP 与完整对象校验通过；本候选恢复原 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。最终完整 HEAD 独立 R3、真实 Ready/live provenance 与 CI 尚待实际通过。
 
 以下为历史工作快照，不是开放 WIP 或新选工入口。
 
@@ -217,7 +217,7 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源尚待完成，未将正常 Worker success 作为原 failure-shape 来源。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
