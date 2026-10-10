@@ -41,7 +41,7 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
     case "task.cancel": apply({ kind: "cancel" }); if (!context.activeExecution || context.activeExecution.closed) apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); break;
     case "task.pause": apply({ kind: "request-pause" }); break;
     case "task.continue":
-      if (task.state === "PAUSED" || (task.state === "READY" && context.requiresReauthorization)) { stopped(); apply({ kind: "cancel" }); apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); }
+      if (task.state === "PAUSED" || (task.state === "READY" && (context.requiresReauthorization || context.activeExecution?.closed))) { stopped(); apply({ kind: "cancel" }); apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); }
       if (!isTerminalTaskState(task.state)) { apply({ kind: "continue" }); break; }
       task = retryTask(task, change(), context.attemptId as TaskAttemptId).task; versions.push(task); apply({ kind: "prepare" }); break;
     case "task.retry": task = retryTask(task, change(), context.attemptId as TaskAttemptId).task; versions.push(task); apply({ kind: "prepare" }); break;

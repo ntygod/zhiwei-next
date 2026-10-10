@@ -9,7 +9,7 @@ CREATE TABLE session_v1 (
   owner_epoch INTEGER NOT NULL CHECK (owner_epoch BETWEEN 1 AND 9007199254740991),
   owner_instance_id TEXT NOT NULL CHECK (length(trim(owner_instance_id)) > 0),
   requires_reauthorization INTEGER NOT NULL CHECK (requires_reauthorization IN (0, 1)),
-  contract_revision INTEGER NOT NULL CHECK (contract_revision BETWEEN 1 AND 9007199254740991),
+  contract_revision INTEGER NOT NULL CHECK (contract_revision = 1),
   content_id TEXT NOT NULL CHECK (length(trim(content_id)) > 0),
   content_version INTEGER NOT NULL CHECK (content_version BETWEEN 1 AND 9007199254740991),
   created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
@@ -17,7 +17,30 @@ CREATE TABLE session_v1 (
   UNIQUE (workspace_id, id),
   UNIQUE (scope_key, id),
   FOREIGN KEY (scope_key, content_id, content_version) REFERENCES content_object(scope_key, content_id, content_version),
+  FOREIGN KEY (id, revision) REFERENCES session_revision_v1(session_id, revision) DEFERRABLE INITIALLY DEFERRED,
   CHECK (updated_at >= created_at)
+) STRICT;
+
+-- Immutable ownership/reauthorization facts survive managed contract-body removal.
+CREATE TABLE session_revision_v1 (
+  session_id TEXT NOT NULL CHECK (length(trim(session_id)) > 0),
+  revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 9007199254740991),
+  workspace_id TEXT NOT NULL CHECK (length(trim(workspace_id)) > 0),
+  owner_epoch INTEGER NOT NULL CHECK (owner_epoch BETWEEN 1 AND 9007199254740991),
+  owner_instance_id TEXT NOT NULL CHECK (length(trim(owner_instance_id)) > 0),
+  requires_reauthorization INTEGER NOT NULL CHECK (requires_reauthorization IN (0, 1)),
+  contract_revision INTEGER NOT NULL CHECK (contract_revision = 1),
+  recovery_epoch INTEGER NOT NULL CHECK (recovery_epoch BETWEEN 0 AND 9007199254740991),
+  reason TEXT NOT NULL CHECK (reason IN ('created', 'owner-fenced', 'reauthorized', 'recovery-fenced')),
+  created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
+  event_cursor INTEGER UNIQUE CHECK (event_cursor IS NULL OR event_cursor BETWEEN 1 AND 9007199254740991),
+  PRIMARY KEY (session_id, revision),
+  FOREIGN KEY (workspace_id, session_id) REFERENCES session_v1(workspace_id, id),
+  FOREIGN KEY (event_cursor) REFERENCES task_outbox_v1(cursor) DEFERRABLE INITIALLY DEFERRED,
+  CHECK ((reason = 'recovery-fenced') = (event_cursor IS NULL)),
+  CHECK (reason != 'created' OR (revision = 1 AND owner_epoch = 1 AND requires_reauthorization = 0)),
+  CHECK (reason != 'reauthorized' OR requires_reauthorization = 0),
+  CHECK (reason NOT IN ('owner-fenced', 'recovery-fenced') OR requires_reauthorization = 1)
 ) STRICT;
 
 CREATE TABLE task_v1 (
@@ -181,6 +204,25 @@ CREATE TRIGGER session_v1_reject_delete
 BEFORE DELETE ON session_v1
 BEGIN
   SELECT RAISE(ABORT, 'session_v1 reject delete');
+END;
+
+CREATE TRIGGER session_revision_v1_reject_replacement
+BEFORE INSERT ON session_revision_v1
+WHEN EXISTS (SELECT 1 FROM session_revision_v1 WHERE (session_id = NEW.session_id AND revision = NEW.revision) OR event_cursor = NEW.event_cursor)
+BEGIN
+  SELECT RAISE(ABORT, 'session_revision_v1 reject replacement');
+END;
+
+CREATE TRIGGER session_revision_v1_reject_delete
+BEFORE DELETE ON session_revision_v1
+BEGIN
+  SELECT RAISE(ABORT, 'session_revision_v1 reject delete');
+END;
+
+CREATE TRIGGER session_revision_v1_reject_update
+BEFORE UPDATE ON session_revision_v1
+BEGIN
+  SELECT RAISE(ABORT, 'session_revision_v1 reject update');
 END;
 
 CREATE TRIGGER task_v1_reject_replacement
@@ -358,7 +400,10 @@ WHEN NEW.id IS NOT OLD.id
   OR NEW.revision != OLD.revision + 1
   OR NEW.owner_epoch < OLD.owner_epoch
   OR NEW.owner_epoch > OLD.owner_epoch + 1
-  OR NEW.contract_revision < OLD.contract_revision
+  OR NEW.contract_revision IS NOT OLD.contract_revision
+  OR NEW.contract_revision != 1
+  OR NEW.content_id IS NOT OLD.content_id
+  OR NEW.content_version IS NOT OLD.content_version
   OR NEW.updated_at < OLD.updated_at
   OR (NEW.owner_instance_id IS NOT OLD.owner_instance_id AND NEW.owner_epoch != OLD.owner_epoch + 1)
 BEGIN

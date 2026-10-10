@@ -10,9 +10,11 @@ updated: 2026-10-10
 
 canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分支 `feat/116-persistent-task-sessions` / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。开工 reconciliation 无开放 PR/Incident，#44/#67 人类输入已核对；P1-03/PR115 已完整交付并关闭 #114。
 
-完整代码已发布 [5d378978b18f7f0368ca241d5cba0a1d2f326fd8](https://github.com/ntygod/zhiwei-next/commit/5d378978b18f7f0368ca241d5cba0a1d2f326fd8)，实现固定前向 schema3、SessionContract/ownerEpoch、Task/Attempt/unknown Outcome 精确历史、WorkingState/真实 Observation/输入、receipt/Outbox/快照、独立配对/CSRF/Scope API、CLI 和受控 Worker 持久接线。全部代码只用于自有临时合成安装，普通入口仍诊断-only。
+完整代码已发布于 PR117，后续独立审查持续修复持久行完整性；实现固定前向 schema3、SessionContract/ownerEpoch、Task/Attempt/unknown Outcome 精确历史、WorkingState/真实 Observation/输入、receipt/Outbox/快照、独立配对/CSRF/Scope API、CLI 和受控 Worker 持久接线。全部代码只用于自有临时合成安装，普通入口仍诊断-only。
 
-该候选在工作区不可访问后重新构建，历史组件结果没有作为新证据。新 Node22.23.1/npm10.9.8 原完整 check exit0：766/766 测试，144 strict roots；发布 tree `4cd40546e360b1bcbdbf6d03e282d461bda8f2c8` 与验证树逐字一致。含13项实际 SQLite/HTTP/CLI/SSE/合成 Worker 集成、重启/中断/取消/暂停关闭边界、输入读回及并发接纳。当前完整 HEAD 新独立 R3、Ready/live、保护合入与 main 回读仍待完成，不能视为已合入。
+该候选在工作区不可访问后重新构建，历史组件结果没有作为新证据。后续已实现有界一致快照分页、浏览器同源读、实际 Supervisor custody 保留时的控制面中断恢复，以及正文撤销后仍保留的结构性历史校验。完整 OS Daemon 死亡且丢失 custody 后的 orphan 发现/回收仍 unsupported/not_run，不以 owner fencing 或 PID 推断进程关闭。
+
+独立审查发现 Session 元数据缺少不可变历史锚定；当前按全部持久表逐列核对 writer 可产生状态、reader 校验、正文撤销边界与双向关联，并补充 Session history 和回归测试。先前候选 `fe17df01c0598cb925f5fb5029d8c47c2f1aa7ca` 的 Node22.23.1/npm10.9.8 原完整 check 为865/865测试、144 strict roots，但该 HEAD 独立 R3 为 BLOCKED；该结果不批准后续修复。新候选完整检查、全新独立 R3、Ready/live、保护合入与 main 回读仍待完成，不能视为已交付。
 
 执行索引 `implemented` 引用已存在代码；Z10/Z11/Z12 产品验收保持 `not_run`，官方 Pi CLI+新扩展完整进程组合也 `not_run`。P1-05 为下一实现，但须本 PR 完成交付与新 reconciliation 后才开工。成功验证/Episode 属于 P1-07；不靠模型查询进度，不开启后台自治。
 

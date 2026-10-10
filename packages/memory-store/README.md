@@ -50,6 +50,8 @@ FORGET/SOURCE_SUPPRESS/PRIVACY_RESTRICT/RETENTION_SHORTEN/RESTORE_BEGIN 使用�
 
 ## P1-04 合成 Task/Session 存储（Schema 3）
 
+逐表 writer/reader、双向关联、正文失效边界与测试映射见[持久字段完整性覆盖清单](task-session-integrity-coverage.md)。
+
 [#116](https://github.com/ntygod/zhiwei-next/issues/116) 在相同 `product.sqlite` 追加固定 `0003_task_session_v1.sql`。`0001/0002`、Runtime v1 和既有 Ledger 入口不变；旧 v1/v2-only opener 拒绝更高版本。产品 opener 使用固定前向链，并在迁移同一事务中验证已有完整领域/正文投影。Schema、STRICT、索引/触发器 manifest、PRAGMA 及完整行校验继续 fail closed。没有迁移 override 或 down migration。
 
 `taskPersistence` 是合成组合根一次注入、固定捕获的同步无 I/O reducer、实例身份、内容政策和 ID 来源。HTTP 不接受 Task/Attempt/Outcome/历史对象或验证开关。`store.tasks` 从锁定的当前 Task 计算持久 CAS，独立检查正式 parser、连续 revision、不可变 intent/attempt/outcome 前缀和状态不变量。CREATED→READY、CANCELLING→CANCELLED 等所有中间版本都持久保存。状态、真实用户输入 Observation、WorkingState、幂等 receipt 与任务 Outbox 同事务，注入时钟每事务只读取一次。
@@ -64,11 +66,11 @@ SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `c
 
 `store.executions` 先持久 ALLOCATED spec、实际 runtime_input 和 fence，再由可信主机启动；实际 READY 及单调扩展来源映射先于事件，dispatched 先于运行派发。完整 EOF/close 才显示 closed。模型请求的确切受控上下文在 receiver 前记录为独立 model_request，仅证明已捕获输入，不冒称发送 Exposure。`readExecutionDetails`、`listRuntimeInputs`、`listModelRequests` 从重开的受管正文重建真实输入。
 
-来源 transport 实现标识与原始 package 标识是不同命名空间。一次性 `runtimeSourceIdentity` 由可信组合根固定，随执行正文保存；Store 没有 Provider 特例、每事件映射器或客户端覆盖。完整 Worker/binding/native Session/source stream 身份逐项匹配。保留 Runtime v1 原始严格递增 source sequence；不同 Surface 可能共享上游计数器，数字跳跃本身不证明丢失，不重编号或伪造连续性。倒序、已占来源槽冲突拒绝，exact replay 返回原确认。settled 事件、checkpoint、Task VERIFYING、Outbox 与最终确认游标一次事务提交，失败全部回滚。
+来源 transport 实现标识与原始 package 标识是不同命名空间。一次性 `runtimeSourceIdentity` 由可信组合根固定，随执行正文保存；Store 没有 Provider 特例、每事件映射器或客户端覆盖。完整 Worker/binding/native Session/source stream 身份逐项匹配。当前有界实现每个 attempt 只允许一个 durable binding；同 binding 精确重放不新增记录，再次执行必须经过显式新 attempt，不能暗中复用旧租约。最新执行按经验证的 Task allocation revision 选择，不以隐式 rowid 充当历史真源。保留 Runtime v1 原始严格递增 source sequence；不同 Surface 可能共享上游计数器，数字跳跃本身不证明丢失，不重编号或伪造连续性。倒序、已占来源槽冲突拒绝，exact replay 返回原确认。settled 事件、checkpoint、Task VERIFYING、Outbox 与最终确认游标一次事务提交，失败全部回滚。
 
-任务事件是独立 `task-session-v1` 投影流，`task_outbox_v1` cursor 不是认知 Outbox 的通用数据库提交号。读快照、校验与 cursor 在同一 SQLite snapshot；消费者顺序推进并按 eventId 去重。每个 Session/Task/input/progress 事件双向校验实际聚合、版本、Workspace、owner、时间与来源；孤立 canonical 事件也按 corruption 拒绝。Session 事件链与当前行端点匹配，只有已提交 recovery epoch 引起的 owner/revision 步进不要求执行投影事件。当前没有删除/压缩事件的保留窗口，未知或跨 Workspace cursor 拒绝。外部不透明 token 的主体、Scope 和恢复 generation 绑定由 API 层负责。
+任务事件是独立 `task-session-v1` 投影流，`task_outbox_v1` cursor 不是认知 Outbox 的通用数据库提交号。读快照、校验与 cursor 在同一 SQLite snapshot；消费者顺序推进并按 eventId 去重。消费者必须指向正数的同 Workspace 游标；当前世代 published/pending 与已确认前缀严格对应，旧世代事件只能 quarantined。每个 Session/Task/input/progress 事件双向校验实际聚合、版本、Workspace、owner、时间与来源；孤立 canonical 事件也按 corruption 拒绝。Session 的不可变 revision 历史精确记录 daemon、ownerEpoch、固定 contractRevision=1、重授权状态、恢复世代、时间与事件游标；当前行和每个事件均有双向历史链接。恢复历史只关联本 Store 已应用的控制记录，每条实际恢复转换增加一次 owner/revision，不从世代差推算虚构转换。当前没有删除/压缩事件的保留窗口，未知或跨 Workspace cursor 拒绝。外部不透明 token 的主体、Scope 和恢复 generation 绑定由 API 层负责。
 
-所有 Task/Session/输入/WorkingState/spec/envelope/model_request/命令比较资料都在受管文件，SQL 不复制永久正文或指纹。内部版本化正文 envelope 包含精确必要依赖，与 SQL 依赖投影比对；Session→命令→Task→执行/模型的闭包参与原 FORGET/隐私/保留/恢复控制。事务失败文件为不可读孤儿，原 collector 回收。最小 receipt 定位键按原合同留在受限数据库；可清除比较/结果正文到期或已清除后返回 unavailable，绝不重新执行，不把哈希称为匿名化。
+所有 Task/Session/输入/WorkingState/spec/envelope/model_request/命令比较资料都在受管文件，SQL 不复制永久正文或指纹。内部版本化正文 envelope 包含精确必要依赖，与 SQL 依赖投影比对；Session→命令→Task→执行/模型的闭包参与原 FORGET/隐私/保留/恢复控制。事务失败文件为不可读孤儿，原 collector 回收。命令 receipt 必须覆盖同事务全部连续版本，并指向该命令最后一个状态事件；输入顺序、Task/Attempt 标量状态、精确可保留依赖角色和依赖图无环性在正文失效后仍校验。已清除的 request、criteria、WorkingState 额外证据选择及模型上下文不重建，也不声称仍可验证其语义。最小 receipt 定位键按原合同留在受限数据库；可清除比较/结果正文到期或已清除后返回 unavailable，绝不重新执行，不把哈希称为匿名化。
 
 恢复协调者接受固定 `taskPersistence` 并传入每个重开 store；服务必须由协调者选择 active generation。RESTORE_BEGIN 隔离旧任务 Outbox、提高 Session epoch，不恢复运行授权。Schema 2 历史清单可以经明确前向迁移读取；清单解析成功不是恢复证明。现有 capture/备份攻击/隔离恢复/切换故障窗口等未运行路径保持 not_run；不执行旧 #90、Private 替换/备份攻击或等价受限诊断。
 

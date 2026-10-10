@@ -148,7 +148,8 @@ export class SyntheticCognitionStoreV2 {
     this.#options = options; this.#db = db; this.#pragmas = pragmas;
     this.#files = files; this.#journal = journal; this.#locks = locks;
     const host: TaskStoreHostV1 = {
-      db, now: () => this.#now(), recoveryEpoch: () => number(this.#state().recovery_epoch), fail,
+      db, now: () => this.#now(), recoveryEpoch: () => number(this.#state().recovery_epoch),
+      recoveryEpochs: () => this.#journal.read().records.filter(record => record.controlSequence <= number(this.#state().applied_control_sequence) && record.intent.kind === "RESTORE_BEGIN").map(record => record.recoveryEpoch), fail,
       transaction: (write, body) => this.#transaction(write, () => {
         const prior = this.#taskComposing; this.#taskComposing = true;
         try { return body(); } finally { this.#taskComposing = prior; }
@@ -903,7 +904,7 @@ export class SyntheticCognitionStoreV2 {
     }
     if (target.kind === "content") {
       if (missingAllowed && !this.#row("SELECT 1 FROM content_object WHERE content_id=? AND content_version=? AND scope_key=?", target.contentId, target.contentVersion, scopeKeyV2(target.scope))) return [];
-      return [this.#content(target, target.scope, ["staged", "available", "revoked", "purged"], false)];
+      return [this.#content({ contentId: target.contentId, contentVersion: target.contentVersion }, target.scope, ["staged", "available", "revoked", "purged"], false)];
     }
     if (target.kind === "claim") {
       const row = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=? AND scope_key=?", target.id, target.version, scopeKeyV2(target.scope));

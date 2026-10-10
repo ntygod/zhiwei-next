@@ -23,7 +23,7 @@ import {
 const NOW = "2026-10-10T00:00:00.000Z";
 const clock = { now: () => NOW };
 const TASK_TABLES = [
-  "session_v1", "task_v1", "task_snapshot_v1", "task_attempt_v1", "task_outcome_v1",
+  "session_v1", "session_revision_v1", "task_v1", "task_snapshot_v1", "task_attempt_v1", "task_outcome_v1",
   "task_input_v1", "working_state_v1", "task_receipt_v1", "task_content_dependency_v1",
   "task_outbox_v1", "task_consumer_v1", "task_execution_v1", "task_execution_snapshot_v1",
   "task_execution_stream_v1", "task_execution_event_v1", "task_model_request_v1", "task_execution_ack_v1",
@@ -56,6 +56,7 @@ function populate(db: DatabaseSync): void {
       .run(id, scope, "2027-01-01T00:00:00.000Z", NOW, `reservation-${id}`, "a".repeat(64));
   }
   db.prepare("INSERT INTO session_v1 VALUES ('session', 'workspace', 'scope-session', 1, 1, 'daemon', 0, 1, 'session-body', 1, ?, ?)").run(NOW, NOW);
+  db.prepare("INSERT INTO session_revision_v1 VALUES ('session', 1, 'workspace', 1, 'daemon', 0, 1, 0, 'created', ?, 1)").run(NOW);
   db.exec("INSERT INTO task_v1 VALUES ('task', 'workspace', 'session', 'scope-task', 1)");
   db.prepare("INSERT INTO task_attempt_v1 VALUES ('attempt', 'task', 1, 1, 'RUNNING', 1, ?, ?)").run(NOW, NOW);
   db.prepare("INSERT INTO task_snapshot_v1 VALUES ('task', 1, 'scope-task', 'RUNNING', 1, 'attempt', 1, 'task-body', 1, ?)").run(NOW);
@@ -79,7 +80,7 @@ function populate(db: DatabaseSync): void {
   db.exec("COMMIT");
 }
 
-test("fixed v3 creates 17 new STRICT tables in a verified real WAL database and reopens", () => {
+test("fixed v3 creates 18 new STRICT tables in a verified real WAL database and reopens", () => {
   temporaryDatabase(filePath => {
     const first = open(filePath);
     try {
@@ -88,7 +89,7 @@ test("fixed v3 creates 17 new STRICT tables in a verified real WAL database and 
         synchronous: 2, trustedSchema: 0, tempStore: 2, secureDelete: 1 });
       const tables = first.db.prepare("PRAGMA table_list").all()
         .filter(row => row.schema === "main" && !String(row.name).startsWith("sqlite_"));
-      assert.equal(tables.length, 37);
+      assert.equal(tables.length, 38);
       assert.ok(tables.every(row => row.strict === 1));
       assert.ok(TASK_TABLES.every(name => tables.some(row => row.name === name)));
       populate(first.db);
@@ -245,7 +246,7 @@ test("task schema enforces append-only evidence, replacement guards and scoped r
       assert.throws(() => db.exec(`DELETE FROM ${table}`), /reject delete/);
       assert.throws(() => db.exec(`INSERT OR REPLACE INTO ${table} SELECT * FROM ${table}`), /reject replacement/);
     }
-    for (const table of ["task_snapshot_v1", "task_outcome_v1", "task_input_v1", "working_state_v1", "task_receipt_v1", "task_content_dependency_v1",
+    for (const table of ["session_revision_v1", "task_snapshot_v1", "task_outcome_v1", "task_input_v1", "working_state_v1", "task_receipt_v1", "task_content_dependency_v1",
       "task_execution_snapshot_v1", "task_execution_event_v1", "task_model_request_v1", "task_execution_ack_v1"]) {
       const column = String(db.prepare(`PRAGMA table_xinfo('${table}')`).get()?.name);
       assert.throws(() => db.exec(`UPDATE ${table} SET ${column}=${column}`), /reject update/);
@@ -263,7 +264,10 @@ test("session/task revisions, owner fencing and consumer/outbox progress are mon
     populate(db);
     assert.throws(() => db.exec("UPDATE session_v1 SET revision=3"), /guard update/);
     assert.throws(() => db.exec("UPDATE session_v1 SET revision=2, owner_instance_id='other'"), /guard update/);
+    db.exec("BEGIN IMMEDIATE");
     db.exec("UPDATE session_v1 SET revision=2, owner_epoch=2, owner_instance_id='other', requires_reauthorization=1");
+    db.prepare("INSERT INTO session_revision_v1 VALUES ('session', 2, 'workspace', 2, 'other', 1, 1, 0, 'owner-fenced', ?, 2)").run(NOW);
+    db.exec("COMMIT");
     assert.throws(() => db.exec("UPDATE session_v1 SET revision=3, owner_epoch=1"), /guard update/);
     assert.throws(() => db.exec("UPDATE task_v1 SET current_revision=3"), /guard update/);
     db.exec("UPDATE task_consumer_v1 SET cursor=2");
@@ -329,5 +333,51 @@ test("execution snapshots require consistent dispatch/closure state and preserve
     assert.throws(() => db.exec("COMMIT"), /FOREIGN KEY/);
     db.exec("ROLLBACK");
     assert.equal(scalar(db, "SELECT current_revision FROM task_execution_v1"), 2);
+  } finally { db.close(); }
+});
+
+
+test("Session current revision requires immutable history and keeps its original contract body", () => {
+  const { db, pragmas } = open(":memory:");
+  try {
+    populate(db);
+    assert.throws(() => db.exec("UPDATE session_v1 SET revision=2,contract_revision=999"), /guard update/);
+    assert.throws(() => db.exec("UPDATE session_v1 SET revision=2,content_id='input-body'"), /guard update/);
+    assert.throws(() => db.exec("UPDATE session_v1 SET revision=2,content_version=2"), /guard update/);
+    db.exec("BEGIN IMMEDIATE");
+    db.exec("UPDATE session_v1 SET revision=2,owner_epoch=2,owner_instance_id='other',requires_reauthorization=1");
+    assert.throws(() => db.exec("COMMIT"), /FOREIGN KEY/);
+    db.exec("ROLLBACK");
+    assert.equal(scalar(db, "SELECT revision FROM session_v1"), 1);
+    for (const [revision, owner, reauthorize, recovery, reason, cursor] of [
+      [2, 2, 1, 0, "owner-fenced", 2], [3, 2, 0, 0, "reauthorized", 3], [4, 3, 1, 1, "recovery-fenced", null],
+    ] as const) {
+      db.exec("BEGIN IMMEDIATE");
+      db.prepare("UPDATE session_v1 SET revision=?,owner_epoch=?,owner_instance_id='other',requires_reauthorization=?").run(revision, owner, reauthorize);
+      db.prepare("INSERT INTO session_revision_v1 VALUES ('session', ?, 'workspace', ?, 'other', ?, 1, ?, ?, ?, ?)")
+        .run(revision, owner, reauthorize, recovery, reason, NOW, cursor);
+      db.exec("COMMIT");
+    }
+    assert.equal(scalar(db, "SELECT count(*) FROM session_revision_v1"), 4);
+    withTaskSnapshotV1(db, pragmas, state => assert.deepEqual(state.integrity, ["ok"]));
+  } finally { db.close(); }
+});
+test("Session history reasons constrain authorization, creation and event references", () => {
+  const { db } = open(":memory:");
+  try {
+    populate(db);
+    const insert = db.prepare("INSERT INTO session_revision_v1 VALUES ('session', ?, 'workspace', ?, 'daemon', ?, ?, ?, ?, ?, ?)");
+    for (const [revision, owner, reauthorize, contract, recovery, reason, cursor] of [
+      [2, 1, 0, 1, 0, "created", 2], [2, 2, 1, 1, 0, "reauthorized", 2],
+      [2, 2, 0, 1, 0, "owner-fenced", 2], [2, 2, 0, 1, 1, "recovery-fenced", null],
+      [2, 2, 1, 999, 0, "owner-fenced", 2], [2, 2, 1, 1, -1, "owner-fenced", 2],
+      [2, 2, 1, 1, 0, "owner-fenced", null], [2, 2, 1, 1, 1, "recovery-fenced", 2],
+      [2, 2, 1, 1, 0, "unknown", 2], [2, 2, 1, 1, 0, "owner-fenced", 0],
+    ] as const) assert.throws(() => insert.run(revision, owner, reauthorize, contract, recovery, reason, NOW, cursor), /CHECK/);
+    assert.throws(() => db.prepare("INSERT INTO session_revision_v1 VALUES ('session', 2, 'other-workspace', 2, 'daemon', 1, 1, 0, 'owner-fenced', ?, 2)").run(NOW), /FOREIGN KEY/);
+    db.exec("BEGIN IMMEDIATE");
+    insert.run(2, 2, 1, 1, 0, "owner-fenced", NOW, 999);
+    assert.throws(() => db.exec("COMMIT"), /FOREIGN KEY/); db.exec("ROLLBACK");
+    assert.equal(scalar(db, "SELECT count(*) FROM session_revision_v1"), 1);
   } finally { db.close(); }
 });

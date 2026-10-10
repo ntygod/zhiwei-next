@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ids, type Task, type PrivacyV2 } from "../../domain/src/index.ts";
-import { createNormalizedRuntimeEventV1, parseSessionTaskV1, type ExecutionSpecV1, type RuntimeBindingV1,
+import { canonicalJsonV1, canonicalJsonSha256V1, createNormalizedRuntimeEventV1, parseSessionTaskV1, type ExecutionSpecV1, type RuntimeBindingV1,
   type NormalizedRuntimeEnvelopeV1, type SessionContractV1, type RuntimeProcessCloseEvidenceV1 } from "../../protocol/src/index.ts";
 import { openSyntheticCognitionStoreV2, CognitiveStoreErrorV2, type SyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
 import type { TaskPersistenceBoundaryV1, TaskStoreContextV1, TaskRuntimeCommandV1 } from "./task-store-v1-types.ts";
@@ -36,6 +36,17 @@ function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?
       return { versions: [change(current, state, ctx.now)] };
     }
     if (command.payload.kind === "task.cancel") return { versions: [change(current, "CANCELLING", ctx.now)] };
+    if (command.payload.kind === "task.pause") {
+      const next = change(current, "RUNNING", ctx.now);
+      return { versions: [{ ...next, attempts: next.attempts.map((attempt, index) => index === next.attempts.length - 1 ? { ...attempt, pauseRequested: true } : attempt) }] };
+    }
+    if (command.payload.kind === "task.retry") {
+      const next = parseSessionTaskV1({ ...structuredClone(current), revision: current.revision + 1, state: "CREATED", updatedAt: ctx.now,
+        attempts: [...structuredClone(current.attempts), { id: ctx.attemptId, taskId: current.id, workspaceId: current.workspaceId,
+          intent: structuredClone(current.intent), state: "CREATED", createdAt: ctx.now, updatedAt: ctx.now,
+          pauseRequested: false, cancellationRequested: false, completeness: "not-settled", outcomes: [], unresolvedActions: [] }] });
+      return { versions: [next, change(next, "READY", ctx.now)] };
+    }
     throw new Error("Unsupported synthetic command");
   };
   function boundary(): TaskPersistenceBoundaryV1 { return { daemonInstanceId: daemon, contentPolicy: { privacy, retentionUntil: "2026-11-10T00:00:00.000Z" },
@@ -93,7 +104,7 @@ function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?
 }
 function change(task: Task, state: Task["state"], at: string): Task {
   return parseSessionTaskV1({ ...task, revision: task.revision + 1, state, updatedAt: at, attempts: task.attempts.map((attempt, index) => index !== task.attempts.length - 1 ? attempt : {
-    ...attempt, state, updatedAt: at, cancellationRequested: attempt.cancellationRequested || state === "CANCELLING" || state === "CANCELLED",
+    ...attempt, state, updatedAt: at, pauseRequested: state === "RUNNING" && attempt.pauseRequested, cancellationRequested: attempt.cancellationRequested || state === "CANCELLING" || state === "CANCELLED",
     completeness: state === "VERIFYING" || state === "CANCELLED" ? "complete" : attempt.completeness }) });
 }
 
@@ -463,5 +474,266 @@ test("revoked settlement receipt retains the exact source event dependency", t =
     assert.equal(db.prepare("DELETE FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?")
       .run(event.content_id!, event.content_version!, receipt.content_id!, receipt.content_version!).changes, 1);
   });
+  rejectCorruptExecution(f);
+});
+
+
+test("one binding belongs to an attempt; only an explicit new attempt can allocate again", t => {
+  const f = fixture(t); f.allocate(); const closed = f.close();
+  assert.deepEqual(f.allocate(), closed);
+  const alternate = { ...f.allocated, bindingId: "replacement-binding", executionUnitId: "replacement-execution" };
+  code(() => f.store.executions.allocateExecution(context, { taskId: f.taskId, expectedRevision: 2,
+    spec: { ...f.spec, executionUnitId: alternate.executionUnitId }, binding: alternate }), "conflict");
+  f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "cancel-closed", idempotencyKey: "cancel-closed", workspaceId: W, expectedRevision: 2,
+    payload: { kind: "task.cancel", targetRef: { kind: "task", id: f.taskId, revision: 2 } } });
+  f.runtime("confirm-stop", closed.bindingId, closed.revision);
+  const cancelled = f.store.tasks.getTask(W, f.taskId).value!;
+  f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "explicit-retry", idempotencyKey: "explicit-retry", workspaceId: W, expectedRevision: cancelled.revision,
+    payload: { kind: "task.retry", targetRef: { kind: "task", id: f.taskId, revision: cancelled.revision } } });
+  const task = f.store.tasks.getTask(W, f.taskId).value!, attempt = task.attempts.at(-1)!;
+  const input = f.store.tasks.recordRuntimeInput(context, { taskId: f.taskId, commandId: "retry-input", idempotencyKey: "retry-input", expectedRevision: task.revision,
+    attemptId: attempt.id, intentRevision: task.intent.revision, text: task.intent.request });
+  const spec = { ...f.spec, executionUnitId: alternate.executionUnitId, requestSnapshotRef: input.contentRef,
+    fence: { ...f.spec.fence, owner: { kind: "task_attempt" as const, id: attempt.id }, sourceTask: { taskId: f.taskId, attemptId: attempt.id, intentRevision: task.intent.revision } } };
+  const allocated = f.store.executions.allocateExecution(context, { taskId: f.taskId, expectedRevision: task.revision, spec, binding: { ...alternate, owner: spec.fence.owner } });
+  assert.equal(allocated.attemptId, attempt.id);
+  // Implicit rowid is not product history and cannot select the former attempt.
+  corruptExecutionRows(f, ["task_execution_v1"], db => { db.prepare("UPDATE task_execution_v1 SET rowid=999 WHERE binding_id=?").run(closed.bindingId); });
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.bindingId, allocated.bindingId);
+  f.reopen(); assert.equal(f.store.executions.readExecution(W, f.taskId)!.bindingId, allocated.bindingId);
+});
+test("revoked execution and model content metadata retain exact time, role and recovery provenance", async t => {
+  for (const variant of ["model-time", "snapshot-time", "purpose", "staged", "future-epoch"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.start(); f.model(); if (variant !== "staged") removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_model_request_v1", "task_execution_snapshot_v1", "task_execution_v1", "content_object"], db => {
+      if (variant === "model-time") db.prepare("UPDATE task_model_request_v1 SET created_at=?").run(T1);
+      else if (variant === "snapshot-time") {
+        db.prepare("UPDATE task_execution_snapshot_v1 SET created_at=? WHERE revision=3").run(T1);
+        db.prepare("UPDATE task_execution_v1 SET updated_at=?").run(T1);
+      } else if (variant === "future-epoch") {
+        // Epoch 1 is a valid integer, but neither this execution's content fence nor installation recorded it.
+        db.exec("UPDATE task_execution_v1 SET recovery_epoch=1; UPDATE task_execution_snapshot_v1 SET recovery_epoch=1; UPDATE task_model_request_v1 SET recovery_epoch=1");
+      } else {
+        const model = db.prepare("SELECT content_id FROM task_model_request_v1").get()!;
+        db.prepare(`UPDATE content_object SET ${variant === "purpose" ? "purpose='artifact'" : "state='staged'"} WHERE content_id=?`).run(model.content_id!);
+      }
+    });
+    rejectCorruptExecution(f);
+  });
+});
+test("revoked execution references cannot change the managed content version", t => {
+  const f = fixture(t); f.allocate(); removeExecutionBodies(f, true);
+  corruptExecutionRows(f, ["content_object", "task_execution_snapshot_v1", "task_content_dependency_v1", "managed_copy"], db => {
+    const snapshot = db.prepare("SELECT * FROM task_execution_snapshot_v1").get()!;
+    db.exec("PRAGMA defer_foreign_keys=ON");
+    db.prepare("UPDATE content_object SET content_version=2 WHERE content_id=?").run(snapshot.content_id!);
+    db.prepare("UPDATE task_execution_snapshot_v1 SET content_version=2 WHERE content_id=?").run(snapshot.content_id!);
+    db.prepare("UPDATE task_content_dependency_v1 SET target_version=2 WHERE target_id=?").run(snapshot.content_id!);
+    db.prepare("UPDATE managed_copy SET content_version=2 WHERE content_id=?").run(snapshot.content_id!);
+  });
+  rejectCorruptExecution(f);
+});
+function alteredSnapshotBody(f: ReturnType<typeof fixture>, revision: number, alter: (body: Record<string, any>) => void): void {
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  const original = db.prepare("SELECT * FROM task_execution_snapshot_v1 WHERE revision=?").get(revision)!; db.close();
+  const scope = { kind: "task" as const, workspaceId: W, taskId: f.taskId };
+  const envelope = JSON.parse(new TextDecoder().decode(f.store.readContent(scope, { contentId: String(original.content_id), contentVersion: Number(original.content_version) }))) as { record: Record<string, any> };
+  alter(envelope.record);
+  // Use the normal managed-content staging API; no content file is rewritten.
+  const ref = { contentId: "11111111-1111-4111-8111-111111111111", contentVersion: 1 };
+  f.store.stageContent({ ref, reservationId: "22222222-2222-4222-8222-222222222222", fence: f.store.currentFence(scope), privacy: "model-allowed",
+    purpose: "cognition", retentionUntil: "2026-11-10T00:00:00.000Z", bytes: new TextEncoder().encode(canonicalJsonV1(envelope)) });
+  corruptExecutionRows(f, ["task_execution_snapshot_v1"], db => {
+    db.prepare("UPDATE content_object SET state='available' WHERE content_id=?").run(ref.contentId);
+    db.prepare(`INSERT INTO task_content_dependency_v1 SELECT source_id,source_version,?,1 FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?`)
+      .run(ref.contentId, original.content_id!, original.content_version!);
+    db.prepare("UPDATE task_execution_snapshot_v1 SET content_id=?,content_version=1 WHERE binding_id=? AND revision=?")
+      .run(ref.contentId, original.binding_id!, revision);
+  });
+}
+test("available allocation bodies must match their exact input, installation and Session contract", async t => {
+  for (const variant of ["prompt", "installation", "contract", "model", "tool", "runtime-profile", "initial-observations", "initial-close"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.allocate();
+    alteredSnapshotBody(f, 1, body => {
+      if (variant === "prompt") body.spec.prompt = "Different synthetic input";
+      else if (variant === "installation") body.spec.fence.installationId = "other-installation";
+      else if (variant === "contract") body.spec.fence.contractRevision = 2;
+      else if (variant === "model") body.spec.selectedModelProfile.id = "other-model";
+      else if (variant === "tool") body.spec.toolProfile = "controlled-read-memory-draft-v1";
+      else if (variant === "runtime-profile") body.binding.profileRevision = 2;
+      else if (variant === "initial-observations") { body.binding.observedRuntimeSessionIds = f.ready.observedRuntimeSessionIds; body.binding.sourceStreams = f.ready.sourceStreams; }
+      else body.closeEvidence = { schemaVersion: 1, bindingId: f.allocated.bindingId, stdoutEof: true, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: T0 };
+    });
+    rejectCorruptExecution(f);
+  });
+});
+test("available execution snapshot deltas correspond to one supported writer operation", async t => {
+  for (const variant of ["dispatch-observations", "close-observations", "observation-close", "no-op"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.start(); let revision = 3;
+    if (variant === "close-observations") revision = f.close().revision;
+    if (variant === "observation-close" || variant === "no-op") revision = f.store.executions.observeExecutionBinding(context,
+      { taskId: f.taskId, binding: { ...f.ready, state: "BUSY", observedRuntimeSessionIds: [...f.ready.observedRuntimeSessionIds, "native-added"] } }).revision;
+    alteredSnapshotBody(f, revision, body => {
+      if (variant === "dispatch-observations" || variant === "close-observations") body.binding.observedRuntimeSessionIds.push("native-forged");
+      else if (variant === "no-op") body.binding.observedRuntimeSessionIds = f.ready.observedRuntimeSessionIds;
+      else body.closeEvidence = { schemaVersion: 1, bindingId: f.allocated.bindingId, stdoutEof: true, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: T0 };
+    });
+    rejectCorruptExecution(f);
+  });
+});
+test("retained source tuple and normalized IDs remain validated after event body removal", async t => {
+  for (const variant of ["native-session", "runtime-instance", "adapter", "implementation", "version", "surface", "domain", "event-id", "idempotency"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.start(); const envelope = f.envelope(1); f.ingest(envelope); removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_execution_event_v1", "task_execution_stream_v1", "task_execution_ack_v1"], db => {
+      const event = db.prepare("SELECT * FROM task_execution_event_v1").get()!, source = JSON.parse(String(event.source_key)) as string[];
+      if (variant === "idempotency") db.exec("UPDATE task_execution_event_v1 SET idempotency_key='generic-id'");
+      else if (variant === "event-id") {
+        db.exec("PRAGMA defer_foreign_keys=ON");
+        db.exec("UPDATE task_execution_event_v1 SET event_id='generic-id'; UPDATE task_execution_stream_v1 SET last_event_id='generic-id'; UPDATE task_execution_ack_v1 SET event_id='generic-id'");
+      } else {
+        const position = { "native-session": 3, "runtime-instance": 4, adapter: 5, implementation: 6, version: 7, surface: 8, domain: 9 }[variant];
+        source[position] = variant === "version" ? "v".repeat(129) : variant === "surface" ? "unknown" : " ";
+        const changed = canonicalJsonV1(source);
+        db.prepare("UPDATE task_execution_event_v1 SET source_key=?").run(changed);
+        db.prepare("UPDATE task_execution_stream_v1 SET source_key=?").run(changed);
+      }
+    });
+    rejectCorruptExecution(f);
+  });
+});
+
+function pauseRequest(f: ReturnType<typeof fixture>): void {
+  const task = f.store.tasks.getTask(W, f.taskId).value!;
+  f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "pause-request", idempotencyKey: "pause-request", workspaceId: W, expectedRevision: task.revision,
+    payload: { kind: "task.pause", targetRef: { kind: "task", id: f.taskId, revision: task.revision } } });
+}
+function moveEventTaskRevision(db: DatabaseSync, eventId: string, revision: number): void {
+  const event = db.prepare("SELECT * FROM task_execution_event_v1 WHERE event_id=?").get(eventId)!;
+  const previous = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(event.task_id!, event.task_revision!)!;
+  const next = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(event.task_id!, revision)!;
+  db.prepare("UPDATE task_execution_event_v1 SET task_revision=? WHERE event_id=?").run(revision, eventId);
+  const progress = db.prepare("SELECT event_json FROM task_outbox_v1 WHERE cursor=?").get(event.commit_cursor!)!;
+  const body = JSON.parse(String(progress.event_json)); body.aggregate.revision = revision;
+  db.prepare("UPDATE task_outbox_v1 SET revision=?,event_json=? WHERE cursor=?").run(revision, canonicalJsonV1(body), event.commit_cursor!);
+  db.prepare("UPDATE task_content_dependency_v1 SET source_id=?,source_version=? WHERE target_id=? AND target_version=? AND source_id=? AND source_version=?")
+    .run(next.content_id!, next.content_version!, event.content_id!, event.content_version!, previous.content_id!, previous.content_version!);
+}
+test("event row order and per-binding event/model revision history cannot rewind", async t => {
+  for (const variant of ["event-cursor", "event-task", "model-task", "event-binding", "model-binding"] as const) await t.test(variant, t => {
+    const f = fixture(t); f.start();
+    if (variant === "event-cursor") {
+      const binding = { ...f.ready, state: "BUSY" as const, sourceStreams: [...f.ready.sourceStreams,
+        { sourceStreamId: "stream-host", surface: "host" as const, runtimeInstanceId: "runtime-host", sequenceDomain: "host-output" }] };
+      f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding });
+      f.ingest(f.envelope(1)); f.ingest(f.envelope(1, false, { ...binding, sourceStreams: [binding.sourceStreams[1]!] }));
+    } else if (variant.endsWith("task")) {
+      pauseRequest(f);
+      if (variant === "event-task") { f.ingest(f.envelope(1)); f.ingest(f.envelope(2)); }
+      else { f.model("first"); f.model("second"); }
+    } else {
+      f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: { ...f.ready, state: "BUSY", observedRuntimeSessionIds: [...f.ready.observedRuntimeSessionIds, "native-one"] } });
+      if (variant === "event-binding") { f.ingest(f.envelope(1)); f.ingest(f.envelope(2)); }
+      else { f.model("first"); f.model("second"); }
+    }
+    removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_execution_event_v1", "task_model_request_v1", "task_outbox_v1", "task_content_dependency_v1"], db => {
+      if (variant === "event-cursor") db.exec("UPDATE task_execution_event_v1 SET row_id=999 WHERE row_id=1; UPDATE task_execution_event_v1 SET row_id=1 WHERE row_id=2; UPDATE task_execution_event_v1 SET row_id=2 WHERE row_id=999");
+      else if (variant === "event-task") moveEventTaskRevision(db, String(db.prepare("SELECT event_id FROM task_execution_event_v1 WHERE row_id=2").get()!.event_id), 3);
+      else if (variant === "model-task") {
+        const row = db.prepare("SELECT * FROM task_model_request_v1 WHERE ordinal=2").get()!;
+        const before = db.prepare("SELECT * FROM task_snapshot_v1 WHERE revision=4").get()!, after = db.prepare("SELECT * FROM task_snapshot_v1 WHERE revision=3").get()!;
+        db.exec("UPDATE task_model_request_v1 SET task_revision=3 WHERE ordinal=2");
+        db.prepare("UPDATE task_content_dependency_v1 SET source_id=?,source_version=? WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?")
+          .run(after.content_id!, after.content_version!, before.content_id!, before.content_version!, row.content_id!, row.content_version!);
+      } else {
+        const row = db.prepare(variant === "event-binding" ? "SELECT * FROM task_execution_event_v1 WHERE row_id=2" : "SELECT * FROM task_model_request_v1 WHERE ordinal=2").get()!;
+        const before = db.prepare("SELECT * FROM task_execution_snapshot_v1 WHERE revision=4").get()!, after = db.prepare("SELECT * FROM task_execution_snapshot_v1 WHERE revision=3").get()!;
+        db.prepare("UPDATE task_content_dependency_v1 SET source_id=?,source_version=? WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?")
+          .run(after.content_id!, after.content_version!, before.content_id!, before.content_version!, row.content_id!, row.content_version!);
+      }
+    });
+    rejectCorruptExecution(f);
+  });
+});
+test("revoked settled receipt starts exactly at the source event Task revision", t => {
+  const f = fixture(t); f.start(); pauseRequest(f); const event = f.envelope(1, true); f.ingest(event); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_execution_event_v1", "task_outbox_v1", "task_content_dependency_v1"], db => moveEventTaskRevision(db, event.event.eventId, 3));
+  rejectCorruptExecution(f);
+});
+test("a Task start receipt cannot point to later runtime progress at the same Task revision", t => {
+  const f = fixture(t); f.start(); const event = f.ingest(f.envelope(1));
+  corruptExecutionRows(f, ["task_receipt_v1"], db => {
+    const receipt = db.prepare("SELECT * FROM task_receipt_v1 WHERE command_id='command-start'").get()!;
+    assert.equal(receipt.revision, 3); assert.ok(Number(receipt.commit_cursor) < event.commitCursor);
+    db.prepare("UPDATE task_receipt_v1 SET commit_cursor=? WHERE command_id='command-start'").run(event.commitCursor);
+  });
+  rejectCorruptExecution(f);
+});
+test("a retained source tuple still matches its available historical binding when only event bytes are revoked", t => {
+  const f = fixture(t); f.start(); const event = f.envelope(1); f.ingest(event);
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite")); const row = db.prepare("SELECT * FROM task_execution_event_v1").get()!; db.close();
+  f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-event-only", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "content",
+    scope: { kind: "task", workspaceId: W, taskId: f.taskId }, contentId: String(row.content_id), contentVersion: Number(row.content_version) }] });
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.state, "BUSY");
+  corruptExecutionRows(f, ["task_execution_event_v1", "task_execution_stream_v1", "task_execution_ack_v1"], db => {
+    const source = JSON.parse(String(row.source_key)) as string[]; source[3] = "unobserved-native-session";
+    const id = "nre1_" + canonicalJsonSha256V1({ protocolVersion: 1, workspaceId: source[2], runtimeSessionId: source[3], runtimeInstanceId: source[4],
+      source: { adapter: source[5], runtime: { implementation: source[6], version: source[7] }, surface: source[8] }, sequence: { domain: source[9], value: 1 } });
+    db.exec("PRAGMA defer_foreign_keys=ON");
+    db.prepare("UPDATE task_execution_event_v1 SET source_key=?,event_id=?").run(canonicalJsonV1(source), id);
+    db.prepare("UPDATE task_execution_stream_v1 SET source_key=?,last_event_id=?").run(canonicalJsonV1(source), id);
+    db.prepare("UPDATE task_execution_ack_v1 SET event_id=?").run(id);
+  });
+  rejectCorruptExecution(f);
+});
+
+test("duplicate attempt bindings are rejected on verified reads even when both transports are closed", t => {
+  const f = fixture(t); f.allocate(); f.close(); removeExecutionBodies(f);
+  corruptExecutionRows(f, [], db => {
+    db.exec(`INSERT INTO task_execution_v1 SELECT 'duplicate-binding','duplicate-execution',workspace_id,task_id,attempt_id,
+      task_revision,intent_revision,owner_epoch,recovery_epoch,scope_key,current_revision,active,created_at,updated_at FROM task_execution_v1`);
+    db.exec(`INSERT INTO task_execution_snapshot_v1 SELECT 'duplicate-binding',revision,task_id,task_revision,attempt_id,intent_revision,
+      owner_epoch,recovery_epoch,scope_key,state,dispatched,closed,content_id,content_version,created_at FROM task_execution_snapshot_v1`);
+  });
+  rejectCorruptExecution(f);
+});
+
+test("no unrelated progress may appear between settled intake and its first Task state event", t => {
+  const f = fixture(t); f.start();
+  const binding = { ...f.ready, state: "BUSY" as const, sourceStreams: [...f.ready.sourceStreams,
+    { sourceStreamId: "second-stream", surface: "rpc" as const, runtimeInstanceId: "runtime-other", sequenceDomain: "other-output" }] };
+  f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding });
+  const ordinary = f.envelope(1), settled = f.envelope(1, true, { ...binding, sourceStreams: [binding.sourceStreams[1]!] });
+  f.ingest(ordinary); f.ingest(settled); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_outbox_v1", "task_execution_event_v1", "task_execution_ack_v1"], db => {
+    const first = db.prepare("SELECT * FROM task_execution_event_v1 WHERE event_id=?").get(ordinary.event.eventId)!;
+    const second = db.prepare("SELECT * FROM task_execution_event_v1 WHERE event_id=?").get(settled.event.eventId)!;
+    db.exec("PRAGMA defer_foreign_keys=ON");
+    db.prepare("UPDATE task_outbox_v1 SET cursor=999 WHERE cursor=?").run(first.commit_cursor!);
+    db.prepare("UPDATE task_outbox_v1 SET cursor=? WHERE cursor=?").run(first.commit_cursor!, second.commit_cursor!);
+    db.prepare("UPDATE task_outbox_v1 SET cursor=? WHERE cursor=999").run(second.commit_cursor!);
+    db.prepare("UPDATE task_execution_event_v1 SET row_id=999,commit_cursor=999 WHERE event_id=?").run(ordinary.event.eventId);
+    db.prepare("UPDATE task_execution_event_v1 SET row_id=?,commit_cursor=? WHERE event_id=?").run(first.row_id!, first.commit_cursor!, settled.event.eventId);
+    db.prepare("UPDATE task_execution_event_v1 SET row_id=?,commit_cursor=? WHERE event_id=?").run(second.row_id!, second.commit_cursor!, ordinary.event.eventId);
+    db.prepare("UPDATE task_execution_ack_v1 SET commit_cursor=? WHERE event_id=?").run(second.commit_cursor!, ordinary.event.eventId);
+  });
+  rejectCorruptExecution(f);
+});
+
+test("settled intake and its command span share the exact pinned transaction timestamp", t => {
+  const f = fixture(t); f.start(); const envelope = f.envelope(1, true); f.ingest(envelope); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_execution_event_v1", "task_outbox_v1", "content_object"], db => {
+    const event = db.prepare("SELECT * FROM task_execution_event_v1 WHERE event_id=?").get(envelope.event.eventId)!;
+    const progress = db.prepare("SELECT event_json FROM task_outbox_v1 WHERE cursor=?").get(event.commit_cursor!)!;
+    const projection = JSON.parse(String(progress.event_json)); projection.occurredAt = T1;
+    db.prepare("UPDATE task_execution_event_v1 SET recorded_at=? WHERE event_id=?").run(T1, envelope.event.eventId);
+    db.prepare("UPDATE content_object SET created_at=? WHERE content_id=? AND content_version=?").run(T1, event.content_id!, event.content_version!);
+    db.prepare("UPDATE task_outbox_v1 SET occurred_at=?,event_json=? WHERE cursor=?").run(T1, canonicalJsonV1(projection), event.commit_cursor!);
+  });
+  rejectCorruptExecution(f);
+});
+test("first runtime progress after a pause request uses the exact committed Task head", t => {
+  const f = fixture(t); f.start(); pauseRequest(f); const event = f.envelope(1); f.ingest(event); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_execution_event_v1", "task_outbox_v1", "task_content_dependency_v1"], db => moveEventTaskRevision(db, event.event.eventId, 3));
   rejectCorruptExecution(f);
 });

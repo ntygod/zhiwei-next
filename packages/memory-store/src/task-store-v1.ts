@@ -17,6 +17,7 @@ export interface TaskStoreHostV1 {
   transaction<T>(write: boolean, body: () => T): T;
   now(): string;
   recoveryEpoch(): number;
+  recoveryEpochs(): readonly number[];
   registerScope(scope: ScopeV2): void;
   content(ref: ContentRefV2, scope: ScopeV2, available: boolean): { bytes?: Uint8Array; privacy: PrivacyV2; retentionUntil: string };
   writeBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ContentRefV2;
@@ -118,6 +119,10 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
   #owner(context: TaskStoreContextV1, row: Row): void { if (row.workspace_id !== context.workspaceId || row.owner_instance_id !== context.daemonInstanceId || row.owner_epoch !== context.ownerEpoch) this.#host.fail("revision_conflict"); }
   #watermark(workspaceId: string): number { return integer(this.#row("SELECT coalesce(max(cursor),0) AS cursor FROM task_outbox_v1 WHERE workspace_id=?", workspaceId)!.cursor); }
   #body(row: Row, scope: ScopeV2, available = true): Record<string, unknown> | undefined {
+    const metadata = this.#row("SELECT * FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version));
+    if (!metadata || metadata.content_version !== 1 || metadata.purpose !== "cognition" || metadata.state === "staged") this.#host.fail("corruption");
+    const fence = parseStored(string(metadata.fence_json)) as { recoveryEpoch: number };
+    if (!Number.isSafeInteger(fence.recoveryEpoch) || fence.recoveryEpoch < 0 || fence.recoveryEpoch > this.#host.recoveryEpoch()) this.#host.fail("corruption");
     const content = this.#host.content(ref(row), scope, available); if (!content.bytes) return undefined;
     const body = parseStored(new TextDecoder("utf-8", { fatal: true }).decode(content.bytes));
     if (!body || typeof body !== "object" || Array.isArray(body)) this.#host.fail("corruption"); return body as Record<string, unknown>;
@@ -154,6 +159,11 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       context.principalId, command.payload.kind, command.idempotencyKey, command.commandId, context.workspaceId, receipt.aggregate.kind, receipt.aggregate.id, receipt.aggregate.revision, cursor, content.contentId, content.contentVersion, scopeKeyV2(scope));
     return { receipt: structuredClone(receipt), commitCursor: cursor, replay: false };
   }
+  #recordSessionRevision(id: string, reason: "created" | "owner-fenced" | "reauthorized" | "recovery-fenced", recoveryEpoch: number, eventCursor: number | null): void {
+    const row = this.#row("SELECT * FROM session_v1 WHERE id=?", id)!;
+    this.#run("INSERT INTO session_revision_v1(session_id,revision,workspace_id,owner_epoch,owner_instance_id,requires_reauthorization,contract_revision,recovery_epoch,reason,created_at,event_cursor) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+      id, integer(row.revision), string(row.workspace_id), integer(row.owner_epoch), string(row.owner_instance_id), integer(row.requires_reauthorization), integer(row.contract_revision), recoveryEpoch, reason, string(row.updated_at), eventCursor);
+  }
   createSession(context: TaskStoreContextV1, raw: SessionCreateCommandV1): TaskStoreCommitV1 {
     const command = parseSessionCreateCommandV1(raw); this.#context(context, command.workspaceId); if (context.ownerEpoch !== 1) this.#host.fail("revision_conflict");
     return this.#host.transaction(true, () => {
@@ -164,6 +174,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       this.#run("INSERT INTO session_v1(id,workspace_id,scope_key,revision,owner_epoch,owner_instance_id,requires_reauthorization,contract_revision,content_id,content_version,created_at,updated_at) VALUES(?,?,?,1,1,?,0,1,?,?,?,?)",
         id, context.workspaceId, scopeKeyV2(scope), context.daemonInstanceId, content.contentId, content.contentVersion, now, now);
       const cursor = this.#outbox(this.#event(context.workspaceId, receipt.aggregate, "session.created", { ownerEpoch: 1 }), 1);
+      this.#recordSessionRevision(id, "created", this.#host.recoveryEpoch(), cursor);
       return this.#receipt(context, command, receipt, cursor, content, scope);
     });
   }
@@ -194,7 +205,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       if (!Array.isArray(reduced.versions) || !reduced.versions.length || reduced.versions.length > 16) this.#host.fail("validation");
       if (reduced.workingStates !== undefined && (!Array.isArray(reduced.workingStates) || reduced.workingStates.length !== reduced.versions.length)) this.#host.fail("validation");
       const versions = reduced.versions.map(value => parseSessionTaskV1(value)), final = versions.at(-1)!; this.#operationReduction(command, current, versions);
-      if (final.state === "CANCELLED" && activeExecution && !activeExecution.closed) this.#host.fail("conflict");
+      if (activeExecution && !activeExecution.closed && versions.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempts.at(-1)!.id !== current?.attempts.at(-1)!.id)) this.#host.fail("conflict");
       const receipt: TaskStoreReceiptV1 = { schemaVersion: 1, commandId: command.commandId, status: "committed", aggregate: { kind: "task", id, revision: final.revision }, result: receiptResult(final) };
       parseLocalApiReceiptV1({ ...receipt, eventCursor: "validated" });
       const finalAttempt = final.attempts.at(-1)!;
@@ -205,7 +216,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const revision = integer(sessionRow.revision) + 1; assertRevisionV2(revision);
         if (this.#host.db.prepare("UPDATE session_v1 SET revision=?,requires_reauthorization=0,updated_at=? WHERE id=? AND revision=? AND owner_epoch=?").run(revision, now, sessionId, integer(sessionRow.revision), context.ownerEpoch).changes !== 1) this.#host.fail("revision_conflict");
         // Publish before Task versions so the final Task cursor covers the entire transaction.
-        this.#outbox(this.#event(context.workspaceId, { kind: "session", id: sessionId, revision }, "session.owner_fenced", { ownerEpoch: context.ownerEpoch }), context.ownerEpoch);
+        const cursor = this.#outbox(this.#event(context.workspaceId, { kind: "session", id: sessionId, revision }, "session.owner_fenced", { ownerEpoch: context.ownerEpoch }), context.ownerEpoch);
+        this.#recordSessionRevision(sessionId, "reauthorized", this.#host.recoveryEpoch(), cursor);
       }
       let previous = current, previousContent = currentRow ? ref(currentRow) : ref(sessionRow), finalContent: ContentRefV2 | undefined, cursor = 0;
       for (const [index, next] of versions.entries()) {
@@ -250,6 +262,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
   }
   #operationReduction(command: TaskStoreCommandV1, prior: Task | undefined, versions: readonly Task[]): void {
     const final = versions.at(-1)!, payload = command.payload;
+    const metadata = (task: Task): Row => ({ revision: task.revision, state: task.state, intent_revision: task.intent.revision, attempt_id: task.attempts.at(-1)!.id, created_at: task.updatedAt });
     if (payload.kind === "task.create" || payload.kind === "task.revise-request") {
       if (final.intent.request !== payload.request || json(final.intent.constraints) !== json(payload.constraints) || json(final.intent.criteria) !== json(payload.acceptanceChecks)) this.#host.fail("validation");
       if (payload.kind === "task.create" && (versions.length !== 2 || final.state !== "READY" || final.attempts.length !== 1)) this.#host.fail("validation");
@@ -260,12 +273,47 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       if (payload.kind !== "task.runtime" || payload.event !== "interrupted" || outcome.status !== "unverifiable"
         || outcome.criteriaResults.some(result => result.status !== "unknown" || result.reason !== "incomplete" || result.evidence.length)) this.#host.fail("unsupported");
     }
+    try { this.#commandMetadata(payload.kind, prior ? metadata(prior) : undefined, versions.map(metadata)); } catch { this.#host.fail("validation"); }
     const expected: Partial<Record<typeof payload.kind, readonly TaskState[]>> = { "task.create": ["READY"], "task.cancel": ["CANCELLING", "CANCELLED"], "task.pause": ["RUNNING"], "task.retry": ["READY"], "task.continue": ["READY"], "task.revise-request": ["READY"] };
     if (expected[payload.kind] && !expected[payload.kind]!.includes(final.state)) this.#host.fail("validation");
     if (payload.kind === "task.runtime") {
       const state = ({ prepare: "READY", start: "RUNNING", settled: "VERIFYING", "confirm-stop": "CANCELLED", "confirm-pause": "PAUSED", interrupted: "UNVERIFIABLE", "effects-unknown": "NEEDS_RECONCILIATION" } as const)[payload.event];
       if (final.state !== state) this.#host.fail("validation");
     }
+  }
+  /** Retained command shape facts; request text and criterion meaning remain in managed bodies. */
+  #commandMetadata(kind: string, prior: Row | undefined, versions: readonly Row[]): void {
+    const states = versions.map(row => row.state).join(","), final = versions.at(-1)!;
+    const sequences: Readonly<Record<string, readonly string[]>> = {
+      "task.create": ["CREATED,READY"], "task.cancel": ["CANCELLING", "CANCELLING,CANCELLED"],
+      "task.pause": ["RUNNING"], "task.retry": ["CREATED,READY"],
+      "task.continue": ["READY", "CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
+      "task.revise-request": ["CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
+      "task.runtime": ["READY", "RUNNING", "VERIFYING", "CANCELLED", "PAUSED", "UNVERIFIABLE", "VERIFYING,UNVERIFIABLE"],
+    };
+    if (!sequences[kind]?.includes(states)) throw new Error("command state span mismatch");
+    let previous = prior;
+    for (const row of versions) {
+      assertIdentifierV2(row.attempt_id); assertIsoTimestampV2(row.created_at);
+      if (!previous) {
+        if (row.revision !== 1 || row.intent_revision !== 1 || row.state !== "CREATED") throw new Error("initial metadata mismatch");
+      } else if (row.attempt_id !== previous.attempt_id) {
+        if (!isTerminalTaskState(previous.state as TaskState) || row.state !== "CREATED"
+          || row.intent_revision !== integer(previous.intent_revision) + (kind === "task.revise-request" ? 1 : 0)
+          || !["task.retry", "task.continue", "task.revise-request"].includes(kind)) throw new Error("new attempt metadata mismatch");
+      } else {
+        const transitions: Readonly<Partial<Record<TaskState, readonly TaskState[]>>> = {
+          CREATED: ["READY"], READY: ["RUNNING", "CANCELLING"], RUNNING: ["RUNNING", "VERIFYING", "PAUSED", "CANCELLING"],
+          VERIFYING: ["UNVERIFIABLE", "CANCELLING"], WAITING_INPUT: ["READY", "CANCELLING"], WAITING_APPROVAL: ["READY", "CANCELLING"],
+          PAUSED: ["CANCELLING"], CANCELLING: ["CANCELLED"], NEEDS_RECONCILIATION: ["CANCELLING"],
+        };
+        if (row.intent_revision !== previous.intent_revision || !transitions[previous.state as TaskState]?.includes(row.state as TaskState)) throw new Error("attempt state metadata mismatch");
+      }
+      previous = row;
+    }
+    if (kind === "task.create" && (prior || final.intent_revision !== 1 || versions.some(row => row.attempt_id !== final.attempt_id))) throw new Error("create attempt metadata mismatch");
+    if (["task.retry", "task.revise-request"].includes(kind) && (!prior || final.attempt_id === prior.attempt_id)) throw new Error("missing command attempt");
+    if (kind === "task.pause" && prior?.state !== "RUNNING") throw new Error("pause metadata mismatch");
   }
   #command(input: TaskStoreCommandV1): TaskStoreCommandV1 {
     const raw = JSON.parse(json(input)) as TaskStoreCommandV1;
@@ -362,6 +410,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       const replay = this.#replayReceipt(context, command);
       if (replay) { const prior = this.#row("SELECT * FROM task_receipt_v1 WHERE principal_id=? AND command_id=?", context.principalId, replay.receipt.commandId)!;
         return { ...replay, snapshot: this.#body(prior, taskScope(context.workspaceId, input.taskId))!.input as unknown as RuntimeInputSnapshotV1, contentRef: ref(prior) }; }
+      if (session.requires_reauthorization !== 0) this.#host.fail("recovery_required");
       const task = this.#task(row)!, attempt = task.attempts.at(-1)!;
       if (task.revision !== input.expectedRevision || attempt.id !== input.attemptId || task.intent.revision !== input.intentRevision) this.#host.fail("revision_conflict");
       if (task.state !== "READY" || this.#host.executionForReduction(context.workspaceId, task.id)?.closed === false) this.#host.fail("conflict");
@@ -397,7 +446,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const epoch = integer(row.owner_epoch) + 1, revision = integer(row.revision) + 1; assertRevisionV2(epoch); assertRevisionV2(revision);
         if (this.#host.db.prepare("UPDATE session_v1 SET owner_epoch=?,revision=?,owner_instance_id=?,requires_reauthorization=1,updated_at=? WHERE id=? AND owner_epoch=? AND revision=?")
           .run(epoch, revision, boundary.daemonInstanceId, this.#host.now(), string(row.id), integer(row.owner_epoch), integer(row.revision)).changes !== 1) this.#host.fail("revision_conflict");
-        this.#outbox(this.#event(string(row.workspace_id), { kind: "session", id: string(row.id), revision }, "session.owner_fenced", { ownerEpoch: epoch }), epoch);
+        const cursor = this.#outbox(this.#event(string(row.workspace_id), { kind: "session", id: string(row.id), revision }, "session.owner_fenced", { ownerEpoch: epoch }), epoch);
+        this.#recordSessionRevision(string(row.id), "owner-fenced", this.#host.recoveryEpoch(), cursor);
         const session = this.#session(this.#row("SELECT * FROM session_v1 WHERE id=?", string(row.id))!, false); if (session) changed.push(session);
       }
       return changed;
@@ -407,7 +457,9 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     this.#run("UPDATE task_outbox_v1 SET publish_state='quarantined' WHERE recovery_epoch<?", recoveryEpoch);
     for (const row of this.#rows("SELECT * FROM session_v1")) {
       const epoch = integer(row.owner_epoch) + 1, revision = integer(row.revision) + 1; assertRevisionV2(epoch); assertRevisionV2(revision);
-      this.#run("UPDATE session_v1 SET owner_epoch=?,revision=?,requires_reauthorization=1,updated_at=? WHERE id=? AND owner_epoch=? AND revision=?", epoch, revision, this.#host.now(), string(row.id), integer(row.owner_epoch), integer(row.revision));
+      if (this.#host.db.prepare("UPDATE session_v1 SET owner_epoch=?,revision=?,requires_reauthorization=1,updated_at=? WHERE id=? AND owner_epoch=? AND revision=?")
+        .run(epoch, revision, this.#host.now(), string(row.id), integer(row.owner_epoch), integer(row.revision)).changes !== 1) this.#host.fail("revision_conflict");
+      this.#recordSessionRevision(string(row.id), "recovery-fenced", recoveryEpoch, null);
     }
   }
   contentRefs(workspaceId: string, taskId: string): readonly ContentRefV2[] {
@@ -420,7 +472,45 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       for (const row of this.#rows("SELECT * FROM session_v1")) {
         assertIdentifierV2(row.id); assertIdentifierV2(row.workspace_id); assertIdentifierV2(row.owner_instance_id);
         assertRevisionV2(row.revision); assertRevisionV2(row.owner_epoch); assertRevisionV2(row.contract_revision);
-        if (row.scope_key !== scopeKeyV2(sessionScope(string(row.workspace_id), string(row.id))) || integer(row.owner_epoch) > integer(row.revision)) throw new Error("session projection mismatch");
+        assertIsoTimestampV2(row.created_at); assertIsoTimestampV2(row.updated_at);
+        if (row.contract_revision !== 1 || row.scope_key !== scopeKeyV2(sessionScope(string(row.workspace_id), string(row.id))) || integer(row.owner_epoch) > integer(row.revision)) throw new Error("session projection mismatch");
+        const contentMetadata = this.#row("SELECT created_at,fence_json FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version));
+        if (contentMetadata?.created_at !== row.created_at) throw new Error("session content time mismatch");
+        const history = this.#rows("SELECT * FROM session_revision_v1 WHERE session_id=? ORDER BY revision", string(row.id));
+        if (history.length !== row.revision) throw new Error("session revision history missing");
+        const recoveryHistory = history.filter(version => version.reason === "recovery-fenced").map(version => integer(version.recovery_epoch));
+        if (json(recoveryHistory) !== json(this.#host.recoveryEpochs().filter(epoch => epoch > integer(history[0]!.recovery_epoch)))) throw new Error("session recovery history missing");
+        let previous: Row | undefined;
+        for (const [index, version] of history.entries()) {
+          assertIdentifierV2(version.owner_instance_id); assertIsoTimestampV2(version.created_at);
+          if (version.revision !== index + 1 || version.workspace_id !== row.workspace_id || version.contract_revision !== 1
+            || integer(version.recovery_epoch) > this.#host.recoveryEpoch() || version.created_at! < row.created_at! || previous && version.created_at! < previous.created_at!) throw new Error("session revision projection mismatch");
+          if (!previous) {
+            if (version.reason !== "created" || version.owner_epoch !== 1 || version.requires_reauthorization !== 0 || version.created_at !== row.created_at || (parseStored(string(contentMetadata!.fence_json)) as { recoveryEpoch: number }).recoveryEpoch !== version.recovery_epoch) throw new Error("session initial owner mismatch");
+          } else {
+            const sameOwner = version.owner_instance_id === previous.owner_instance_id;
+            switch (version.reason) {
+              case "owner-fenced":
+                if (sameOwner || version.owner_epoch !== integer(previous.owner_epoch) + 1 || version.requires_reauthorization !== 1 || version.recovery_epoch !== previous.recovery_epoch) throw new Error("session owner transition mismatch"); break;
+              case "reauthorized":
+                if (!sameOwner || version.owner_epoch !== previous.owner_epoch || version.requires_reauthorization !== 0 || previous.requires_reauthorization !== 1 || version.recovery_epoch !== previous.recovery_epoch) throw new Error("session authorization transition mismatch"); break;
+              case "recovery-fenced":
+                if (!sameOwner || version.owner_epoch !== integer(previous.owner_epoch) + 1 || version.requires_reauthorization !== 1 || integer(version.recovery_epoch) <= integer(previous.recovery_epoch)) throw new Error("session recovery transition mismatch"); break;
+              default: throw new Error("unknown session revision transition");
+            }
+          }
+          if (version.reason === "recovery-fenced") { if (version.event_cursor !== null) throw new Error("unexpected recovery projection"); }
+          else {
+            const event = this.#row("SELECT * FROM task_outbox_v1 WHERE cursor=?", integer(version.event_cursor));
+            if (!event || event.workspace_id !== version.workspace_id || event.entity_kind !== "session" || event.entity_id !== row.id || event.revision !== version.revision
+              || event.owner_epoch !== version.owner_epoch || event.recovery_epoch !== version.recovery_epoch || event.occurred_at !== version.created_at
+              || event.event_type !== (version.reason === "created" ? "session.created" : "session.owner_fenced")) throw new Error("session history event missing");
+          }
+          previous = version;
+        }
+        if (!previous || ["revision", "workspace_id", "owner_epoch", "owner_instance_id", "requires_reauthorization", "contract_revision"].some(field => previous![field] !== row[field])
+          || previous.created_at !== row.updated_at || previous.recovery_epoch !== this.#host.recoveryEpoch()) throw new Error("session current history mismatch");
+        if (this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", string(row.content_id), integer(row.content_version))) throw new Error("session dependency role mismatch");
         const contentKey = json(ref(row)); if (aggregateContents.has(contentKey)) throw new Error("reused aggregate content"); aggregateContents.add(contentKey);
         const body = this.#body(row, sessionScope(string(row.workspace_id), string(row.id)), false);
         if (body) { exact(body, ["schemaVersion", "contract", "command", "receipt"]); const command = parseSessionCreateCommandV1(body.command);
@@ -434,6 +524,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         for (const [index, row] of rows.entries()) {
           if (row.revision !== index + 1 || row.scope_key !== taskRow.scope_key) throw new Error("task revision projection");
           const contentKey = json(ref(row)); if (aggregateContents.has(contentKey)) throw new Error("reused aggregate content"); aggregateContents.add(contentKey);
+          const metadata = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version));
+          if (metadata?.created_at !== row.created_at) throw new Error("task content time mismatch");
           const workingRow = this.#row("SELECT * FROM working_state_v1 WHERE task_id=? AND task_revision=?", string(taskRow.id), integer(row.revision));
           if (!workingRow || workingRow.scope_key !== row.scope_key || workingRow.attempt_id !== row.attempt_id || json(ref(workingRow)) !== json(ref(row))) throw new Error("working state projection missing");
           const predecessor = index === 0 ? this.#row("SELECT * FROM session_v1 WHERE id=?", string(taskRow.session_id))! : rows[index - 1]!;
@@ -460,6 +552,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const attempts = this.#rows("SELECT * FROM task_attempt_v1 WHERE task_id=? ORDER BY attempt_no", string(taskRow.id));
         if (!attempts.length || attempts.some((row, i) => row.attempt_no !== i + 1 || (i < attempts.length - 1 && row.active !== 0))) throw new Error("attempt order mismatch");
         for (const [index, attempt] of attempts.entries()) {
+          assertIdentifierV2(attempt.id); assertIsoTimestampV2(attempt.created_at); assertIsoTimestampV2(attempt.updated_at);
           const history = rows.filter(row => row.attempt_id === attempt.id), first = history[0], last = history.at(-1);
           if (!first || !last || first.state !== "CREATED" || attempt.intent_revision !== first.intent_revision || history.some(row => row.intent_revision !== attempt.intent_revision)
             || attempt.created_at !== first.created_at || attempt.updated_at !== last.created_at || attempt.state !== last.state
@@ -488,6 +581,27 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         if (!this.#row("SELECT 1 FROM task_outcome_v1 WHERE id=? AND revision=? AND task_id=? AND attempt_id=?", outcome.id, outcome.revision, task.id, attempt.id)) throw new Error("outcome missing");
       // A command receipt covers every consecutive Task version in its transaction.
       // This coverage remains checkable after its managed body has been revoked or purged.
+      const dependencyTargets = new Set(this.#rows(`SELECT content_id,content_version FROM session_v1 UNION SELECT content_id,content_version FROM task_snapshot_v1
+        UNION SELECT content_id,content_version FROM task_input_v1 UNION SELECT content_id,content_version FROM task_execution_snapshot_v1
+        UNION SELECT content_id,content_version FROM task_execution_event_v1 UNION SELECT content_id,content_version FROM task_model_request_v1`).map(row => json([row.content_id, row.content_version])));
+      const edges = new Map<string, string[]>(), visiting = new Set<string>(), visited = new Set<string>();
+      for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
+        const source = json([edge.source_id, edge.source_version]), target = json([edge.target_id, edge.target_version]);
+        if (source === target || !dependencyTargets.has(target)) throw new Error("invalid dependency target");
+        const targets = edges.get(source) ?? []; targets.push(target); edges.set(source, targets);
+      }
+      // A long legitimate Task history must not depend on the JavaScript call-stack limit.
+      for (const root of edges.keys()) {
+        if (visited.has(root)) continue;
+        const pending = [{ id: root, index: 0 }]; visiting.add(root);
+        while (pending.length) {
+          const frame = pending.at(-1)!, targets = edges.get(frame.id) ?? [];
+          if (frame.index === targets.length) { visiting.delete(frame.id); visited.add(frame.id); pending.pop(); continue; }
+          const target = targets[frame.index++]!;
+          if (visiting.has(target)) throw new Error("cyclic dependency");
+          if (!visited.has(target)) { visiting.add(target); pending.push({ id: target, index: 0 }); }
+        }
+      }
       const commandEnds = new Map<string, number>(), commandStarts = new Map<number, number>();
       for (const receipt of this.#rows("SELECT * FROM task_receipt_v1 WHERE entity_kind='task' AND command_kind!='task.runtime-input' ORDER BY entity_id,revision")) {
         const task = this.#row("SELECT * FROM task_v1 WHERE id=?", string(receipt.entity_id));
@@ -497,16 +611,26 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           || task.workspace_id !== receipt.workspace_id || task.scope_key !== receipt.scope_key || json(ref(receipt)) !== json(ref(snapshot))
           || end <= start || end - start > 16 || (start === 0) !== (receipt.command_kind === "task.create")) throw new Error("command receipt projection mismatch");
         const scope = taskScope(string(task.workspace_id), string(task.id)), finalBody = this.#body(snapshot, scope, false);
+        const range = this.#rows("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision>? AND revision<=? ORDER BY revision", string(task.id), start, end);
+        const previous = start ? this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(task.id), start) : undefined;
+        this.#commandMetadata(string(receipt.command_kind), previous, range);
+        const events = this.#rows("SELECT * FROM task_outbox_v1 WHERE entity_kind='task' AND entity_id=? AND revision>? AND revision<=? AND event_type IN ('task.created','task.state_changed') ORDER BY cursor", string(task.id), start, end);
+        if (events.length !== range.length || events.some((event, index) => event.revision !== start + index + 1)
+          || events.at(-1)?.cursor !== receipt.commit_cursor
+          || this.#rows("SELECT cursor FROM task_outbox_v1 WHERE cursor>=? AND cursor<=?", integer(events[0]!.cursor), integer(receipt.commit_cursor)).length !== range.length) throw new Error("command final watermark mismatch");
         for (let revision = start + 1; revision <= end; revision++) {
           const version = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(task.id), revision);
           if (!version || version.scope_key !== task.scope_key || version.owner_epoch !== snapshot.owner_epoch || version.created_at !== snapshot.created_at) throw new Error("command version coverage mismatch");
           const body = this.#body(version, scope, false);
           if (body && (!body.command || !body.receipt || finalBody && (json(body.command) !== json(finalBody.command) || json(body.receipt) !== json(finalBody.receipt)))) throw new Error("command version body mismatch");
         }
+        const bodies = range.map(version => snapshots.get(json([task.id, version.revision])));
+        const priorTask = start ? snapshots.get(json([task.id, start])) : undefined;
+        if (finalBody && bodies.every(value => value !== undefined) && (start === 0 || priorTask)) this.#operationReduction(this.#command(finalBody.command as TaskStoreCommandV1), priorTask, bodies as Task[]);
         commandStarts.set(integer(receipt.commit_cursor), start); commandEnds.set(string(task.id), end);
       }
       for (const task of this.#rows("SELECT id,current_revision FROM task_v1")) if (commandEnds.get(string(task.id)) !== task.current_revision) throw new Error("task command coverage missing");
-      const ordinals = new Map<string, number>(), usedReceipts = new Set<number>(), userContents = new Set<string>(), inputContents = new Set<string>();
+      const ordinals = new Map<string, number>(), inputHeads = new Map<string, { cursor: number; revision: number }>(), usedReceipts = new Set<number>(), userContents = new Set<string>(), inputContents = new Set<string>();
       const dependency = (source: Row, target: Row): void => {
         if (!this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?",
           string(source.content_id), integer(source.content_version), string(target.content_id), integer(target.content_version))) throw new Error("input dependency missing");
@@ -527,11 +651,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
             : receipt.command_kind !== "task.runtime-input" && (receipt.command_kind === "task.runtime") === internal && json(ref(receipt)) === json(ref(snapshot)));
         if (candidates.length !== 1) throw new Error("input receipt missing");
         const receipt = candidates[0]!, cursor = integer(receipt.commit_cursor);
+        const priorInput = inputHeads.get(string(row.attempt_id));
+        if (priorInput && (cursor <= priorInput.cursor || integer(row.task_revision) < priorInput.revision)) throw new Error("input commit order mismatch");
+        inputHeads.set(string(row.attempt_id), { cursor, revision: integer(row.task_revision) });
         if (usedReceipts.has(cursor) || receipt.workspace_id !== row.workspace_id || receipt.scope_key !== row.scope_key) throw new Error("duplicate command input");
         usedReceipts.add(cursor);
         const body = this.#body(row, scope, false), receiptBody = this.#body(receipt, scope, false);
         const start = runtime ? integer(row.task_revision) : commandStarts.get(cursor)!;
-        if (runtime) { dependency(snapshot, row); dependency(session, row); }
+        if (runtime) { if (snapshot.state !== "READY") throw new Error("runtime input requires READY snapshot"); dependency(snapshot, row); dependency(session, row); }
         else if (internal) { if (json(ref(row)) !== json(ref(snapshot))) throw new Error("internal input body mismatch"); }
         else {
           if (json(ref(row)) === json(ref(snapshot))) throw new Error("user input cannot be task body");
@@ -549,6 +676,15 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
             || Object.values(observation.correlation).some(value => value !== null)) throw new Error("user input Observation mismatch");
           const key = json(ref(row)); if (userContents.has(key)) throw new Error("duplicate user content"); userContents.add(key);
         }
+        if (!internal) {
+          const actual = this.#rows("SELECT source_id,source_version FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", string(row.content_id), integer(row.content_version))
+            .map(edge => json([edge.source_id, edge.source_version])).sort();
+          const previous = runtime ? snapshot : start > 0 ? this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), start)! : undefined;
+          const expected = [session, ...(previous ? [previous] : [])].map(source => json([source.content_id, source.content_version])).sort();
+          if (json(actual) !== json(expected)) throw new Error("input dependency role mismatch");
+          const metadata = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version))!;
+          if (!runtime && metadata.created_at !== snapshot.created_at) throw new Error("command content time mismatch");
+        }
         if (body) {
           if (runtime) {
             exact(body, ["schemaVersion", "input", "command", "receipt"]); const input = body.input;
@@ -557,6 +693,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
               || input.intentRevision !== row.intent_revision || input.ownerEpoch !== row.owner_epoch || input.ordinal !== row.ordinal || input.kind !== row.kind
               || input.contractRevision !== session.contract_revision || typeof input.text !== "string" || !input.text.trim() || Buffer.byteLength(input.text) > 1024 * 1024) throw new Error("input projection mismatch");
             assertIsoTimestampV2(input.createdAt); assertRevisionV2(input.contractRevision);
+            const metadata = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version))!;
+            if (input.createdAt !== metadata.created_at) throw new Error("runtime input time mismatch");
             exact(body.command, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]);
             exact(body.command.payload, ["kind", "taskId", "attemptId", "intentRevision", "text"]);
             if (body.command.schemaVersion !== 1 || body.command.payload.kind !== "task.runtime-input" || body.command.payload.taskId !== row.task_id
@@ -600,6 +738,12 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const scope = row.entity_kind === "task" ? taskScope(string(row.workspace_id), string(row.entity_id)) : sessionScope(string(row.workspace_id), string(row.entity_id));
         const body = this.#body(row, scope, false), event = this.#row("SELECT * FROM task_outbox_v1 WHERE cursor=?", integer(row.commit_cursor));
         if (!event || event.workspace_id !== row.workspace_id || event.entity_kind !== row.entity_kind || event.entity_id !== row.entity_id || event.revision !== row.revision) throw new Error("receipt cursor mismatch");
+        if (row.entity_kind === "task" && event.event_type !== (row.command_kind === "task.runtime-input" ? "task.input_committed" : "task.state_changed")) throw new Error("receipt final event mismatch");
+        if (row.entity_kind === "session") {
+          const session = this.#row("SELECT * FROM session_v1 WHERE id=? AND workspace_id=?", string(row.entity_id), string(row.workspace_id));
+          if (!session || row.command_kind !== "session.create" || row.revision !== 1 || event.event_type !== "session.created" || event.owner_epoch !== 1
+            || row.scope_key !== session.scope_key || json(ref(row)) !== json(ref(session))) throw new Error("session receipt projection mismatch");
+        }
         if (body) {
           const command = body.command as { commandId: string; idempotencyKey: string; workspaceId: string; payload: { kind: string } }, receipt = body.receipt as TaskStoreReceiptV1;
           if (!command || command.commandId !== row.command_id || command.idempotencyKey !== row.idempotency_key || command.workspaceId !== row.workspace_id || command.payload.kind !== row.command_kind
@@ -614,17 +758,26 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           } else if (row.command_kind !== "session.create" || receipt.result.kind !== "session" || receipt.result.ownerEpoch !== 1) throw new Error("session receipt mismatch");
         }
       }
+      const consumerHeads = new Map<string, number>();
+      for (const row of this.#rows("SELECT * FROM task_consumer_v1")) {
+        assertIdentifierV2(row.consumer_id); assertIdentifierV2(row.workspace_id); assertRevisionV2(row.cursor);
+        if (!this.#row("SELECT 1 FROM task_outbox_v1 WHERE workspace_id=? AND cursor=?", string(row.workspace_id), integer(row.cursor))) throw new Error("consumer cursor mismatch");
+        consumerHeads.set(string(row.workspace_id), Math.max(consumerHeads.get(string(row.workspace_id)) ?? 0, integer(row.cursor)));
+      }
       let cursor = 0;
-      const sessionHeads = new Map<string, Row>(), versionEvents = new Set<string>(), inputEvents = new Set<string>();
+      const sessionHeads = new Map<string, Row>(), taskEventHeads = new Map<string, number>(), versionEvents = new Set<string>(), inputEvents = new Set<string>();
       for (const row of this.#rows("SELECT * FROM task_outbox_v1 ORDER BY cursor")) {
         const event = this.#eventRow(row).event;
         if (integer(row.cursor) <= cursor || row.event_id !== event.eventId || row.workspace_id !== event.workspaceId || row.entity_kind !== event.aggregate.kind || row.entity_id !== event.aggregate.id
           || row.revision !== event.aggregate.revision || row.event_type !== event.type || row.occurred_at !== event.occurredAt || integer(row.recovery_epoch) > this.#host.recoveryEpoch()
-          || (integer(row.recovery_epoch) < this.#host.recoveryEpoch() && row.publish_state !== "quarantined")) throw new Error("outbox projection mismatch");
+          || (integer(row.recovery_epoch) < this.#host.recoveryEpoch() && row.publish_state !== "quarantined")
+          || (integer(row.recovery_epoch) === this.#host.recoveryEpoch() && row.publish_state !== ((consumerHeads.get(event.workspaceId) ?? 0) >= integer(row.cursor) ? "published" : "pending"))) throw new Error("outbox projection mismatch");
         if (event.type === "session.created" || event.type === "session.owner_fenced") {
           const session = this.#row("SELECT * FROM session_v1 WHERE id=? AND workspace_id=?", event.aggregate.id, event.workspaceId);
           if (!session || event.aggregate.revision > integer(session.revision) || event.payload.ownerEpoch !== row.owner_epoch
-            || integer(row.owner_epoch) > integer(session.owner_epoch) || event.occurredAt < string(session.created_at) || event.occurredAt > string(session.updated_at)) throw new Error("outbox session mismatch");
+            || integer(row.owner_epoch) > integer(session.owner_epoch) || event.occurredAt < string(session.created_at)) throw new Error("outbox session mismatch");
+          const history = this.#row("SELECT * FROM session_revision_v1 WHERE session_id=? AND revision=? AND event_cursor=?", event.aggregate.id, event.aggregate.revision, integer(row.cursor));
+          if (!history) throw new Error("session event history link missing");
           const prior = sessionHeads.get(event.aggregate.id);
           if (event.type === "session.created") {
             const receipt = this.#row("SELECT * FROM task_receipt_v1 WHERE commit_cursor=?", integer(row.cursor));
@@ -633,12 +786,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
               || receipt.command_kind !== "session.create" || receipt.revision !== 1 || json(ref(receipt)) !== json(ref(session))) throw new Error("outbox session creation mismatch");
           } else {
             if (!prior) throw new Error("outbox missing session creation");
-            // RESTORE_BEGIN advances every Session once per recovery epoch without an execution event.
-            // Every other Session revision has exactly one owner-fence projection, in commit order.
-            const recoveries = integer(row.recovery_epoch) - integer(prior.recovery_epoch), owners = integer(row.owner_epoch) - integer(prior.owner_epoch);
-            if (recoveries < 0 || event.aggregate.revision !== integer(prior.revision) + recoveries + 1
-              || ![recoveries, recoveries + 1].includes(owners) || event.occurredAt < string(prior.occurred_at)) throw new Error("outbox session history mismatch");
-            if (owners === recoveries) {
+            if (event.aggregate.revision <= integer(prior.revision)) throw new Error("outbox session history mismatch");
+            if (history.reason === "reauthorized") {
               // Same-epoch event is the explicit user command that opens a new attempt, not a new daemon.
               const receipt = this.#row(`SELECT r.* FROM task_receipt_v1 r JOIN task_v1 t ON t.id=r.entity_id
                 JOIN task_snapshot_v1 s ON s.task_id=t.id AND s.revision=r.revision
@@ -648,31 +797,47 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
                   AND s.owner_epoch=? AND s.created_at=? AND a.created_at=? ORDER BY r.commit_cursor LIMIT 1`,
                 event.workspaceId, event.aggregate.id, integer(row.cursor), integer(row.owner_epoch), event.occurredAt, event.occurredAt);
               if (!receipt) throw new Error("outbox reauthorization missing command");
+              const start = commandStarts.get(integer(receipt.commit_cursor))!;
+              const final = this.#row("SELECT attempt_id FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(receipt.entity_id), integer(receipt.revision))!;
+              const before = start ? this.#row("SELECT attempt_id FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(receipt.entity_id), start) : undefined;
+              if (before && before.attempt_id === final.attempt_id) throw new Error("reauthorization requires new attempt");
+              const first = this.#row("SELECT * FROM task_outbox_v1 WHERE cursor>? ORDER BY cursor LIMIT 1", integer(row.cursor));
+              if (!first || first.entity_kind !== "task" || first.entity_id !== receipt.entity_id
+                || first.revision !== (commandStarts.get(integer(receipt.commit_cursor)) ?? -1) + 1
+                || !["task.created", "task.state_changed"].includes(string(first.event_type))) throw new Error("reauthorization command ordering mismatch");
             }
           }
           sessionHeads.set(event.aggregate.id, row);
         } else {
-          const snapshot = this.#row("SELECT s.*,t.workspace_id FROM task_snapshot_v1 s JOIN task_v1 t ON t.id=s.task_id WHERE s.task_id=? AND s.revision=?", event.aggregate.id, event.aggregate.revision);
+          const snapshot = this.#row("SELECT s.*,t.workspace_id,t.session_id FROM task_snapshot_v1 s JOIN task_v1 t ON t.id=s.task_id WHERE s.task_id=? AND s.revision=?", event.aggregate.id, event.aggregate.revision);
           if (!snapshot || snapshot.workspace_id !== event.workspaceId || snapshot.owner_epoch !== row.owner_epoch) throw new Error("outbox task identity mismatch");
+          const authority = this.#row("SELECT * FROM session_revision_v1 WHERE session_id=? AND recovery_epoch<=? AND (event_cursor IS NULL OR event_cursor<?) ORDER BY revision DESC LIMIT 1",
+            string(snapshot.session_id), integer(row.recovery_epoch), integer(row.cursor));
+          if (!authority || authority.owner_epoch !== row.owner_epoch || authority.recovery_epoch !== row.recovery_epoch || authority.created_at! > row.occurred_at!
+            || event.type === "task.input_committed" && authority.requires_reauthorization !== 0) throw new Error("outbox task authority mismatch");
           switch (event.type) {
             case "task.created": case "task.state_changed": {
               const key = json([event.aggregate.id, event.aggregate.revision]);
-              if (versionEvents.has(key) || (event.type === "task.created") !== (event.aggregate.revision === 1)
+              if (event.aggregate.revision !== (taskEventHeads.get(event.aggregate.id) ?? 0) + 1 || versionEvents.has(key) || (event.type === "task.created") !== (event.aggregate.revision === 1)
                 || snapshot.state !== event.payload.state || snapshot.intent_revision !== event.payload.intentRevision || snapshot.created_at !== event.occurredAt) throw new Error("outbox task mismatch");
-              versionEvents.add(key); break;
+              const metadata = this.#row("SELECT fence_json FROM content_object WHERE content_id=? AND content_version=?", string(snapshot.content_id), integer(snapshot.content_version))!;
+              if ((parseStored(string(metadata.fence_json)) as { recoveryEpoch: number }).recoveryEpoch !== row.recovery_epoch) throw new Error("task content recovery mismatch");
+              versionEvents.add(key); taskEventHeads.set(event.aggregate.id, event.aggregate.revision); break;
             }
             case "task.input_committed": {
+              if ((taskEventHeads.get(event.aggregate.id) ?? 0) !== event.aggregate.revision) throw new Error("input current task mismatch");
               const input = this.#row("SELECT * FROM task_input_v1 WHERE task_id=? AND attempt_id=? AND ordinal=? AND kind='runtime_input'", event.aggregate.id, event.payload.attemptId, event.payload.ordinal);
               const receipt = this.#row("SELECT * FROM task_receipt_v1 WHERE commit_cursor=?", integer(row.cursor));
               if (!input || input.task_revision !== event.aggregate.revision || input.owner_epoch !== row.owner_epoch || input.attempt_id !== snapshot.attempt_id
                 || input.intent_revision !== snapshot.intent_revision || inputEvents.has(string(input.id)) || !receipt || receipt.command_kind !== "task.runtime-input"
                 || receipt.entity_kind !== "task" || receipt.entity_id !== input.task_id || receipt.revision !== input.task_revision || receipt.workspace_id !== event.workspaceId
                 || json(ref(receipt)) !== json(ref(input))) throw new Error("outbox input mismatch");
-              const content = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(input.content_id), integer(input.content_version));
-              if (!content || content.created_at !== event.occurredAt) throw new Error("outbox input time mismatch");
+              const content = this.#row("SELECT created_at,fence_json FROM content_object WHERE content_id=? AND content_version=?", string(input.content_id), integer(input.content_version));
+              if (!content || content.created_at !== event.occurredAt || (parseStored(string(content.fence_json)) as { recoveryEpoch: number }).recoveryEpoch !== row.recovery_epoch) throw new Error("outbox input time mismatch");
               inputEvents.add(string(input.id)); break;
             }
             case "task.progress": {
+              if ((taskEventHeads.get(event.aggregate.id) ?? 0) !== event.aggregate.revision) throw new Error("progress current task mismatch");
               const source = this.#row("SELECT * FROM task_execution_event_v1 WHERE commit_cursor=?", integer(row.cursor));
               if (!source || source.task_id !== event.aggregate.id || source.task_revision !== event.aggregate.revision || source.attempt_id !== snapshot.attempt_id
                 || source.intent_revision !== snapshot.intent_revision || source.owner_epoch !== row.owner_epoch || source.recovery_epoch !== row.recovery_epoch
@@ -684,16 +849,15 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         cursor = integer(row.cursor);
       }
       for (const session of this.#rows("SELECT * FROM session_v1")) {
-        const head = sessionHeads.get(string(session.id)); if (!head) throw new Error("session event history missing");
-        const recoveries = this.#host.recoveryEpoch() - integer(head.recovery_epoch);
-        if (session.revision !== integer(head.revision) + recoveries || session.owner_epoch !== integer(head.owner_epoch) + recoveries
-          || recoveries === 0 && session.updated_at !== head.occurred_at) throw new Error("session event head mismatch");
+        const head = sessionHeads.get(string(session.id));
+        const history = this.#row("SELECT * FROM session_revision_v1 WHERE session_id=? AND event_cursor IS NOT NULL ORDER BY revision DESC LIMIT 1", string(session.id));
+        if (!head || history?.event_cursor !== head.cursor) throw new Error("session event head mismatch");
       }
       for (const snapshot of this.#rows("SELECT task_id,revision FROM task_snapshot_v1"))
         if (!versionEvents.has(json([snapshot.task_id, snapshot.revision]))) throw new Error("task version event missing");
       for (const input of this.#rows("SELECT id FROM task_input_v1 WHERE kind='runtime_input'"))
         if (!inputEvents.has(string(input.id))) throw new Error("runtime input event missing");
-      for (const row of this.#rows("SELECT * FROM task_consumer_v1")) if (row.cursor !== 0 && !this.#row("SELECT 1 FROM task_outbox_v1 WHERE workspace_id=? AND cursor=?", string(row.workspace_id), integer(row.cursor))) throw new Error("consumer cursor mismatch");
+
     } catch (error) { if ((error as { code?: string })?.code === "ERR_SQLITE_ERROR") throw error; this.#host.fail("corruption"); }
   }
 }

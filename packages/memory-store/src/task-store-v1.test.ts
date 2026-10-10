@@ -190,7 +190,7 @@ test("all ProductEvent variants reject orphan aggregates in a real isolated in-m
       const pragmas = configureCognitiveDatabaseV2(db, { filePath: ":memory:", busyTimeoutMs: 100 });
       applyTaskMigrationsV1(db, { clock: { now: () => T0 }, expectedPragmas: pragmas });
       const unused = (): never => { throw new Error("Unexpected content or execution access"); };
-      const host: TaskStoreHostV1 = { db, now: () => T0, recoveryEpoch: () => 0, registerScope: unused, content: unused, writeBody: unused,
+      const host: TaskStoreHostV1 = { db, now: () => T0, recoveryEpoch: () => 0, recoveryEpochs: () => [], registerScope: unused, content: unused, writeBody: unused,
         recordCommandEvidence: unused, executionForReduction: unused, onExecutionSettled: unused,
         fail: category => { throw new CognitiveStoreErrorV2(category); }, transaction: (_write, body) => {
           db.exec("BEGIN"); try { engine.validateRows(); execution.validateRows(); const result = body(); db.exec("COMMIT"); return result; }
@@ -323,4 +323,208 @@ test("revoked metadata still rejects invented attempts and terminal Outcomes", a
     } finally { db.close(); }
     code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
   });
+});
+
+
+test("Session contract and reauthorization metadata must equal the admitted writer history", async t => {
+  for (const variant of ["contract", "initial-reauthorization", "fenced-reauthorization", "authorized-reauthorization", "revoked-contract", "revoked-reauthorization"] as const) await t.test(variant, t => {
+    const f = fixture(t), c = create(f);
+    if (variant === "authorized-reauthorization") f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2));
+    if (variant === "fenced-reauthorization" || variant === "authorized-reauthorization") f.reopen("daemon-two");
+    if (variant === "authorized-reauthorization") f.store.tasks.executeTask({ ...context, daemonInstanceId: "daemon-two", ownerEpoch: 2 }, action("task.retry", c.taskId, 4));
+    if (variant.startsWith("revoked")) f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-session-projection", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope: { kind: "session", workspaceId: WORKSPACE, sessionId: c.sessionId } }] });
+    const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+    try {
+      const trigger = db.prepare("SELECT sql FROM sqlite_master WHERE name='session_v1_guard_update'").get()!.sql;
+      db.exec("PRAGMA ignore_check_constraints=ON; BEGIN; DROP TRIGGER session_v1_guard_update");
+      if (variant.includes("contract")) db.prepare("UPDATE session_v1 SET contract_revision=999 WHERE id=?").run(c.sessionId);
+      else db.prepare("UPDATE session_v1 SET requires_reauthorization=? WHERE id=?").run(variant === "fenced-reauthorization" ? 0 : 1, c.sessionId);
+      db.exec(String(trigger)); db.exec("COMMIT; PRAGMA ignore_check_constraints=OFF");
+      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    } finally { db.close(); }
+    code(() => f.store.tasks.getSession(WORKSPACE, c.sessionId), "corruption");
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+    code(() => f.reopen(), "corruption");
+  });
+});
+
+function editMetadata(f: ReturnType<typeof fixture>, tables: readonly string[], body: (db: DatabaseSync) => void) {
+ const db=new DatabaseSync(join(f.dataRoot,"product.sqlite"));
+ try { db.exec("BEGIN; PRAGMA defer_foreign_keys=ON"); const triggers: { name: string; sql: string }[]=[];
+ for(const table of tables) for(const trigger of db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table)) {triggers.push({ name: String(trigger.name), sql: String(trigger.sql) }); db.exec(`DROP TRIGGER "${trigger.name}"`);}
+ body(db); for(const trigger of triggers) db.exec(String(trigger.sql)); db.exec("COMMIT");
+ assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{db.close();}
+}
+test("metadata integrity rejects future Task owner crossprojection",t=>{
+ const f=fixture(t),c=create(f);
+ editMetadata(f,["task_snapshot_v1","task_input_v1","task_outbox_v1"],db=>{
+ db.prepare("UPDATE task_snapshot_v1 SET owner_epoch=999 WHERE task_id=?").run(c.taskId);
+ db.prepare("UPDATE task_input_v1 SET owner_epoch=999 WHERE task_id=?").run(c.taskId);
+ db.prepare("UPDATE task_outbox_v1 SET owner_epoch=999 WHERE entity_kind='task' AND entity_id=?").run(c.taskId);
+ });
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects malformed zero consumer",t=>{
+ const f=fixture(t),c=create(f);editMetadata(f,[],db=>db.exec("INSERT INTO task_consumer_v1 VALUES ('bad id','unknown workspace',0)"));
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects extra Session receipt after revoked body",t=>{
+ const f=fixture(t),c=create(f);f.reopen("daemon-two");
+ f.store.applyControlIntent({kind:"FORGET",operationId:"audit-forget-session",at:T0,authorization:"synthetic-user-request",targets:[{kind:"scope",scope:{kind:"session",workspaceId:WORKSPACE,sessionId:c.sessionId}}]});
+ editMetadata(f,[],db=>db.exec("INSERT INTO task_receipt_v1 SELECT principal_id,'invented-command','invented-key','invented-id',workspace_id,entity_kind,entity_id,2,(SELECT max(cursor) FROM task_outbox_v1),content_id,content_version,scope_key FROM task_receipt_v1 WHERE entity_kind='session'"));
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen("daemon-two"), "corruption");
+});
+test("metadata integrity rejects published event without consumer",t=>{
+ const f=fixture(t);create(f);editMetadata(f,[],db=>db.exec("UPDATE task_outbox_v1 SET publish_state='published' WHERE cursor=3"));
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects out-of-order Task version cursors",t=>{
+ const f=fixture(t),c=create(f);
+ editMetadata(f,["task_outbox_v1","task_receipt_v1"],db=>{
+ db.exec("UPDATE task_outbox_v1 SET cursor=99 WHERE cursor=2; UPDATE task_outbox_v1 SET cursor=2 WHERE cursor=3; UPDATE task_outbox_v1 SET cursor=3 WHERE cursor=99");
+ db.prepare("UPDATE task_receipt_v1 SET commit_cursor=2 WHERE entity_kind='task' AND entity_id=?").run(c.taskId);
+ });
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects revoked self-dependency",t=>{
+ const f=fixture(t),c=create(f);
+ f.store.applyControlIntent({kind:"FORGET",operationId:"audit-forget-task",at:T0,authorization:"synthetic-user-request",targets:[{kind:"scope",scope:{kind:"task",workspaceId:WORKSPACE,taskId:c.taskId}}]});
+ editMetadata(f,[],db=>db.prepare("INSERT INTO task_content_dependency_v1 SELECT content_id,content_version,content_id,content_version FROM task_snapshot_v1 WHERE task_id=? AND revision=2").run(c.taskId));
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects revoked malformed attempt identifier",t=>{
+ const f=fixture(t),c=create(f);
+ f.store.applyControlIntent({kind:"FORGET",operationId:"audit-forget-attempt",at:T0,authorization:"synthetic-user-request",targets:[{kind:"scope",scope:{kind:"task",workspaceId:WORKSPACE,taskId:c.taskId}}]});
+ editMetadata(f,["task_attempt_v1","task_snapshot_v1","working_state_v1","task_input_v1"],db=>{
+ db.prepare("UPDATE task_attempt_v1 SET id='bad attempt id' WHERE task_id=?").run(c.taskId);
+ for(const table of ["task_snapshot_v1","working_state_v1","task_input_v1"])db.prepare(`UPDATE ${table} SET attempt_id='bad attempt id' WHERE task_id=?`).run(c.taskId);
+ });
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects revoked runtime input at CREATED",t=>{
+ const f=fixture(t),c=create(f);f.store.tasks.recordRuntimeInput(context,input(f,c.taskId));
+ f.store.applyControlIntent({kind:"FORGET",operationId:"audit-forget-input-state",at:T0,authorization:"synthetic-user-request",targets:[{kind:"scope",scope:{kind:"task",workspaceId:WORKSPACE,taskId:c.taskId}}]});
+ editMetadata(f,["task_input_v1","task_receipt_v1","task_outbox_v1","task_content_dependency_v1"],db=>{
+ db.exec("UPDATE task_input_v1 SET task_revision=1 WHERE kind='runtime_input'; UPDATE task_receipt_v1 SET revision=1 WHERE command_kind='task.runtime-input'");
+ const ev=db.prepare("SELECT * FROM task_outbox_v1 WHERE event_type='task.input_committed'").get()!;const json=JSON.parse(String(ev.event_json));json.aggregate.revision=1;
+ db.prepare("UPDATE task_outbox_v1 SET revision=1,event_json=? WHERE cursor=?").run(canonicalJsonV1(json),ev.cursor!);
+ const source=db.prepare("SELECT * FROM task_snapshot_v1 WHERE revision=1").get()!;const target=db.prepare("SELECT * FROM task_input_v1 WHERE kind='runtime_input'").get()!;
+ db.prepare("DELETE FROM task_content_dependency_v1 WHERE target_id=? AND source_id IN (SELECT content_id FROM task_snapshot_v1)").run(target.content_id!);
+ db.prepare("INSERT INTO task_content_dependency_v1 VALUES(?,?,?,?)").run(source.content_id!,source.content_version!,target.content_id!,target.content_version!);
+ });
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+test("metadata integrity rejects revoked create command ending WAITING_INPUT",t=>{
+ const f=fixture(t),c=create(f);
+ f.store.applyControlIntent({kind:"FORGET",operationId:"audit-forget-command-state",at:T0,authorization:"synthetic-user-request",targets:[{kind:"scope",scope:{kind:"task",workspaceId:WORKSPACE,taskId:c.taskId}}]});
+ editMetadata(f,["task_snapshot_v1","task_attempt_v1","task_outbox_v1"],db=>{
+ db.exec("UPDATE task_snapshot_v1 SET state='WAITING_INPUT' WHERE revision=2; UPDATE task_attempt_v1 SET state='WAITING_INPUT'");
+ const ev=db.prepare("SELECT * FROM task_outbox_v1 WHERE event_type='task.state_changed'").get()!;const value=JSON.parse(String(ev.event_json));value.payload.state='WAITING_INPUT';
+ db.prepare("UPDATE task_outbox_v1 SET event_json=? WHERE cursor=?").run(canonicalJsonV1(value),ev.cursor!);
+ });
+ code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+ code(() => f.reopen(), "corruption");
+});
+
+test("Session revision facts preserve daemon ownership and explicit authorization across reopen", t => {
+  const f = fixture(t), c = create(f);
+  f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2));
+  f.reopen("daemon-two");
+  f.store.tasks.executeTask({ ...context, daemonInstanceId: "daemon-two", ownerEpoch: 2 }, action("task.retry", c.taskId, 4));
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  try {
+    const rows = db.prepare("SELECT revision,owner_epoch,owner_instance_id,requires_reauthorization,contract_revision,recovery_epoch,reason FROM session_revision_v1 WHERE session_id=? ORDER BY revision").all(c.sessionId).map(row => ({ ...row }));
+    assert.deepEqual(rows, [
+      { revision: 1, owner_epoch: 1, owner_instance_id: "daemon-one", requires_reauthorization: 0, contract_revision: 1, recovery_epoch: 0, reason: "created" },
+      { revision: 2, owner_epoch: 2, owner_instance_id: "daemon-two", requires_reauthorization: 1, contract_revision: 1, recovery_epoch: 0, reason: "owner-fenced" },
+      { revision: 3, owner_epoch: 2, owner_instance_id: "daemon-two", requires_reauthorization: 0, contract_revision: 1, recovery_epoch: 0, reason: "reauthorized" },
+    ]);
+  } finally { db.close(); }
+  assert.equal(f.reopen("daemon-two").tasks.getSession(WORKSPACE, c.sessionId).value!.revision, 3);
+});
+
+test("Session immutable history rejects current owner drift, missing revisions and false transition reasons", async t => {
+  for (const variant of ["current-owner", "history-owner", "history-reason", "history-missing", "revoked-owner"] as const) await t.test(variant, t => {
+    const f = fixture(t), c = create(f); f.reopen("daemon-two");
+    if (variant === "revoked-owner") f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-history-owner", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope: { kind: "session", workspaceId: WORKSPACE, sessionId: c.sessionId } }] });
+    editMetadata(f, ["session_v1", "session_revision_v1"], db => {
+      if (variant === "current-owner" || variant === "revoked-owner") db.prepare("UPDATE session_v1 SET owner_instance_id='invented-daemon' WHERE id=?").run(c.sessionId);
+      else if (variant === "history-owner") db.prepare("UPDATE session_revision_v1 SET owner_instance_id='daemon-one' WHERE session_id=? AND revision=2").run(c.sessionId);
+      else if (variant === "history-reason") db.prepare("UPDATE session_revision_v1 SET reason='reauthorized',requires_reauthorization=0 WHERE session_id=? AND revision=2").run(c.sessionId);
+      else { db.prepare("UPDATE session_v1 SET revision=1 WHERE id=?").run(c.sessionId); db.prepare("DELETE FROM session_revision_v1 WHERE session_id=? AND revision=2").run(c.sessionId); }
+    });
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen("daemon-two"), "corruption");
+  });
+});
+
+test("consumer publication state is exactly the committed acknowledged prefix", async t => {
+  for (const variant of ["current-quarantine", "covered-pending", "zero-valid-id", "unknown-workspace"] as const) await t.test(variant, t => {
+    const f = fixture(t); create(f);
+    editMetadata(f, [], db => {
+      if (variant === "current-quarantine") db.exec("UPDATE task_outbox_v1 SET publish_state='quarantined' WHERE cursor=3");
+      else if (variant === "covered-pending") db.prepare("INSERT INTO task_consumer_v1 VALUES('consumer',?,3)").run(WORKSPACE);
+      else db.prepare("INSERT INTO task_consumer_v1 VALUES('consumer',?,?)").run(variant === "unknown-workspace" ? "unknown-workspace" : WORKSPACE, variant === "zero-valid-id" ? 0 : 3);
+    });
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
+  });
+});
+
+test("revoked graph and input order retain fresh-target and commit-order invariants", async t => {
+  for (const variant of ["cycle", "session-dependency", "input-order"] as const) await t.test(variant, t => {
+    const f = fixture(t), c = create(f);
+    if (variant === "input-order") f.store.tasks.recordRuntimeInput(context, input(f, c.taskId));
+    f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-graph-order", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope: { kind: "session", workspaceId: WORKSPACE, sessionId: c.sessionId } }] });
+    editMetadata(f, ["task_input_v1"], db => {
+      if (variant === "input-order") db.exec("UPDATE task_input_v1 SET ordinal=99 WHERE ordinal=1; UPDATE task_input_v1 SET ordinal=1 WHERE ordinal=2; UPDATE task_input_v1 SET ordinal=2 WHERE ordinal=99");
+      else {
+        const source = db.prepare("SELECT content_id,content_version FROM task_snapshot_v1 WHERE task_id=? AND revision=2").get(c.taskId)!;
+        const target = variant === "session-dependency" ? db.prepare("SELECT content_id,content_version FROM session_v1 WHERE id=?").get(c.sessionId)!
+          : db.prepare("SELECT content_id,content_version FROM task_snapshot_v1 WHERE task_id=? AND revision=1").get(c.taskId)!;
+        db.prepare("INSERT INTO task_content_dependency_v1 VALUES(?,?,?,?)").run(source.content_id!, source.content_version!, target.content_id!, target.content_version!);
+      }
+    });
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
+  });
+});
+
+test("Task-managed content roles retain purpose, publication and transaction time invariants", async t => {
+  for (const role of ["session", "task", "user-command", "runtime-input"] as const)
+    for (const variant of ["purpose", "staged", "time"] as const) await t.test(`${role}/${variant}`, t => {
+      const f = fixture(t), c = create(f);
+      if (role === "runtime-input") f.store.tasks.recordRuntimeInput(context, input(f, c.taskId));
+      editMetadata(f, ["content_object"], db => {
+        const row = role === "session" ? db.prepare("SELECT content_id,content_version FROM session_v1 WHERE id=?").get(c.sessionId)!
+          : role === "task" ? db.prepare("SELECT content_id,content_version FROM task_snapshot_v1 WHERE task_id=? AND revision=2").get(c.taskId)!
+            : db.prepare("SELECT content_id,content_version FROM task_input_v1 WHERE task_id=? AND kind=?").get(c.taskId, role === "user-command" ? "user_command" : "runtime_input")!;
+        const column = variant === "purpose" ? "purpose" : variant === "staged" ? "state" : "created_at";
+        const value = variant === "purpose" ? "artifact" : variant === "staged" ? "staged" : "2026-10-10T00:00:01.000Z";
+        db.prepare(`UPDATE content_object SET ${column}=? WHERE content_id=? AND content_version=?`).run(value, row.content_id!, row.content_version!);
+      });
+      code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
+    });
+});
+
+test("multi-version reducer cannot cancel an unclosed execution and hide it behind a new READY attempt", t => {
+  const f = fixture(t, (current, command, context) => {
+    if (command.payload.kind !== "task.continue") return reduce(current, command, context);
+    assert.ok(current);
+    const cancelled = reduce(current, action("task.cancel", current.id, current.revision), context).versions;
+    const next = reduce(cancelled.at(-1)!, action("task.retry", current.id, cancelled.at(-1)!.revision), context).versions;
+    return { versions: [...cancelled, ...next] };
+  }, false, "model-allowed");
+  const c = create(f); startStoredExecution(f, c.taskId, c.sessionId);
+  const before = f.store.tasks.snapshot(WORKSPACE);
+  const command = parseLocalApiCommandV1({ schemaVersion: 1, commandId: "continue-open-execution", idempotencyKey: "continue-open-execution", workspaceId: WORKSPACE,
+    expectedRevision: 3, payload: { kind: "task.continue", targetRef: { kind: "task", id: c.taskId, revision: 3 } } });
+  code(() => f.store.tasks.executeTask(context, command), "conflict");
+  assert.deepEqual(f.store.tasks.snapshot(WORKSPACE), before);
 });
