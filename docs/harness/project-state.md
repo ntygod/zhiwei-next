@@ -10,9 +10,13 @@ updated: 2026-10-10
 
 canonical [#112](https://github.com/ntygod/zhiwei-next/issues/112)，唯一 `feat/112-cognitive-persistence` / Draft [PR113](https://github.com/ntygod/zhiwei-next/pull/113)，从已保护 main `e996451f1c601b5d4859c07030bfeabb290f5371` 开始。开工已核实无开放 PR/Incident、远端仅 main；#44/#67 原人类输入保留。P1-01 / PR111 已通过最终 R3、499 项完整测试、Ready/live、保护合入与 main provenance，#110 已关闭；产品验收仍 `not_run`。
 
-本项仅实现 `memory-store` 独立 v2 内容/认知存储与真实隔离临时数据库开发验证。当前正文文件与独立恢复日志适配器已由首个实质提交 `07f625177e13fee8502e0cfa6e9e10e29d96ee86` 发布；固定新增迁移/manifest、Observation/Claim 事务、必要 P1 认知快照、逻辑遗忘/受管副本与恢复隔离正在集成。实施状态 `in_progress`，不是已交付或产品验收。
+完整代码提交 `a763c8c257ed8b8a4fcba7f13bda6f6162033a11` 已实现独立 v2 固定迁移/manifest、正文 staging/发布/孤儿回收、Observation/Claim 与必要 P1 认知快照、Candidate+Claim 同事务接受/纠正、逻辑遗忘/当前受管副本和最小隔离恢复协调者。正式 Node22.23.1/npm10.9.8 完整 `npm run check` 原始 exit0，582/582 测试，严格类型110 roots。真实临时 SQLite 与实际 P1-01 core 输出的合成事务回归通过；受限恢复动作没有伪装为已运行测试。具体 supported/unsupported 与动态未验收范围见 [memory-store 交付边界](../../packages/memory-store/README.md)。
 
-保留 0001/v1 原合同，不接真实用户数据、模型、凭据或生产入口。原 #90/preintegration-safety 及等价争议动态诊断不运行；D-04/D-08、G-2/G-5 与真实启用门不变。完整最终 check、精确 HEAD 独立 R3、当前 PR Runtime 来源、Ready/live、CI 与受保护合入仍待完成。以下旧段落是开发期历史快照，不能覆盖本段已核实交付状态。
+执行索引记录本 PR 已存在代码证据为 `implemented`，产品 Z05/Z06/Z07 验收仍 `not_run`。Episode/WorkingState 的生产持久消费者等待 Task 事务依赖；P1-05 通用 Claim 生命周期服务、P4 加密/跨安装/生产备份接线不提前。最小 synthetic source/catalog、独立当前 journal 重放、恢复世代/Outbox quarantine、atomic active selection 及受管恢复副本清理代码已具备，但 capture/restore/清理与故障窗口动态验收均 `not_run`。当前 raw synthetic opener 的调用者须遵守 coordinator 所有权合同，没有生产消费者或通用授权绕过开关。
+
+本 PR 的 SDK 原来源为 `404427198a501998f9fd4ff17c3382812a66aa37` / run `38043223271`；Worker 原来源为 `0925e00732cd567924b82f999bc7dcaf9208ef3b` / run `38043701983`，两次原 job/ZIP/artifact/result 与完整对象相等、成对来源及 attempt1 后续字节回读均已核验。历史 failure-shape 来源仅在完整相等成功后使用既有临时 guard，不把预期捕获失败写成普通 CI 成功；比较器已恢复原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。精确最终 HEAD 的独立 R3、Ready/live、完整 CI、受保护合入与 main 回读仍待完成，不能把候选状态当作已合入。
+
+保留 0001/v1 原合同，不接真实用户数据、模型、凭据或生产入口。原 #90/preintegration-safety 及等价争议动态诊断不运行；D-04/D-08、G-2/G-5 与真实启用门不变。本 PR 保护合入并核验 main 后才开始下一独立 P1-03 实现；不宣称产品验收依赖通过。以下旧段落是开发期历史快照，不能覆盖本段真实状态。
 
 ## 历史工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
 
