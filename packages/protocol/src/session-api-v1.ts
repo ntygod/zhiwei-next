@@ -2,7 +2,7 @@ import { assertTaskIntent, assertTaskOutcomeHistory, isTerminalTaskState, sameTa
 import { CognitiveProtocolError, decodeWireJson, identifier, invalid, keys, list, member, object, revision, textValue, timestamp, unique, version, wireBoundary } from "./cognitive-wire.ts";
 import { canonicalJsonV1, snapshotJsonValue } from "./lossless-json.ts";
 import { parseLocalApiErrorV1, parseLocalApiReceiptV1 } from "./local-api-v1-response.ts";
-import type { SessionApiReceiptV1, SessionSnapshotV1, SessionSnapshotPageV1, ProductEventV1, SessionContractV1, SessionCreateCommandV1, SessionPairRequestV1, SessionV1, TaskSummaryV1 } from "./session-api-v1-types.ts";
+import type { SessionApiReceiptV1, SessionSnapshotV1, SessionSnapshotPageV1, ProductEventV1, SessionContractV1, SessionCreateCommandV1, SessionPairRequestV1, SessionV1, TaskSummaryV1, SessionTaskRecoveryV1 } from "./session-api-v1-types.ts";
 export * from "./session-api-v1-types.ts";
 export const sessionTaskStatesV1 = ["CREATED", "READY", "RUNNING", "VERIFYING", "WAITING_INPUT", "WAITING_APPROVAL", "PAUSED", "CANCELLING", "NEEDS_RECONCILIATION", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "UNVERIFIABLE"] as const;
 function contract(input: unknown): void {
@@ -32,11 +32,18 @@ export function parseSessionV1(input: unknown): SessionV1 {
     return value as unknown as SessionV1;
   });
 }
+function taskRecovery(input: unknown): void {
+  const value = object(input); keys(value, ["status", "reason"]);
+  member(value.status, ["blocked"]); member(value.reason, ["worker_custody_required"]);
+}
+export function parseSessionTaskRecoveryV1(input: unknown): SessionTaskRecoveryV1 {
+  return wireBoundary(input, value => { taskRecovery(value); return value as unknown as SessionTaskRecoveryV1; });
+}
 export function parseTaskSummaryV1(input: unknown): TaskSummaryV1 {
   return wireBoundary(input, value => {
-    keys(value, ["id", "workspaceId", "sessionId", "revision", "intentRevision", "state", "updatedAt"]);
+    keys(value, ["id", "workspaceId", "sessionId", "revision", "intentRevision", "state", "updatedAt"], ["recovery"]);
     identifier(value.id); identifier(value.workspaceId); identifier(value.sessionId); revision(value.revision); revision(value.intentRevision);
-    member(value.state, sessionTaskStatesV1); timestamp(value.updatedAt);
+    member(value.state, sessionTaskStatesV1); timestamp(value.updatedAt); if (value.recovery !== undefined) taskRecovery(value.recovery);
     return value as unknown as TaskSummaryV1;
   });
 }

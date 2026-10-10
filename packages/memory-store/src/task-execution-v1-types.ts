@@ -14,6 +14,8 @@ export interface TaskExecutionReadV1 {
   readonly state: RuntimeWorkerStateV1;
   readonly dispatched: boolean;
   readonly closed: boolean;
+  /** Current ownership is derived at read time; it never rewrites historical transport facts. */
+  readonly authority: "current" | "closed" | "recovery-blocked";
 }
 export interface TaskExecutionSourceIdentityV1 {
   readonly bindingImplementation: string;
@@ -45,6 +47,11 @@ export interface TaskModelRequestSnapshotV1 {
   readonly createdAt: string;
   readonly contentRef: ContentRefV2;
 }
+/** Fixed server custody adapter. Returns only already-recorded close observations; no I/O in a transaction. */
+export interface TaskRecoveryCustodyV1 {
+  observedClose(input: Readonly<{ spec: ExecutionSpecV1; binding: RuntimeBindingV1; executionRevision: number }>):
+    Readonly<{ spec: ExecutionSpecV1; binding: RuntimeBindingV1; executionRevision: number; evidence: RuntimeProcessCloseEvidenceV1 }> | undefined;
+}
 /** Trusted in-process persistence only. No caller-supplied host, SQL or identity mapping. */
 export interface TaskExecutionPersistenceV1 {
   allocateExecution(context: TaskStoreContextV1, input: Readonly<{ taskId: string; expectedRevision: number; spec: ExecutionSpecV1; binding: RuntimeBindingV1 }>): TaskExecutionReadV1;
@@ -54,6 +61,7 @@ export interface TaskExecutionPersistenceV1 {
   ingestExecutionEvent(context: TaskStoreContextV1, input: Readonly<{ taskId: string; envelope: NormalizedRuntimeEnvelopeV1 }>): TaskExecutionEventCommitV1;
   recordModelRequest(context: TaskStoreContextV1, input: Readonly<{ taskId: string; bindingId: string; requestId: string; context: JsonValue; maxTokens: number }>): TaskModelRequestCommitV1;
   closeExecution(context: TaskStoreContextV1, input: Readonly<{ taskId: string; evidence: RuntimeProcessCloseEvidenceV1 }>): TaskExecutionReadV1;
+  recoverExecutionClose(context: TaskStoreContextV1, input: Readonly<{ taskId: string; bindingId: string; expectedExecutionRevision: number }>): TaskExecutionReadV1;
   readExecution(workspaceId: string, taskId: string): TaskExecutionReadV1 | undefined;
   readExecutionDetails(workspaceId: string, taskId: string): TaskExecutionDetailsV1 | undefined;
   listModelRequests(workspaceId: string, taskId: string, attemptId: string): readonly TaskModelRequestSnapshotV1[];

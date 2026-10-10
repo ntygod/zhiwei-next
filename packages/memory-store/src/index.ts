@@ -96,4 +96,4 @@ export type { SyntheticRecoveryOptionsV2, CreateSyntheticRecoveryOptionsV2,
   ManagedSyntheticRecoveryPurgeResultV2 } from "./synthetic-recovery-v2.ts";
 
 export type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1, TaskStoreContextV1, TaskStoreCommandV1, TaskRuntimeCommandV1, TaskReductionContextV1, TaskReductionV1, TaskStoreCommitV1, TaskStoreReceiptV1, TaskStoreReadV1, TaskStoreSnapshotV1, TaskStoreReplayV1, TaskOutboxRowV1, RuntimeInputSnapshotV1, TaskInputCommitV1, TaskInputCommitResultV1 } from "./task-store-v1-types.ts";
-export type { TaskExecutionPersistenceV1, TaskExecutionReadV1, TaskExecutionEventCommitV1, TaskExecutionDetailsV1, TaskExecutionSourceIdentityV1, TaskModelRequestSnapshotV1, TaskModelRequestCommitV1 } from "./task-execution-v1-types.ts";
+export type { TaskRecoveryCustodyV1, TaskExecutionPersistenceV1, TaskExecutionReadV1, TaskExecutionEventCommitV1, TaskExecutionDetailsV1, TaskExecutionSourceIdentityV1, TaskModelRequestSnapshotV1, TaskModelRequestCommitV1 } from "./task-execution-v1-types.ts";

@@ -78,5 +78,5 @@ process.stdin.on('data',chunk=>{
 process.stdin.on('end',()=>{void pending.then(()=>hooks.get('session_shutdown')({type:'session_shutdown',reason:'quit'},ctx));});
 `);
   const wait = async (name:string) => { const deadline=Date.now()+10000; while(true) { try { await access(join(root,name)); return; } catch { if(Date.now()>deadline) throw new Error("Synthetic barrier not reached."); await delay(5); } } };
-  return {root,remove:()=>rm(root,{recursive:true,force:true}),waitForHandshake:()=>wait("handshake-started"),waitForPrompt:()=>wait("prompt-started"),releaseHandshake:()=>writeFile(join(root,"handshake-release"),"synthetic")};
+  return {root,remove:()=>rm(root,{recursive:true,force:true}),waitForHandshake:()=>wait("handshake-started"),waitForPrompt:()=>wait("prompt-started"),releaseHandshake:()=>writeFile(join(root,"handshake-release"),"synthetic"),releasePrompt:()=>writeFile(join(root,"prompt-release"),"synthetic")};
 }

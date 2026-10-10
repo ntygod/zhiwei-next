@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSyntheticRecoveryCoordinatorV2, openSyntheticRecoveryCoordinatorV2, type SyntheticRecoveryCoordinatorV2, type TaskPersistenceBoundaryV1, type TaskRuntimeCommandV1, type TaskExecutionDetailsV1, type TaskModelRequestSnapshotV1, type RuntimeInputSnapshotV1 } from "../../../../packages/memory-store/src/index.ts";
+import { canonicalJsonV1, type RuntimeProcessCloseEvidenceV1 } from "../../../../packages/protocol/src/index.ts";
 import type { Task } from "../../../../packages/domain/src/index.ts";
 import { createSyntheticSessionApi, type SyntheticSessionApi } from "../session-api/server.ts";
 import { SessionApiError, type SessionApiContext } from "../session-api/service.ts";
@@ -14,7 +15,7 @@ export interface SyntheticTaskSessionHarness {
   readonly application: PersistentSessionApplication; readonly api: SyntheticSessionApi;
   evidence(context: SessionApiContext, taskId: string): Readonly<{ execution?: TaskExecutionDetailsV1; runtimeInputs: readonly RuntimeInputSnapshotV1[]; modelRequests: readonly TaskModelRequestSnapshotV1[] }>;
   runTask(context: SessionApiContext, taskId: string): Promise<void>;
-  idle(): Promise<void>; restart(): Promise<void>; close(): Promise<void>;
+  idle(): Promise<void>; restart(): Promise<void>; interruptControlPlane(): Promise<void>; reconcileRetainedWorkers(): Promise<void>; close(): Promise<void>;
 }
 export interface SyntheticTaskSessionHarnessOptions { readonly runtime?: Readonly<{ packageDirectory: string; nodeExecutable: string }> }
 /** Owns a new temporary installation. No caller data root, application, credentials, prompts,
@@ -38,8 +39,10 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
   let daemonInstanceId = `synthetic-daemon-${randomUUID()}`, coordinator: SyntheticRecoveryCoordinatorV2;
   let closed = false, restarting = false, closing = false, lastFailure: unknown;
   let serial = Promise.resolve(), lifecycle = Promise.resolve();
-  const live = new Map<string, { context: SessionApiContext; supervisor: SyntheticWorkerSupervisor; stopping?: Promise<void> }>();
+  const live = new Map<string, { context: SessionApiContext; supervisor: SyntheticWorkerSupervisor; stopping?: Promise<void>; suspended?: boolean }>();
+  const observedCloses = new Map<string, { spec: TaskExecutionDetailsV1["spec"]; binding: TaskExecutionDetailsV1["binding"]; executionRevision: number; evidence: RuntimeProcessCloseEvidenceV1 }>();
   const boundary = (): TaskPersistenceBoundaryV1 => ({ daemonInstanceId,
+    recoveryCustody: { observedClose(input) { const record = observedCloses.get(input.binding.bindingId); return record ? structuredClone(record) : undefined; } },
     runtimeSourceIdentity: { bindingImplementation: "pi", adapter: "pi", implementation: "@earendil-works/pi-coding-agent", version: "0.84.1" },
     contentPolicy: { privacy: "model-allowed", retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reducePersistentTask });
   const recoveryOptions = () => ({ recoveryRoot, controlRoot, installationId, clock: { now: () => new Date().toISOString() }, taskPersistence: boundary() });
@@ -63,6 +66,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       // A busy peer can withhold abort acknowledgement. Disposal must not wait for it.
       const acknowledgement = supervisor.runtime.abort(bindingId, reason).catch(() => undefined);
       const evidence = await supervisor.runtime.dispose(bindingId); await acknowledgement;
+      if (active.suspended) return; // New owner will reconcile this actual retained custody.
       const task = current(context, taskId);
       store().executions.closeExecution(application.contextForTask(context, task), { taskId, evidence });
       if (task.state === "CANCELLING") runtimeCommand(context, taskId, "confirm-stop", bindingId);
@@ -97,20 +101,21 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     try {
       supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
         fence: { installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: attempt.id }, sourceTask: { taskId, attemptId: attempt.id, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: owner.ownerEpoch, cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60_000).toISOString() } },
-        beforeSyntheticModelReceive(record) { if (!supervisor) throw new Error("Missing controlled binding."); store().executions.recordModelRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); application.committed(); },
+        beforeSyntheticModelReceive(record) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().executions.recordModelRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); application.committed(); },
       });
       const admitted = current(context, taskId);
       if (closed || restarting || admitted.revision !== task.revision || admitted.state !== "READY" || admitted.attempts.at(-1)!.id !== attempt.id) return;
       live.set(taskId, { context, supervisor });
       store().executions.allocateExecution(owner, { taskId, expectedRevision: task.revision, spec: supervisor.spec, binding: supervisor.snapshot().binding });
       const binding = await supervisor.runtime.start(supervisor.spec);
+      if (live.get(taskId)?.suspended) return;
       store().executions.markExecutionReady(owner, { taskId, binding });
       const readyTask = current(context, taskId);
       if (closed || restarting || readyTask.state !== "READY" || readyTask.revision !== task.revision) { await stop(taskId, "shutdown"); return; }
       runtimeCommand(context, taskId, "start", binding.bindingId);
       const collecting = (async () => {
         for await (const envelope of supervisor!.runtime.events(binding.bindingId)) {
-          if (live.get(taskId)?.stopping) break;
+          if (live.get(taskId)?.stopping || live.get(taskId)?.suspended) break;
           store().executions.observeExecutionBinding(owner, { taskId, binding: supervisor!.snapshot().binding });
           store().executions.ingestExecutionEvent(owner, { taskId, envelope }); application.committed();
           if (envelope.event.stability === "settled") break; // Store atomically commits exact envelope and VERIFYING.
@@ -122,9 +127,11 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       if (accepted.status !== "accepted") throw new SessionApiError("unavailable", "dependency_down", 503);
       await observed;
       const active = live.get(taskId);
+      if (active?.suspended) return;
       if (active?.stopping) await active.stopping;
       else { const evidence = await supervisor.runtime.dispose(binding.bindingId); store().executions.closeExecution(owner, { taskId, evidence }); if (current(context, taskId).state === "RUNNING") runtimeCommand(context, taskId, "interrupted", binding.bindingId, "incomplete"); }
     } catch (error) {
+      if (live.get(taskId)?.suspended) return;
       const stopping = live.get(taskId)?.stopping; if (stopping) { await stopping; return; }
       if (supervisor) {
         const evidence = await supervisor.runtime.dispose(supervisor.snapshot().binding.bindingId);
@@ -133,26 +140,60 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
         if (current(context, taskId).state === "RUNNING") runtimeCommand(context, taskId, "interrupted", supervisor.snapshot().binding.bindingId, "incomplete");
       }
       throw error;
-    } finally { if (supervisor) await supervisor.close(); live.delete(taskId); }
+    } finally { if (!live.get(taskId)?.suspended) { if (supervisor) await supervisor.close(); live.delete(taskId); } }
   };
   const runTask = (context: SessionApiContext, taskId: string): Promise<void> => {
     if (closed || restarting || !runtime) return Promise.reject(new SessionApiError("unsupported", "runtime_capability", 422));
     const admittedContext = Object.freeze({ principalId: context.principalId, workspaceId: context.workspaceId });
     const operation = serial.then(() => executeTask(admittedContext, taskId)); serial = operation.catch(error => { lastFailure = error; }); return operation;
   };
+  const reconcileRetained = async () => {
+    const recovered: string[] = [];
+    for (const [taskId, active] of [...live]) {
+      if (!active.suspended) continue;
+      const persisted = store().executions.readExecutionDetails(active.context.workspaceId, taskId);
+      if (!persisted || persisted.bindingId !== active.supervisor.snapshot().binding.bindingId || canonicalJsonV1(persisted.spec) !== canonicalJsonV1(active.supervisor.spec)) throw new SessionApiError("unavailable", "recovery_required", 503);
+      const acknowledgement = active.supervisor.runtime.abort(persisted.bindingId, "shutdown").catch(() => undefined);
+      const evidence = await active.supervisor.runtime.dispose(persisted.bindingId); await acknowledgement;
+      // This registry is populated only by observed disposal of the retained exact Supervisor.
+      observedCloses.set(persisted.bindingId, { spec: persisted.spec, binding: persisted.binding, executionRevision: persisted.revision, evidence });
+      const task = current(active.context, taskId);
+      try { if (!persisted.closed) store().executions.recoverExecutionClose(application.contextForTask(active.context, task), { taskId, bindingId: persisted.bindingId, expectedExecutionRevision: persisted.revision }); }
+      finally { observedCloses.delete(persisted.bindingId); }
+      if (task.state === "CANCELLING") runtimeCommand(active.context, taskId, "confirm-stop", persisted.bindingId);
+      else if (task.state === "RUNNING" || task.state === "VERIFYING") runtimeCommand(active.context, taskId, "interrupted", persisted.bindingId, "incomplete");
+      await active.supervisor.close(); recovered.push(taskId); application.committed();
+    }
+    if (recovered.length) { await serial; for (const taskId of recovered) live.delete(taskId); }
+  };
   return {
     mode: "synthetic-fixtures-only", production: "unsupported", application, get api() { return api; }, runTask,
     evidence(context, taskId) { const task = current(context, taskId), attemptId = task.attempts.at(-1)!.id, execution = store().executions.readExecutionDetails(context.workspaceId, taskId); return { ...(execution ? { execution } : {}), runtimeInputs: store().tasks.listRuntimeInputs(context.workspaceId, taskId, attemptId).value, modelRequests: store().executions.listModelRequests(context.workspaceId, taskId, attemptId) }; },
     async idle() { await serial; if (lastFailure) { const error = lastFailure; lastFailure = undefined; throw error; } },
+    async interruptControlPlane() {
+      if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
+      restarting = true;
+      lifecycle = lifecycle.then(async () => { try {
+        // Abrupt Store/control-plane loss; the enclosing synthetic launcher retains real Worker custody.
+        for (const active of live.values()) active.suspended = true;
+        await api.close(); coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`;
+        coordinator = openSyntheticRecoveryCoordinatorV2(recoveryOptions()); store().tasks.fenceRestartedOwners();
+        api = createSyntheticSessionApi(apiOptions()); application.committed();
+      } finally { if (!closing) restarting = false; } }); return lifecycle;
+    },
+    async reconcileRetainedWorkers() {
+      if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
+      restarting = true; lifecycle = lifecycle.then(async () => { try { await reconcileRetained(); } finally { if (!closing) restarting = false; } }); return lifecycle;
+    },
     async restart() {
       if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
       restarting = true;
-      lifecycle = lifecycle.then(async () => { try { await api.close(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`; coordinator = openSyntheticRecoveryCoordinatorV2(recoveryOptions()); store().tasks.fenceRestartedOwners(); api = createSyntheticSessionApi(apiOptions()); application.committed(); } finally { if (!closing) restarting = false; } });
+      lifecycle = lifecycle.then(async () => { try { await api.close(); await reconcileRetained(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`; coordinator = openSyntheticRecoveryCoordinatorV2(recoveryOptions()); store().tasks.fenceRestartedOwners(); api = createSyntheticSessionApi(apiOptions()); application.committed(); } finally { if (!closing) restarting = false; } });
       return lifecycle;
     },
     async close() {
       if (closed) return; if (closing) return lifecycle; closing = true; restarting = true;
-      lifecycle = lifecycle.catch(() => undefined).then(async () => { await api.close(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); closed = true; await rm(root, { recursive: true, force: true }); }); return lifecycle;
+      lifecycle = lifecycle.catch(() => undefined).then(async () => { await api.close(); await reconcileRetained(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); closed = true; await rm(root, { recursive: true, force: true }); }); return lifecycle;
     },
   };
 }

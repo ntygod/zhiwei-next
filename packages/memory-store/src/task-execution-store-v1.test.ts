@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ids, type Task, type PrivacyV2 } from "../../domain/src/index.ts";
 import { createNormalizedRuntimeEventV1, parseSessionTaskV1, type ExecutionSpecV1, type RuntimeBindingV1,
-  type NormalizedRuntimeEnvelopeV1, type SessionContractV1 } from "../../protocol/src/index.ts";
+  type NormalizedRuntimeEnvelopeV1, type SessionContractV1, type RuntimeProcessCloseEvidenceV1 } from "../../protocol/src/index.ts";
 import { openSyntheticCognitionStoreV2, CognitiveStoreErrorV2, type SyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
 import type { TaskPersistenceBoundaryV1, TaskStoreContextV1, TaskRuntimeCommandV1 } from "./task-store-v1-types.ts";
 
@@ -18,7 +18,7 @@ const contract: SessionContractV1 = { schemaVersion: 1, runtimeProfile: { id: "s
   toolProfile: { id: "none", revision: 1 }, policyProfile: { id: "synthetic-policy", revision: 1 }, dataProfile: { id: "synthetic-data", revision: 1 },
   compilerProfile: { id: "synthetic-compiler", revision: 1 }, interactionKind: "interactive" };
 function code(work: () => unknown, expected: string): void { assert.throws(work, (error: unknown) => error instanceof CognitiveStoreErrorV2 && error.code === expected); }
-function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?: TaskPersistenceBoundaryV1["runtimeSourceIdentity"]) {
+function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?: TaskPersistenceBoundaryV1["runtimeSourceIdentity"], custody?: TaskPersistenceBoundaryV1["recoveryCustody"]) {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-normal-execution-v1-")), dataRoot = join(root, "data"), controlRoot = join(root, "control");
   mkdirSync(dataRoot, { mode: 0o700 }); let counter = 0, now = T0, daemon = INSTANCE, rejectSettled = false;
   const reduce: TaskPersistenceBoundaryV1["reduce"] = (current, command, ctx) => {
@@ -40,7 +40,7 @@ function fixture(t: TestContext, privacy: PrivacyV2 = "model-allowed", declared?
   };
   function boundary(): TaskPersistenceBoundaryV1 { return { daemonInstanceId: daemon, contentPolicy: { privacy, retentionUntil: "2026-11-10T00:00:00.000Z" },
     ids: { next: kind => { counter++; return kind === "content" || kind === "reservation" ? `00000000-0000-4000-8000-${counter.toString(16).padStart(12, "0")}` : `${kind}-synthetic-${counter}`; } },
-    reduce, ...(declared ? { runtimeSourceIdentity: declared } : {}) }; }
+    reduce, ...(declared ? { runtimeSourceIdentity: declared } : {}), ...(custody ? { recoveryCustody: custody } : {}) }; }
   let store: SyntheticCognitionStoreV2 = openSyntheticCognitionStoreV2({ dataRoot, controlRoot, installationId: "installation-synthetic", mode: "create", clock: { now: () => now }, taskPersistence: boundary() });
   t.after(() => { try { store.close(); } finally { rmSync(root, { recursive: true, force: true }); } });
   const session = store.tasks.createSession(context, { schemaVersion: 1, commandId: "create-session", idempotencyKey: "create-session", workspaceId: W, expectedRevision: 0,
@@ -249,4 +249,113 @@ test("undispatched READY binding cannot materialize progress even after Task bec
   f.store.executions.markExecutionDispatched(context, { taskId: f.taskId, bindingId: ready.bindingId });
   const committed = f.ingest(envelope); assert.equal(committed.replay, false);
   assert.deepEqual(f.ingest(envelope), { ...committed, replay: true });
+});
+
+// These custody fixtures represent already-recorded synthetic transport observations.
+// They do not demonstrate physical custody of a real orphaned process.
+type CloseWitness = { spec: ExecutionSpecV1; binding: RuntimeBindingV1; executionRevision: number; evidence: RuntimeProcessCloseEvidenceV1 };
+function closeWitness(f: ReturnType<typeof fixture>): CloseWitness {
+  const stored = f.store.executions.readExecutionDetails(W, f.taskId)!;
+  return { spec: structuredClone(stored.spec), binding: structuredClone(stored.binding), executionRevision: stored.revision,
+    evidence: { schemaVersion: 1, bindingId: stored.bindingId, stdoutEof: true, stderrEof: true, closeObserved: true, exitCode: 0, signal: null, observedAt: T0 } };
+}
+const nextOwner: TaskStoreContextV1 = { ...context, daemonInstanceId: "daemon-custodian", ownerEpoch: 2 };
+function recover(f: ReturnType<typeof fixture>, revision: number, ctx = nextOwner) {
+  return f.store.executions.recoverExecutionClose(ctx, { taskId: f.taskId, bindingId: f.allocated.bindingId, expectedExecutionRevision: revision });
+}
+test("new Session owner records exact custody close without rewriting old lease or inventing task outcome", t => {
+  let recorded: CloseWitness | undefined, observations = 0;
+  const f = fixture(t, "model-allowed", undefined, { observedClose() { observations++; return recorded; } });
+  const active = f.start(); assert.equal(active.authority, "current"); recorded = closeWitness(f);
+  f.reopen(nextOwner.daemonInstanceId);
+  const blocked = f.store.executions.readExecution(W, f.taskId)!;
+  assert.equal(blocked.authority, "recovery-blocked"); assert.equal(blocked.closed, false); assert.equal(blocked.state, "BUSY");
+  const cursor = f.store.tasks.snapshot(W).commitCursor;
+  code(() => f.close(), "conflict"); code(() => f.ingest(f.envelope(1)), "conflict");
+  const closed = recover(f, active.revision);
+  assert.equal(closed.authority, "closed"); assert.equal(closed.closed, true); assert.equal(closed.state, "STOPPED");
+  assert.equal(closed.ownerEpoch, 1); assert.equal(closed.revision, active.revision + 1);
+  const details = f.store.executions.readExecutionDetails(W, f.taskId)!;
+  assert.deepEqual(details.closeEvidence, recorded.evidence); assert.equal(details.binding.leaseEpoch, 1);
+  assert.deepEqual(details.spec, recorded.spec); assert.equal(details.dispatched, true);
+  assert.equal(f.store.tasks.getTask(W, f.taskId).value!.state, "RUNNING");
+  assert.equal(f.store.tasks.snapshot(W).commitCursor, cursor);
+  assert.deepEqual(recover(f, active.revision), closed); assert.deepEqual(recover(f, closed.revision), closed); assert.equal(observations, 1);
+  code(() => recover(f, active.revision - 1), "revision_conflict");
+  f.reopen(); assert.deepEqual(f.store.executions.readExecution(W, f.taskId), closed);
+});
+test("recovery authority is derived on read without mutating execution facts", t => {
+  const f = fixture(t); const active = f.start(); f.reopen(nextOwner.daemonInstanceId);
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  try {
+    const before = db.prepare("SELECT * FROM task_execution_v1").all(), count = db.prepare("SELECT count(*) AS n FROM task_execution_snapshot_v1").get()!.n;
+    const read = f.store.executions.readExecutionDetails(W, f.taskId)!;
+    assert.equal(read.authority, "recovery-blocked"); assert.equal(read.revision, active.revision); assert.equal(read.closed, false); assert.equal(read.closeEvidence, undefined);
+    assert.deepEqual(db.prepare("SELECT * FROM task_execution_v1").all(), before);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM task_execution_snapshot_v1").get()!.n, count);
+  } finally { db.close(); }
+});
+test("recovery close remains unavailable without a fixed custody port or recorded observation", t => {
+  const noPort = fixture(t); const active = noPort.start(); noPort.reopen(nextOwner.daemonInstanceId); code(() => recover(noPort, active.revision), "unavailable");
+  const noEvidence = fixture(t, "model-allowed", undefined, { observedClose: () => undefined });
+  const other = noEvidence.start(); noEvidence.reopen(nextOwner.daemonInstanceId); code(() => recover(noEvidence, other.revision), "unavailable");
+  assert.equal(noEvidence.store.executions.readExecution(W, noEvidence.taskId)!.closed, false);
+});
+test("custody recovery rejects wrong binding, worker, lease, spec and revision echoes", t => {
+  let recorded: CloseWitness | undefined;
+  const f = fixture(t, "model-allowed", undefined, { observedClose: () => recorded }); const active = f.start(), exact = closeWitness(f);
+  f.reopen(nextOwner.daemonInstanceId);
+  const bad: CloseWitness[] = [
+    { ...structuredClone(exact), binding: { ...structuredClone(exact.binding), bindingId: "different-binding" } },
+    { ...structuredClone(exact), binding: { ...structuredClone(exact.binding), workerInstanceId: "different-worker" } },
+    { ...structuredClone(exact), binding: { ...structuredClone(exact.binding), leaseEpoch: 2 } },
+    { ...structuredClone(exact), spec: { ...structuredClone(exact.spec), prompt: "different request" } },
+    { ...structuredClone(exact), executionRevision: exact.executionRevision + 1 },
+    { ...structuredClone(exact), evidence: { ...exact.evidence, bindingId: "different-binding" } },
+    { ...structuredClone(exact), evidence: { ...exact.evidence, stderrEof: false } },
+    { ...structuredClone(exact), evidence: { ...exact.evidence, observedAt: T1 } },
+  ];
+  for (const candidate of bad) { recorded = candidate; code(() => recover(f, active.revision), "conflict"); }
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.revision, active.revision);
+  recorded = exact; assert.equal(recover(f, active.revision).closed, true);
+});
+test("custody recovery rejects malformed or asynchronous results and caller close assertions", t => {
+  let result: unknown;
+  const f = fixture(t, "model-allowed", undefined, { observedClose: () => result as CloseWitness }); const active = f.start(), exact = closeWitness(f);
+  f.reopen(nextOwner.daemonInstanceId);
+  for (const candidate of [{ ...exact, authorized: true }, { ...exact, evidence: { ...exact.evidence, stdoutEof: "yes" } }, Promise.resolve(exact)]) {
+    result = candidate; code(() => recover(f, active.revision), "validation");
+  }
+  let invoked = false; result = Object.defineProperty({ ...exact }, "evidence", { enumerable: true, get() { invoked = true; return exact.evidence; } });
+  code(() => recover(f, active.revision), "validation"); assert.equal(invoked, false);
+  code(() => f.store.executions.recoverExecutionClose(nextOwner, { taskId: f.taskId, bindingId: f.allocated.bindingId,
+    expectedExecutionRevision: active.revision, evidence: exact.evidence } as never), "validation");
+  assert.equal(f.store.executions.readExecution(W, f.taskId)!.closed, false);
+});
+test("only the newer persisted Session owner can recover the exact active execution revision", t => {
+  let recorded: CloseWitness | undefined, calls = 0;
+  const f = fixture(t, "model-allowed", undefined, { observedClose() { calls++; return recorded; } }); const active = f.start(); recorded = closeWitness(f);
+  code(() => recover(f, active.revision, context), "conflict");
+  f.reopen(nextOwner.daemonInstanceId);
+  code(() => recover(f, active.revision, context), "conflict");
+  code(() => recover(f, active.revision, { ...nextOwner, ownerEpoch: 3 }), "conflict");
+  code(() => recover(f, active.revision - 1), "revision_conflict"); assert.equal(calls, 0);
+  assert.equal(recover(f, active.revision).closed, true); assert.equal(calls, 1);
+});
+test("old active execution blocks cancel, retry and continue after reopen without changing Task or cursor", t => {
+  const f = fixture(t); f.start(); f.reopen(nextOwner.daemonInstanceId);
+  const before = f.store.tasks.getTask(W, f.taskId), cursor = f.store.tasks.snapshot(W).commitCursor;
+  for (const kind of ["task.cancel", "task.retry", "task.continue"] as const) {
+    code(() => f.store.tasks.executeTask(nextOwner, { schemaVersion: 1, commandId: `recovered-${kind}`, idempotencyKey: `recovered-${kind}`, workspaceId: W,
+      expectedRevision: before.value!.revision, payload: { kind, targetRef: { kind: "task", id: f.taskId, revision: before.value!.revision } } }), "recovery_required");
+  }
+  assert.deepEqual(f.store.tasks.getTask(W, f.taskId), before); assert.equal(f.store.tasks.snapshot(W).commitCursor, cursor);
+});
+test("recovery close rejects a clock earlier than its persisted execution snapshot", t => {
+  let recorded: CloseWitness | undefined, calls = 0;
+  const f = fixture(t, "model-allowed", undefined, { observedClose() { calls++; return recorded; } }); f.setTime(T1);
+  const active = f.start(); recorded = { ...closeWitness(f), evidence: { ...closeWitness(f).evidence, observedAt: T1 } };
+  f.reopen(nextOwner.daemonInstanceId); f.setTime(T0);
+  code(() => recover(f, active.revision), "conflict"); assert.equal(calls, 0);
+  f.setTime(T1); assert.equal(recover(f, active.revision).closed, true);
 });

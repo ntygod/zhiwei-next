@@ -5,8 +5,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { ids, type Task, type TaskAttemptId, type TaskId, type OutcomeId, type TaskState, type WorkingStateV2 } from "../../domain/src/index.ts";
-import { parseLocalApiCommandV1, type SessionCreateCommandV1, type SessionContractV1 } from "../../protocol/src/index.ts";
+import { canonicalJsonV1, parseProductEventV1, parseLocalApiCommandV1, type SessionCreateCommandV1, type SessionContractV1 } from "../../protocol/src/index.ts";
 import { CognitiveStoreErrorV2, openSyntheticCognitionStoreV2, type SyntheticCognitionStoreV2, type TaskPersistenceBoundaryV1, type TaskStoreContextV1 } from "./index.ts";
+import { applyTaskMigrationsV1, configureCognitiveDatabaseV2 } from "./cognitive-schema-v2.ts";
+import { TaskStoreEngineV1, type TaskStoreHostV1 } from "./task-store-v1.ts";
+import { TaskExecutionStoreEngineV1 } from "./task-execution-store-v1.ts";
 // Normal isolated, synthetic persistence tests. No backup replacement diagnostic or real data.
 const T0 = "2026-10-10T00:00:00.000Z", RETENTION = "2026-11-10T00:00:00.000Z", WORKSPACE = "synthetic-task-workspace";
 const contract: SessionContractV1 = { schemaVersion: 1, runtimeProfile: { id: "runtime-test", revision: 1 }, modelProfile: { id: "model-test", revision: 1 },
@@ -172,4 +175,65 @@ test("a configured reducer cannot promote invented successful criterion evidence
   }), c = create(f), before = f.store.tasks.getTask(WORKSPACE, c.taskId);
   code(() => f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2)), "unsupported");
   assert.deepEqual(f.store.tasks.getTask(WORKSPACE, c.taskId), before);
+});
+
+
+test("all ProductEvent variants reject orphan aggregates in a real isolated in-memory database", async t => {
+  for (const [type, kind, payload] of [
+    ["session.created", "session", { ownerEpoch: 999 }], ["session.owner_fenced", "session", { ownerEpoch: 999 }],
+    ["task.created", "task", { state: "CREATED", intentRevision: 1 }], ["task.state_changed", "task", { state: "READY", intentRevision: 1 }],
+    ["task.input_committed", "task", { attemptId: "missing-attempt", ordinal: 999 }], ["task.progress", "task", { phase: "working" }],
+  ] as const) await t.test(type, () => {
+    const db = new DatabaseSync(":memory:");
+    try {
+      const pragmas = configureCognitiveDatabaseV2(db, { filePath: ":memory:", busyTimeoutMs: 100 });
+      applyTaskMigrationsV1(db, { clock: { now: () => T0 }, expectedPragmas: pragmas });
+      const unused = (): never => { throw new Error("Unexpected content or execution access"); };
+      const host: TaskStoreHostV1 = { db, now: () => T0, recoveryEpoch: () => 0, registerScope: unused, content: unused, writeBody: unused,
+        recordCommandEvidence: unused, executionForReduction: unused, onExecutionSettled: unused,
+        fail: category => { throw new CognitiveStoreErrorV2(category); }, transaction: (_write, body) => {
+          db.exec("BEGIN"); try { engine.validateRows(); execution.validateRows(); const result = body(); db.exec("COMMIT"); return result; }
+          catch (error) { if (db.isTransaction) db.exec("ROLLBACK"); throw error; }
+        } };
+      const engine = new TaskStoreEngineV1(host), execution = new TaskExecutionStoreEngineV1(host);
+      const event = parseProductEventV1({ schemaVersion: 1, eventId: `orphan-${type}`, workspaceId: "missing-workspace",
+        aggregate: { kind, id: "missing-aggregate", revision: 999 }, occurredAt: T0, type, payload });
+      db.prepare("INSERT INTO task_outbox_v1(event_id,workspace_id,entity_kind,entity_id,revision,event_type,owner_epoch,recovery_epoch,occurred_at,publish_state,event_json) VALUES(?,?,?,?,?,?,1,0,?,'pending',?)")
+        .run(event.eventId, event.workspaceId, kind, event.aggregate.id, event.aggregate.revision, type, T0, canonicalJsonV1(event));
+      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+      code(() => engine.replay("missing-workspace"), "corruption");
+    } finally { db.close(); }
+  });
+});
+
+test("Outbox rejects canonical wrong scope, owner, version, input and source facts through full Store reads", async t => {
+  for (const variant of ["wrong-workspace", "wrong-task-time", "duplicate-task-version", "created-late", "missing-task-version", "wrong-task-owner", "session-owner", "session-version", "session-history", "input-attempt", "input-ordinal", "input-owner", "input-time", "orphan-progress"] as const)
+    await t.test(variant, t => {
+      const f = fixture(t), c = create(f), committed = f.store.tasks.recordRuntimeInput(context, input(f, c.taskId));
+      if (variant === "session-history") { f.reopen("daemon-two"); f.reopen("daemon-three"); }
+      const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+      try {
+        const type = variant.startsWith("session") ? "session.created" : variant.startsWith("input") ? "task.input_committed" : "task.state_changed";
+        const original = db.prepare("SELECT * FROM task_outbox_v1 WHERE event_type=? ORDER BY cursor LIMIT 1").get(type)!;
+        const parsed = JSON.parse(String(original.event_json)); let owner = Number(original.owner_epoch);
+        let value = { ...parsed, eventId: `forged-${variant}` };
+        if (variant === "wrong-workspace") value = { ...value, workspaceId: "other-synthetic-workspace" };
+        if (variant === "wrong-task-time" || variant === "input-time") value = { ...value, occurredAt: "2026-10-10T00:00:01.000Z" };
+        if (variant === "created-late") value = { ...value, type: "task.created" };
+        if (variant === "missing-task-version" || variant === "session-version") value = { ...value, aggregate: { ...value.aggregate, revision: 999 } };
+        if (variant === "wrong-task-owner" || variant === "input-owner") owner = 999;
+        if (variant === "session-owner") value = { ...value, payload: { ownerEpoch: 999 } };
+        if (variant === "session-history") value = { ...value, type: "session.owner_fenced", aggregate: { ...value.aggregate, revision: 2 }, payload: { ownerEpoch: 2 } }, owner = 2;
+        if (variant === "input-attempt") value = { ...value, payload: { ...value.payload, attemptId: "missing-attempt" } };
+        if (variant === "input-ordinal") value = { ...value, payload: { ...value.payload, ordinal: committed.snapshot.ordinal + 99 } };
+        if (variant === "orphan-progress") value = { ...value, type: "task.progress", payload: { phase: "working" } };
+        const event = parseProductEventV1(value);
+        db.prepare("INSERT INTO task_outbox_v1(event_id,workspace_id,entity_kind,entity_id,revision,event_type,owner_epoch,recovery_epoch,occurred_at,publish_state,event_json) VALUES(?,?,?,?,?,?,?,0,?,'pending',?)")
+          .run(event.eventId, event.workspaceId, event.aggregate.kind, event.aggregate.id, event.aggregate.revision, event.type, owner, event.occurredAt, canonicalJsonV1(event));
+        assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+      } finally { db.close(); }
+      code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+      code(() => f.store.tasks.snapshot(WORKSPACE), "corruption");
+      code(() => f.reopen(), "corruption");
+    });
 });

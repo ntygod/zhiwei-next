@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Task } from "../../../packages/domain/src/index.ts";
 import {
   canonicalJsonV1, decodeSessionApiJsonV1, deserializeProductEventV1, parseSessionApiErrorV1,
-  parseProductEventV1, parseSessionSnapshotPageV1, parseSessionSnapshotV1, sessionSnapshotAssemblyBytesV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
+  parseProductEventV1, parseSessionSnapshotPageV1, parseSessionSnapshotV1, sessionSnapshotAssemblyBytesV1, parseSessionTaskRecoveryV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
   type ProductEventV1, type SessionApiReadV1, type SessionPairResponseV1, type SessionSnapshotV1, type SessionSnapshotPageV1,
   type SessionTaskListV1, type SessionV1, type TaskSummaryV1,
 } from "../../../packages/protocol/src/index.ts";
@@ -74,13 +74,13 @@ export function createSessionDataClient(options: SessionClientOptions) {
       await checkStatus(response); return await responseJson(response);
     } catch (error) { if (error instanceof SessionClientError) throw error; return fail("daemon_unavailable"); }
   };
-  const read = async <T>(path: string, workspaceId: string, parse: (value: unknown) => T, parameters: Record<string, string> = {}): Promise<SessionApiReadV1<T>> => {
+  const read = async <T>(path: string, workspaceId: string, parse: (value: unknown) => T, parameters: Record<string, string> = {}, taskRecovery = false): Promise<SessionApiReadV1<T>> => {
     try {
-      const body = record(await query(path, { workspaceId, ...parameters })); keys(body, ["schemaVersion", "value", "asOfCursor"]);
+      const body = record(await query(path, { workspaceId, ...parameters })); keys(body, ["schemaVersion", "value", "asOfCursor"], taskRecovery ? ["recovery"] : []);
       if (body.schemaVersion !== 1) fail("invalid_response");
       const value = parse(body.value);
       if (typeof value === "object" && value !== null && "workspaceId" in value && value.workspaceId !== workspaceId) fail("invalid_response");
-      return { schemaVersion: 1, value, asOfCursor: token(body.asOfCursor) };
+      return { schemaVersion: 1, value, asOfCursor: token(body.asOfCursor), ...(body.recovery === undefined ? {} : { recovery: parseSessionTaskRecoveryV1(body.recovery) }) };
     } catch (error) { if (error instanceof SessionClientError) throw error; return fail("invalid_response"); }
   };
   async function* snapshotPages(workspaceId: string): AsyncGenerator<SessionSnapshotPageV1> {
@@ -106,7 +106,7 @@ export function createSessionDataClient(options: SessionClientOptions) {
       catch { return fail("invalid_response"); }
     },
     session: (workspaceId: string, id: string): Promise<SessionApiReadV1<SessionV1>> => read(`/v1/sessions/${encodeURIComponent(id)}`, workspaceId, parseSessionV1),
-    task: (workspaceId: string, id: string): Promise<SessionApiReadV1<Task>> => read(`/v1/tasks/${encodeURIComponent(id)}`, workspaceId, parseSessionTaskV1),
+    task: (workspaceId: string, id: string): Promise<SessionApiReadV1<Task>> => read(`/v1/tasks/${encodeURIComponent(id)}`, workspaceId, parseSessionTaskV1, {}, true),
     tasks(workspaceId: string, filters: Readonly<{ limit?: number; state?: string; cursor?: string }> = {}): Promise<SessionApiReadV1<SessionTaskListV1>> {
       const limit = filters.limit ?? 50; if (!Number.isInteger(limit) || limit < 1 || limit > 50) fail("invalid_configuration");
       return read("/v1/tasks", workspaceId, input => {

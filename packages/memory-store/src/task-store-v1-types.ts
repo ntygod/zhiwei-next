@@ -1,4 +1,5 @@
 import type { ContentRefV2, PrivacyV2, EvidenceRefV2, Task, TaskEvidenceRef, TaskState, WorkingStateV2 } from "../../domain/src/index.ts";
+import type { TaskRecoveryCustodyV1 } from "./task-execution-v1-types.ts";
 import type { LocalApiCommandV1, ProductEventV1, SessionApiReceiptV1, SessionCreateCommandV1, SessionV1, TaskSummaryV1 } from "../../protocol/src/index.ts";
 
 /** Trusted in-process command; the HTTP parser never accepts this envelope. */
@@ -39,6 +40,8 @@ export interface TaskPersistenceBoundaryV1 {
   readonly daemonInstanceId: string;
   /** Fixed adapter-selected mapping between transport and raw source namespaces; never taken from an event. */
   readonly runtimeSourceIdentity?: Readonly<{ bindingImplementation: string; adapter: string; implementation: string; version: string }>;
+  /** Reads only already-observed exact Supervisor closure; never performs I/O under the transaction. */
+  readonly recoveryCustody?: TaskRecoveryCustodyV1;
   readonly contentPolicy: Readonly<{ privacy: PrivacyV2; retentionUntil: string }>;
   /** All generated identities are trusted injected values; content/reservation must be UUIDs. */
   readonly ids: { next(kind: "session" | "task" | "attempt" | "outcome" | "observation" | "event" | "input" | "content" | "reservation"): string };

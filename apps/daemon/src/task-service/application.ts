@@ -33,6 +33,14 @@ export function createPersistentSessionApplication(options: Readonly<{ store: ()
     if (!session || task.workspaceId !== context.workspaceId) throw new SessionApiError("not_found", "not_found", 404);
     return { ...context, daemonInstanceId: options.daemonInstanceId(), ownerEpoch: session.ownerEpoch };
   };
+  const recovery = (workspaceId: string, taskId: string) => {
+    const execution = options.store().executions.readExecution(workspaceId, taskId);
+    const task = options.store().tasks.getTask(workspaceId, taskId).value;
+    const session = task && options.store().tasks.getSession(workspaceId, task.sessionId).value;
+    return execution && !execution.closed && session && execution.ownerEpoch < session.ownerEpoch
+      ? { status: "blocked" as const, reason: "worker_custody_required" as const } : undefined;
+  };
+  const summary = <T extends { id: string }>(workspaceId: string, value: T) => { const state = recovery(workspaceId, value.id); return { ...value, ...(state ? { recovery: state } : {}) }; };
   return {
     authorize, committed, contextForTask, subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     createSession(context, raw) { return mapped(() => {
@@ -62,9 +70,9 @@ export function createPersistentSessionApplication(options: Readonly<{ store: ()
       return { value: result.receipt, commitCursor: result.commitCursor };
     }); },
     getSession(context, id) { return mapped(() => { check(context); const result = options.store().tasks.getSession(context.workspaceId, id); if (!result.value) throw new SessionApiError("not_found", "not_found", 404); return { value: result.value, commitCursor: result.commitCursor }; }); },
-    getTask(context, id) { return mapped(() => { check(context); const result = options.store().tasks.getTask(context.workspaceId, id); if (!result.value) throw new SessionApiError("not_found", "not_found", 404); return { value: result.value, commitCursor: result.commitCursor }; }); },
-    listTasks(context, query) { return mapped(() => { check(context); const result = options.store().tasks.listTasks(context.workspaceId, { limit: query.limit, ...(query.state ? { state: query.state as TaskState } : {}), ...(query.after ? { after: query.after } : {}) }); return { value: { tasks: result.value, ...(result.value.length === query.limit ? { nextAfter: result.value.at(-1)!.id } : {}) }, commitCursor: result.commitCursor }; }); },
-    snapshot(context) { return mapped(() => { check(context); return options.store().tasks.snapshot(context.workspaceId); }); },
+    getTask(context, id) { return mapped(() => { check(context); const result = options.store().tasks.getTask(context.workspaceId, id); if (!result.value) throw new SessionApiError("not_found", "not_found", 404); const state = recovery(context.workspaceId, id); return { value: result.value, commitCursor: result.commitCursor, ...(state ? { recovery: state } : {}) }; }); },
+    listTasks(context, query) { return mapped(() => { check(context); const result = options.store().tasks.listTasks(context.workspaceId, { limit: query.limit, ...(query.state ? { state: query.state as TaskState } : {}), ...(query.after ? { after: query.after } : {}) }); return { value: { tasks: result.value.map(task => summary(context.workspaceId, task)), ...(result.value.length === query.limit ? { nextAfter: result.value.at(-1)!.id } : {}) }, commitCursor: result.commitCursor }; }); },
+    snapshot(context) { return mapped(() => { check(context); const result = options.store().tasks.snapshot(context.workspaceId); return { ...result, tasks: result.tasks.map(task => summary(context.workspaceId, task)) }; }); },
     replay(context, query) { return mapped(() => { check(context); return options.store().tasks.replay(context.workspaceId, query); }); },
   };
 }

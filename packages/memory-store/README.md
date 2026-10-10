@@ -58,13 +58,15 @@ P1-04 没有任务成功验证器。Runtime settled 原子进入 VERIFYING，不
 
 WorkingState 的旧通用认知入口保持 unsupported；专用 Task 入口保存真实 Task/attempt/intent/revision 及 Observation 证据。默认快照记录已提交 Task 状态；固定 reducer 也可返回与版本一一对应、非空 known/unknown/pendingInput/nextSteps 的完整状态。每个引用、时间、Scope、隐私与必要内容依赖均验证，独立更新必须伴随合法 Task revision，不开放任意覆写。
 
-SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `content_object` 生命周期。新 Daemon 先提高 Session ownerEpoch、发布 owner-fenced 状态、使旧 owner 写入失效，不自动派发。显式认证继续/重试登记新 attempt 后才能重新取得执行资格。旧 ALLOCATED/已派发绑定没有真实 EOF/close 证据时不能假设已停止；恢复 epoch 也不能充当无外部副作用证明。
+SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `content_object` 生命周期。新 Daemon 先提高 Session ownerEpoch、发布 owner-fenced 状态、使旧 owner 写入失效，不自动派发。显式认证继续/重试登记新 attempt 后才能重新取得执行资格。旧 ALLOCATED/已派发绑定没有真实 EOF/close 证据时不能假设已停止；恢复 epoch 也不能充当无外部副作用证明。旧 owner 未关闭执行显示 `recovery-blocked`，新用户命令返回 `recovery_required`，不把取消意图部分写成不可恢复的 CANCELLING；已有命令 receipt 仍可按原语义重放。
+
+新 owner 可调用不接受自报 close 字段的 `recoverExecutionClose`。固定组合根 `recoveryCustody.observedClose` 只读取受控 Supervisor 已实际观察的完整 EOF/close 记录，精确回显持久 spec、binding 与 execution revision；Store 独立验证新 owner、旧 lease、当前 attempt 和 CAS，再追加保留旧身份的 STOPPED 历史。缺失 custody/证据保持 unavailable 与 recovery-blocked；不会扫描 PID、猜测孤儿进程已消失或凭 owner fence 伪造停止。跨进程实际 custody 缺失时保持明确受阻，不能默认重试。
 
 `store.executions` 先持久 ALLOCATED spec、实际 runtime_input 和 fence，再由可信主机启动；实际 READY 及单调扩展来源映射先于事件，dispatched 先于运行派发。完整 EOF/close 才显示 closed。模型请求的确切受控上下文在 receiver 前记录为独立 model_request，仅证明已捕获输入，不冒称发送 Exposure。`readExecutionDetails`、`listRuntimeInputs`、`listModelRequests` 从重开的受管正文重建真实输入。
 
 来源 transport 实现标识与原始 package 标识是不同命名空间。一次性 `runtimeSourceIdentity` 由可信组合根固定，随执行正文保存；Store 没有 Provider 特例、每事件映射器或客户端覆盖。完整 Worker/binding/native Session/source stream 身份逐项匹配。保留 Runtime v1 原始严格递增 source sequence；不同 Surface 可能共享上游计数器，数字跳跃本身不证明丢失，不重编号或伪造连续性。倒序、已占来源槽冲突拒绝，exact replay 返回原确认。settled 事件、checkpoint、Task VERIFYING、Outbox 与最终确认游标一次事务提交，失败全部回滚。
 
-任务事件是独立 `task-session-v1` 投影流，`task_outbox_v1` cursor 不是认知 Outbox 的通用数据库提交号。读快照、校验与 cursor 在同一 SQLite snapshot；消费者顺序推进并按 eventId 去重。当前没有删除/压缩事件的保留窗口，未知或跨 Workspace cursor 拒绝。外部不透明 token 的主体、Scope 和恢复 generation 绑定由 API 层负责。
+任务事件是独立 `task-session-v1` 投影流，`task_outbox_v1` cursor 不是认知 Outbox 的通用数据库提交号。读快照、校验与 cursor 在同一 SQLite snapshot；消费者顺序推进并按 eventId 去重。每个 Session/Task/input/progress 事件双向校验实际聚合、版本、Workspace、owner、时间与来源；孤立 canonical 事件也按 corruption 拒绝。Session 事件链与当前行端点匹配，只有已提交 recovery epoch 引起的 owner/revision 步进不要求执行投影事件。当前没有删除/压缩事件的保留窗口，未知或跨 Workspace cursor 拒绝。外部不透明 token 的主体、Scope 和恢复 generation 绑定由 API 层负责。
 
 所有 Task/Session/输入/WorkingState/spec/envelope/model_request/命令比较资料都在受管文件，SQL 不复制永久正文或指纹。内部版本化正文 envelope 包含精确必要依赖，与 SQL 依赖投影比对；Session→命令→Task→执行/模型的闭包参与原 FORGET/隐私/保留/恢复控制。事务失败文件为不可读孤儿，原 collector 回收。最小 receipt 定位键按原合同留在受限数据库；可清除比较/结果正文到期或已清除后返回 unavailable，绝不重新执行，不把哈希称为匿名化。
 

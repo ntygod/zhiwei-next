@@ -67,3 +67,12 @@ test("Session error parser recognizes transport recovery reasons but rejects unk
   assert.throws(() => parseSessionApiErrorV1({ ...input, error: { ...input.error, retryable: true } }));
   assert.throws(() => parseSessionApiErrorV1({ ...input, error: { ...input.error, secret: "forbidden" } }));
 });
+
+test("Task recovery metadata is strict, detached read-side availability and never a new Task state", async () => {
+  const { parseSessionTaskRecoveryV1, parseTaskSummaryV1 } = await import("./session-api-v1.ts");
+  const recovery = { status: "blocked", reason: "worker_custody_required" }; const parsed = parseSessionTaskRecoveryV1(recovery); recovery.reason = "changed";
+  assert.equal(parsed.reason, "worker_custody_required"); assert.ok(Object.isFrozen(parsed));
+  for (const invalid of [{ status: "running", reason: "worker_custody_required" }, { status: "blocked", reason: "unknown" }, { status: "blocked", reason: "worker_custody_required", pid: 123 }]) assert.throws(() => parseSessionTaskRecoveryV1(invalid));
+  const summary = { id: "task-1", workspaceId: "workspace-a", sessionId: "session-1", revision: 2, intentRevision: 1, state: "RUNNING", updatedAt: "2026-10-10T00:00:00.000Z", recovery: parsed };
+  assert.deepEqual(parseTaskSummaryV1(summary), summary); assert.throws(() => parseTaskSummaryV1({ ...summary, state: "BLOCKED" }));
+});

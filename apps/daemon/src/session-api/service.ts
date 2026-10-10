@@ -1,10 +1,11 @@
 import type { Task } from "../../../../packages/domain/src/index.ts";
-import type { LocalApiCommandV1, LocalApiErrorCodeV1, ProductEventV1, SessionApiReceiptV1, SessionCreateCommandV1, SessionV1, TaskSummaryV1 } from "../../../../packages/protocol/src/index.ts";
+import type { LocalApiCommandV1, LocalApiErrorCodeV1, ProductEventV1, SessionApiReceiptV1, SessionCreateCommandV1, SessionV1, TaskSummaryV1, SessionTaskRecoveryV1 } from "../../../../packages/protocol/src/index.ts";
 
 export interface SessionApiContext { readonly principalId: string; readonly workspaceId: string }
 export interface SessionApiCommitted<T> { readonly value: T; readonly commitCursor: number }
 type WithoutCursor<T> = T extends unknown ? Omit<T, "eventCursor"> : never;
 export type SessionApiDurableReceipt = WithoutCursor<SessionApiReceiptV1>;
+export type SessionApiTaskRead = SessionApiCommitted<Task> & Readonly<{ recovery?: SessionTaskRecoveryV1 }>;
 export interface SessionApiSnapshot { readonly sessions: readonly SessionV1[]; readonly tasks: readonly TaskSummaryV1[]; readonly commitCursor: number }
 export interface SessionApiReplay {
   readonly events: readonly Readonly<{ commitCursor: number; event: ProductEventV1 }>[];
@@ -23,7 +24,7 @@ export interface SessionApiApplication {
   createSession(context: SessionApiContext, command: SessionCreateCommandV1): SessionApiCommitted<SessionApiDurableReceipt>;
   executeTask(context: SessionApiContext, command: LocalApiCommandV1): SessionApiCommitted<SessionApiDurableReceipt>;
   getSession(context: SessionApiContext, id: string): SessionApiCommitted<SessionV1>;
-  getTask(context: SessionApiContext, id: string): SessionApiCommitted<Task>;
+  getTask(context: SessionApiContext, id: string): SessionApiTaskRead;
   listTasks(context: SessionApiContext, query: Readonly<{ state?: string; limit: number; after?: string }>): SessionApiCommitted<Readonly<{ tasks: readonly TaskSummaryV1[]; nextAfter?: string }>>;
   /** Consistent view; each collection has stable ID order for watermark-pinned transport paging. */
   snapshot(context: SessionApiContext): SessionApiSnapshot;

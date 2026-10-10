@@ -115,3 +115,45 @@ test("Actual HTTP lost response replays one durable Task; CLI/SSE read SQLite tr
  assert.equal((await restarted.task(context.workspaceId, receipt.aggregate.id)).value.state, "READY");
  const stale = restarted.events(context.workspaceId, snapshot.asOfCursor)[Symbol.asyncIterator](); await assert.rejects(stale.next(), { code: "snapshot_required" });
 });
+
+
+test("Interrupted control plane exposes blocked custody, then exact retained Worker close permits a new attempt", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true });
+ const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); });
+ const { taskId, command, receipt } = create(h); await peer.waitForPrompt();
+ const prior = h.application.getTask(context, taskId).value, execution = h.evidence(context, taskId).execution!;
+ assert.equal(prior.state, "RUNNING"); assert.equal(execution.closed, false);
+ await h.interruptControlPlane();
+ const blocked = h.application.getTask(context, taskId);
+ assert.deepEqual(blocked.value, prior); assert.deepEqual(blocked.recovery, { status: "blocked", reason: "worker_custody_required" });
+ assert.deepEqual(h.application.snapshot(context).tasks[0]!.recovery, blocked.recovery);
+ assert.deepEqual(h.application.listTasks(context, { limit: 10 }).value.tasks[0]!.recovery, blocked.recovery);
+ assert.equal(h.evidence(context, taskId).execution!.closed, false);
+ assert.throws(() => h.application.executeTask(context, change(prior, "task.continue")), { reason: "recovery_required" });
+ assert.deepEqual(h.application.executeTask(context, command), receipt);
+ const origin = await h.api.listen(), pairing = await pairSyntheticSessionCli(origin, h.api.issuePairingCode("cli"));
+ const client = createSessionDataClient({ baseUrl: origin, credential: pairing.credential });
+ assert.deepEqual((await client.task(context.workspaceId, taskId)).recovery, blocked.recovery);
+ assert.deepEqual((await client.snapshot(context.workspaceId)).tasks[0]!.recovery, blocked.recovery);
+ await h.reconcileRetainedWorkers(); await h.idle();
+ const stopped = h.application.getTask(context, taskId); assert.equal(stopped.recovery, undefined); assert.equal(stopped.value.state, "UNVERIFIABLE");
+ const closed = h.evidence(context, taskId).execution!; assert.equal(closed.bindingId, execution.bindingId); assert.equal(closed.ownerEpoch, execution.ownerEpoch); assert.equal(closed.closed, true); assert.ok(closed.closeEvidence);
+ assert.ok(stopped.value.attempts[0]!.outcomes[0]!.criteriaResults.every(result => result.status === "unknown"));
+ await peer.releasePrompt(); h.application.executeTask(context, change(stopped.value, "task.continue")); await h.idle();
+ const continued = h.application.getTask(context, taskId).value; assert.equal(continued.attempts.length, 2); assert.equal(continued.state, "VERIFYING");
+ assert.notEqual(continued.attempts[1]!.id, prior.attempts[0]!.id); assert.deepEqual(continued.attempts[0], stopped.value.attempts[0]);
+ assert.notEqual(h.evidence(context, taskId).execution!.bindingId, execution.bindingId);
+});
+
+
+for (const window of ["handshake", "cancelling"] as const) test(`Retained custody recovers the ${window} interruption window without fabricated close`, async t => {
+ const peer = await createSyntheticWorkerTestPackage(window === "handshake" ? { pauseHandshake: true } : { pausePrompt: true });
+ const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); }); const { taskId } = create(h);
+ if (window === "handshake") await peer.waitForHandshake(); else { await peer.waitForPrompt(); h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.cancel")); }
+ await h.interruptControlPlane(); await h.reconcileRetainedWorkers(); await h.idle();
+ const stopped = h.application.getTask(context, taskId); assert.equal(stopped.recovery, undefined); assert.equal(stopped.value.state, window === "handshake" ? "READY" : "CANCELLED");
+ assert.equal(h.evidence(context, taskId).execution!.closed, true); assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
+ if (window === "handshake") { await peer.releaseHandshake(); h.application.executeTask(context, change(stopped.value, "task.continue")); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.attempts.length, 2); }
+});

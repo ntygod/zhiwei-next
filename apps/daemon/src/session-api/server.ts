@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   CognitiveProtocolError, deserializeLocalApiCommandV1, deserializeSessionCreateCommandV1, deserializeSessionPairRequestV1,
-  parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotPageV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
+  parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotPageV1, parseSessionTaskRecoveryV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
   type LocalApiErrorV1,
 } from "../../../../packages/protocol/src/index.ts";
 import { assertIdentifierV2 } from "../../../../packages/domain/src/index.ts";
 import { SyntheticSessionAuthenticator, type SessionAuthentication, type SyntheticSessionFixture } from "./auth.ts";
 import { SessionCursorCodec } from "./cursor.ts";
 import { SessionApiError, type SessionApiApplication, type SessionApiContext, type SessionApiReplay } from "./service.ts";
-export type { SessionApiApplication, SessionApiContext, SessionApiCommitted, SessionApiDurableReceipt, SessionApiSnapshot, SessionApiReplay } from "./service.ts";
+export type { SessionApiApplication, SessionApiContext, SessionApiCommitted, SessionApiDurableReceipt, SessionApiSnapshot, SessionApiReplay, SessionApiTaskRead } from "./service.ts";
 export { SessionApiError } from "./service.ts";
 export { syntheticSessionIdentities } from "./auth.ts";
 
@@ -243,7 +243,9 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         const id = readIdentifier(resource[2]!); const result = resource[1] === "sessions" ? app.getSession(context, id) : app.getTask(context, id);
         const value = resource[1] === "sessions" ? responseValue(parseSessionV1, result.value) : responseValue(parseSessionTaskV1, result.value);
         if (value.workspaceId !== context.workspaceId) throw new SessionApiError("corruption", "integrity_failed", 500);
-        writeJson(response, 200, { schemaVersion: 1, value, asOfCursor: encode(context, result.commitCursor) }); return;
+        const recovery = "recovery" in result && result.recovery !== undefined ? responseValue(parseSessionTaskRecoveryV1, result.recovery) : undefined;
+        if (recovery && resource[1] !== "tasks") throw new SessionApiError("corruption", "integrity_failed", 500);
+        writeJson(response, 200, { schemaVersion: 1, value, asOfCursor: encode(context, result.commitCursor), ...(recovery === undefined ? {} : { recovery }) }); return;
       }
       const stateFilter = url.searchParams.has("state") ? parseSessionTaskStateV1(url.searchParams.get("state")) : undefined;
       const limitText = url.searchParams.get("limit") ?? "50"; if (!/^(?:[1-9]|[1-4][0-9]|50)$/.test(limitText)) invalid();

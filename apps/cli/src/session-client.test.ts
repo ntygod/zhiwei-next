@@ -87,3 +87,11 @@ test("A stale snapshot continuation fails atomically instead of returning a part
   try { await assert.rejects(createSessionDataClient({ baseUrl: fixture.baseUrl, credential }).snapshot(workspace), isError("snapshot_required")); assert.equal(requests, 2); }
   finally { await fixture.close(); }
 });
+
+test("CLI rejects unknown task recovery metadata instead of presenting it as an authoritative runtime state", async () => {
+  const intent = { revision: 1, request: "Synthetic report", constraints: [], criteria: [{ id: "criterion", revision: 1, description: "Synthetic check", required: true, method: "artifact" }] };
+  const task = { id: "task-1", workspaceId: workspace, sessionId: "session-1", revision: 2, intent, state: "RUNNING", attempts: [{ id: "attempt-1", taskId: "task-1", workspaceId: workspace, intent: structuredClone(intent), state: "RUNNING", createdAt: at, updatedAt: at, pauseRequested: false, cancellationRequested: false, completeness: "not-settled", outcomes: [], unresolvedActions: [] }], createdAt: at, updatedAt: at };
+  const fixture = await server((_request, response) => json(response, { schemaVersion: 1, value: task, asOfCursor: "cursor", recovery: { status: "blocked", reason: "unknown_custody", pid: 123 } }));
+  try { await assert.rejects(createSessionDataClient({ baseUrl: fixture.baseUrl, credential }).task(workspace, "task-1"), isError("invalid_response")); }
+  finally { await fixture.close(); }
+});

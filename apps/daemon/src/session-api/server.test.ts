@@ -14,12 +14,12 @@ const taskCommand = (id = 1): LocalApiCommandV1 => parseLocalApiCommandV1({ sche
 class FixtureApplication implements SessionApiApplication {
   readonly sessions: SessionV1[] = []; readonly tasks: Task[] = []; readonly events: { commitCursor: number; event: ProductEventV1 }[] = [];
   readonly listeners = new Set<() => void>(); readonly receipts = new Map<string, { body: string; committed: SessionApiCommitted<SessionApiDurableReceipt> }>();
-  cursor = 0; reads = 0; authorizations = 0; denyAt = Infinity; gap = false; readFailure = false;
+  cursor = 0; reads = 0; authorizations = 0; denyAt = Infinity; gap = false; readFailure = false; blockedCustody = false;
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   notify() { for (const listener of this.listeners) listener(); }
   authorize(context: SessionApiContext) { this.authorizations++; return this.authorizations < this.denyAt && Object.values(syntheticSessionIdentities).some(value => value.principalId === context.principalId && value.workspaceId === context.workspaceId); }
   append(event: ProductEventV1) { this.events.push({ commitCursor: ++this.cursor, event }); this.notify(); }
-  summary(task: Task): TaskSummaryV1 { return { id: task.id, workspaceId: task.workspaceId, sessionId: task.sessionId, revision: task.revision, intentRevision: task.intent.revision, state: task.state, updatedAt: task.updatedAt }; }
+  summary(task: Task): TaskSummaryV1 { return { id: task.id, workspaceId: task.workspaceId, sessionId: task.sessionId, revision: task.revision, intentRevision: task.intent.revision, state: task.state, updatedAt: task.updatedAt, ...(this.blockedCustody ? { recovery: { status: "blocked" as const, reason: "worker_custody_required" as const } } : {}) }; }
   createSession(context: SessionApiContext, command: SessionCreateCommandV1): SessionApiCommitted<SessionApiDurableReceipt> {
     const key = `${context.principalId}:${command.idempotencyKey}`; const prior = this.receipts.get(key);
     if (prior) { if (prior.body !== JSON.stringify(command)) throw new SessionApiError("idempotency_conflict", "idempotency_conflict", 409); return prior.committed; }
@@ -37,7 +37,7 @@ class FixtureApplication implements SessionApiApplication {
     return { commitCursor: this.cursor, value: { schemaVersion: 1, commandId: command.commandId, status: "committed", aggregate: { kind: "task", id, revision: 1 }, result: { kind: "task", taskState: "READY", intentRevision: 1 } } };
   }
   getSession(context: SessionApiContext, id: string) { this.reads++; if (this.readFailure) throw new Error("private-secret /private/path Synthetic prompt"); const value = this.sessions.find(session => session.workspaceId === context.workspaceId && session.id === id); if (!value) throw new SessionApiError("not_found", "not_found", 404); return { value, commitCursor: this.cursor }; }
-  getTask(context: SessionApiContext, id: string) { this.reads++; const value = this.tasks.find(task => task.workspaceId === context.workspaceId && task.id === id); if (!value) throw new SessionApiError("not_found", "not_found", 404); return { value, commitCursor: this.cursor }; }
+  getTask(context: SessionApiContext, id: string) { this.reads++; const value = this.tasks.find(task => task.workspaceId === context.workspaceId && task.id === id); if (!value) throw new SessionApiError("not_found", "not_found", 404); return { value, commitCursor: this.cursor, ...(this.blockedCustody ? { recovery: { status: "blocked" as const, reason: "worker_custody_required" as const } } : {}) }; }
   listTasks(context: SessionApiContext, query: Readonly<{ state?: string; limit: number; after?: string }>) { this.reads++; const values = this.tasks.filter(task => task.workspaceId === context.workspaceId && (!query.state || task.state === query.state) && (!query.after || task.id > query.after)); const selected = values.slice(0, query.limit); return { commitCursor: this.cursor, value: { tasks: selected.map(task => this.summary(task)), ...(values.length > selected.length ? { nextAfter: selected.at(-1)!.id } : {}) } }; }
   snapshot(context: SessionApiContext) { this.reads++; return { sessions: this.sessions.filter(session => session.workspaceId === context.workspaceId), tasks: this.tasks.filter(task => task.workspaceId === context.workspaceId).map(task => this.summary(task)), commitCursor: this.cursor }; }
   replay(context: SessionApiContext, query: Readonly<{ afterCommitCursor: number; limit: number }>) { this.reads++; const rows = this.events.filter(row => row.event.workspaceId === context.workspaceId && row.commitCursor > query.afterCommitCursor); return { events: rows.slice(0, query.limit), highWatermark: this.cursor, hasMore: rows.length > query.limit, gap: this.gap }; }
@@ -187,5 +187,23 @@ test("Cookie GET and SSE accept genuine same-origin Fetch Metadata without Origi
     assert.equal((await fixture.call("/v1/sessions", { ...headers, "x-zhiwei-csrf": pair.body.csrfToken! }, sessionCommand())).status, 403);
     const stream = await fixture.call(eventPath + `&afterCursor=${snapshot.asOfCursor}`, headers); assert.equal(stream.status, 200);
     await fixture.call("/v1/sessions", pair.headers, sessionCommand()); assert.match((await frames(stream, 1))[0]!, /session.created/);
+  } finally { await fixture.api.close(); }
+});
+
+test("Scoped task read/list/snapshot and CLI preserve blocked custody separately from the last confirmed RUNNING state", async () => {
+  const fixture = await setup();
+  try {
+    const pair = await fixture.pair(); await fixture.call("/v1/sessions", pair.headers, sessionCommand()); await fixture.call("/v1/tasks", pair.headers, taskCommand());
+    const task = fixture.app.tasks[0]!;
+    fixture.app.tasks[0] = parseSessionTaskV1({ ...task, state: "RUNNING", attempts: task.attempts.map(attempt => ({ ...attempt, state: "RUNNING" })) }); fixture.app.blockedCustody = true;
+    const { createSessionDataClient, runSessionCli } = await import("../../../cli/src/session-client.ts");
+    const options = { baseUrl: fixture.base, credential: pair.body.credential! }; const client = createSessionDataClient(options);
+    const expected = { status: "blocked", reason: "worker_custody_required" };
+    const read = await client.task(workspace, task.id); assert.equal(read.value.state, "RUNNING"); assert.deepEqual(read.recovery, expected);
+    const list = await client.tasks(workspace); assert.equal(list.value.tasks[0]!.state, "RUNNING"); assert.deepEqual(list.value.tasks[0]!.recovery, expected);
+    const snapshot = await client.snapshot(workspace); assert.equal(snapshot.tasks[0]!.state, "RUNNING"); assert.deepEqual(snapshot.tasks[0]!.recovery, expected);
+    for (const json of [false, true]) { const lines: string[] = []; assert.equal(await runSessionCli(["task", workspace, task.id, ...(json ? ["--json"] : [])], line => lines.push(line), options), 0); assert.match(lines[0]!, /worker_custody_required/); assert.match(lines[0]!, /RUNNING/); }
+    const denied = await fixture.call(`/v1/tasks/${task.id}?workspaceId=synthetic-workspace-b`, pair.headers); assert.equal(denied.status, 404); assert.doesNotMatch(await denied.text(), /worker_custody_required|RUNNING/);
+    fixture.app.blockedCustody = false; assert.equal((await client.task(workspace, task.id)).recovery, undefined);
   } finally { await fixture.api.close(); }
 });

@@ -174,6 +174,7 @@ export class SyntheticCognitionStoreV2 {
     const boundary: TaskPersistenceBoundaryV1 | undefined = configured ? Object.freeze({ daemonInstanceId: configured.daemonInstanceId,
       contentPolicy: Object.freeze(structuredClone(configured.contentPolicy)),
       ...(configured.runtimeSourceIdentity ? { runtimeSourceIdentity: Object.freeze(structuredClone(configured.runtimeSourceIdentity)) } : {}),
+      ...(configured.recoveryCustody ? { recoveryCustody: Object.freeze({ observedClose: configured.recoveryCustody.observedClose.bind(configured.recoveryCustody) }) } : {}),
       ids: Object.freeze({ next: configured.ids.next.bind(configured.ids) }), reduce: configured.reduce }) : undefined;
     this.#taskEngine = new TaskStoreEngineV1(host, boundary); this.#executionEngine = new TaskExecutionStoreEngineV1(host, boundary);
   }

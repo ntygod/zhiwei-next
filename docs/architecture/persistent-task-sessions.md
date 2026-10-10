@@ -12,7 +12,7 @@
 
 ## 事务和历史
 
-- 命令 Observation、每个连续 Task revision、WorkingState、产品 Outbox、receipt 同事务；CREATED→READY 等中间版本保留。
+- 命令 Observation、每个连续 Task revision、WorkingState、产品 Outbox、receipt 同事务；CREATED→READY 等中间版本保留。全部产品事件逐类核对真实 Session/Task/input/execution 的 Workspace、owner、revision、payload 与水位，不能只凭 JSON 合法即接受孤立事件。
 - reducer 可提供与各 Task revision 一一对应的完整 WorkingState，必须匹配 Task/attempt/intent/真实 evidence 和正文依赖。默认仅保存当前步骤，不伪造认知循环。
 - 同主体/类型/幂等键和相同语义输入返回原 receipt；commandId 仅相关标识，不使相同语义重新执行。不同语义冲突。响应丢失、通知异常不回滚已提交真源。
 - 请求、标准、Outcome 解释、SessionContract、输入、Runtime envelope 和比较正文走受控 ContentRef 生命周期。最小 opaque receipt 定位键不当作匿名化，也不放入外部日志；正文失效后不重新执行。
@@ -30,6 +30,9 @@
 7. 实际 envelope、checkpoint、进度和 settled→VERIFYING 同事务。Broker 在第一方接收器之前同步提交实际 projected model_request，失败阻止接收。runtime_input 不等于 model_request，后者也不是生产 Exposure 证明。
 8. 取消先提交 CANCELLING；真实关闭证据或事务证明无执行绑定后才 CANCELLED。abort acknowledgement 不阻塞 dispose，忙碌进程仍能结束。
 9. 所有直接/自动执行共用串行接纳队列；异步准备后重检 Task/attempt/生命周期。restart/close 串行，关闭替换后的 API，不遗留进程。
+10. 控制面/Store 中断而外层合成启动器仍保有真实 Supervisor custody 时，先重开 Store 并 fence 旧 owner。旧 Task 的最后提交状态不改写成“正在运行”；查询、列表和快照另给出 `recovery: {status: blocked, reason: worker_custody_required}`。旧未关闭绑定存在时，新命令拒绝为 `recovery_required`，已提交命令 receipt 仍可重放。
+11. 固定 composition custody port 只读取由该精确 Supervisor 的真实 dispose/EOF/close 填入的关闭记录。新 owner 不能传入 close 布尔值；Store 校验原 spec、binding、lease、execution revision 与新 Session owner 后，才追加旧绑定的关闭历史。RUNNING/VERIFYING 随后得到 unknown/unverifiable；明确继续才新建 attempt，绝不原生 resume。取消只能在实际关闭后确认。
+12. 完整 OS Daemon 死亡并失去 Supervisor custody 后的 orphan 发现/跨进程回收当前 unsupported/not_run；未知 custody 保持明确 blocked。PID、经过时间、owner fencing 或 ALLOCATED 记录均不当作物理关闭证明。普通控制面中断+保留 custody 的合成进程测试不冒充该生产场景。
 
 官方 Pi CLI+新扩展完整组合仍 `not_run`。加载真实扩展的合成协议进程不冒充官方 Agent Loop；工具/真实模型 Grant/action/预算生产接线不由该无工具 profile 认证。
 

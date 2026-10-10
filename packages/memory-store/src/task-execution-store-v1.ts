@@ -195,9 +195,14 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
     return this.#host.writeBody(scope, body, dependencies.map(item => ({ ...item })), boundary);
   }
   #summary(row: Row, body: Body): TaskExecutionReadV1 {
+    const session = this.#host.db.prepare("SELECT owner_epoch,owner_instance_id FROM session_v1 WHERE workspace_id=? AND id=?")
+      .get(row.workspace_id!, body.spec.sessionId) as Row | undefined;
+    if (!session) return this.#host.fail("corruption");
+    const authority = body.closed ? "closed" : session.owner_epoch === row.owner_epoch
+      && session.owner_instance_id === this.#configured().daemonInstanceId && row.recovery_epoch === this.#host.recoveryEpoch() ? "current" : "recovery-blocked";
     return { bindingId: body.binding.bindingId, revision: integer(row.current_revision), executionUnitId: body.spec.executionUnitId,
       taskId: text(row.task_id), attemptId: text(row.attempt_id), taskRevision: integer(row.task_revision), ownerEpoch: integer(row.owner_epoch),
-      state: body.binding.state, dispatched: body.dispatched, closed: body.closed };
+      state: body.binding.state, dispatched: body.dispatched, closed: body.closed, authority };
   }
   #append(owned: Owned, body: Body): TaskExecutionReadV1 {
     const revision = next(owned.row.current_revision!), now = this.#host.now(), row = owned.row;
@@ -386,6 +391,62 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       if (owned.body.closed || !closeExtends(owned.body.closeEvidence, evidence)) this.#host.fail("conflict");
       return this.#append(owned, { ...owned.body, closeEvidence: evidence, closed: complete(evidence),
         binding: parseRuntimeBindingV1({ ...owned.body.binding, ...(complete(evidence) ? { state: "STOPPED" } : {}) }) });
+    });
+  }
+  recoverExecutionClose(context: TaskStoreContextV1, input: Parameters<TaskExecutionPersistenceV1["recoverExecutionClose"]>[1]): TaskExecutionReadV1 {
+    this.#parse("validation", () => {
+      exact(input, ["taskId", "bindingId", "expectedExecutionRevision"]);
+      assertIdentifierV2(input.taskId); assertIdentifierV2(input.bindingId); assertRevisionV2(input.expectedExecutionRevision);
+    });
+    this.#context(context);
+    return this.#host.transaction(true, () => {
+      // This path records an already observed physical close under the new Session owner.
+      // It never transfers the old lease, calls a Runtime, or weakens normal #owned admission.
+      const db = this.#host.db;
+      const task = db.prepare("SELECT * FROM task_v1 WHERE workspace_id=? AND id=?").get(context.workspaceId, input.taskId) as Row | undefined;
+      if (!task) return this.#host.fail("unavailable");
+      const session = db.prepare("SELECT * FROM session_v1 WHERE workspace_id=? AND id=?").get(context.workspaceId, task.session_id!) as Row | undefined;
+      const row = db.prepare("SELECT * FROM task_execution_v1 WHERE workspace_id=? AND task_id=? AND binding_id=?")
+        .get(context.workspaceId, input.taskId, input.bindingId) as Row | undefined;
+      if (!session || !row) return this.#host.fail("unavailable");
+      if (session.owner_instance_id !== context.daemonInstanceId || session.owner_epoch !== context.ownerEpoch
+        || context.ownerEpoch <= integer(row.owner_epoch) || row.recovery_epoch !== this.#host.recoveryEpoch()) this.#host.fail("conflict");
+      const taskSnapshot = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?")
+        .get(input.taskId, task.current_revision!) as Row | undefined;
+      const snapshot = db.prepare("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? AND revision=?")
+        .get(input.bindingId, row.current_revision!) as Row | undefined;
+      if (!taskSnapshot || !snapshot) return this.#host.fail("corruption");
+      if (taskSnapshot.attempt_id !== row.attempt_id || taskSnapshot.intent_revision !== row.intent_revision
+        || integer(taskSnapshot.owner_epoch) > context.ownerEpoch) this.#host.fail("conflict");
+      const scope = taskScope(context.workspaceId, input.taskId);
+      this.#host.content(ref(taskSnapshot), scope, true);
+      const body = this.#decode(this.#bodyValue(snapshot, scope, true));
+      const currentRevision = integer(row.current_revision), now = this.#host.now();
+      if (now < text(snapshot.created_at)) this.#host.fail("conflict");
+      if (body.closed) {
+        // A lost response may retry the exact pre-close CAS. No custody re-query or new row.
+        if (input.expectedExecutionRevision !== currentRevision && input.expectedExecutionRevision !== currentRevision - 1) this.#host.fail("revision_conflict");
+        return this.#summary(row, body);
+      }
+      if (input.expectedExecutionRevision !== currentRevision) this.#host.fail("revision_conflict");
+      const attempt = db.prepare("SELECT active FROM task_attempt_v1 WHERE task_id=? AND id=?").get(input.taskId, row.attempt_id!) as Row | undefined;
+      if (!attempt || attempt.active !== 1 || row.active !== 1) this.#host.fail("conflict");
+      const custody = this.#configured().recoveryCustody;
+      if (!custody) return this.#host.fail("unavailable");
+      const observed: unknown = custody.observedClose({ spec: structuredClone(body.spec), binding: structuredClone(body.binding), executionRevision: currentRevision });
+      if (observed === undefined) return this.#host.fail("unavailable");
+      const captured = this.#parse("validation", () => {
+        exact(observed, ["spec", "binding", "executionRevision", "evidence"]); assertRevisionV2(observed.executionRevision);
+        return { spec: parseExecutionSpecV1(observed.spec), binding: parseRuntimeBindingV1(observed.binding),
+          executionRevision: observed.executionRevision, evidence: parseRuntimeProcessCloseEvidenceV1(observed.evidence) };
+      });
+      if (captured.executionRevision !== currentRevision || json(captured.spec) !== json(body.spec) || json(captured.binding) !== json(body.binding)
+        || captured.evidence.bindingId !== input.bindingId || !complete(captured.evidence)
+        || captured.evidence.observedAt > now || captured.evidence.observedAt < text(row.created_at)
+        || !closeExtends(body.closeEvidence, captured.evidence)) this.#host.fail("conflict");
+      const current: TaskCoordinates = { task, snapshot: taskSnapshot, session, scope };
+      return this.#append({ row, snapshot, body, current }, { ...body, closed: true, closeEvidence: captured.evidence,
+        binding: parseRuntimeBindingV1({ ...body.binding, state: "STOPPED" }) });
     });
   }
   #latest(workspaceId: string, taskId: string): { row: Row; body: Body } | undefined {

@@ -31,12 +31,15 @@ export interface SessionV1 {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+/** Read-side availability only; the persisted Task state remains its last confirmed state. */
+export interface SessionTaskRecoveryV1 { readonly status: "blocked"; readonly reason: "worker_custody_required" }
 export interface TaskSummaryV1 {
   readonly id: string;
   readonly workspaceId: string;
   readonly sessionId: string;
   readonly revision: number;
   readonly intentRevision: number;
+  readonly recovery?: SessionTaskRecoveryV1;
   readonly state: TaskState;
   readonly updatedAt: string;
 }
@@ -45,7 +48,7 @@ export type SessionCommandReceiptV1 = Omit<LocalApiReceiptV1, "aggregate" | "res
   result: Readonly<{ kind: "session"; ownerEpoch: number }>;
 }>;
 export type SessionApiReceiptV1 = LocalApiReceiptV1 | SessionCommandReceiptV1;
-export interface SessionApiReadV1<T> { readonly schemaVersion: 1; readonly value: T; readonly asOfCursor: string }
+export interface SessionApiReadV1<T> { readonly schemaVersion: 1; readonly value: T; readonly asOfCursor: string; readonly recovery?: SessionTaskRecoveryV1 }
 export interface SessionSnapshotV1 {
   readonly schemaVersion: 1;
   readonly workspaceId: string;
