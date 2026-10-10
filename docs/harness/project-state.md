@@ -6,7 +6,19 @@ status: active
 updated: 2026-10-10
 -->
 
-## 当前工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
+## 当前工作：P1-02 正文生命周期与认知事务 #112（2026-10-10）
+
+canonical [#112](https://github.com/ntygod/zhiwei-next/issues/112)，唯一 `feat/112-cognitive-persistence` / Draft [PR113](https://github.com/ntygod/zhiwei-next/pull/113)，从已保护 main `e996451f1c601b5d4859c07030bfeabb290f5371` 开始。开工已核实无开放 PR/Incident、远端仅 main；#44/#67 原人类输入保留。P1-01 / PR111 已通过最终 R3、499 项完整测试、Ready/live、保护合入与 main provenance，#110 已关闭；产品验收仍 `not_run`。
+
+完整代码提交 `a763c8c257ed8b8a4fcba7f13bda6f6162033a11` 已实现独立 v2 固定迁移/manifest、正文 staging/发布/孤儿回收、Observation/Claim 与必要 P1 认知快照、Candidate+Claim 同事务接受/纠正、逻辑遗忘/当前受管副本和最小隔离恢复协调者。正式 Node22.23.1/npm10.9.8 完整 `npm run check` 原始 exit0，582/582 测试，严格类型110 roots。真实临时 SQLite 与实际 P1-01 core 输出的合成事务回归通过；受限恢复动作没有伪装为已运行测试。具体 supported/unsupported 与动态未验收范围见 [memory-store 交付边界](../../packages/memory-store/README.md)。
+
+执行索引记录本 PR 已存在代码证据为 `implemented`，产品 Z05/Z06/Z07 验收仍 `not_run`。Episode/WorkingState 的生产持久消费者等待 Task 事务依赖；P1-05 通用 Claim 生命周期服务、P4 加密/跨安装/生产备份接线不提前。最小 synthetic source/catalog、独立当前 journal 重放、恢复世代/Outbox quarantine、atomic active selection 及受管恢复副本清理代码已具备，但 capture/restore/清理与故障窗口动态验收均 `not_run`。当前 raw synthetic opener 的调用者须遵守 coordinator 所有权合同，没有生产消费者或通用授权绕过开关。
+
+本 PR 的 SDK 原来源为 `404427198a501998f9fd4ff17c3382812a66aa37` / run `38043223271`；Worker 原来源为 `0925e00732cd567924b82f999bc7dcaf9208ef3b` / run `38043701983`，两次原 job/ZIP/artifact/result 与完整对象相等、成对来源及 attempt1 后续字节回读均已核验。历史 failure-shape 来源仅在完整相等成功后使用既有临时 guard，不把预期捕获失败写成普通 CI 成功；比较器已恢复原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。精确最终 HEAD 的独立 R3、Ready/live、完整 CI、受保护合入与 main 回读仍待完成，不能把候选状态当作已合入。
+
+保留 0001/v1 原合同，不接真实用户数据、模型、凭据或生产入口。原 #90/preintegration-safety 及等价争议动态诊断不运行；D-04/D-08、G-2/G-5 与真实启用门不变。本 PR 保护合入并核验 main 后才开始下一独立 P1-03 实现；不宣称产品验收依赖通过。以下旧段落是开发期历史快照，不能覆盖本段真实状态。
+
+## 历史工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
 
 canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分支 `feat/110-cognitive-domain-contracts`，从已保护合入 main `009387778d2f473945e89239557bf2d16735d242` 开始。#108 / PR109 已完成开发/验收分离治理，最新 main 回读无开放 PR/Incident、远端仅 main；本项是独立产品合同实现，不修改新治理来让自身通过。
 
@@ -231,14 +243,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #111；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #113；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8
-capture workflow             38040347283
-capture artifact             11665431880
-capture artifact digest      sha256:ed0436b8d7b1cb662a518c7153ac6c93eed6c7028d60c1decfc3a026f58f6c59
+capture head                 404427198a501998f9fd4ff17c3382812a66aa37
+capture workflow             38043223271
+capture artifact             11666279525
+capture artifact digest      sha256:9f13deb7e2c2191e602b702253dc3679a5dbd430bc0e0bcf0ecdb1a14d9d7121
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

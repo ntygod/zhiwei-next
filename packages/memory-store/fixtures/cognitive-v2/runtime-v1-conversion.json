@@ -1,0 +1,126 @@
+{
+  "original": {
+    "compatibility": "required",
+    "correlation": {
+      "normalized": {
+        "agentRunId": "fixture-run-a",
+        "messageId": "fixture-message-a",
+        "turnId": "fixture-turn-a"
+      },
+      "observed": {}
+    },
+    "data": {
+      "body": {
+        "text": "fixture response"
+      },
+      "contentKinds": [
+        "text",
+        "tool-call"
+      ],
+      "kind": "message.lifecycle",
+      "phase": "ended",
+      "role": "assistant",
+      "stopReason": "stop"
+    },
+    "eventId": "nre1_eb621f6ba784efbd6e3a27518cebee971da7eb861e2e1769423d175cce04c718",
+    "idempotencyKey": "nre1b_f8e9ec0f98e8ca99a88c9af2ed67d01225ee7d88b0a4651a9d97eac60d873ace",
+    "observedAt": "2026-08-17T05:00:08.000Z",
+    "persistence": "durable",
+    "protocolVersion": 1,
+    "provenance": "observed",
+    "runtimeInstanceId": "fixture-worker-1",
+    "runtimeSessionId": "fixture-session-a",
+    "sequence": {
+      "domain": "sdk-public-events",
+      "value": 5
+    },
+    "source": {
+      "adapter": "pi",
+      "eventType": "message_end",
+      "runtime": {
+        "implementation": "@earendil-works/pi-coding-agent",
+        "version": "0.84.1"
+      },
+      "surface": "sdk"
+    },
+    "stability": "boundary",
+    "workspaceId": "fixture-workspace"
+  },
+  "mapping": {
+    "observationId": "observation-converted-1",
+    "streamId": "stream-pi-sdk-version-0.84.1-session-a-worker-1",
+    "scope": {
+      "kind": "session",
+      "workspaceId": "fixture-workspace",
+      "sessionId": "product-session-1"
+    },
+    "privacy": "local-only",
+    "sourceTrust": "model-derived",
+    "recordedAt": "2026-10-10T08:00:00.000Z",
+    "runtime": "pi",
+    "productSessionId": "product-session-1",
+    "actor": "assistant",
+    "kind": "assistant_output",
+    "correlation": {
+      "taskAttempt": null,
+      "turnId": "product-turn-1",
+      "toolCallId": null,
+      "causationId": null,
+      "correlationId": "conversion-1"
+    },
+    "content": {
+      "availability": "available",
+      "ref": {
+        "contentId": "b85afc52-bf1b-4fd1-921d-990eaa4290c1",
+        "contentVersion": 1
+      }
+    },
+    "integrity": {
+      "status": "complete"
+    }
+  },
+  "expected": {
+    "schemaVersion": 2,
+    "id": "observation-converted-1",
+    "revision": 1,
+    "scope": {
+      "kind": "session",
+      "workspaceId": "fixture-workspace",
+      "sessionId": "product-session-1"
+    },
+    "privacy": "local-only",
+    "sourceTrust": "model-derived",
+    "observedAt": "2026-08-17T05:00:08.000Z",
+    "recordedAt": "2026-10-10T08:00:00.000Z",
+    "actor": "assistant",
+    "kind": "assistant_output",
+    "source": {
+      "streamId": "stream-pi-sdk-version-0.84.1-session-a-worker-1",
+      "adapter": "pi",
+      "surface": "sdk",
+      "sourceSequence": 5,
+      "runtime": "pi",
+      "productSessionId": "product-session-1",
+      "runtimeSessionId": "fixture-session-a",
+      "runtimeInstanceId": "fixture-worker-1",
+      "eventType": "message_end"
+    },
+    "correlation": {
+      "taskAttempt": null,
+      "turnId": "product-turn-1",
+      "toolCallId": null,
+      "causationId": null,
+      "correlationId": "conversion-1"
+    },
+    "content": {
+      "availability": "available",
+      "ref": {
+        "contentId": "b85afc52-bf1b-4fd1-921d-990eaa4290c1",
+        "contentVersion": 1
+      }
+    },
+    "integrity": {
+      "status": "complete"
+    }
+  }
+}
