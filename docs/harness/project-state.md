@@ -12,7 +12,7 @@ canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分�
 
 范围为 domain/cognition-core/protocol 的正式 Scope、正交隐私/信任/认识状态、认知版本与纯转换、Observation v2 和 Local API DTO。保留 Bootstrap/v1 Ledger、固定迁移、Runtime 与 P0-03 Task/Outcome；只有合成测试消费新入口，无生产接线、模型、真实个人数据、外发或凭据。实现状态由[执行索引](execution-mode.json)记录，产品验收仍 `not_run`；原 P0-01/02、D-04/D-08、G-2/G-5 及真实启用门保持，受限实验不执行。
 
-正在开发与确定性检查；首个实质提交后创建唯一 Draft PR。最终完整 HEAD 的独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main provenance 均须实际完成，未预记交付或产品验收。
+唯一 Draft [PR111](https://github.com/ntygod/zhiwei-next/pull/111) 已创建，首提交 `7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8` 交付领域合同；认知纯转换和独立协议正在同一 PR 集成。领域30项、认知86项、协议60项及全仓 strict 类型检查通过，最终完整 `npm run check`、精确 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main provenance 仍须实际完成，未预记产品验收。
 
 以下为历史工作快照，不是开放 WIP 或新选工入口。
 

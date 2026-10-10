@@ -58,7 +58,8 @@
       "implementation_status": "in_progress",
       "acceptance_status": "not_run",
       "implementation_evidence": [
-        "https://github.com/ntygod/zhiwei-next/issues/110"
+        "https://github.com/ntygod/zhiwei-next/issues/110",
+        "https://github.com/ntygod/zhiwei-next/pull/111"
       ],
       "acceptance_evidence": []
     },

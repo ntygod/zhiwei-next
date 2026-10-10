@@ -88,3 +88,16 @@ export function correctClaim(current: MemoryClaim, correction: ClaimCorrection):
 export { createTask, transitionTask, retryTask, reviseTaskIntent } from "./task-transitions.ts";
 export type { AttemptReceipt, TaskAction, TaskChange, TaskTransitionRecord, TaskTransition } from "./task-transitions.ts";
 export { deriveOutcome } from "./outcome-rules.ts";
+
+// Opt-in formal cognition contracts. No storage, production activation or permission is implied.
+export type { CognitionChangeV2 } from "./cognition-change-v2.ts";
+export {
+  createMemoryCandidate, transitionMemoryCandidate, acceptMemoryCandidate, correctMemoryClaim, transitionMemoryClaim,
+} from "./memory-transitions-v2.ts";
+export type {
+  CandidateAcceptanceV2, CandidateAcceptanceResultV2, ClaimCorrectionResultV2, ClaimLifecycleActionV2, ClaimLifecycleTransitionV2,
+} from "./memory-transitions-v2.ts";
+export { createHypothesis, transitionHypothesis } from "./hypothesis-transitions-v2.ts";
+export type { HypothesisActionV2, HypothesisTransitionV2 } from "./hypothesis-transitions-v2.ts";
+export { createGoal, transitionGoal, reviseGoal } from "./goal-transitions-v2.ts";
+export type { GoalCriterionResultV2, GoalActionV2, GoalTransitionV2, GoalRevisionV2, GoalRevisionResultV2 } from "./goal-transitions-v2.ts";
