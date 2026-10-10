@@ -99,3 +99,13 @@ export function assertConfidence(confidence: number): void {
     throw new Error("confidence must be between 0 and 1");
   }
 }
+
+export {
+  assertTaskText, assertTaskRevision, assertTaskTime, assertTaskEvidence, assertTaskIntent,
+  isTerminalTaskState, assertTaskOutcomeHistory, sameTaskIntent,
+} from "./task.ts";
+export type {
+  TaskId, TaskAttemptId, CriterionId, OutcomeId, TaskState, OutcomeStatus,
+  VerificationMethod, AcceptanceCriterion, TaskIntent, TaskAttempt, Task,
+  TaskEvidenceRef, CriterionBinding, CriterionResult, Outcome,
+} from "./task.ts";

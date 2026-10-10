@@ -2,6 +2,12 @@
 
 状态：design-v2 目标。当前 MemoryScope/MemoryKind 是 Bootstrap 表达；P1-01 更新领域类型，持久结构以新迁移实现，不改写已发布 Runtime v1。
 
+P0-03 当前增加仅供合成内存验证的 `Task` / `TaskAttempt`、`AcceptanceCriterion` / `CriterionResult` / `Outcome` 类型及纯转换/归约；没有生产调用方，也不完成 P1-01。实现边界见[准备边界](../planning/core-preparation-boundary.md)。输入时间为规范 UTC 毫秒字符串，ID 与 revision 由调用方传入。原 MemoryScope、MemoryKind、Runtime v1 与既有哨兵保持。
+
+`createTask` 登记首 attempt；`transitionTask` 返回新 Task 和含触发引用/固定原因码的转换记录，CAS 只比较内存版本，不证明持久并发。`retryTask` 与 `reviseTaskIntent` 仅在旧 attempt 终态后追加新 attempt；普通状态变化不增加意图版本。P0-03 不实现活跃目标修订的真实 fence 失效，须先停止/核对旧尝试。暂停请求保持 RUNNING，合成停止记录到达且无未知动作才显示 PAUSED；无已证明 checkpoint 的 PAUSED 不开放原 attempt continue，可取消后新建 attempt。
+
+`deriveOutcome` 校验精确意图/标准/方法、证据引用、时间和完整结果集，再归约；必需标准 N/A、unknown 和 model-assisted 自述不算 pass。取消优先保留 cancelled；未核对动作禁止归约。已终态尝试的新证据可生成同 Outcome ID 的下一 revision，而不修改原 attempt/Outcome；该纯结果仍须正式 P1 提交边界决定如何发布。证据、停止/派发准备记录仅是调用方提供的结构化输入，不证明真实授权、验证器执行、产物质量或运行体已停止。Z03/Z16 只获得组件证据，不是端到端验收。
+
 字段落库、索引与事务见[持久化详设](persistence-and-recovery.md)，跨进程身份与运行 fence 见[运行详设](runtime-coordination.md)。领域对象的语义以本文为准，物理实现不能把 Runtime role、lease 或缓存身份当作长期事实/授权。
 
 ## 身份与正交维度
