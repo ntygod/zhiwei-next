@@ -18,7 +18,7 @@ Runtime v1、SQLite Ledger v1、固定工具链/CLI、有限诊断与场景运�
 
 ## 下一可执行目标
 
-在 #106 唯一 primary PR 实现预算合同指定的内存计算、固定渲染和确定性测试；原规则要求完整 check、最终 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源。未实际通过前不宣称完成；不创建另一 integrator/finalizer PR。
+[#106](https://github.com/ntygod/zhiwei-next/issues/106) / [PR107](https://github.com/ntygod/zhiwei-next/pull/107) 已实现预算合同指定的内存计算、固定渲染和35项独立测试，完整固定工具链 check 428/428通过；原规则要求完整 check、最终 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源。未实际通过前不宣称完成；不创建另一 integrator/finalizer PR。
 
 P0-04 depends=[]，不依赖 P0-03 计算；输入已取得的合成材料，固定渲染和精确计数，结果不是可发送 Capsule 或资格证明。保留旧 compileContext 哨兵，不接生产、检索、存储、Runtime、模型或发送。仅是 Z14 组件证据，Z14/Z15 正式验收仍由 P1 链交付。
 

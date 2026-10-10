@@ -8,7 +8,7 @@ updated: 2026-10-10
 
 ## 当前工作：P0-04 纯预算/选择组件 #106（2026-10-10）
 
-canonical [#106](https://github.com/ntygod/zhiwei-next/issues/106)，唯一分支 `feat/106-context-budget-core`，基于已保护合入的 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`。#104 / PR105 规划已经独立 R3、原 CI/来源和保护合入；本项独立实现其[完整预算合同](../planning/context-budget-preparation.md)，不修改刚生效的规则。实现、测试、当前 PR 与 HEAD 验收以实时 GitHub 记录为准，尚未宣称交付。
+canonical [#106](https://github.com/ntygod/zhiwei-next/issues/106)，唯一分支 `feat/106-context-budget-core`，基于已保护合入的 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`。#104 / PR105 规划已经独立 R3、原 CI/来源和保护合入；本项独立实现其[完整预算合同](../planning/context-budget-preparation.md)，不修改刚生效的规则。唯一 [PR107](https://github.com/ntygod/zhiwei-next/pull/107) 已实现内部预算选择与35项独立测试（含全部4097预算配额和输入排列），固定工具链完整 check 428/428、原始退出码0。最终 HEAD 独立 R3/Ready 与受保护交付仍以实时 GitHub 记录为准，未提前宣称完成。
 
 新增仅限 context-compiler 内部纯预算选择，无生产消费者；不认证材料资格或生成可发送 Capsule。旧 compileContext 与哨兵、P0-01/P0-02/D-04/D-08、正式 P1 安全/存储依赖均保持，不执行受限实验。原 Runtime 来源逐 PR 续期，不能复用前一 PR 的来源证明；最终独立 R3、Ready/live 来源、CI 与 main 回读仍需完成。
 
@@ -211,10 +211,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 322bf58985c44307a2546b047eb3368839b52358
-capture workflow             38020190525
-capture artifact             11657289511
-capture artifact digest      sha256:dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3
+capture head                 1d70a667e454e1698156aa84f0869def9560f379
+capture workflow             38022110861
+capture artifact             11658418106
+capture artifact digest      sha256:26d9ca47fe61c72b4ab593f34cfd7df6613e2a95509c2c5c7c66bfacaef8dd57
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
