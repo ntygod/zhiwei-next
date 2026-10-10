@@ -16,6 +16,7 @@ const T0 = "2026-10-01T00:00:00.000Z";
 const T1 = "2026-10-02T00:00:00.000Z";
 const T2 = "2026-10-03T00:00:00.000Z";
 const T3 = "2026-10-04T00:00:00.000Z";
+const T4 = "2026-10-05T00:00:00.000Z";
 const END = "2026-10-31T00:00:00.000Z";
 const scope: ScopeV2 = { kind: "workspace", workspaceId: "workspace-a" };
 const otherScope: ScopeV2 = { kind: "workspace", workspaceId: "workspace-b" };
@@ -294,14 +295,14 @@ test("goal lifecycle requires direct confirmations and completion of bound crite
   const active = transitionGoal(created, change(), { kind: "activate", confirmation: evidence("activate", { observedAt: T1 }) });
   const paused = transitionGoal(active.current, change(2, T2), { kind: "pause", confirmation: evidence("pause", { observedAt: T2 }) });
   const resumed = transitionGoal(paused.current, change(3, T3), { kind: "resume", confirmation: evidence("resume", { observedAt: T3 }) });
-  const achieved = transitionGoal(resumed.current, change(4, T3), { kind: "achieve",
-    results: [result(resumed.current, { checkedAt: T3, evidence: [evidence("complete", { observedAt: T3 })] })] });
+  const achieved = transitionGoal(resumed.current, change(4, T4), { kind: "achieve",
+    results: [result(resumed.current, { checkedAt: T4, evidence: [evidence("complete", { observedAt: T4 })] })] });
   assert.equal(achieved.current.status, "ACHIEVED");
   assert.equal(achieved.current.revision, 5);
   assert.equal(achieved.action.kind, "achieve");
   assert.equal(input.status, "PROPOSED"); assert.equal(Object.isFrozen(input.criteria), false);
   assert.equal(paused.current.status, "PAUSED"); frozen(achieved);
-  rejects(() => transitionGoal(achieved.current, change(5, T3), { kind: "resume", confirmation: evidence("resume", { observedAt: T3 }) }), "invalid_transition");
+  rejects(() => transitionGoal(achieved.current, change(5, T4), { kind: "resume", confirmation: evidence("resume-again", { observedAt: T4 }) }), "invalid_transition");
   const abandoned = transitionGoal(created, change(), { kind: "abandon", confirmation: evidence("abandon", { observedAt: T1 }) });
   assert.equal(abandoned.current.status, "ABANDONED");
   rejects(() => transitionGoal(abandoned.current, change(2, T2), { kind: "activate", confirmation: evidence("again", { observedAt: T2 }) }), "invalid_transition");
@@ -444,4 +445,82 @@ test("correction explicitly rejects a fully valid other-scope replacement and ne
   const publicReplacement = candidate({ id: "public-replacement", createdAt: T2, updatedAt: T2 });
   rejects(() => correctMemoryClaim(accepted.claim, change(1, T2), 1, publicReplacement, change(1, T2),
     confirmation(publicReplacement, T2)), "validation");
+});
+
+test("Goal achievement rejects one immutable Observation with conflicting metadata across criteria", () => {
+  const input = { ...activeGoal(), privacy: "local-only" as const, criteria: [criterion(),
+    criterion({ id: "criterion-b" as CriterionId, method: "deterministic-test" })] };
+  const first = result(input, { evidence: [evidence("shared-proof", { observedAt: T2 })] });
+  const second = result(input, { criterion: input.criteria[1],
+    evidence: [evidence("shared-proof", { sourceTrust: "verified-tool", observedAt: T2 })] });
+  rejects(() => transitionGoal(input, change(2, T2), { kind: "achieve", results: [first, second] }), "evidence_invalid");
+
+  const sameMethods = { ...input, criteria: [criterion(), criterion({ id: "criterion-b" as CriterionId })] };
+  for (const conflicting of [
+    { privacy: "local-only" as const },
+    { scope: { kind: "global" } as ScopeV2 },
+    { observedAt: T3 },
+  ]) {
+    const other = result(sameMethods, { criterion: sameMethods.criteria[1], checkedAt: T3,
+      evidence: [evidence("shared-proof", { observedAt: T2, fragmentId: "second-fragment", ...conflicting })] });
+    rejects(() => transitionGoal(sameMethods, change(2, T3), { kind: "achieve", results: [first, other] }), "evidence_invalid");
+  }
+});
+
+test("Goal completion cannot reuse its request confirmation or stale evidence by changing checkedAt", () => {
+  const input = activeGoal();
+  rejects(() => transitionGoal(input, change(2, T2), { kind: "achieve",
+    results: [result(input, { evidence: [input.confirmation] })] }), "evidence_invalid");
+  rejects(() => transitionGoal(input, change(2, T2), { kind: "achieve",
+    results: [result(input, { evidence: [evidence("stale-independent-proof", { observedAt: T0 })] })] }), "evidence_invalid");
+  // Even simultaneous creation/activation does not turn the original request into completion evidence.
+  const simultaneous = transitionGoal(goal(), change(1, T0),
+    { kind: "activate", confirmation: evidence("activate", { observedAt: T0 }) }).current;
+  rejects(() => transitionGoal(simultaneous, change(2, T2), { kind: "achieve",
+    results: [result(simultaneous, { evidence: [{ ...simultaneous.confirmation, fragmentId: "other-fragment" }] })] }), "evidence_invalid");
+  const withOptional = { ...input, criteria: [criterion(), criterion({ id: "optional" as CriterionId, required: false })] };
+  rejects(() => transitionGoal(withOptional, change(2, T2), { kind: "achieve", results: [result(withOptional),
+    result(withOptional, { criterion: withOptional.criteria[1], status: "fail", evidence: [evidence("stale-failure", { observedAt: T0 })] })] }), "evidence_invalid");
+});
+
+test("multiple Goal criteria may reuse an identical current Observation regardless of result order", () => {
+  const input = { ...activeGoal(), criteria: [criterion(), criterion({ id: "criterion-b" as CriterionId })] };
+  const shared = evidence("shared-valid-proof", { observedAt: T2 });
+  const results = [result(input, { evidence: [shared], checkedAt: T2 }),
+    result(input, { criterion: input.criteria[1], evidence: [structuredClone(shared)], checkedAt: T3 })];
+  const before = structuredClone(results);
+  for (const ordered of [results, [...results].reverse()]) {
+    const achieved = transitionGoal(input, change(2, T3), { kind: "achieve", results: ordered });
+    assert.equal(achieved.current.status, "ACHIEVED");
+    frozen(achieved);
+  }
+  assert.deepEqual(results, before);
+  assert.equal(input.status, "ACTIVE");
+});
+
+test("Goal results must strictly postdate activation, resume and revision watermarks", () => {
+  const activation = evidence("activation-confirmation", { observedAt: T1 });
+  const active = transitionGoal(goal(), change(1, T1), { kind: "activate", confirmation: activation }).current;
+  for (const proof of [activation, evidence("same-time-independent-source", { observedAt: T1 })]) {
+    rejects(() => transitionGoal(active, change(2, T2), { kind: "achieve", results: [result(active, { evidence: [proof] })] }), "evidence_invalid");
+  }
+  const optional = { ...active, criteria: [...active.criteria, criterion({ id: "optional" as CriterionId, required: false })] };
+  rejects(() => transitionGoal(optional, change(2, T2), { kind: "achieve", results: [result(optional),
+    result(optional, { criterion: optional.criteria[1], status: "fail", evidence: [activation] })] }), "evidence_invalid");
+  const paused = transitionGoal(active, change(2, T2),
+    { kind: "pause", confirmation: evidence("pause-confirmation", { observedAt: T2 }) }).current;
+  const resume = evidence("resume-confirmation", { observedAt: T3 });
+  const resumed = transitionGoal(paused, change(3, T3), { kind: "resume", confirmation: resume }).current;
+  rejects(() => transitionGoal(resumed, change(4, T4), { kind: "achieve",
+    results: [result(resumed, { checkedAt: T4, evidence: [resume] })] }), "evidence_invalid");
+
+  const revision = evidence("revision-confirmation", { observedAt: T2 });
+  const revised = reviseGoal(active, change(2, T2), { intent: "Prepare a revised draft", criteria: active.criteria,
+    priority: "normal", confirmation: revision }).current;
+  const reactivated = transitionGoal(revised, change(3, T2),
+    { kind: "activate", confirmation: evidence("revised-activation", { observedAt: T2 }) }).current;
+  rejects(() => transitionGoal(reactivated, change(4, T3), { kind: "achieve",
+    results: [result(reactivated, { checkedAt: T3, evidence: [revision] })] }), "evidence_invalid");
+  assert.equal(transitionGoal(reactivated, change(4, T3), { kind: "achieve",
+    results: [result(reactivated, { checkedAt: T3, evidence: [evidence("later-independent-verification", { observedAt: T3 })] })] }).current.status, "ACHIEVED");
 });

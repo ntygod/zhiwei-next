@@ -1,9 +1,9 @@
 import {
-  assertGoalV2, assertEntityRefV2, assertIsoTimestampV2, assertRevisionV2,
+  assertGoalV2, assertEntityRefV2, assertIsoTimestampV2, assertRevisionV2, assertEvidenceForScopeV2,
   type GoalV2, type EvidenceRefV2, type EntityRefV2, type AcceptanceCriterion,
 } from "../../domain/src/index.ts";
 import {
-  checkAdditionalEvidence, checkChange, checkEvidence, checkUserEvidence, dataArray, exactObject, initialState, reject, requireState, snapshot,
+  checkAdditionalEvidence, checkChange, checkEvidence, checkUserEvidence, dataArray, exactObject, initialState, mergeEvidence, reject, requireState, snapshot,
   type CognitionChangeV2,
 } from "./cognition-change-v2.ts";
 
@@ -60,6 +60,7 @@ function checkAchievement(goal: GoalV2, change: CognitionChangeV2, results: read
     reject("evidence_invalid", "incomplete_goal_results", "Every goal criterion requires one result");
   }
   const seen = new Set<string>();
+  let allEvidence: readonly EvidenceRefV2[] = [goal.confirmation];
   for (const result of results) {
     exactObject(result, ["goal", "criterion", "status", "evidence", "checkedAt", "validUntil"]);
     assertEntityRefV2(result.goal);
@@ -83,7 +84,14 @@ function checkAchievement(goal: GoalV2, change: CognitionChangeV2, results: read
       reject("validation", "invalid_goal_result", "Goal result status or evidence is invalid");
     }
     checkAdditionalEvidence(goal, [goal.confirmation], result.evidence, result.checkedAt);
+    allEvidence = mergeEvidence(allEvidence, result.evidence);
     if (result.status === "pass" || result.status === "fail") {
+      // No trusted within-millisecond ordering is supplied here. Equal-time evidence might
+      // be the activation/resume/revision request itself, so require a later independent check.
+      if (result.evidence.some(item => item.observedAt <= goal.updatedAt
+        || item.source.id === goal.confirmation.source.id)) {
+        reject("evidence_invalid", "goal_result_not_independent", "Goal result evidence must postdate the current goal and be distinct from its confirmation");
+      }
       const trust = criterion.method === "user-confirmation" ? "user-direct" : "verified-tool";
       if (criterion.method === "model-assisted" || !result.evidence.some(item => item.sourceTrust === trust && item.role === "supports")) {
         reject("evidence_invalid", "goal_result_unverified", "A pass or fail requires bounded independent verification evidence");
@@ -93,6 +101,9 @@ function checkAchievement(goal: GoalV2, change: CognitionChangeV2, results: read
       reject("invalid_transition", "goal_criteria_not_met", "Required goal criteria are not all verified as passed");
     }
   }
+  // One immutable Observation cannot acquire different metadata in separate criterion results.
+  // Identical evidence may support multiple checks; deduplication does not multiply its identity.
+  assertEvidenceForScopeV2(allEvidence, goal.scope, goal.privacy, change.now);
 }
 
 export function transitionGoal(goal: GoalV2, change: CognitionChangeV2, action: GoalActionV2): GoalTransitionV2 {

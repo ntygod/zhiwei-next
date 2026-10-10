@@ -8,7 +8,7 @@
 
 `EntityRefV2` 用 `kind/id/revision` 表示聚合快照；`VersionRefV2`、`ClaimVersionRefV2` 和 `ContentRefV2` 明确表达不可变内容版本。已有 TaskAttempt 没有自有 revision，`TaskAttemptRefV2` 使用 `taskId/attemptId/intentRevision`，不虚构版本。Claim 的聚合 CAS revision 与内容 version 不混用；生命周期变化保存历史，纠正创建新 version 并指向精确旧版本。纯函数仅比较给定内存快照，实际 Store 仍须在同一事务重验并提交。
 
-Candidate/Claim/Hypothesis/Goal 的纯转换返回脱离输入的新快照及必要原始动作记录；接受需要精确候选绑定与明确用户确认或独立结构化验证。模型来源只产生候选/假设，不能凭自评取得事实或任何授权。`SUPPORTED` 假设仍是 inferred；Goal 完成需要逐项绑定原标准的有界证据。Episode、WorkingState、Procedure 在本任务仅有结构/基础不变量，没有学习晋升或服务执行能力。输入里的来源声明与检查记录须由未来受控边界认证，合法结构本身不是已经执行、已经授权或已经持久提交的证明。
+Candidate/Claim/Hypothesis/Goal 的纯转换返回脱离输入的新快照及必要原始动作记录；接受需要精确候选绑定与明确用户确认或独立结构化验证。模型来源只产生候选/假设，不能凭自评取得事实或任何授权。`SUPPORTED` 假设仍是 inferred；Goal 完成需要逐项绑定原标准的有界证据，整组结果必须保持同一 Observation 的元数据一致。pass/fail 证据观察时间须严格晚于当前 Goal 水位，不能复用创建/激活/恢复目标的控制证据；同毫秒缺少可信顺序证明时保守拒绝，需要后续独立确认。Episode、WorkingState、Procedure 在本任务仅有结构/基础不变量，没有学习晋升或服务执行能力。输入里的来源声明与检查记录须由未来受控边界认证，合法结构本身不是已经执行、已经授权或已经持久提交的证明。
 
 Observation v2 与 Local API v1 使用独立版本和 Fixture；Runtime v1、诊断 API、Ledger v1、固定迁移、原 Bootstrap/P0-03 导出均保留。产品接线、跨会话/真实存储/权限与真实场景验收不在本切片证明范围。
 

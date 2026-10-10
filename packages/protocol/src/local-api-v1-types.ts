@@ -59,8 +59,21 @@ export interface LocalApiMemorySearchV1 {
   readonly knownAt?: string;
   readonly limit: number;
 }
+export interface LocalApiOutcomeSummaryV1 {
+  readonly ref: EntityRefV2<"outcome">;
+  readonly status: OutcomeStatus;
+}
 export type LocalApiResultV1 =
-  | Readonly<{ kind: "task"; taskState: TaskState; intentRevision: number; outcome?: Readonly<{ ref: EntityRefV2<"outcome">; status: OutcomeStatus }> }>
+  | Readonly<{
+    kind: "task";
+    /** Historical terminal state is retained when later evidence revises an Outcome. */
+    taskState: TaskState;
+    intentRevision: number;
+    /** Current exact Outcome version; this status determines the current result classification. */
+    outcome?: LocalApiOutcomeSummaryV1;
+    /** Required only when outcome.revision > 1: original same-ID revision 1, matching taskState. */
+    initialOutcome?: LocalApiOutcomeSummaryV1;
+  }>
   | Readonly<{ kind: "goal"; status: GoalStatusV2; affectedRefs: readonly EntityRefV2[] }>
   | Readonly<{ kind: "memory"; affectedRefs: readonly EntityRefV2<"claim">[]; cognitionEpoch: number }>;
 /** Durable receipt representation only; parsing cannot establish that a transaction committed. */
