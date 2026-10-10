@@ -183,14 +183,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本连续性表按现行 Harness 与 manifest 同步至 PR #97；PR #87 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
+本连续性表按现行 Harness 与 manifest 同步至 PR #101；PR #87 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 2679e561bdbf98e94c143219cbef59e3b591bf86
-capture workflow             37922999709
-capture artifact             11612682909
-capture artifact digest      sha256:718e1ff6a693a27bbd51538a13ac931e1d8de66e527fd0e329ab35623d4b6d40
+capture head                 0641b5cf1710cc2dbb4be6d99f1f321e863ff4b4
+capture workflow             38015299672
+capture artifact             11656340371
+capture artifact digest      sha256:0b45fca75d676cd664de35bc24b8c6d48c43ed5402e2d64eeacdb3060e3a439f
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
