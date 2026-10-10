@@ -116,3 +116,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
   }
 }
+
+// Explicit synthetic composition only; not routed by the diagnostic HTTP server.
+export { createSyntheticControlledWorkerSupervisor, SyntheticSupervisorError } from "./runtime/controlled-worker-supervisor.ts";
+export type { SyntheticWorkerSupervisor, SyntheticWorkerSupervisorOptions } from "./runtime/controlled-worker-supervisor.ts";

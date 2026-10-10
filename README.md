@@ -17,7 +17,7 @@
 
 ## 当前实现
 
-当前方向为 **design-v2 / P0**，产品实现仍处 Bootstrap。已交付 Runtime v1、SQLite Ledger v1、固定工具链与 CLI 方向、受保护本地诊断、场景运行器和有限安全实验。完整会话、记忆、学习、主动、工作台和桌面仍是后续任务，不因为设计定案而成为已实现功能。
+当前产品验收阶段为 **design-v2 / P0**。已交付 Runtime v1、SQLite Ledger v1、固定工具链与 CLI 方向、受保护本地诊断、场景运行器，以及按[开发与验收分离](docs/harness/development-and-acceptance.md)推进的 Task/Outcome、预算、P1 领域合同与 v2 认知持久化。当前 [P1-03 受控 Worker/Broker](docs/architecture/controlled-pi-worker.md)只接固定合成材料和接收器；完整会话/真实授权、学习、主动、工作台和桌面仍待相应任务与验收，不能从组件已实现推导产品可用。
 
 新顺序为：接入前置 → 连续协作 Alpha → 可验证学习 → 主动协作 → 可靠委托与完整桌面 v1 → 跨 Runtime 扩展。P1 就有可用工作台与结果验证；原 M0—M7 计划保留为历史，不再自动决定下一任务。全部既有质量与合并门保留。
 

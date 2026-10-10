@@ -193,14 +193,14 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 ```text
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
-source head                  0925e00732cd567924b82f999bc7dcaf9208ef3b
-source workflow              38043701983
+source head                  f065131f4f3687ba0cefdeec91f09c19b62e5bcf
+source workflow              38047135909
 source run attempt           2
-source artifact              11666950683
-source artifact digest       sha256:5804dfea58c0fea5bfd9e7d66b48c54e9d653aff07c7f460be1ef244fd1b16c4
+source artifact              11667816687
+source artifact digest       sha256:b5dcf633e0fbc7d832d3a5c221190bcbd0b51d8f7c5d601718014feb5e2d0147
 comparison run attempt       1
-comparison artifact          11667400285
-comparison artifact digest   sha256:843dfdb4a2f96a833fa52e3662c8b304c48804479f566ced6ef8e68fb86acb70
+comparison artifact          11668370944
+comparison artifact digest   sha256:f824d2f714c22e8ecd79d4d0e70fa8fd216f9997b3fbe7668570d178721bcd75
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -209,7 +209,7 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-PR #113 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
+PR #115 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。最终候选恢复正式compare路径；Ready live provenance必须重新验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 
