@@ -14,7 +14,7 @@ scenario: sdk-rpc-parity
 instrumentation provenance refresh: fixed-container and Artifact verified
 ```
 
-本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #109 Draft 固定容器 Run `38037392722` 已经成功完成 Fresh Capture、两个 Checker、committed Fixture 校验和完整对象比较；其 Artifact `11663923009` 与 committed Fixture 逐字节绑定，SDK Manifest 继续处于 `verified` 状态。该 Run 的 Capture HEAD 为 `2ae982c3c62764ad69fe9290c2f3e6ba70679425`。当前 Worker 双 attempt 来源已按原合同续期；最终 provenance 候选仍须核验来源 ancestry 并通过真实 Ready/live 检查。
+本记录比较固定 npm发布 Artifact上的进程内 `AgentSession` SDK、原始 JSONL RPC Worker与发布包 `RpcClient`执行同一个无工具任务时的接受、运行中、稳定和关闭边界。PR #111 Draft 固定容器 Run `38040347283` 已经成功完成 Fresh Capture、两个 Checker、committed Fixture 校验和完整对象比较；其 Artifact `11665431880` 与 committed Fixture 逐字节绑定，SDK Manifest 继续处于 `verified` 状态。该 Run 的 Capture HEAD 为 `7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8`。当前 Worker 双 attempt 来源已按原合同续期；最终 provenance 候选仍须核验来源 ancestry 并通过真实 Ready/live 检查。
 
 Committed Fixture：
 
@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     2ae982c3c62764ad69fe9290c2f3e6ba70679425
-workflow run     38037392722
-artifact id      11663923009
-artifact digest  sha256:309294280c6c37c1dd7df2321fd8700854ff510a743cdf8dbb7d017ea220d2bb
+capture head     7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8
+workflow run     38040347283
+artifact id      11665431880
+artifact digest  sha256:ed0436b8d7b1cb662a518c7153ac6c93eed6c7028d60c1decfc3a026f58f6c59
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38037392722` 属于当前 PR #109，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源已按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38040347283` 属于当前 PR #111，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源已按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

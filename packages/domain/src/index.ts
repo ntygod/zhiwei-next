@@ -109,3 +109,20 @@ export type {
   VerificationMethod, AcceptanceCriterion, TaskIntent, TaskAttempt, Task,
   TaskEvidenceRef, CriterionBinding, CriterionResult, Outcome,
 } from "./task.ts";
+
+// Formal P1 contracts are opt-in; the Bootstrap and P0-03 exports above are unchanged.
+export type {
+  ScopeV2, PrivacyV2, SourceTrustV2, EpistemicV2, EntityKindV2, EntityRefV2, ContentRefV2,
+  ClaimVersionRefV2, VersionedEntityKindV2, VersionRefV2, TaskAttemptRefV2, EvidenceRefV2, CognitionMetadataV2, ClaimKindV2, CandidateStatusV2,
+  ClaimStatusV2, HypothesisStatusV2, GoalStatusV2, ProcedureStatusV2, MemoryCandidateV2,
+  MemoryClaimV2, HypothesisV2, GoalV2, EpisodeV2, WorkingStateV2, ProcedureStepV2, ProcedureV2,
+} from "./cognitive-v2.ts";
+export { domainErrorV2, DomainValidationErrorV2 } from "./errors-v2.ts";
+export type { DomainErrorCodeV2, DomainErrorV2, DomainResultV2 } from "./errors-v2.ts";
+export {
+  assertIdentifierV2, assertTextV2, assertRevisionV2, assertIsoTimestampV2, assertExpectedRevisionV2,
+  assertPrivacyV2, assertSourceTrustV2, assertEpistemicV2, assertScopeV2, scopeKeyV2, sameScopeV2,
+  isScopeWithinV2, assertEntityRefV2, assertVersionRefV2, assertTaskAttemptRefV2, assertContentRefV2, assertClaimVersionRefV2, assertEvidenceRefV2,
+  assertEvidenceForScopeV2, assertMemoryCandidateV2, assertMemoryClaimV2, assertHypothesisV2,
+  assertGoalV2, assertEpisodeV2, assertWorkingStateV2, assertProcedureV2,
+} from "./validation-v2.ts";

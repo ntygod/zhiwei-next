@@ -40,3 +40,8 @@ export interface NormalizedRuntimeEvent {
   };
   readonly sourceEventType: string;
 }
+
+// Independent P1 wire contracts; neither replaces Runtime v1 nor enables data endpoints.
+export { CognitiveProtocolError } from "./cognitive-wire.ts";
+export * from "./observation-v2.ts";
+export * from "./local-api-v1.ts";

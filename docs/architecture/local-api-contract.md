@@ -1,6 +1,6 @@
 # 本地 API、命令与事件详设
 
-状态：architecture-1 / Local API v1 目标，尚未实现这些业务 endpoint。已有 health/meta/doctor 使用[原诊断合同](local-diagnostics.md)，诊断凭据不能访问这里的数据接口。
+状态：architecture-1 / Local API v1 目标，尚未实现这些业务 endpoint。P1-01 / #110 提供独立的核心 Task/Goal/记忆命令、查询、receipt/error DTO 解析与序列化 Fixture，仅由合成测试调用；Workspace 写命令与单范围查询不实现 HTTP、鉴权、实际提交或全目录 endpoint。Global 写命令、安装/配对和后续阶段接口继续按对应任务实现，不复用 Workspace envelope。已有 health/meta/doctor 使用[原诊断合同](local-diagnostics.md)，诊断凭据不能访问这里的数据接口。
 
 ## 1. 协议分层
 

@@ -6,6 +6,20 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
+
+canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分支 `feat/110-cognitive-domain-contracts`，从已保护合入 main `009387778d2f473945e89239557bf2d16735d242` 开始。#108 / PR109 已完成开发/验收分离治理，最新 main 回读无开放 PR/Incident、远端仅 main；本项是独立产品合同实现，不修改新治理来让自身通过。
+
+范围为 domain/cognition-core/protocol 的正式 Scope、正交隐私/信任/认识状态、认知版本与纯转换、Observation v2 和 Local API DTO。保留 Bootstrap/v1 Ledger、固定迁移、Runtime 与 P0-03 Task/Outcome；只有合成测试消费新入口，无生产接线、模型、真实个人数据、外发或凭据。实现状态由[执行索引](execution-mode.json)记录，产品验收仍 `not_run`；原 P0-01/02、D-04/D-08、G-2/G-5 及真实启用门保持，受限实验不执行。
+
+唯一 Draft [PR111](https://github.com/ntygod/zhiwei-next/pull/111) 的实现提交 `0cc3d85c57f2b85d9bab16715b3d42b8c0e6cdd6` 已完成代码范围和开发验证：固定 Node22.23.1/npm10.9.8 完整 `npm run check` 原始 exit0，499/499 产品测试（新增71项）通过，严格类型94 roots。独立冷审发现并修复 Goal 结果跨标准伪造来源/控制证据重用，以及历史终态与新 Outcome revision 不能共存的兼容缺口；新增回归通过。正反补丁恢复基线精确 tree 后再正向恢复候选 tree 已验证。
+
+执行索引的 `implemented` 只引用已存在的本 PR 代码提交与开发证据，候选仍待最终精确 HEAD 新独立 R3、真实 Ready/live、完整 CI、保护合入与 main 回读；不是预填未来 merge SHA、已合入或产品验收。当前 PR 的 SDK 来源 `7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8` / run `38040347283` 与 Worker 来源 `0112810f62390a633d2690f30d4e3127b983d7a1` / run `38040583324` 两 attempts 已严格核验原 ZIP、来源身份与完整对象；临时 guard 已恢复原 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。最终当前 HEAD 仍须真实门禁，Draft 跳过不算通过。
+
+只有本 PR 保护合入并核验 main 后，下一独立实现才按原 P1-02 做真实临时 SQLite 产品存储/事务合同；不得提前把本内存 CAS 或 DTO 当持久提交、安全授权或场景验收。
+
+以下为历史工作快照，不是开放 WIP 或新选工入口。
+
 ## 当前工作：开发与验收分离 #108（2026-10-10）
 
 唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；开工时无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
@@ -217,14 +231,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #111；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 2ae982c3c62764ad69fe9290c2f3e6ba70679425
-capture workflow             38037392722
-capture artifact             11663923009
-capture artifact digest      sha256:309294280c6c37c1dd7df2321fd8700854ff510a743cdf8dbb7d017ea220d2bb
+capture head                 7f83f60ea274e8da5da4d0fcfeb8eaa4ce67fbf8
+capture workflow             38040347283
+capture artifact             11665431880
+capture artifact digest      sha256:ed0436b8d7b1cb662a518c7153ac6c93eed6c7028d60c1decfc3a026f58f6c59
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
