@@ -6,6 +6,14 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：P0-03 纯 Task/Outcome 组件 #102（2026-10-10）
+
+canonical [#102](https://github.com/ntygod/zhiwei-next/issues/102)，唯一分支 `feat/102-task-outcome-core`，基于已保护合入的 main `79f156b8abcb5110e62f89427a021c6e8384eaf4`。规划 #100 / PR101 已交付；本独立任务依生效的 [P0-03 准备边界](../planning/core-preparation-boundary.md)实现 domain/cognition-core 纯 Task/Attempt/Outcome 类型、规则及确定性测试，尚未完成验证与交付。实际 primary PR 和精确 HEAD 以 GitHub 为准。
+
+仅合成内存输入，无生产调用方、I/O、模型、存储或 Runtime 接线。P0-01/P0-02、D-04/D-08 与全部正式接入门仍未完成；组件测试不认证 Z03/Z16 或 P1。没有重跑受限安全实验/旧漏洞诊断，也没有恢复已取消的旧本地验证会话。PR99 关闭未合并、#98 未交付保持；不恢复 UI 工作。规则、checker、Workflow 与门禁不变。
+
+以下规划工作记录保留历史背景，不是并行 WIP。
+
 ## 当前工作：核心实现准备拆分 #100（2026-10-10）
 
 canonical [#100](https://github.com/ntygod/zhiwei-next/issues/100)，分支 `docs/100-core-preparation-plan`，从 main `e08ef068f3c0075a11155be50a871f8d851ed24c` 创建。所有者明确停止视觉打磨并要求继续核心开发；本项只调整准备与正式接入顺序，新增 P0-03 纯 Task/Outcome 规则任务，不实现产品代码。P0-01/P0-02 原对象与全部门保持；P1-01 同时依赖 P0-02/P0-03。旧规则独立 R3、完整 check/CI/保护合入前，不启用新范围。
