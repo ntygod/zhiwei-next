@@ -37,6 +37,7 @@ export interface TaskAttempt {
   readonly cancellationRequested: boolean;
   readonly completeness: "not-settled" | "complete" | "incomplete";
   readonly outcomes: readonly Outcome[];
+  readonly unresolvedActions: readonly TaskEvidenceRef[];
 }
 export interface Task {
   readonly id: TaskId;
@@ -123,4 +124,46 @@ export function assertTaskIntent(intent: TaskIntent): void {
 }
 export function isTerminalTaskState(state: TaskState): boolean {
   return ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "UNVERIFIABLE"].includes(state);
+}
+
+export function assertTaskOutcomeHistory(attempt: TaskAttempt): void {
+  let recordedAt = attempt.createdAt;
+  let outcomeId: string | undefined;
+  for (const [index, outcome] of attempt.outcomes.entries()) {
+    assertTaskText(outcome.id, "outcome id"); assertTaskTime(outcome.recordedAt);
+    if (outcome.taskId !== attempt.taskId || outcome.attemptId !== attempt.id || outcome.workspaceId !== attempt.workspaceId
+      || outcome.intentRevision !== attempt.intent.revision) throw new Error("historical outcome binding conflict");
+    if (outcome.revision !== index + 1 || (outcomeId !== undefined && outcome.id !== outcomeId)) throw new Error("historical outcome revision conflict");
+    if (outcome.recordedAt < recordedAt || outcome.recordedAt > attempt.updatedAt) throw new Error("historical outcome time conflict");
+    if (!["completed", "partial", "failed", "cancelled", "unverifiable"].includes(outcome.status)) throw new Error("unknown historical outcome status");
+    if (!Array.isArray(outcome.criteriaResults) || outcome.criteriaResults.length !== attempt.intent.criteria.length) throw new Error("historical criteria incomplete");
+    const ids = new Set<string>();
+    for (const result of outcome.criteriaResults) {
+      const criterion = attempt.intent.criteria.find(item => item.id === result.criterionId);
+      if (!criterion || ids.has(result.criterionId) || result.criterionRevision !== criterion.revision || result.method !== criterion.method
+        || result.taskId !== attempt.taskId || result.attemptId !== attempt.id || result.workspaceId !== attempt.workspaceId
+        || result.intentRevision !== attempt.intent.revision) throw new Error("historical criterion binding conflict");
+      ids.add(result.criterionId); assertTaskTime(result.checkedAt); assertTaskText(result.explanation, "historical explanation");
+      if (result.checkedAt < attempt.createdAt || result.checkedAt > outcome.recordedAt) throw new Error("historical criterion time conflict");
+      assertTaskEvidence(result.evidence, result.status === "pass" || result.status === "fail");
+      if (result.status === "pass" || result.status === "fail") {
+        assertTaskTime(result.validUntil);
+        if (result.validUntil <= outcome.recordedAt || result.method === "model-assisted") throw new Error("invalid historical verification");
+      } else if (result.status === "unknown") {
+        if (!["missing-evidence", "validator-unavailable", "validator-error", "incomplete", "model-only"].includes(result.reason)) throw new Error("unknown historical verification reason");
+      } else if (result.status !== "not-applicable") throw new Error("unknown historical criterion status");
+    }
+    outcomeId = outcome.id; recordedAt = outcome.recordedAt;
+  }
+}
+
+/** Compare contract fields, independent of JavaScript object key insertion order. */
+export function sameTaskIntent(left: TaskIntent, right: TaskIntent, includeRevision = true): boolean {
+  return (!includeRevision || left.revision === right.revision) && left.request === right.request
+    && left.constraints.length === right.constraints.length && left.constraints.every((value, index) => value === right.constraints[index])
+    && left.criteria.length === right.criteria.length && left.criteria.every(criterion => {
+      const other = right.criteria.find(value => value.id === criterion.id);
+      return other !== undefined && criterion.revision === other.revision && criterion.description === other.description
+        && criterion.required === other.required && criterion.method === other.method;
+    });
 }

@@ -84,3 +84,7 @@ export function correctClaim(current: MemoryClaim, correction: ClaimCorrection):
 
   return Object.freeze({ previous, current: replacement });
 }
+
+export { createTask, transitionTask, retryTask, reviseTaskIntent } from "./task-transitions.ts";
+export type { AttemptReceipt, TaskAction, TaskChange, TaskTransitionRecord, TaskTransition } from "./task-transitions.ts";
+export { deriveOutcome } from "./outcome-rules.ts";

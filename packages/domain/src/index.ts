@@ -102,7 +102,7 @@ export function assertConfidence(confidence: number): void {
 
 export {
   assertTaskText, assertTaskRevision, assertTaskTime, assertTaskEvidence, assertTaskIntent,
-  isTerminalTaskState,
+  isTerminalTaskState, assertTaskOutcomeHistory, sameTaskIntent,
 } from "./task.ts";
 export type {
   TaskId, TaskAttemptId, CriterionId, OutcomeId, TaskState, OutcomeStatus,
