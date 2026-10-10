@@ -8,7 +8,7 @@ updated: 2026-10-10
 
 ## 当前工作：开发与验收分离 #108（2026-10-10）
 
-唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
+唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；开工时无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
 
 本独立 R3 治理仅定案[代码开发与产品验收分离](development-and-acceptance.md)。原任务/验收 DAG 保留；新增执行索引记录实现依赖与双状态，不复制任务内容。本治理仍走旧规则，保护合入后下一独立实现直接进入 P1-01，合成输入编写正式领域/协议代码；不再循环新增 P0 准备卡。P0-01/02、D-04/D-08、G-2/G-5 仍未验收，不执行受限实验、不授予真实数据/模型/外发/凭据/部署许可。最终 HEAD 批准/CI/合入均以实时 GitHub 为准。
 
@@ -217,7 +217,7 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源尚待完成，未将正常 Worker success 作为原 failure-shape 来源。SDK / RPC parity 当前 `verified` Fixture 身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源尚待完成，未将正常 Worker success 作为原 failure-shape 来源。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
