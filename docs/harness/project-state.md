@@ -6,6 +6,16 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
+
+canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分支 `feat/110-cognitive-domain-contracts`，从已保护合入 main `009387778d2f473945e89239557bf2d16735d242` 开始。#108 / PR109 已完成开发/验收分离治理，最新 main 回读无开放 PR/Incident、远端仅 main；本项是独立产品合同实现，不修改新治理来让自身通过。
+
+范围为 domain/cognition-core/protocol 的正式 Scope、正交隐私/信任/认识状态、认知版本与纯转换、Observation v2 和 Local API DTO。保留 Bootstrap/v1 Ledger、固定迁移、Runtime 与 P0-03 Task/Outcome；只有合成测试消费新入口，无生产接线、模型、真实个人数据、外发或凭据。实现状态由[执行索引](execution-mode.json)记录，产品验收仍 `not_run`；原 P0-01/02、D-04/D-08、G-2/G-5 及真实启用门保持，受限实验不执行。
+
+正在开发与确定性检查；首个实质提交后创建唯一 Draft PR。最终完整 HEAD 的独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main provenance 均须实际完成，未预记交付或产品验收。
+
+以下为历史工作快照，不是开放 WIP 或新选工入口。
+
 ## 当前工作：开发与验收分离 #108（2026-10-10）
 
 唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；开工时无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
