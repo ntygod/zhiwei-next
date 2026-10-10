@@ -6,7 +6,15 @@ status: active
 updated: 2026-10-10
 -->
 
-## 当前工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
+## 当前工作：P1-02 正文生命周期与认知事务 #112（2026-10-10）
+
+canonical [#112](https://github.com/ntygod/zhiwei-next/issues/112)，唯一 `feat/112-cognitive-persistence` / Draft [PR113](https://github.com/ntygod/zhiwei-next/pull/113)，从已保护 main `e996451f1c601b5d4859c07030bfeabb290f5371` 开始。开工已核实无开放 PR/Incident、远端仅 main；#44/#67 原人类输入保留。P1-01 / PR111 已通过最终 R3、499 项完整测试、Ready/live、保护合入与 main provenance，#110 已关闭；产品验收仍 `not_run`。
+
+本项仅实现 `memory-store` 独立 v2 内容/认知存储与真实隔离临时数据库开发验证。当前正文文件与独立恢复日志适配器已由首个实质提交 `07f625177e13fee8502e0cfa6e9e10e29d96ee86` 发布；固定新增迁移/manifest、Observation/Claim 事务、必要 P1 认知快照、逻辑遗忘/受管副本与恢复隔离正在集成。实施状态 `in_progress`，不是已交付或产品验收。
+
+保留 0001/v1 原合同，不接真实用户数据、模型、凭据或生产入口。原 #90/preintegration-safety 及等价争议动态诊断不运行；D-04/D-08、G-2/G-5 与真实启用门不变。完整最终 check、精确 HEAD 独立 R3、当前 PR Runtime 来源、Ready/live、CI 与受保护合入仍待完成。以下旧段落是开发期历史快照，不能覆盖本段已核实交付状态。
+
+## 历史工作：P1-01 正式认知与作用域合同 #110（2026-10-10）
 
 canonical [#110](https://github.com/ntygod/zhiwei-next/issues/110)，唯一分支 `feat/110-cognitive-domain-contracts`，从已保护合入 main `009387778d2f473945e89239557bf2d16735d242` 开始。#108 / PR109 已完成开发/验收分离治理，最新 main 回读无开放 PR/Incident、远端仅 main；本项是独立产品合同实现，不修改新治理来让自身通过。
 
