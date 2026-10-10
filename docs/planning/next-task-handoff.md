@@ -1,6 +1,6 @@
 # 下一开发上下文交接
 
-当前方向：design-v2 / P0，停止视觉打磨，持续推进核心。当前独立规划 work item [#104](https://github.com/ntygod/zhiwei-next/issues/104)，分支 `docs/104-context-budget-plan`；PR/HEAD/CI 必须实时回读，不预填批准或合入。
+当前方向：design-v2 / P0，停止视觉打磨，持续推进核心。当前独立实现 work item [#106](https://github.com/ntygod/zhiwei-next/issues/106)，分支 `feat/106-context-budget-core`；PR/HEAD/CI 必须实时回读，不预填批准或合入。
 
 ## 先读什么
 
@@ -10,13 +10,15 @@
 
 ## 当前真实起点
 
+#104 / PR105 已完成规划并受保护合入 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`，#104 已关闭；P0-04 精确准备合同对本独立任务生效，规则不在本次自改。
+
 PR103 已受保护合入 main `c32a13d65fbf484e099bca432502f03ba00a61e1`，#102 已关闭。P0-03 纯 Task/Attempt/Outcome 组件已交付：新增69测试、完整393测试通过；无生产消费者，不证明 Z03/Z16 端到端、P1-01 整体或真实持久 CAS/验证器。
 
 Runtime v1、SQLite Ledger v1、固定工具链/CLI、有限诊断与场景运行器保留。D-04/D-08 仍 Proposed，P0-01/P0-02 未完成。不得重跑受限实验、替换环境规避限制或把旧批准延伸到新范围。
 
 ## 下一可执行目标
 
-先核实 #104 的唯一 primary PR 已按任务开始时旧规则完成当前 HEAD 独立 R3、完整 check、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源；未合入前不实现 P0-04。合入后另建独立 implementation work item，仅实现预算合同指定的内存计算和测试。
+在 #106 唯一 primary PR 实现预算合同指定的内存计算、固定渲染和确定性测试；原规则要求完整 check、最终 HEAD 新独立 R3、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源。未实际通过前不宣称完成；不创建另一 integrator/finalizer PR。
 
 P0-04 depends=[]，不依赖 P0-03 计算；输入已取得的合成材料，固定渲染和精确计数，结果不是可发送 Capsule 或资格证明。保留旧 compileContext 哨兵，不接生产、检索、存储、Runtime、模型或发送。仅是 Z14 组件证据，Z14/Z15 正式验收仍由 P1 链交付。
 

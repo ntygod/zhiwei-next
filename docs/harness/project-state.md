@@ -6,6 +6,14 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：P0-04 纯预算/选择组件 #106（2026-10-10）
+
+canonical [#106](https://github.com/ntygod/zhiwei-next/issues/106)，唯一分支 `feat/106-context-budget-core`，基于已保护合入的 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`。#104 / PR105 规划已经独立 R3、原 CI/来源和保护合入；本项独立实现其[完整预算合同](../planning/context-budget-preparation.md)，不修改刚生效的规则。实现、测试、当前 PR 与 HEAD 验收以实时 GitHub 记录为准，尚未宣称交付。
+
+新增仅限 context-compiler 内部纯预算选择，无生产消费者；不认证材料资格或生成可发送 Capsule。旧 compileContext 与哨兵、P0-01/P0-02/D-04/D-08、正式 P1 安全/存储依赖均保持，不执行受限实验。原 Runtime 来源逐 PR 续期，不能复用前一 PR 的来源证明；最终独立 R3、Ready/live 来源、CI 与 main 回读仍需完成。
+
+以下段落为已完成规划及历史快照，不是额外开放 WIP。
+
 ## 当前工作：P0-04 预算准备规划 #104（2026-10-10）
 
 canonical [#104](https://github.com/ntygod/zhiwei-next/issues/104)，唯一分支 `docs/104-context-budget-plan`，基于 main `c32a13d65fbf484e099bca432502f03ba00a61e1`。PR103/#102 已交付 P0-03，69新增/393完整测试通过，无生产消费者。本项仅定案[P0-04 纯预算/选择准备](../planning/context-budget-preparation.md)及精确准备边界，不实现算法；最终 HEAD 旧规则独立 R3/CI/来源/保护合入前不得使用新规则。
