@@ -8,15 +8,17 @@ updated: 2026-10-10
 
 ## 当前工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
 
-canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一工作分支 `feat/116-persistent-task-sessions`，从最新 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a` 开始；reconciliation 无开放 PR/Incident，远端仅 main，已核对 #44/#67 人类输入及重复任务。
+canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分支 `feat/116-persistent-task-sessions` / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。开工 reconciliation 无开放 PR/Incident，#44/#67 人类输入已核对；P1-03/PR115 已完整交付并关闭 #114。
 
-P1-03 / [PR115](https://github.com/ntygod/zhiwei-next/pull/115) 已完成最终独立 R3、669 项完整测试、Ready CI/live、Autonomous Merge 与 main provenance，#114 已关闭。下方 P1-03 段落保留开发期历史，不再代表开放 WIP。
+完整代码已发布 [5d378978b18f7f0368ca241d5cba0a1d2f326fd8](https://github.com/ntygod/zhiwei-next/commit/5d378978b18f7f0368ca241d5cba0a1d2f326fd8)，实现固定前向 schema3、SessionContract/ownerEpoch、Task/Attempt/unknown Outcome 精确历史、WorkingState/真实 Observation/输入、receipt/Outbox/快照、独立配对/CSRF/Scope API、CLI 和受控 Worker 持久接线。全部代码只用于自有临时合成安装，普通入口仍诊断-only。
 
-本项按原 P1-04 实现 SessionContract/ownerEpoch、Task/Attempt/Outcome 精确历史、输入与 WorkingState 所需持久真源、committed receipt/Outbox/cursor/快照、独立配对/CSRF/Scope 数据 API 与 CLI。实现 `in_progress`，产品 Z10/Z11/Z12 `not_run`；真实入口保持关闭。初始合成 Supervisor 身份接线只允许 Task 身份/fence，不允许修改固定 Prompt、工具、模型目的地或凭据；必须由服务在 spawn/dispatch 前提交精确绑定，结构合法不构成授权证明。
+该候选在工作区不可访问后重新构建，历史组件结果没有作为新证据。新 Node22.23.1/npm10.9.8 原完整 check exit0：766/766 测试，144 strict roots；发布 tree `4cd40546e360b1bcbdbf6d03e282d461bda8f2c8` 与验证树逐字一致。含13项实际 SQLite/HTTP/CLI/SSE/合成 Worker 集成、重启/中断/取消/暂停关闭边界、输入读回及并发接纳。当前完整 HEAD 新独立 R3、Ready/live、保护合入与 main 回读仍待完成，不能视为已合入。
 
-基线正式 Node22.23.1/npm10.9.8 完整 check 已通过 669/669；当前开发变更仍须完成全部新事务/服务验证、当前 HEAD 新独立 R3、当前 PR 原 Runtime 来源、Ready/live 与保护合入。原 #90 及等价争议 Private/链接替换/备份攻防实验不运行；D-04/D-08、G-2/G-5、真实模型/账户/数据/部署均不启用。
+执行索引 `implemented` 引用已存在代码；Z10/Z11/Z12 产品验收保持 `not_run`，官方 Pi CLI+新扩展完整进程组合也 `not_run`。P1-05 为下一实现，但须本 PR 完成交付与新 reconciliation 后才开工。成功验证/Episode 属于 P1-07；不靠模型查询进度，不开启后台自治。
 
-当前完整实现候选在临时工作区不可访问后重新构建；历史组件测试不计入新 HEAD 验证。新候选使用本地分批提交及精确内容快照，原比较器已本地恢复，当前 PR Runtime 原来源只允许读取原 artifact 重建证据，不重新采集。当前开发状态仍 `in_progress`，最终完整检查与独立审查待新树完成。
+PR117 原 SDK/Worker 来源及全部原 ZIP 从同一 artifact 读回，摘要与原保存值一致；原完整比较/validator 重新验证，无 Runtime 重新采集。比较器恢复精确原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90`；Workflow/normalizer/接受条件未改。来源元数据不代表产品验收或新扩展组合可用。
+
+原 #90/preintegration-safety、Private/链接替换/备份攻击及等价争议动态诊断不运行，不绕过具体拒绝。v1/0001/0002、Accepted 范围不改；真实模型/账户凭据、个人数据、外发、部署、新持续权限不启用。D-04/D-08 与 G-2/G-5 维持原门。
 
 ## 历史工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
 
