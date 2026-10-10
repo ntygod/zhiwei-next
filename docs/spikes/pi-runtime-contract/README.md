@@ -190,10 +190,10 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 322bf58985c44307a2546b047eb3368839b52358
-capture workflow             38020190525
-capture artifact             11657289511
-capture artifact digest      sha256:dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3
+capture head                 1d70a667e454e1698156aa84f0869def9560f379
+capture workflow             38022110861
+capture artifact             11658418106
+capture artifact digest      sha256:26d9ca47fe61c72b4ab593f34cfd7df6613e2a95509c2c5c7c66bfacaef8dd57
 external Provider prompts    0
 ```
 
@@ -540,3 +540,16 @@ P0-04 规划 #104 按现行当前 PR 来源合同在同一 Draft PR 续期。SDK
 两次原日志均先完成两个严格 Checker 与完整对象相等，再由明确三行 PR105 recapture-only guard 产生受控 CLI failure；不是 Runtime 故障或正常比较不相等。本补丁随比较器精确恢复原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90` 发布；原比较器对两份原 JSON 的正常完整 compare 已通过。原 ZIP 没有重新打包；Workflow、来源 validator、normalizer、base/wrapper、frozen content 和接受谓词无净变化，历史各节正文保留。
 
 这仅续期既有 Runtime 来源，不实现 P0-04 算法、不执行受限实验或旧漏洞诊断、不恢复旧取消会话。最终新 HEAD 仍须独立 R3、原生完整 CI 与真实 Ready/live provenance；Draft 跳过的 live gate 不算通过。来源不证明上下文资格、真实请求快照、Z14/Z15 或任何安全门已完成。
+
+## 2026-10-10：P0-04 纯预算实现 PR107 当前来源续期
+
+[#106](https://github.com/ntygod/zhiwei-next/issues/106) / [PR107](https://github.com/ntygod/zhiwei-next/pull/107) 的来源为当前 PR 新采集，不复用 PR105。SDK source `1d70a667e454e1698156aa84f0869def9560f379`，成功 run `38022110861` attempt1 / job `114125132237`，Artifact `11658418106` 原 ZIP 10441 bytes，SHA-256 `26d9ca47fe61c72b4ab593f34cfd7df6613e2a95509c2c5c7c66bfacaef8dd57`。唯一 result.json 122178 bytes 与 committed 字节/完整对象一致，原严格 checker 和 ZIP validator 通过。
+
+同一正常成功 run 的 Worker job `114125132412`、Artifact `11658972809` 已先证明两个严格检查及完整对象相等，再按现行 failure-shape 来源合同临时增加 comparison-success 后 guard。Guard source `fc4f86d0ce31466d516e2181b46546200352571d` 的 run `38022297204`：
+
+- comparison attempt1 / job `114125694698` / Artifact `11657794299`，原 ZIP SHA-256 `92d5086678b4448baec72e920b730d6f735070c04f14c2ec267f3abbc730fde3`
+- source attempt2 / job `114126034618` / Artifact `11658743590`，原 ZIP SHA-256 `a8207bb7cbcb7745d87fe35437a49cd551fb1aa2d0d572e26e98d46d177b13a5`
+
+只在保存并验证第一份原 ZIP 后重跑精确 Worker job 一次，不重跑整个 Workflow/all-failed；第二次完成后重新 live 下载第一份 ZIP，逐字节相同。两次 capture/fresh/committed/upload 成功，原日志都先记录严格检查与完整对象相等，随后明确 guard failure；不是 Runtime 内容差异。原 run/job/artifact/paired validators 通过，两份唯一 result.json 均为72731 bytes、SHA-256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`，逐字节及完整对象均与 committed v2 相同。ZIP 未重打包。
+
+最终候选已恢复原 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`；normalizer、validator、Workflow、冻结内容与fingerprint不变。两 manifest 仅续期来源；实际最终 HEAD 严格祖先关系、独立 R3、Ready/live 门与 CI 仍由真实远端回读验收，Draft 跳过不算通过。初始 PR 的 governance-change:no 与原 checker 对连续性文档路径的机械规则冲突，已按原规则改为 yes，未改 checker 或接受失败轮次为通过。
