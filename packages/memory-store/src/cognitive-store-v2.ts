@@ -9,10 +9,10 @@ import {
 } from "../../domain/src/index.ts";
 import {
   canonicalJsonV1, parseObservationV2, serializeObservationV2,
-  type ObservationV2,
+  type ObservationV2, type LocalApiCommandV1,
 } from "../../protocol/src/index.ts";
 import {
-  configureCognitiveDatabaseV2, applyCognitiveMigrationsV2, verifyCognitiveDatabaseV2,
+  configureCognitiveDatabaseV2, applyTaskMigrationsV1, verifyTaskDatabaseV1,
 } from "./cognitive-schema-v2.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 import { ContentFilesV2, type ContentFileDescriptorV2 } from "./content-files-v2.ts";
@@ -26,13 +26,19 @@ import {
 import { splitClaimV2, hydrateClaimV2, parseCognitiveRecordV2, cognitiveRecordMetadataV2, parseCognitiveRecordMetadataV2,
   type CognitiveRecordKindV2, type CognitiveRecordByKindV2, type CognitiveRecordMetadataV2 } from "./cognitive-codec-v2.ts";
 
-/** No daemon/API/model consumer is wired to this synthetic development entry. */
+import { TaskStoreEngineV1, type TaskStoreHostV1 } from "./task-store-v1.ts";
+import { TaskExecutionStoreEngineV1 } from "./task-execution-store-v1.ts";
+import type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1 } from "./task-store-v1-types.ts";
+import type { TaskExecutionPersistenceV1 } from "./task-execution-v1-types.ts";
+
+/** Default-disabled synthetic composition; no real data or external model boundary. */
 export interface SyntheticCognitionStoreOptionsV2 {
   readonly dataRoot: string;
   readonly controlRoot: string;
   readonly installationId: string;
   readonly mode: "create" | "open" | "migrate-v1";
   readonly clock: { now(): string };
+  readonly taskPersistence?: TaskPersistenceBoundaryV1;
 }
 export interface CognitionFenceV2 {
   readonly installationId: string;
@@ -131,12 +137,47 @@ export class SyntheticCognitionStoreV2 {
   #closed = false;
   #gate = false;
   #bundleFence: CognitionFenceV2 | undefined;
+  #transactionNow: string | undefined;
+  #taskComposing = false;
+  readonly #taskEngine: TaskStoreEngineV1;
+  readonly #executionEngine: TaskExecutionStoreEngineV1;
 
   private constructor(options: SyntheticCognitionStoreOptionsV2, db: DatabaseSync,
     pragmas: ReturnType<typeof configureCognitiveDatabaseV2>, files: ContentFilesV2,
     journal: RecoveryJournalV2, locks: readonly CoordinatorLockV2[]) {
     this.#options = options; this.#db = db; this.#pragmas = pragmas;
     this.#files = files; this.#journal = journal; this.#locks = locks;
+    const host: TaskStoreHostV1 = {
+      db, now: () => this.#now(), recoveryEpoch: () => number(this.#state().recovery_epoch),
+      recoveryEpochs: () => this.#journal.read().records.filter(record => record.controlSequence <= number(this.#state().applied_control_sequence) && record.intent.kind === "RESTORE_BEGIN").map(record => record.recoveryEpoch), fail,
+      transaction: (write, body) => this.#transaction(write, () => {
+        const prior = this.#taskComposing; this.#taskComposing = true;
+        try { return body(); } finally { this.#taskComposing = prior; }
+      }),
+      registerScope: scope => { this.registerScope(scope); },
+      content: (ref, scope, available) => {
+        const row = this.#content(ref, scope, available ? ["available"] : ["available", "staged", "revoked", "purged"], available);
+        return { ...(row.state === "available" ? { bytes: this.#taskBodyBytes(row) } : {}), privacy: row.privacy as PrivacyV2, retentionUntil: text(row.retention_until) };
+      },
+      writeBody: (scope, body, dependencies, boundary) => this.#writeTaskBody(scope, body, dependencies, boundary),
+      recordCommandEvidence: (scope, command, dependencies, boundary) => this.#recordTaskCommand(scope, command, dependencies, boundary),
+      executionForReduction: (workspaceId, taskId) => this.#executionEngine.currentForReduction(workspaceId, taskId),
+      onExecutionSettled: (context, envelope) => {
+        const execution = this.#row("SELECT task_id FROM task_execution_v1 WHERE binding_id=? AND workspace_id=?", envelope.bindingId, context.workspaceId);
+        if (!execution) fail("unavailable");
+        const task = this.#row("SELECT current_revision FROM task_v1 WHERE id=? AND workspace_id=?", text(execution.task_id), context.workspaceId);
+        if (!task) fail("unavailable");
+        this.#taskEngine.executeTask(context, { schemaVersion: 1, commandId: `settled:${envelope.event.eventId}`, idempotencyKey: `settled:${envelope.event.eventId}`,
+          workspaceId: context.workspaceId, expectedRevision: number(task.current_revision), payload: { kind: "task.runtime", taskId: text(execution.task_id), event: "settled", completeness: "complete", evidenceRefs: [{ id: envelope.event.eventId, revision: 1 }] } });
+      },
+    };
+    const configured = options.taskPersistence;
+    const boundary: TaskPersistenceBoundaryV1 | undefined = configured ? Object.freeze({ daemonInstanceId: configured.daemonInstanceId,
+      contentPolicy: Object.freeze(structuredClone(configured.contentPolicy)),
+      ...(configured.runtimeSourceIdentity ? { runtimeSourceIdentity: Object.freeze(structuredClone(configured.runtimeSourceIdentity)) } : {}),
+      ...(configured.recoveryCustody ? { recoveryCustody: Object.freeze({ observedClose: configured.recoveryCustody.observedClose.bind(configured.recoveryCustody) }) } : {}),
+      ids: Object.freeze({ next: configured.ids.next.bind(configured.ids) }), reduce: configured.reduce }) : undefined;
+    this.#taskEngine = new TaskStoreEngineV1(host, boundary); this.#executionEngine = new TaskExecutionStoreEngineV1(host, boundary);
   }
 
   static open(options: SyntheticCognitionStoreOptionsV2): SyntheticCognitionStoreV2 {
@@ -164,7 +205,10 @@ export class SyntheticCognitionStoreV2 {
       const files = ContentFilesV2.open({ contentRoot: join(dataRoot, "content"), initialize: options.mode !== "open" });
       db = new DatabaseSync(filePath);
       const pragmas = configureCognitiveDatabaseV2(db, { filePath, busyTimeoutMs: 5000 });
-      applyCognitiveMigrationsV2(db, { clock: options.clock, expectedPragmas: pragmas });
+      const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
+      const hasState = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='store_state'").get()
+        && db.prepare("SELECT 1 FROM store_state WHERE singleton=1").get();
+      applyTaskMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
       const state = db.prepare("SELECT * FROM store_state WHERE singleton=1").get();
       if (!state) {
         if (options.mode === "open") fail("corruption");
@@ -172,9 +216,9 @@ export class SyntheticCognitionStoreV2 {
         db.prepare("INSERT INTO store_state(singleton,installation_id,applied_control_sequence,applied_control_checksum,recovery_epoch) VALUES(1,?,?,?,?)")
           .run(options.installationId, head.controlSequence, head.checksum, head.recoveryEpoch);
       } else if (options.mode !== "open") fail("conflict");
-      const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
       store.reconcileControl();
       store.#transaction(false, () => undefined);
+      if (options.taskPersistence) store.#taskEngine.fenceRestartedOwners();
       return store;
     } catch (error) {
       try { db?.close(); } catch { /* Preserve primary fixed-category error. */ }
@@ -189,7 +233,10 @@ export class SyntheticCognitionStoreV2 {
     }
   }
 
-  #now(): string { const now = this.#options.clock.now(); assertIsoTimestampV2(now); return now; }
+  get tasks(): TaskPersistenceStoreV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#taskEngine; }
+  get executions(): TaskExecutionPersistenceV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#executionEngine; }
+
+  #now(): string { const now = this.#transactionNow ?? this.#options.clock.now(); assertIsoTimestampV2(now); return now; }
   #row(sql: string, ...values: (string | number | null)[]): Row | undefined { return this.#db.prepare(sql).get(...values) as Row | undefined; }
   #rows(sql: string, ...values: (string | number | null)[]): Row[] { return this.#db.prepare(sql).all(...values) as Row[]; }
   #state(): Row { const row = this.#row("SELECT * FROM store_state WHERE singleton=1"); if (!row) fail("corruption"); return row; }
@@ -217,11 +264,12 @@ export class SyntheticCognitionStoreV2 {
     if (this.#closed) fail("closed");
     // Only the fixed acceptance bundle below can compose these commands. It owns
     // the outer transaction and validates the shared initial fence exactly once.
-    if (this.#bundleFence && this.#db.isTransaction) return body();
+    if ((this.#bundleFence || this.#taskComposing) && this.#db.isTransaction) return body();
     try {
       if (!reconciling) this.#checkControl();
+      this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
       this.#db.exec(write ? "BEGIN IMMEDIATE" : "BEGIN");
-      verifyCognitiveDatabaseV2(this.#db, this.#pragmas);
+      verifyTaskDatabaseV1(this.#db, this.#pragmas);
       this.#validateRows();
       if (!reconciling) this.#checkControl();
       const result = body();
@@ -236,7 +284,7 @@ export class SyntheticCognitionStoreV2 {
       if (["corruption", "recovery_required"].includes(code ?? "")) fail(code as "corruption" | "recovery_required");
       if (code === "io") fail("io");
       fail("validation");
-    }
+    } finally { this.#transactionNow = undefined; }
   }
 
   registerScope(scope: ScopeV2): CognitionFenceV2 {
@@ -286,6 +334,63 @@ export class SyntheticCognitionStoreV2 {
     if (checkTime && states.length === 1 && states[0] === "available") this.#notForgotten(scope, { kind: "content", id: ref.contentId, version: ref.contentVersion });
     return row;
   }
+  #taskBodyBytes(row: Row): Uint8Array {
+    const value = parse(new TextDecoder("utf-8", { fatal: true }).decode(this.#files.read(this.#descriptor(row))));
+    plainDataRecord(value, ["format", "dependencies", "record"]);
+    const envelope = value as { format: string; dependencies: ContentRefV2[]; record: unknown };
+    if (envelope.format !== "task-managed-content-v1" || !Array.isArray(envelope.dependencies)) fail("corruption");
+    for (const ref of envelope.dependencies) assertContentRefV2(ref);
+    const order = (refs: readonly ContentRefV2[]) => refs.map(refKey).sort();
+    const expected = this.#rows("SELECT source_id AS content_id,source_version AS content_version FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", text(row.content_id), number(row.content_version)).map(contentRef);
+    if (json(order(envelope.dependencies)) !== json(order(expected))) fail("corruption");
+    return new TextEncoder().encode(json(envelope.record));
+  }
+  #writeTaskBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ContentRefV2 {
+    if (!this.#taskComposing || !this.#db.isTransaction) fail("corruption");
+    this.#notForgotten(scope); this.#scope(scope);
+    const unique = [...new Map(dependencies.map(ref => { assertContentRefV2(ref); return [refKey(ref), structuredClone(ref)] as const; })).values()];
+    let privacy = boundary.contentPolicy.privacy, retentionUntil = boundary.contentPolicy.retentionUntil;
+    assertPrivacyV2(privacy); assertIsoTimestampV2(retentionUntil);
+    for (const dependency of unique) {
+      const source = this.#row("SELECT c.*,s.scope_json FROM content_object c JOIN scope_catalog s USING(scope_key) WHERE content_id=? AND content_version=?", dependency.contentId, dependency.contentVersion);
+      if (!source) fail("unavailable"); const sourceScope = scopeFrom(source);
+      if (scope.kind === "global" || sourceScope.kind === "global" || sourceScope.workspaceId !== scope.workspaceId) fail("unavailable");
+      this.#content(dependency, sourceScope); this.#files.read(this.#descriptor(source));
+      if (source.privacy === "local-only") privacy = "local-only";
+      if (text(source.retention_until) < retentionUntil) retentionUntil = text(source.retention_until);
+    }
+    const content: ContentRefV2 = { contentId: boundary.ids.next("content"), contentVersion: 1 }, reservation = boundary.ids.next("reservation");
+    assertContentRefV2(content); assertIdentifierV2(reservation);
+    if (retentionUntil <= this.#now()) fail("unavailable");
+    this.#notForgotten(scope, { kind: "content", id: content.contentId, version: 1 });
+    const fence = this.#currentFence(scope), bytes = new TextEncoder().encode(json({ format: "task-managed-content-v1", dependencies: unique, record: body }));
+    this.#db.prepare("INSERT INTO content_object(content_id,content_version,scope_key,privacy,state,purpose,retention_until,created_at,reservation_id,digest,byte_count,fence_json) VALUES(?,?,?,?,'staged','cognition',?,?,?,NULL,NULL,?)")
+      .run(content.contentId, 1, scopeKeyV2(scope), privacy, retentionUntil, this.#now(), reservation, json(fence));
+    const descriptor = this.#files.stage({ contentId: content.contentId, version: 1, reservationId: reservation }, bytes); this.#files.publish(descriptor);
+    this.#db.prepare("UPDATE content_object SET digest=?,byte_count=? WHERE content_id=? AND content_version=? AND state='staged'").run(descriptor.digest, descriptor.byteCount, content.contentId, 1);
+    this.#publish(content, fence, privacy);
+    for (const source of unique) this.#db.prepare("INSERT INTO task_content_dependency_v1(source_id,source_version,target_id,target_version) VALUES(?,?,?,?)").run(source.contentId, source.contentVersion, content.contentId, 1);
+    return content;
+  }
+  #recordTaskCommand(scope: ScopeV2, command: LocalApiCommandV1, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ReturnType<TaskStoreHostV1["recordCommandEvidence"]> {
+    if (scope.kind !== "task") fail("validation");
+    const content = this.#writeTaskBody(scope, { schemaVersion: 1, command }, dependencies, boundary);
+    const stored = this.#content(content, scope), now = this.#now(), streamId = `task-command:${scope.taskId}`;
+    const sequence = number(this.#row("SELECT coalesce(max(last_sequence),0)+1 AS n FROM source_stream WHERE stream_id=?", streamId)!.n);
+    const observation = parseObservationV2({ schemaVersion: 2, id: boundary.ids.next("observation"), revision: 1,
+      scope, privacy: stored.privacy, sourceTrust: "user-direct", observedAt: now, recordedAt: now, actor: "user", kind: "user_input",
+      source: { streamId, adapter: "local-api", surface: "local-api", sourceSequence: sequence, runtime: null,
+        productSessionId: command.payload.kind === "task.create" ? command.payload.sessionId : null,
+        runtimeSessionId: null, runtimeInstanceId: null, eventType: "task-command" },
+      correlation: { taskAttempt: null, turnId: null, toolCallId: null, causationId: null, correlationId: null },
+      content: { availability: "available", ref: content }, integrity: { status: "complete" } });
+    // The stream identity must stay fixed across create and subsequent commands.
+    const event = parseObservationV2({ ...observation, source: { ...observation.source, productSessionId: null } });
+    this.appendObservation(event, this.#currentFence(scope), boundary.ids.next("event"));
+    return { content, evidence: { source: { kind: "observation", id: event.id, revision: 1 }, scope, privacy: event.privacy,
+      sourceTrust: event.sourceTrust, observedAt: event.observedAt, role: "supports" } };
+  }
+
   stageContent(input: StageCognitiveContentV2): ContentRefV2 {
     plainDataRecord(input, ["ref", "reservationId", "fence", "privacy", "purpose", "retentionUntil", "bytes"]);
     assertContentRefV2(input.ref); assertIdentifierV2(input.reservationId); assertPrivacyV2(input.privacy);
@@ -799,7 +904,7 @@ export class SyntheticCognitionStoreV2 {
     }
     if (target.kind === "content") {
       if (missingAllowed && !this.#row("SELECT 1 FROM content_object WHERE content_id=? AND content_version=? AND scope_key=?", target.contentId, target.contentVersion, scopeKeyV2(target.scope))) return [];
-      return [this.#content(target, target.scope, ["staged", "available", "revoked", "purged"], false)];
+      return [this.#content({ contentId: target.contentId, contentVersion: target.contentVersion }, target.scope, ["staged", "available", "revoked", "purged"], false)];
     }
     if (target.kind === "claim") {
       const row = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=? AND scope_key=?", target.id, target.version, scopeKeyV2(target.scope));
@@ -821,6 +926,11 @@ export class SyntheticCognitionStoreV2 {
       const source = nodes.shift()!, key = json(source); if (seen.has(key)) continue; seen.add(key);
       if (seen.size > 100000) fail("corruption");
       if (source.kind === "content") {
+        for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1 WHERE source_id=? AND source_version=?", source.id, source.version)) {
+          const content = this.#row("SELECT * FROM content_object WHERE content_id=? AND content_version=?", text(edge.target_id), number(edge.target_version));
+          if (!content) fail("corruption"); targets.set(refKey(contentRef(content)), content);
+          nodes.push({ kind: "content", id: text(content.content_id), version: number(content.content_version) });
+        }
         for (const row of this.#rows("SELECT * FROM observation_v2 WHERE content_id=? AND content_version=?", source.id, source.version)) nodes.push({ kind: "observation", id: text(row.id), version: 1 });
       }
       for (const edge of this.#rows("SELECT * FROM dependency_edge WHERE source_kind=? AND source_id=? AND source_version=? AND required=1", source.kind, source.id, source.version)) {
@@ -842,7 +952,8 @@ export class SyntheticCognitionStoreV2 {
   #applyRecord(record: RecoveryControlRecordV2): void {
     const intent = record.intent;
     if (intent.kind === "RESTORE_BEGIN") {
-      // No credentials, grants, leases or executable actions are stored by this slice.
+      this.#taskEngine.quarantineRecovery(record.recoveryEpoch);
+      // Historical bindings cannot restore execution authority.
       // Historical projection events are quarantined before any reader can open.
       this.#db.prepare("UPDATE outbox SET publish_state='quarantined' WHERE recovery_epoch<?").run(record.recoveryEpoch);
       for (const scope of this.#rows("SELECT * FROM scope_catalog")) {
@@ -983,7 +1094,7 @@ export class SyntheticCognitionStoreV2 {
 
   #recoveryState(): CognitiveRecoveryStateV2 {
     const state = this.#state();
-    return { installationId: text(state.installation_id), schemaVersion: 2,
+    return { installationId: text(state.installation_id), schemaVersion: 3,
       controlSequence: number(state.applied_control_sequence), controlChecksum: text(state.applied_control_checksum),
       recoveryEpoch: number(state.recovery_epoch) };
   }
@@ -1027,7 +1138,7 @@ export class SyntheticCognitionStoreV2 {
       },
       verifyRecoveryBoundary: () => {
         const result = this.#transaction(false, () => ({ ...this.#recoveryState(),
-          nonQuarantinedOldOutbox: number(this.#row("SELECT count(*) AS n FROM outbox WHERE recovery_epoch<? AND publish_state!='quarantined'", number(this.#state().recovery_epoch))!.n) }));
+          nonQuarantinedOldOutbox: number(this.#row("SELECT count(*) AS n FROM outbox WHERE recovery_epoch<? AND publish_state!='quarantined'", number(this.#state().recovery_epoch))!.n) + number(this.#row("SELECT count(*) AS n FROM task_outbox_v1 WHERE recovery_epoch<? AND publish_state!='quarantined'", number(this.#state().recovery_epoch))!.n) }));
         const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as Row;
         if (number(checkpoint.busy) !== 0) fail("recovery_required");
         this.#checkControl(); return result;
@@ -1191,6 +1302,17 @@ export class SyntheticCognitionStoreV2 {
         if (row.type === "claim.committed" && !this.#row("SELECT 1 FROM claim_version WHERE claim_id=? AND version=? AND scope_key=?", text(row.entity_id), number(row.version), text(row.scope_key))) fail("corruption");
         if (row.type === "cognition.committed" && !this.#row("SELECT 1 FROM cognitive_snapshot WHERE kind=? AND id=? AND revision=? AND scope_key=?", text(row.entity_kind), text(row.entity_id), number(row.version), text(row.scope_key))) fail("corruption");
       }
+      for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
+        const source = contents.get(refKey({ contentId: text(edge.source_id), contentVersion: number(edge.source_version) }));
+        const target = contents.get(refKey({ contentId: text(edge.target_id), contentVersion: number(edge.target_version) }));
+        if (!source || !target) fail("corruption");
+        const sourceScope = scopes.get(text(source.scope_key)), targetScope = scopes.get(text(target.scope_key));
+        if (!sourceScope || !targetScope || sourceScope.kind === "global" || targetScope.kind === "global"
+          || sourceScope.workspaceId !== targetScope.workspaceId
+          || (source.privacy === "local-only" && target.privacy !== "local-only") || text(target.retention_until) > text(source.retention_until)
+          || (target.state === "available" && source.state !== "available")) fail("corruption");
+      }
+      this.#taskEngine.validateRows(); this.#executionEngine.validateRows();
       if (this.#db.prepare("PRAGMA foreign_key_check").all().length) fail("corruption");
     } catch (error) {
       if (error instanceof CognitiveStoreErrorV2 && error.code === "sqlite") throw error;

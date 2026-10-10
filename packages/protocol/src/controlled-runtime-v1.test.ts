@@ -204,3 +204,12 @@ test("reasoning omission is explicit in the neutral envelope without changing Ru
       [{ ...marker, hash: "synthetic-forbidden-digest" }]]) reject(parseNormalizedRuntimeEnvelopeV1, { ...envelope, omissions });
   }
 });
+
+test("Explicit not-spawned disposal preserves old close fixtures and cannot fabricate process EOF or exit", () => {
+  const evidence = { schemaVersion: 1, bindingId: "binding-1", processDisposition: "not_spawned", stdoutEof: false, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: "2026-10-10T10:00:00.000Z" };
+  assert.deepEqual(parseRuntimeProcessCloseEvidenceV1(evidence), evidence);
+  for (const patch of [{ processDisposition: "unknown" }, { processDisposition: "spawned" }, { stdoutEof: true }, { stderrEof: true }, { closeObserved: true }, { exitCode: 0 }, { signal: "SIGTERM" }, { noProcess: true }]) reject(parseRuntimeProcessCloseEvidenceV1, { ...evidence, ...patch });
+  const { processDisposition: _, ...legacyUnknown } = evidence;
+  assert.equal(parseRuntimeProcessCloseEvidenceV1(legacyUnknown).processDisposition, undefined);
+  assert.equal(parseRuntimeProcessCloseEvidenceV1({ ...legacyUnknown, stdoutEof: true, stderrEof: true, closeObserved: true, exitCode: 0 }).processDisposition, undefined);
+});
