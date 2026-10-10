@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { ids } from "../../../../packages/domain/src/index.ts";
 import {
-  parseExecutionSpecV1, parseNormalizedRuntimeEnvelopeV1, parseRuntimeBindingV1,
+  parseExecutionSpecV1, parseNormalizedRuntimeEnvelopeV1, parseRuntimeBindingV1, snapshotJsonValue,
   parseRuntimeCapabilityProfileV1, parseRuntimeCommandAcceptanceV1,
   parseRuntimeProcessCloseEvidenceV1, parseRuntimeStopAcknowledgementV1,
   type ExecutionSpecV1, type RuntimeBindingV1, type RuntimeCapabilityProfileV1,
@@ -53,11 +53,17 @@ export interface SyntheticWorkerSupervisor {
   }>;
   close(): Promise<void>;
 }
+/** Trusted synthetic Task composition supplies identity only. This is not authority evidence. */
+export type SyntheticTaskRuntimeIdentity = Readonly<Pick<ExecutionSpecV1,
+  "executionUnitId" | "workspaceId" | "sessionId" | "requestSnapshotRef" | "fence">>;
+
 export interface SyntheticWorkerSupervisorOptions {
   /** Trusted launcher-selected installation; signature/source authentication is an outer prerequisite. */
   readonly packageDirectory: string;
   readonly nodeExecutable: string;
   readonly scenario?: "text" | "tools";
+  /** No prompt, capability, credential, path or model destination override. */
+  readonly taskIdentity?: SyntheticTaskRuntimeIdentity;
 }
 
 /** No daemon HTTP route calls this factory. It can only dispatch its own generated synthetic input,
@@ -67,10 +73,17 @@ export interface SyntheticWorkerSupervisorOptions {
 export async function createSyntheticControlledWorkerSupervisor(input: SyntheticWorkerSupervisorOptions): Promise<SyntheticWorkerSupervisor> {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_request");
   const descriptors = Object.getOwnPropertyDescriptors(input);
-  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario"].includes(key)
+  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity"].includes(key)
     || !descriptors[key] || !("value" in descriptors[key]) || !descriptors[key].enumerable)) fail("invalid_request");
   const scenario = input.scenario ?? "text";
   if (typeof input.packageDirectory !== "string" || typeof input.nodeExecutable !== "string" || !["text", "tools"].includes(scenario)) fail("invalid_request");
+  let taskIdentity: SyntheticTaskRuntimeIdentity | undefined;
+  if (input.taskIdentity !== undefined) {
+    const copied = snapshotJsonValue(input.taskIdentity);
+    if (!copied || typeof copied !== "object" || Array.isArray(copied)
+      || Object.keys(copied).sort().join() !== ["executionUnitId", "workspaceId", "sessionId", "requestSnapshotRef", "fence"].sort().join()) fail("invalid_request");
+    taskIdentity = copied as unknown as SyntheticTaskRuntimeIdentity;
+  }
   const packageDirectory = input.packageDirectory;
   const nodeExecutable = input.nodeExecutable;
   if (process.platform !== "linux") fail("unsupported");
@@ -93,7 +106,9 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
     toolProfile: scenario === "tools" ? "controlled-read-memory-draft-v1" : "none",
     bounds: { maxOutputBytes: 1_048_576, maxDurationMs: 60_000, maxTokens: 32_768, maxModelRequests: 8, maxToolCalls: scenario === "tools" ? 3 : 0 },
     controlledCwdRef: `synthetic-cwd-${key}`,
+    ...taskIdentity,
   });
+  if (spec.fence.owner.kind !== "task_attempt") fail("invalid_request");
   const root = await mkdtemp(join(tmpdir(), "zhiwei-synthetic-worker-"));
   let broker: Awaited<ReturnType<typeof createSyntheticControlledBroker>>;
   try {

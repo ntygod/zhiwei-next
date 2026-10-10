@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-10
 -->
 
-## 当前工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
+## 当前工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
+
+canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一工作分支 `feat/116-persistent-task-sessions`，从最新 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a` 开始；reconciliation 无开放 PR/Incident，远端仅 main，已核对 #44/#67 人类输入及重复任务。
+
+P1-03 / [PR115](https://github.com/ntygod/zhiwei-next/pull/115) 已完成最终独立 R3、669 项完整测试、Ready CI/live、Autonomous Merge 与 main provenance，#114 已关闭。下方 P1-03 段落保留开发期历史，不再代表开放 WIP。
+
+本项按原 P1-04 实现 SessionContract/ownerEpoch、Task/Attempt/Outcome 精确历史、输入与 WorkingState 所需持久真源、committed receipt/Outbox/cursor/快照、独立配对/CSRF/Scope 数据 API 与 CLI。实现 `in_progress`，产品 Z10/Z11/Z12 `not_run`；真实入口保持关闭。初始合成 Supervisor 身份接线只允许 Task 身份/fence，不允许修改固定 Prompt、工具、模型目的地或凭据；必须由服务在 spawn/dispatch 前提交精确绑定，结构合法不构成授权证明。
+
+基线正式 Node22.23.1/npm10.9.8 完整 check 已通过 669/669；当前开发变更仍须完成全部新事务/服务验证、当前 HEAD 新独立 R3、当前 PR 原 Runtime 来源、Ready/live 与保护合入。原 #90 及等价争议 Private/链接替换/备份攻防实验不运行；D-04/D-08、G-2/G-5、真实模型/账户/数据/部署均不启用。
+
+## 历史工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
 
 canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker` / Draft [PR115](https://github.com/ntygod/zhiwei-next/pull/115)，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
 

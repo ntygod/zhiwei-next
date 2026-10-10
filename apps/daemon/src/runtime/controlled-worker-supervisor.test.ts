@@ -3,10 +3,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
-import { createSyntheticControlledWorkerSupervisor, SyntheticSupervisorError } from "./controlled-worker-supervisor.ts";
+import { createSyntheticControlledWorkerSupervisor, SyntheticSupervisorError, type SyntheticTaskRuntimeIdentity } from "./controlled-worker-supervisor.ts";
 import type { NormalizedRuntimeEnvelopeV1 } from "../../../../packages/protocol/src/index.ts";
 
-async function fixture(t: TestContext, scenario: "text" | "tools" = "text") {
+async function fixture(t: TestContext, scenario: "text" | "tools" = "text", taskIdentity?: SyntheticTaskRuntimeIdentity) {
   const root = await mkdtemp(join(tmpdir(), "zhiwei-supervisor-ordinary-test-"));
   await mkdir(join(root, "dist"));
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.1", type: "module", bin: { pi: "dist/cli.js" } }));
@@ -71,7 +71,7 @@ process.stdin.on('data',chunk=>{
 });
 process.stdin.on('end',()=>{void pending.then(()=>hooks.get('session_shutdown')({type:'session_shutdown',reason:'quit'},ctx));});
 `);
-  const supervisor = await createSyntheticControlledWorkerSupervisor({ packageDirectory: root, nodeExecutable: process.execPath, scenario });
+  const supervisor = await createSyntheticControlledWorkerSupervisor({ packageDirectory: root, nodeExecutable: process.execPath, scenario, ...(taskIdentity ? { taskIdentity } : {}) });
   t.after(async () => { await supervisor.close(); await rm(root, { recursive: true, force: true }); });
   return supervisor;
 }
@@ -152,4 +152,27 @@ test("Supervisor carries fixed file-memory-draft fixture through actual extensio
   assert.equal(snapshot.taskOutcome, "not_evaluated");
   assert.equal(events.filter(event => event.event.data.kind === "tool.lifecycle" && event.event.data.phase === "completed").length, 3);
   await supervisor.close();
+});
+
+// Trusted identity binding is prepared before spawn; it cannot change the fixture's prompt or tools.
+test("Supervisor accepts exact durable task identities without expanding the synthetic profile", async t => {
+  const taskIdentity: SyntheticTaskRuntimeIdentity = {
+    executionUnitId: "execution-persistent-1", workspaceId: "workspace-persistent-1", sessionId: "session-persistent-1",
+    requestSnapshotRef: { contentId: "input-persistent-1", contentVersion: 1 },
+    fence: { installationId: "installation-persistent-1", recoveryEpoch: "recovery-0",
+      owner: { kind: "task_attempt", id: "attempt-persistent-1" },
+      sourceTask: { taskId: "task-persistent-1", attemptId: "attempt-persistent-1", intentRevision: 1 },
+      contractRevision: 1, leaseEpoch: 2, cognition: { global: 0, workspace: 0 }, policy: { global: 0, workspace: 0 },
+      notAfter: new Date(Date.now() + 60_000).toISOString() },
+  };
+  const supervisor = await fixture(t, "text", taskIdentity);
+  assert.equal(supervisor.snapshot().binding.state, "ALLOCATED");
+  assert.equal(supervisor.spec.prompt, "Summarize the fixed synthetic sample.");
+  assert.equal(supervisor.spec.toolProfile, "none");
+  assert.deepEqual(supervisor.spec.fence, taskIdentity.fence);
+  const binding = await supervisor.runtime.start(supervisor.spec);
+  assert.equal(binding.workspaceId, taskIdentity.workspaceId);
+  assert.equal(binding.sessionId, taskIdentity.sessionId);
+  assert.equal(binding.owner.id, "attempt-persistent-1");
+  assert.equal(binding.leaseEpoch, 2);
 });
