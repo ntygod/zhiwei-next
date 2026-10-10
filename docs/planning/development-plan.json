@@ -111,12 +111,49 @@
       "condition": null
     },
     {
+      "id": "P0-03",
+      "phase": "P0",
+      "kind": "required",
+      "title": "准备纯 Task 与 Outcome 领域规则",
+      "depends": [],
+      "risk": "R2",
+      "paths": [
+        "packages/domain",
+        "packages/cognition-core"
+      ],
+      "contracts": [
+        "docs/architecture/domain-model.md",
+        "docs/architecture/runtime-coordination.md",
+        "docs/architecture/cognitive-pipelines.md",
+        "docs/planning/core-preparation-boundary.md"
+      ],
+      "outcome": "以合成输入验证可复用的纯内存任务状态与结果语义，为 P1-01 提供已测试组件；不提供产品运行入口。",
+      "acceptance": [
+        "仅领域类型、基础校验与纯状态转换；时间、ID、版本、证据和输入由调用方注入，无 I/O 或初始化副作用",
+        "Task attempt 与任务意图 revision 分离；终态保留历史，Runtime settled 只能进入 VERIFYING；Outcome 逐标准区分 pass/fail/unknown/not-applicable",
+        "确定性正反例覆盖非法转换、版本冲突、输入不变、证据缺失与模型自述不计成功；保留已有 v1 导出与哨兵测试",
+        "仅报告 Z03/Z16 相关组件准备证据；P0-01/P0-02、P1-01 整体和正式场景仍逐项另验收"
+      ],
+      "failures": [
+        "未知/取消/验证器失败不伪成 completed，终态不得在原 attempt 原地回退",
+        "无生产消费者、存储或 Runtime 接线；组件接口不能把调用方声明当真实授权或持久化证明"
+      ],
+      "rollback": "通过受审 PR revert 新纯组件；无生产消费者、迁移或持久数据，既有导出与测试保持。",
+      "nonGoals": "不执行或替代接入前安全实验，不接真实数据、Runtime、模型、数据库、网络或外部副作用；不实现通用框架、API DTO、真实恢复或学习。",
+      "scenarios": [
+        "Z03",
+        "Z16"
+      ],
+      "condition": null
+    },
+    {
       "id": "P1-01",
       "phase": "P1",
       "kind": "required",
       "title": "建立认知与任务领域合同",
       "depends": [
-        "P0-02"
+        "P0-02",
+        "P0-03"
       ],
       "risk": "R2",
       "paths": [

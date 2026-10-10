@@ -19,11 +19,15 @@ main 1872955 已有 Runtime v1、SQLite Ledger v1、工具链/CLI 方向、受�
 
 本次 #94 / [PR #95](https://github.com/ntygod/zhiwei-next/pull/95)只交付完整设计、依赖/任务/验收与导航；不修改产品实现，不接真实数据/模型，不运行未来产品场景。ADR0016/0017 已按[真实独立设计接受](design-acceptance.md)定案；登记后的最终 HEAD 仍走原 R3/CI/来源与受保护合入。先核实 PR95 已合入，再推进下一执行任务。
 
-## 第一个可执行目标
+## 下一可执行目标
 
-P0-01：沿现有 decision-execution-layer，把 ADR0014/0015 的真实合成实验登记为 Evidence Ready；由独立上下文实际复跑并逐项接受，绑定精确 HEAD 与 proposalSha256；再按原 G-2 卡验收。本设计选择已明确，任务是证据/有限接受与边界落实。不要重写实验或放宽 checker。
+先核实 [#100](https://github.com/ntygod/zhiwei-next/issues/100)规划 primary 已按旧规则独立 R3 与全部门禁合入，再为 P0-03 创建独立 implementation work item；未合入时不按本规划写产品代码。
 
-P0-02 随后完成原 G-5 的规模/持久性/演进基线并冻结代表性夹具。之后按 P1-01→P1-09 交付一条有界的工作台/任务/记忆/结果链。不要先建通用插件系统或把首个界面推迟到旧 M6。
+P0-03 只准备 Task/Outcome 纯内存领域合同与确定性测试，范围见[准备边界](core-preparation-boundary.md)。无真实数据、运行入口、模型、I/O、存储或副作用；不沿用原型代码作为核心事实源，不自建 Agent Loop。完成组件不表示正式 Z03/Z16 或 P1-01 已完成。
+
+P0-01 仍沿原 decision-execution-layer 完成 ADR0014/0015 实证登记、独立复跑/逐项接受与 G-2 验收。当前受限实验不执行、不换环境绕过、不伪造通过；保留未完成状态。P0-02 仍等待 P0-01，按原 G-5 取得规模/持久性/演进基线。P1-01 必须同时等到 P0-02 与 P0-03 完成，之后原 P1-01→P1-09 正式接入链不变。
+
+原型 [PR99](https://github.com/ntygod/zhiwei-next/pull/99)因方向调整关闭未合并，保留 Draft/未验收历史；精确源码 `dded6fd30d93a95deb9fe7724d153c19b02e295e`。#98 未交付，浏览器验收未完成，不再占用核心开发 WIP。恢复需重新对账、重新授权当前方向并完成原验收，不能继承旧代码复核为合入批准。
 
 ## 工作纪律
 
