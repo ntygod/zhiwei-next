@@ -9,7 +9,7 @@
     "npm": "10.9.8"
   },
   "scripts": {
-    "check": "npm run check:toolchain && npm run typecheck && npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:normalized-runtime-event-v1 && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run check:pi-rpc-worker-lifecycle && npm run check:design-plan && npm run check:detailed-architecture && npm run test",
+    "check": "npm run check:toolchain && npm run typecheck && npm run check:architecture && npm run check:agents && npm run check:work-items && npm run check:main-provenance && npm run check:main-provenance-dispatch && npm run check:branch-cleanup && npm run check:harness && npm run check:normalized-runtime-event-v1 && npm run check:pi-spike && npm run check:pi-artifact && npm run check:pi-lifecycle && npm run check:pi-retry-lifecycle && npm run check:pi-follow-up-lifecycle && npm run check:pi-cancel-retry-exhaustion && npm run check:pi-parallel-tool-ordering && npm run check:pi-compaction-session-replacement && npm run check:pi-sdk-rpc-parity && npm run check:pi-rpc-worker-lifecycle && npm run check:design-plan && npm run check:execution-mode && npm run check:detailed-architecture && npm run test",
     "check:design-plan": "node scripts/check-design-plan.mjs",
     "check:detailed-architecture": "node scripts/check-detailed-architecture.mjs",
     "test": "node scripts/test.mjs",
@@ -49,7 +49,8 @@
     "check:toolchain": "node scripts/check-toolchain.mjs && node --test scripts/toolchain.test.mjs",
     "install:toolchain": "sh scripts/formal-toolchain.sh install",
     "diagnose:pi-root-types": "node scripts/diagnose-pi-root-types.mjs",
-    "eval:scenarios": "node --experimental-strip-types scripts/run-scenarios.mjs"
+    "eval:scenarios": "node --experimental-strip-types scripts/run-scenarios.mjs",
+    "check:execution-mode": "node scripts/check-execution-mode.mjs && node --test scripts/check-execution-mode.test.mjs"
   },
   "packageManager": "npm@10.9.8",
   "devDependencies": {

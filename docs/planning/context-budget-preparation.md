@@ -1,5 +1,8 @@
 # P0-04 纯上下文预算与选择准备合同
 
+当前执行排期以[开发与验收分离](development-and-acceptance.md)为准；本文预算组件合同及非保证保持。第7节保留 #104 的历史排期解释，原完整阶段依赖继续管产品验收/真实启用，不再阻止满足技术依赖的正式合成开发。
+
+
 状态：#104 独立规划；本次不实现。按旧规则完成最终 HEAD 独立 R3、CI 与保护合入后，仅供下一独立 P0-04 实现任务使用。已接受 C05/C06 责任和预算总纲不变，来源为[详细架构](../architecture/detailed-design.md)、[认知流水线 §4–5](../architecture/cognitive-pipelines.md)及[上下文总纲](../architecture/cognitive-loop.md#上下文构成与预算)。
 
 ## 1. 用户结果与精确边界

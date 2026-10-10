@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "baseline": "design-v2",
+  "mode": "synthetic-development",
+  "taskCatalog": "docs/planning/development-plan.json",
+  "acceptanceDependencyField": "depends",
+  "nextImplementation": "P1-01",
+  "tasks": [
+    {
+      "id": "P0-01",
+      "implementation_depends": [],
+      "implementation_status": "blocked",
+      "acceptance_status": "blocked",
+      "implementation_evidence": [
+        "https://github.com/ntygod/zhiwei-next/issues/108"
+      ],
+      "acceptance_evidence": [
+        "https://github.com/ntygod/zhiwei-next/issues/108"
+      ]
+    },
+    {
+      "id": "P0-02",
+      "implementation_depends": [],
+      "implementation_status": "not_started",
+      "acceptance_status": "blocked",
+      "implementation_evidence": [],
+      "acceptance_evidence": [
+        "https://github.com/ntygod/zhiwei-next/issues/108"
+      ]
+    },
+    {
+      "id": "P0-03",
+      "implementation_depends": [],
+      "implementation_status": "implemented",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [
+        "https://github.com/ntygod/zhiwei-next/pull/103",
+        "https://github.com/ntygod/zhiwei-next/commit/c32a13d65fbf484e099bca432502f03ba00a61e1"
+      ],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P0-04",
+      "implementation_depends": [],
+      "implementation_status": "implemented",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [
+        "https://github.com/ntygod/zhiwei-next/pull/107",
+        "https://github.com/ntygod/zhiwei-next/commit/e7077df36fe794e296008c7db88c175fb588013f"
+      ],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-01",
+      "implementation_depends": [
+        "P0-03"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-02",
+      "implementation_depends": [
+        "P1-01"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-03",
+      "implementation_depends": [
+        "P1-02"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-04",
+      "implementation_depends": [
+        "P1-03"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-05",
+      "implementation_depends": [
+        "P1-04"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-06",
+      "implementation_depends": [
+        "P1-05",
+        "P0-04"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-07",
+      "implementation_depends": [
+        "P1-06"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-08",
+      "implementation_depends": [
+        "P1-07"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    },
+    {
+      "id": "P1-09",
+      "implementation_depends": [
+        "P1-08"
+      ],
+      "implementation_status": "not_started",
+      "acceptance_status": "not_run",
+      "implementation_evidence": [],
+      "acceptance_evidence": []
+    }
+  ]
+}

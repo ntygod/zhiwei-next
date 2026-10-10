@@ -19,7 +19,7 @@
 
 ## 事实源
 
-design-v2 的开发入口为[整体设计](../planning/design-baseline.md)与[当前交接](../planning/next-task-handoff.md)。`development-plan.json` 是新任务/依赖/场景/旧包映射源，`implementation-plan.md` 是生成视图；`npm run check:design-plan` 增量检查一致性并含负例。原冻结计划、决议检查及所有既有 CI/批准门保留；新检查不认证产品完成或远端批准，不替换旧门。当前阶段以配置和 project-state 机器块一致的 P 编号为准，旧 M0—M7 只保留历史与过渡映射。
+design-v2 的开发入口为[整体设计](../planning/design-baseline.md)与[当前交接](../planning/next-task-handoff.md)。`development-plan.json` 是新任务/依赖/场景/旧包映射源，`implementation-plan.md` 是生成视图；`npm run check:design-plan` 增量检查一致性并含负例。[开发与验收分离](../planning/development-and-acceptance.md)以 execution-mode v1 仅记录实现依赖/双状态，原 depends 保留为验收/启用依赖。原冻结计划、决议检查及所有既有 CI/批准门保留；新检查不认证产品完成或远端批准，不替换旧门。当前阶段以配置和 project-state 机器块一致的 P 编号为准，旧 M0—M7 只保留历史与过渡映射。
 
 [详细架构](../architecture/detailed-design.md)的 `architecture-catalog.json` 记录目标组件、端口、事务和场景映射；`npm run check:detailed-architecture` 检查引用/责任/包依赖和负例，并在隔离内存 SQLite 验证文档中的三表约束示例。该检查不执行产品迁移、不证明真实事务/删除/恢复已实现，仍保留全部既有检查。
 
@@ -154,6 +154,7 @@ Repository Hygiene 负责：
 
 - 固定工具链与安装态依赖闭包、全部正式 TypeScript 源/测试 strict noEmit、实际缺 API/类型/配置污染负例（范围见[工具链说明](../architecture/formal-toolchain.md)）；
 - 架构边界；
+- `check:execution-mode` 合成开发技术依赖、双状态和证据引用结构；不认证远端批准或真实启用；
 - `AGENTS.md` 层级与引用；
 - `check:work-items` Work Item Policy 和治理一致性；
 - Main Provenance、Autonomous Merge即时 dispatch和完成后 reconciler；

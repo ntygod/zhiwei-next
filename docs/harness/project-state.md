@@ -6,6 +6,14 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：开发与验收分离 #108（2026-10-10）
+
+唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
+
+本独立 R3 治理仅定案[代码开发与产品验收分离](../planning/development-and-acceptance.md)。原任务/验收 DAG 保留；新增执行索引记录实现依赖与双状态，不复制任务内容。本治理仍走旧规则，保护合入后下一独立实现直接进入 P1-01，合成输入编写正式领域/协议代码；不再循环新增 P0 准备卡。P0-01/02、D-04/D-08、G-2/G-5 仍未验收，不执行受限实验、不授予真实数据/模型/外发/凭据/部署许可。最终 HEAD 批准/CI/合入均以实时 GitHub 为准。
+
+以下为历史工作快照，不是开放 WIP 或新选工入口。
+
 ## 当前工作：P0-04 纯预算/选择组件 #106（2026-10-10）
 
 canonical [#106](https://github.com/ntygod/zhiwei-next/issues/106)，唯一分支 `feat/106-context-budget-core`，基于已保护合入的 main `4d3d40926150b3fce122f8f20f6d7e8c50c735a8`。#104 / PR105 规划已经独立 R3、原 CI/来源和保护合入；本项独立实现其[完整预算合同](../planning/context-budget-preparation.md)，不修改刚生效的规则。唯一 [PR107](https://github.com/ntygod/zhiwei-next/pull/107) 已实现内部预算选择与35项独立测试（含全部4097预算配额和输入排列），固定工具链完整 check 428/428、原始退出码0。最终 HEAD 独立 R3/Ready 与受保护交付仍以实时 GitHub 记录为准，未提前宣称完成。
