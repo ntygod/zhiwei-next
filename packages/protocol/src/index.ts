@@ -45,3 +45,6 @@ export interface NormalizedRuntimeEvent {
 export { CognitiveProtocolError } from "./cognitive-wire.ts";
 export * from "./observation-v2.ts";
 export * from "./local-api-v1.ts";
+
+// Controlled Runtime transport is independent of the existing event and persistence contracts.
+export * from "./controlled-runtime-v1.ts";

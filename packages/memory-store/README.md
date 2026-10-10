@@ -9,7 +9,7 @@ P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发
 - Claim：正文仅受管文件；SQL 保留不可变受控元数据/版本/证据。纠正使用持久 CAS，同事务新增版本、supersede、依赖失效、epoch、生命周期记录、Outbox。旧正文保留受政策约束的历史，不原位改成新事实。
 - 同一 Claim 版本的通用 dispute/expire 状态持久入口按原 M1-4 规划留给 P1-05；当前实现纠正、FORGET、control-first 收紧与按有效时间拒绝读取，没有任意状态 override。
 - Candidate、Hypothesis、Goal：正式 domain parser 验证的独立类型、规范正文、精确最小元数据投影和 revision history；指针、依赖、epoch、Outbox 同事务。ACCEPTED Candidate 必须走 `commitCandidateAcceptance` 与 Claim 同事务提交，独立提交拒绝；生命周期 revision 不得改写 Candidate 原正文。不是任意 JSON Repository，也不实现 P2 学习晋升。
-- Episode/WorkingState：有严格 codec/非正文投影；当前公开持久提交/读取返回固定 `unsupported`，因为其 Task/Attempt/Outcome 精确引用需要 P1-04/09 的真实任务事务。没有任意“引用已验证”开关。Procedure/P2、权限执行/预算/租约表不提前铺空壳。
+- Episode/WorkingState：有严格 codec/非正文投影；当前公开持久提交/读取返回固定 `unsupported`，因为WorkingState 持久依赖 P1-04 的真实 Task/Attempt 事务、由 P1-06 消费；Episode 由 P1-07 的 Outcome 消费者基于 P1-04 精确 Task/Attempt/Outcome 历史接线。P1-09 只负责 Alpha 端到端验收，不承担这两项存储实现。没有任意“引用已验证”开关。Procedure/P2、权限执行/预算/租约表不提前铺空壳。
 - 独立 evidence fragment 没有正式存储解析器时返回 `unsupported`，不会因为父 Observation 存在而接纳悬空 fragmentId。
 - v1→v2 转换要求显式 mapping；`fixtures/cognitive-v2` 保留两版 Fixture。版本转换不物化正文，不认证来源或授权，不迁移真实数据。
 

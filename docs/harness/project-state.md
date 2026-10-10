@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-10
 -->
 
-## 当前工作：P1-02 正文生命周期与认知事务 #112（2026-10-10）
+## 当前工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
+
+canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker`，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
+
+当前开发正式 CLI JSONL Worker 传输、Daemon Supervisor 与工具/模型 Broker；真实入口默认关闭，仅固定合成材料/接收器。新一方扩展合同见 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)，尚待独立决策接受；不把 unknown 边界的本地编译当上游 SDK 类型支持。root SDK46 诊断保留，精确工具链/官方入口不变。原 #90 及同等争议攻防动态实验不重跑，Z08/Z09 真实安全验收 `not_run`。
+
+P1-04 承接真实 Session/Task/Attempt/输入及 WorkingState 存储，P1-06 消费 WorkingState；P1-07 基于 P1-04 精确历史完成 Outcome/Episode；P1-09 仅 Alpha 验收。本项不扩大 Task 存储范围或伪造持久授权。当前候选仍须完整原检查、最终独立 R3、本 PR Runtime 来源、Ready/live、保护合入与 main 回读。
+
+以下段落保留原开发期快照，不代表当前 WIP。
+
+## 历史工作：P1-02 正文生命周期与认知事务 #112（2026-10-10）
 
 canonical [#112](https://github.com/ntygod/zhiwei-next/issues/112)，唯一 `feat/112-cognitive-persistence` / Draft [PR113](https://github.com/ntygod/zhiwei-next/pull/113)，从已保护 main `e996451f1c601b5d4859c07030bfeabb290f5371` 开始。开工已核实无开放 PR/Incident、远端仅 main；#44/#67 原人类输入保留。P1-01 / PR111 已通过最终 R3、499 项完整测试、Ready/live、保护合入与 main provenance，#110 已关闭；产品验收仍 `not_run`。
 
