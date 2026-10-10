@@ -80,3 +80,17 @@ export type {
   RuntimeSourceStreamIdentityV1,
   StoredRuntimeEventV1,
 } from "./sqlite-observation-ledger.ts";
+
+// Synthetic development only; no daemon/API/runtime consumer is enabled.
+export { SyntheticCognitionStoreV2, CognitiveStoreErrorV2, openSyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
+export type { SyntheticCognitionStoreOptionsV2, CognitionFenceV2, CognitiveStoreErrorCodeV2,
+  StageCognitiveContentV2, CognitiveCommitReceiptV2, CognitiveOutboxEventV2 } from "./cognitive-store-v2.ts";
+export { convertRuntimeV1ToObservationV2 } from "./cognitive-codec-v2.ts";
+export type { CognitiveRecordKindV2, CognitiveRecordByKindV2 } from "./cognitive-codec-v2.ts";
+export type { RecoveryControlIntentV2, RecoveryControlTargetV2 } from "./recovery-journal-v2.ts";
+export { SyntheticRecoveryCoordinatorV2, SyntheticRecoveryErrorV2,
+  createSyntheticRecoveryCoordinatorV2, openSyntheticRecoveryCoordinatorV2 } from "./synthetic-recovery-v2.ts";
+export type { SyntheticRecoveryOptionsV2, CreateSyntheticRecoveryOptionsV2,
+  RestoreSyntheticSnapshotV2, SyntheticRecoveryReceiptV2, SyntheticSnapshotManifestV2,
+  SyntheticRecoveryErrorCodeV2, ManagedSyntheticRecoveryCopyV2,
+  ManagedSyntheticRecoveryPurgeResultV2 } from "./synthetic-recovery-v2.ts";
