@@ -41,7 +41,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
   let serial = Promise.resolve(), lifecycle = Promise.resolve();
   // Each caller still receives its own failure; later lifecycle work must not inherit a rejected tail.
   // Every operation below repeats the actual API/Worker close and Store checks before proceeding.
-  const live = new Map<string, { context: SessionApiContext; supervisor: SyntheticWorkerSupervisor; stopping?: Promise<void>; suspended?: boolean }>();
+  type LiveWorker = { context: SessionApiContext; supervisor: SyntheticWorkerSupervisor; runFinished: boolean; stopping?: Promise<void>; suspended?: boolean };
+  const live = new Map<string, LiveWorker>();
   const observedCloses = new Map<string, { spec: TaskExecutionDetailsV1["spec"]; binding: TaskExecutionDetailsV1["binding"]; executionRevision: number; evidence: RuntimeProcessCloseEvidenceV1 }>();
   const boundary = (): TaskPersistenceBoundaryV1 => ({ daemonInstanceId,
     recoveryCustody: { observedClose(input) { const record = observedCloses.get(input.binding.bindingId); return record ? structuredClone(record) : undefined; } },
@@ -61,6 +62,11 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     store().tasks.executeTask(application.contextForTask(context, task), { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: task.revision, payload: { kind: "task.runtime", taskId, event, evidenceRefs: [{ id: bindingId, revision: execution.revision }], ...(completeness ? { completeness } : {}) } });
     application.committed();
   };
+  const releaseClosedCustody = (taskId: string, active: LiveWorker) => {
+    if (!active.runFinished || live.get(taskId) !== active) return;
+    const persisted = store().executions.readExecution(active.context.workspaceId, taskId);
+    if (persisted?.closed && persisted.bindingId === active.supervisor.snapshot().binding.bindingId) live.delete(taskId);
+  };
   const stop = async (taskId: string, reason: "cancelled" | "shutdown") => {
     const active = live.get(taskId); if (!active) return;
     active.stopping ??= (async () => {
@@ -77,7 +83,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       await supervisor.close();
     })();
     const pending = active.stopping;
-    try { await pending; }
+    try { await pending; if (!active.suspended) releaseClosedCustody(taskId, active); }
     catch (error) {
       // Retain the exact Supervisor so an observed close can be persisted on a later retry.
       if (active.stopping === pending) active.stopping = undefined;
@@ -105,7 +111,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     const input = store().tasks.recordRuntimeInput(owner, { commandId: inputId, idempotencyKey: inputId, taskId, expectedRevision: task.revision, attemptId: attempt.id, intentRevision: task.intent.revision, text: syntheticTaskPrompt });
     application.committed();
     const global = store().currentFence({ kind: "global" }), workspace = store().currentFence({ kind: "workspace", workspaceId: context.workspaceId });
-    let supervisor: SyntheticWorkerSupervisor | undefined;
+    let supervisor: SyntheticWorkerSupervisor | undefined, active: LiveWorker | undefined;
     try {
       supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
         fence: { installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: attempt.id }, sourceTask: { taskId, attemptId: attempt.id, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: owner.ownerEpoch, cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60_000).toISOString() } },
@@ -113,8 +119,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       });
       const admitted = current(context, taskId);
       if (closed || restarting || admitted.revision !== task.revision || admitted.state !== "READY" || admitted.attempts.at(-1)!.id !== attempt.id) return;
-      live.set(taskId, { context, supervisor });
       store().executions.allocateExecution(owner, { taskId, expectedRevision: task.revision, spec: supervisor.spec, binding: supervisor.snapshot().binding });
+      active = { context, supervisor, runFinished: false }; live.set(taskId, active);
       const binding = await supervisor.runtime.start(supervisor.spec);
       if (live.get(taskId)?.suspended) return;
       store().executions.markExecutionReady(owner, { taskId, binding });
@@ -134,9 +140,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       const accepted = await supervisor.runtime.dispatch(binding.bindingId);
       if (accepted.status !== "accepted") throw new SessionApiError("unavailable", "dependency_down", 503);
       await observed;
-      const active = live.get(taskId);
-      if (active?.suspended) return;
-      if (active?.stopping) await active.stopping;
+      if (active.suspended) return;
+      if (active.stopping) await active.stopping;
       else { const evidence = await supervisor.runtime.dispose(binding.bindingId); store().executions.closeExecution(owner, { taskId, evidence }); if (current(context, taskId).state === "RUNNING") runtimeCommand(context, taskId, "interrupted", binding.bindingId, "incomplete"); }
     } catch (error) {
       if (live.get(taskId)?.suspended) return;
@@ -149,13 +154,11 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       }
       throw error;
     } finally {
-      if (!live.get(taskId)?.suspended) {
-        if (supervisor) await supervisor.close();
-        // Physical disposal is not the durable close commit. Never discard custody after a
-        // persistence failure; cancellation/restart must be able to retry this exact evidence.
-        const persisted = store().executions.readExecution(context.workspaceId, taskId);
-        if (!persisted || persisted.closed) live.delete(taskId);
-      }
+      try { if (supervisor && !active?.suspended) await supervisor.close(); }
+      finally { if (active) active.runFinished = true; }
+      // Physical disposal is not the durable close commit. A failed write retains this exact
+      // Supervisor; a later successful stop retry may release it only after this run has drained.
+      if (active && !active.suspended) releaseClosedCustody(taskId, active);
     }
   };
   const runTask = (context: SessionApiContext, taskId: string): Promise<void> => {
@@ -164,7 +167,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     const operation = serial.then(() => executeTask(admittedContext, taskId)); serial = operation.catch(error => { lastFailure = error; }); return operation;
   };
   const reconcileRetained = async () => {
-    const recovered: string[] = [];
+    const recovered: [string, LiveWorker][] = [];
     for (const [taskId, active] of [...live]) {
       if (!active.suspended) continue;
       const persisted = store().executions.readExecutionDetails(active.context.workspaceId, taskId);
@@ -178,9 +181,9 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       finally { observedCloses.delete(persisted.bindingId); }
       if (task.state === "CANCELLING") runtimeCommand(active.context, taskId, "confirm-stop", persisted.bindingId);
       else if (task.state === "RUNNING" || task.state === "VERIFYING") runtimeCommand(active.context, taskId, "interrupted", persisted.bindingId, "incomplete");
-      await active.supervisor.close(); recovered.push(taskId); application.committed();
+      await active.supervisor.close(); recovered.push([taskId, active]); application.committed();
     }
-    if (recovered.length) { await serial; for (const taskId of recovered) live.delete(taskId); }
+    if (recovered.length) { await serial; for (const [taskId, active] of recovered) releaseClosedCustody(taskId, active); }
   };
   return {
     mode: "synthetic-fixtures-only", production: "unsupported", application, get api() { return api; }, runTask,

@@ -5,6 +5,7 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate as nextTick } from "node:timers/promises";
 import type { CriterionId, Task } from "../../../../packages/domain/src/index.ts";
+import { SyntheticCognitionStoreV2, type TaskExecutionPersistenceV1 } from "../../../../packages/memory-store/src/index.ts";
 import type { LocalApiCommandV1, SessionCreateCommandV1 } from "../../../../packages/protocol/src/index.ts";
 import { createSessionDataClient, pairSyntheticSessionCli, runSessionCli } from "../../../cli/src/session-client.ts";
 import { createSyntheticWorkerTestPackage } from "../runtime/controlled-worker-test-fixture.ts";
@@ -220,4 +221,49 @@ test("Ordinary missing package startup failure releases only proven non-spawned 
  assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
  h.application.executeTask(context, change(before.value, "task.cancel")); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.state, "CANCELLED");
  await h.restart(); assert.equal(h.application.getTask(context, taskId).recovery, undefined);
+});
+
+
+for (const window of ["cancelling", "settled"] as const) test(`A failed durable close retains custody until retry, then releases the exact finished ${window} run for a new attempt`, async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: window === "cancelling" });
+ const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ let failing = true, rejectedCloses = 0;
+ t.after(async () => { failing = false; t.mock.restoreAll(); await h.close(); await peer.remove(); });
+ // Fail the actual public persistence port before its write; all successful operations still use
+ // the owned temporary SQLite Store. No SQL, close evidence, or process lifecycle is simulated.
+ const getExecutions = Object.getOwnPropertyDescriptor(SyntheticCognitionStoreV2.prototype, "executions")!.get!;
+ const getter = t.mock.getter(SyntheticCognitionStoreV2.prototype, "executions", function(this: SyntheticCognitionStoreV2): TaskExecutionPersistenceV1 {
+   const port = getExecutions.call(this) as TaskExecutionPersistenceV1, closeExecution = port.closeExecution;
+   getter.mock.restore();
+   t.mock.method(port, "closeExecution", (...[owner, input]: Parameters<TaskExecutionPersistenceV1["closeExecution"]>) => {
+     if (failing) { rejectedCloses++; throw new Error("synthetic durable close write failure"); }
+     return closeExecution.call(port, owner, input);
+   });
+   return port;
+ });
+ const { taskId } = create(h);
+ if (window === "cancelling") { await peer.waitForPrompt(); h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.cancel")); }
+ await assert.rejects(h.idle(), /synthetic durable close write failure/);
+ const retained = h.evidence(context, taskId).execution!;
+ assert.ok(rejectedCloses > 0); assert.equal(retained.closed, false); assert.equal(retained.closeEvidence, undefined);
+ assert.equal(h.application.getTask(context, taskId).value.state, window === "cancelling" ? "CANCELLING" : "VERIFYING");
+ // A second failed commit cannot discard custody or pretend the previously observed physical
+ // close was durable. The next restart must retry the same binding before replacing the Store.
+ const beforeRetry = rejectedCloses;
+ await assert.rejects(h.restart(), /synthetic durable close write failure/);
+ assert.ok(rejectedCloses > beforeRetry); assert.equal(h.evidence(context, taskId).execution!.closed, false);
+ failing = false; await h.restart(); await h.idle();
+ const closed = h.evidence(context, taskId).execution!;
+ assert.equal(closed.bindingId, retained.bindingId); assert.equal(closed.closed, true);
+ assert.equal(closed.closeEvidence?.stdoutEof, true); assert.equal(closed.closeEvidence?.stderrEof, true); assert.equal(closed.closeEvidence?.closeObserved, true);
+ assert.equal(closed.closeEvidence?.processDisposition, undefined);
+ if (window === "settled") h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.cancel"));
+ assert.equal(h.application.getTask(context, taskId).value.state, "CANCELLED");
+ await peer.releasePrompt();
+ h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.continue"));
+ await Promise.all([h.runTask(context, taskId), h.runTask(context, taskId)]); await h.idle();
+ const current = h.application.getTask(context, taskId).value, next = h.evidence(context, taskId);
+ assert.equal(current.attempts.length, 2); assert.equal(current.state, "VERIFYING");
+ assert.notEqual(next.execution!.bindingId, retained.bindingId); assert.equal(next.execution!.closed, true);
+ assert.equal(next.modelRequests.length, 1); assert.equal(next.runtimeInputs.length, 1);
 });
