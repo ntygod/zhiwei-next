@@ -50,8 +50,6 @@ FORGET/SOURCE_SUPPRESS/PRIVACY_RESTRICT/RETENTION_SHORTEN/RESTORE_BEGIN 使用�
 
 ## P1-04 合成 Task/Session 存储（Schema 3）
 
-逐表 writer/reader、双向关联、正文失效边界与测试映射见[持久字段完整性覆盖清单](task-session-integrity-coverage.md)。
-
 [#116](https://github.com/ntygod/zhiwei-next/issues/116) 在相同 `product.sqlite` 追加固定 `0003_task_session_v1.sql`。`0001/0002`、Runtime v1 和既有 Ledger 入口不变；旧 v1/v2-only opener 拒绝更高版本。产品 opener 使用固定前向链，并在迁移同一事务中验证已有完整领域/正文投影。Schema、STRICT、索引/触发器 manifest、PRAGMA 及完整行校验继续 fail closed。没有迁移 override 或 down migration。
 
 `taskPersistence` 是合成组合根一次注入、固定捕获的同步无 I/O reducer、实例身份、内容政策和 ID 来源。HTTP 不接受 Task/Attempt/Outcome/历史对象或验证开关。`store.tasks` 从锁定的当前 Task 计算持久 CAS，独立检查正式 parser、连续 revision、不可变 intent/attempt/outcome 前缀和状态不变量。CREATED→READY、CANCELLING→CANCELLED 等所有中间版本都持久保存。状态、真实用户输入 Observation、WorkingState、幂等 receipt 与任务 Outbox 同事务，注入时钟每事务只读取一次。
@@ -75,3 +73,10 @@ SessionContract 六类 profile、输入、Task 历史和工作正文使用原 `c
 恢复协调者接受固定 `taskPersistence` 并传入每个重开 store；服务必须由协调者选择 active generation。RESTORE_BEGIN 隔离旧任务 Outbox、提高 Session epoch，不恢复运行授权。Schema 2 历史清单可以经明确前向迁移读取；清单解析成功不是恢复证明。现有 capture/备份攻击/隔离恢复/切换故障窗口等未运行路径保持 not_run；不执行旧 #90、Private 替换/备份攻击或等价受限诊断。
 
 验证仅使用虚构输入和真实隔离临时 SQLite；精确当前 HEAD 的 Node22.23.1/npm10.9.8 类型、事务、迁移、完整行、生命周期与正常进程重开结果在交付记录。产品验收始终 not_run，真实个人数据、模型、凭据、外部副作用和部署不启用。回退关闭新入口并排空 Worker，保留独立控制日志；不允许旧软件打开 Schema 3，也不通过恢复回生已遗忘正文，只能兼容软件或受审前向修复。
+
+
+#### 历史接纳与未启动收尾
+
+Execution allocation 同事务保存实际 global/workspace cognition/policy 四个不可变接纳 epoch，供历史 spec 精确投影校验；历史 lease 只与原事务时间比较，不因现在已到期否定过去合法记录。Task 相邻版本、跨 attempt 时间和新 attempt 的 Session 再授权在正文失效后仍双向检查；settled receipt 的来源关系不能通过改名跳过。
+
+受控 Runtime 的 `processDisposition: not_spawned` 证明只适用于关闭 spawn admission 后从未创建 child 的 ALLOCATED 执行。Store 要求未 dispatch、未观察 native Session/stream、无 EOF/close 迹象，再追加 STOPPED；原 ALLOCATED 事实保留。READY/BUSY 和未知进程状态不能借此收尾。完整字段与失效边界见[完整性覆盖清单](task-session-integrity-coverage.md)。

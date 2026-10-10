@@ -93,6 +93,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   const cursor = new SessionCursorCodec({ installationId: options.installationId, recoveryEpoch: options.recoveryEpoch ?? (() => "synthetic-recovery-1"), projectionGeneration: options.projectionGeneration ?? (() => 1), now });
   const streams = new Set<ServerResponse>(); const wakeStreams = new Set<() => void>(); let origin = ""; let state: "idle" | "starting" | "listening" | "closed" = "idle";
   let closing: Promise<void> | undefined;
+  let starting: Promise<string> | undefined;
   const authorize = (authentication: SessionAuthentication, workspaceId: string): SessionApiContext => {
     if (!auth.current(authentication)) throw new SessionApiError("unauthenticated", "expired_session", 401);
     // Reject scope before consulting application content or membership lookup.
@@ -169,7 +170,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   };
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     try {
-      if (state !== "listening") throw new SessionApiError("unavailable", "dependency_down", 503);
+      if (state !== "listening" || closing) throw new SessionApiError("unavailable", "dependency_down", 503);
       if (request.rawHeaders.length > 128 || !request.url || request.url.length > 4096 || request.headersDistinct.expect || request.headersDistinct["content-encoding"]) invalid();
       const authority = origin.slice("http://".length);
       if (request.socket.localAddress !== "127.0.0.1" || request.socket.remoteAddress !== "127.0.0.1"
@@ -269,23 +270,32 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   for (const event of ["upgrade", "connect"] as const) server.on(event, (_request, socket) => socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"));
   return {
     mode: "synthetic-fixtures-only",
-    listen: () => new Promise((resolve, reject) => {
-      if (state !== "idle") { reject(new SessionApiError("validation", "invalid_shape", 400)); return; }
-      state = "starting";
-      const failed = () => { state = "closed"; reject(new SessionApiError("unavailable", "dependency_down", 503)); }; server.once("error", failed);
-      server.listen(0, "127.0.0.1", () => {
-        server.removeListener("error", failed); const address = server.address();
-        if (!address || typeof address === "string") { failed(); return; }
-        origin = `http://127.0.0.1:${address.port}`; state = "listening"; resolve(origin);
+    listen: () => {
+      if (state !== "idle") return Promise.reject(new SessionApiError("validation", "invalid_shape", 400));
+      starting = new Promise((resolve, reject) => {
+        state = "starting";
+        const failed = () => { state = "closed"; reject(new SessionApiError("unavailable", "dependency_down", 503)); }; server.once("error", failed);
+        server.listen(0, "127.0.0.1", () => {
+          server.removeListener("error", failed); const address = server.address();
+          if (!address || typeof address === "string") { failed(); return; }
+          origin = `http://127.0.0.1:${address.port}`; state = "listening"; resolve(origin);
+        });
       });
-    }),
+      return starting;
+    },
     issuePairingCode: (kind, fixture) => auth.issuePairingCode(kind, fixture), revoke: fixture => { auth.revoke(fixture); for (const wake of wakeStreams) wake(); },
     close: () => {
       if (closing) return closing;
-      if (state === "starting") return Promise.reject(new SessionApiError("unavailable", "dependency_down", 503));
       auth.close(); cursor.close(); for (const response of streams) response.destroy();
-      if (state !== "listening") { state = "closed"; return Promise.resolve(); }
-      state = "closed"; closing = new Promise((resolve, reject) => { server.closeAllConnections(); server.close(error => error ? reject(new SessionApiError("unavailable", "dependency_down", 503)) : resolve()); }); return closing;
+      closing = (async () => {
+        // A pending listen owns a real socket acquisition. Join it before teardown rather than
+        // rejecting or claiming closure while its callback can still open the server later.
+        if (state === "starting") await starting?.catch(() => undefined);
+        if (state !== "listening") { state = "closed"; return; }
+        state = "closed";
+        await new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close(error => error ? reject(new SessionApiError("unavailable", "dependency_down", 503)) : resolve()); });
+      })();
+      return closing;
     },
   };
 }

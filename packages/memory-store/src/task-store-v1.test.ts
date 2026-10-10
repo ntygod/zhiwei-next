@@ -528,3 +528,47 @@ test("multi-version reducer cannot cancel an unclosed execution and hide it behi
   code(() => f.store.tasks.executeTask(context, command), "conflict");
   assert.deepEqual(f.store.tasks.snapshot(WORKSPACE), before);
 });
+
+test("retained Task chronology survives body erasure and rejects cross-attempt time reversal", async t => {
+  for (const corrupt of [false, true]) await t.test(corrupt ? "reversed" : "increasing", t => {
+    const f = fixture(t), c = create(f);
+    f.setTime("2026-10-10T00:00:01.000Z"); f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2));
+    f.setTime("2026-10-10T00:00:02.000Z"); f.store.tasks.executeTask(context, action("task.retry", c.taskId, 4));
+    f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-chronology", at: "2026-10-10T00:00:02.000Z", authorization: "synthetic-user-request",
+      targets: [{ kind: "scope", scope: { kind: "task", workspaceId: WORKSPACE, taskId: c.taskId } }] });
+    if (!corrupt) { assert.ok(f.store.tasks.replay(WORKSPACE).events.length); assert.ok(f.reopen().tasks.replay(WORKSPACE).events.length); return; }
+    editMetadata(f, ["task_snapshot_v1", "task_attempt_v1", "content_object", "task_outbox_v1", "observation_v2"], db => {
+      const at = "2026-10-10T00:00:03.000Z";
+      db.prepare("UPDATE task_snapshot_v1 SET created_at=? WHERE task_id=? AND revision IN (3,4)").run(at, c.taskId);
+      db.prepare("UPDATE task_attempt_v1 SET updated_at=? WHERE task_id=? AND attempt_no=1").run(at, c.taskId);
+      db.prepare("UPDATE content_object SET created_at=? WHERE content_id IN (SELECT content_id FROM task_snapshot_v1 WHERE task_id=? AND revision IN (3,4)) OR content_id IN (SELECT content_id FROM task_input_v1 WHERE task_id=? AND task_revision=4)").run(at, c.taskId, c.taskId);
+      for (const row of db.prepare("SELECT * FROM task_outbox_v1 WHERE entity_kind='task' AND entity_id=? AND revision IN (3,4)").all(c.taskId)) {
+        const event = JSON.parse(String(row.event_json)); event.occurredAt = at;
+        db.prepare("UPDATE task_outbox_v1 SET occurred_at=?,event_json=? WHERE cursor=?").run(at, canonicalJsonV1(event), row.cursor!);
+      }
+      for (const row of db.prepare("SELECT * FROM observation_v2 WHERE content_id IN (SELECT content_id FROM task_input_v1 WHERE task_id=? AND task_revision=4)").all(c.taskId)) {
+        const event = JSON.parse(String(row.event_json)); event.observedAt = at; event.recordedAt = at;
+        db.prepare("UPDATE observation_v2 SET event_json=? WHERE id=?").run(canonicalJsonV1(event), row.id!);
+      }
+    });
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
+  });
+});
+
+test("every explicit new attempt retains its preceding Session reauthorization", async t => {
+  for (const erased of [false, true]) await t.test(erased ? "erased" : "available", t => {
+    const f = fixture(t), c = create(f);
+    f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2)); f.reopen("daemon-two");
+    f.store.tasks.executeTask({ ...context, daemonInstanceId: "daemon-two", ownerEpoch: 2 }, action("task.retry", c.taskId, 4));
+    if (erased) f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-reauthorized", at: T0, authorization: "synthetic-user-request",
+      targets: [{ kind: "scope", scope: { kind: "task", workspaceId: WORKSPACE, taskId: c.taskId } }] });
+    editMetadata(f, ["session_v1", "session_revision_v1", "task_outbox_v1"], db => {
+      const history = db.prepare("SELECT * FROM session_revision_v1 WHERE session_id=? AND reason='reauthorized'").get(c.sessionId)!;
+      db.prepare("UPDATE session_v1 SET revision=2,requires_reauthorization=1,updated_at=(SELECT created_at FROM session_revision_v1 WHERE session_id=? AND revision=2) WHERE id=?").run(c.sessionId, c.sessionId);
+      db.prepare("DELETE FROM session_revision_v1 WHERE session_id=? AND revision=3").run(c.sessionId);
+      db.prepare("DELETE FROM task_outbox_v1 WHERE cursor=?").run(history.event_cursor!);
+    });
+    code(() => f.store.tasks.getTask(WORKSPACE, c.taskId), "corruption"); code(() => f.store.tasks.getSession(WORKSPACE, c.sessionId), "corruption");
+    code(() => f.reopen("daemon-two"), "corruption");
+  });
+});

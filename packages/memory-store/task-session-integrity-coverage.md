@@ -2,7 +2,7 @@
 
 ## 范围与判定方法
 
-本清单描述同一变更中的 `0003_task_session_v1.sql`、Task/Session Store、Execution Store 与相关正式parser，覆盖 **18张表、170个SQL列**，并列出其受控正文的主要逐字段合同。这里的“已校验”指源码存在明确检查，不等于测试已经通过或产品已启用。
+本清单描述同一变更中的 `0003_task_session_v1.sql`、Task/Session Store、Execution Store 与相关正式parser，覆盖 **18张表、174个SQL列**，并列出其受控正文的主要逐字段合同。这里的“已校验”指源码存在明确检查，不等于测试已经通过或产品已启用。
 
 本次仅进行静态源码与测试源码核对，没有执行测试、动态诊断或外部操作。表中测试编号表示已有用例的覆盖映射；**最终提交上的执行结果全部待验证**。不得沿用较早提交的通过数字，也不得把合成开发验证写成真实模型、真实数据或生产恢复验收。
 
@@ -292,7 +292,7 @@
 | workspace_id | API选定并实际确认事件的Workspace | 无条件标识；cursor必须在同Workspace存在 | Outbox发布前缀按Workspace隔离 | 完整保留 | T17 |
 | cursor | 每次恰确认当前cursor之后的下一实际事件；持久行永远>0 | 无条件正整数；真实同Workspace事件存在 | 其覆盖前缀在当前世代须published，旧世代须quarantined | 完整保留 | T08,T17 |
 
-## task_execution_v1（14列）
+## task_execution_v1（18列）
 
 入口与检查：E.allocateExecution / #append / validateRows。
 
@@ -309,6 +309,10 @@
 | intent_revision | 分配时意图版本 | 正整数；精确分配Task意图 | snapshot/event/model/input完全一致 | 完整保留 | X01,X02 |
 | owner_epoch | 分配时Session owner | 正整数；分配Task owner相同 | Task版本事件回接历史Session授权；执行历史不被新owner改写 | 完整保留 | X01,X02 |
 | recovery_epoch | 分配时独立控制世代 | 无条件非负且<=当前控制世代；正文metadata fence一致 | snapshot/event/model全坐标相同 | 完整保留 | X11,XF07 |
+| global_cognition_epoch | allocation 已验证事务从实际 scope_catalog.cognition_epoch 读取；不可变 | 非负且不大于该 scope 已知值；可用历史 spec.fence.cognition.global 精确相等 | 安装/恢复世代由现有根、content fence 与 Store 状态锚定；禁止以调用方自报历史代替接纳事实 | 保留接纳元数据，不重建已删 spec | R3-A04 |
+| workspace_cognition_epoch | allocation 已验证事务从实际 scope_catalog.cognition_epoch 读取；不可变 | 非负且不大于该 scope 已知值；可用历史 spec.fence.cognition.workspace 精确相等 | 安装/恢复世代由现有根、content fence 与 Store 状态锚定；禁止以调用方自报历史代替接纳事实 | 保留接纳元数据，不重建已删 spec | R3-A04 |
+| global_policy_epoch | allocation 已验证事务从实际 scope_catalog.policy_epoch 读取；不可变 | 非负且不大于该 scope 已知值；可用历史 spec.fence.policy.global 精确相等 | 安装/恢复世代由现有根、content fence 与 Store 状态锚定；禁止以调用方自报历史代替接纳事实 | 保留接纳元数据，不重建已删 spec | R3-A04 |
+| workspace_policy_epoch | allocation 已验证事务从实际 scope_catalog.policy_epoch 读取；不可变 | 非负且不大于该 scope 已知值；可用历史 spec.fence.policy.workspace 精确相等 | 安装/恢复世代由现有根、content fence 与 Store 状态锚定；禁止以调用方自报历史代替接纳事实 | 保留接纳元数据，不重建已删 spec | R3-A04 |
 | scope_key | Task scope | 精确scopeKey；Task存在 | 所有正文scope和child FK一致 | 完整保留 | X01,XF07 |
 | current_revision | 初始1，每个实际变化+1 | 执行snapshot数等于current；连续1..N | 末snapshot决定active/updated_at | 完整保留 | X01,XF02 |
 | active | 初始1，完整关闭后0 | 恰等于1-末snapshot.closed | closed历史不能再追加；同attempt无替换执行 | 完整保留 | X05,XF09 |
@@ -515,7 +519,7 @@ C.#resolveTargets处理既有 `RecoveryControlTargetV2` 的content目标时，�
 
 ## 验证与验收状态
 
-- 源码覆盖：18张表、170列已逐项登记；对应现有及新增测试名称已映射。
+- 源码覆盖：18张表、174列已逐项登记；对应现有及新增测试名称已映射。
 - 本文编制：静态核对，未运行测试或诊断；收到的中间局部结果不替代最终提交上的完整运行。
 - 中间开发运行记录：Task相关116/116、strict类型检查130根及架构检查已有通过报告；正式最终结果须绑定冻结源码和最终提交后另行记录，本文不据此写整体通过。
 - 补充Execution F7/F9：代码已加入；最终SHA确认和对应运行pending。
@@ -524,3 +528,16 @@ C.#resolveTargets处理既有 `RecoveryControlTargetV2` 的content目标时，�
 - 历史资格：检查已存历史时不把当前policy/cognition或已过期lease重新当作当年写入时的值；必须区分历史完整性与当前可执行资格。
 
 本清单不替代最终HEAD的完整检查、独立完整性审查和既定交付门。测试状态更新应引用实际命令、Node补丁版本和对应提交，不通过本清单中的“有检查”推导“已通过”。
+
+
+## 后续 R3 历史关系与未启动收尾修正
+
+以下变更属于同一 P1-04 候选。这里记录源码合同和测试名，最终提交验证及独立审批仍须另行完成。
+
+- R3-A01：T.#commandMetadata 在跨命令及同命令的每一相邻 Task revision 上比较 retained created_at，不能早于前版；attempt.created_at 不得早于前 attempt.updated_at。已有首末 snapshot/attempt 精确投影继续生效。此处是领域 Task 时间约束，不比较独立 Runtime source 时钟。测试：`retained Task chronology survives body erasure and rejects cross-attempt time reversal`、`retained same-attempt commands cannot move backwards in time after body erasure`。
+- R3-A02：每个新 attempt 命令反向查找其首个 Task 事件前已生效的 Session history，必须 requires_reauthorization=0。既有 reauthorized 事件仍正向要求同事务明确用户新 attempt 命令。未开新 attempt 的内部 interrupted 可合法保留再授权待定。测试：`every explicit new attempt retains its preceding Session reauthorization`，覆盖正文可用和清除后。
+- R3-A03：最终状态为 VERIFYING 的 task.runtime receipt 必须通过 retained 依赖唯一回接真实 execution event，并保留 `settled:<eventId>` 的精确双键。再由原正向检查验证来源、完整命令段、时间、相邻事件和最终 ACK；改名不能使义务消失。中间 VERIFYING→最终 UNVERIFIABLE 的 interrupted receipt 不套用 settled 规则。测试：`erased settled receipt cannot be renamed to bypass its final acknowledgement`。
+- R3-A04：execution 根新增上表四个 immutable allocation admission epoch。该投影来自原 allocation 事务的实际 scope_catalog，spec 不承担自证作用。当前 scope 只提供不可能未来值的上界，不要求历史等于现在；正文可用才核原 spec 的四值、notAfter 和 profiles。测试：`allocation admission epochs are bounded immutable metadata`、`allocation spec projects independently captured admission epochs`、`retained allocation admission epochs reject future scope values even after body erasure`。
+- R3-A05：allocation、READY、dispatch、source observation、event intake、model request 的 writer 实际调用 #checkFence；读取历史时在能辨识这些操作且原 spec 可用的范围内，用各自事务创建时间核原 notAfter。close/recover-close 与 exact replay 不要求当前 lease 仍有效。普通 close 和恢复 close 的 observedAt 都须位于 allocation.created_at 与本次记录时间之间，可用历史正文同样核验。正文失效后不重建 notAfter 或 close 原始证明。测试：`non-close execution observations cannot be committed at the historical lease deadline`、`historical model and event admissions must precede the original lease deadline`、`normal close rejects future and pre-allocation observations without committing`、`available close history rejects evidence observed after its own committed snapshot`；已有 expired replay/close 正例保留。
+- R3-A06：受控替换正文测试必须同步迁移入边并清理旧 target 的入边，避免 orphan dependency 提前失败掩盖 payload 缺陷。`managed execution body fixture preserves unchanged valid payloads and dependency roles` 分别证明 ALLOCATED、dispatched、closed、observed 的 unchanged-body 读取及重开正控；原负例继续使用同一修正夹具。
+- R3-A07：Runtime close evidence 可携带严格 `processDisposition: not_spawned`，由受控 adapter 关闭 spawn admission、等待 preparation 完成且确认从未产生 child 后提供。Store 仅接受原 ALLOCATED、未 dispatched、无 observed native Session/stream、无 EOF/close 观察的历史，追加 STOPPED；不伪造 EOF 或进程 close。可信恢复 custody 仍需精确原 spec/binding/revision，并受同一资格守卫。READY/BUSY/已有进程迹象拒绝，普通不完整 EOF 不能被推断为未启动。测试：`not-spawned close is complete only for undispatched unobserved ALLOCATED execution`、`trusted recovery accepts unspawned proof only for exact old ALLOCATED custody`；真实受控 Worker 场景由 daemon 集成测试覆盖。

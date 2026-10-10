@@ -70,7 +70,7 @@ function populate(db: DatabaseSync): void {
   db.exec("INSERT INTO task_receipt_v1 VALUES ('principal', 'task.input', 'idempotency', 'command', 'workspace', 'task', 'task', 1, 1, 'input-body', 1, 'scope-task')");
   db.exec("INSERT INTO task_content_dependency_v1 VALUES ('task-body', 1, 'input-body', 1)");
   db.exec("INSERT INTO task_consumer_v1 VALUES ('consumer', 'workspace', 0)");
-  db.prepare("INSERT INTO task_execution_v1 VALUES ('binding', 'execution-unit', 'workspace', 'task', 'attempt', 1, 1, 1, 0, 'scope-task', 1, 1, ?, ?)").run(NOW, NOW);
+  db.prepare("INSERT INTO task_execution_v1 VALUES ('binding', 'execution-unit', 'workspace', 'task', 'attempt', 1, 1, 1, 0, 0, 0, 0, 0, 'scope-task', 1, 1, ?, ?)").run(NOW, NOW);
   db.prepare("INSERT INTO task_execution_snapshot_v1 VALUES ('binding', 1, 'task', 1, 'attempt', 1, 1, 0, 'scope-task', 'ALLOCATED', 0, 0, 'execution-body', 1, ?)").run(NOW);
   db.exec("INSERT INTO task_execution_stream_v1 VALUES ('binding', 'source', 'stream', 1, 'runtime-event')");
   db.prepare("INSERT INTO task_execution_event_v1 VALUES (1, 'runtime-event', 'runtime-idempotency', 'binding', 'task', 'attempt', 1, 1, 1, 0, 'scope-task', 'stream', 'source', 1, 'execution-body', 1, 2, ?)").run(NOW);
@@ -380,4 +380,14 @@ test("Session history reasons constrain authorization, creation and event refere
     assert.throws(() => db.exec("COMMIT"), /FOREIGN KEY/); db.exec("ROLLBACK");
     assert.equal(scalar(db, "SELECT count(*) FROM session_revision_v1"), 1);
   } finally { db.close(); }
+});
+
+test("allocation admission epochs are bounded immutable metadata", () => {
+  temporaryDatabase(filePath => { const { db } = open(filePath); try {
+    populate(db);
+    for (const column of ["global_cognition_epoch", "workspace_cognition_epoch", "global_policy_epoch", "workspace_policy_epoch"]) {
+      assert.throws(() => db.exec(`UPDATE task_execution_v1 SET ${column}=1,current_revision=2`), /guard update/);
+      assert.equal(scalar(db, `SELECT ${column} FROM task_execution_v1`), 0);
+    }
+  } finally { db.close(); } });
 });

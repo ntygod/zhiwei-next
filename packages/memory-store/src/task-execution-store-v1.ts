@@ -51,9 +51,14 @@ function identity(binding: RuntimeBindingV1): unknown {
   const { state: _state, observedRuntimeSessionIds: _sessions, sourceStreams: _streams, ...fixed } = binding; return fixed;
 }
 function prefix<T>(before: readonly T[], after: readonly T[]): boolean { return after.length >= before.length && before.every((item, index) => json(item) === json(after[index])); }
-function complete(evidence: RuntimeProcessCloseEvidenceV1): boolean { return evidence.stdoutEof && evidence.stderrEof && evidence.closeObserved; }
+function complete(evidence: RuntimeProcessCloseEvidenceV1): boolean { return evidence.processDisposition === "not_spawned" || evidence.stdoutEof && evidence.stderrEof && evidence.closeObserved; }
+function unspawned(body: Body, stopped = false): boolean {
+  return (body.binding.state === "ALLOCATED" || stopped && body.binding.state === "STOPPED") && !body.dispatched
+    && !body.binding.observedRuntimeSessionIds.length && !body.binding.sourceStreams.length
+    && (!body.closeEvidence || !body.closeEvidence.stdoutEof && !body.closeEvidence.stderrEof && !body.closeEvidence.closeObserved);
+}
 function closeExtends(before: RuntimeProcessCloseEvidenceV1 | undefined, after: RuntimeProcessCloseEvidenceV1): boolean {
-  return !before || (before.bindingId === after.bindingId && after.observedAt >= before.observedAt
+  return !before || ((before.processDisposition === after.processDisposition || before.processDisposition === undefined && after.processDisposition === "not_spawned" && !before.stdoutEof && !before.stderrEof && !before.closeObserved) && before.bindingId === after.bindingId && after.observedAt >= before.observedAt
     && (!before.stdoutEof || after.stdoutEof) && (!before.stderrEof || after.stderrEof) && (!before.closeObserved || after.closeObserved)
     && (!before.closeObserved || before.exitCode === after.exitCode && before.signal === after.signal));
 }
@@ -125,6 +130,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         || value.closed !== (binding.state === "STOPPED") || (binding.state === "BUSY" || binding.state === "DRAINING") && !value.dispatched
         || (binding.state === "ALLOCATED" || binding.state === "READY") && value.dispatched
         || value.closed !== (evidence !== undefined && complete(evidence)) || evidence && evidence.bindingId !== binding.bindingId) throw new Error("Invalid state");
+      if (evidence?.processDisposition === "not_spawned" && !unspawned({ schemaVersion: 1, spec, binding, sourceIdentity: declared, dispatched: value.dispatched, closed: value.closed, closeEvidence: evidence }, true)) throw new Error("Invalid unspawned proof");
       this.#matchSpec(spec, binding, declared);
       return { schemaVersion: 1, spec, binding, sourceIdentity: declared, dispatched: value.dispatched, closed: value.closed, ...(evidence ? { closeEvidence: evidence } : {}) };
     });
@@ -246,15 +252,19 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       if (current.snapshot.state !== "READY") this.#host.fail("conflict");
       this.#checkFence(context, current, spec, binding);
       if (this.#host.db.prepare("SELECT 1 FROM task_execution_v1 WHERE task_id=? AND owner_epoch=? AND active=1").get(taskId, context.ownerEpoch)) this.#host.fail("conflict");
+      const global = this.#host.db.prepare("SELECT * FROM scope_catalog WHERE scope_key=?").get(scopeKeyV2({ kind: "global" })) as Row;
+      const workspace = this.#host.db.prepare("SELECT * FROM scope_catalog WHERE scope_key=?").get(scopeKeyV2({ kind: "workspace", workspaceId: context.workspaceId })) as Row;
       const now = this.#host.now(), body: Body = { schemaVersion: 1, spec, binding, sourceIdentity: declared, dispatched: false, closed: false };
       const content = this.#writeBody(current.scope, body, [ref(current.snapshot), spec.requestSnapshotRef], boundary);
       const row: Row = { binding_id: binding.bindingId, execution_unit_id: spec.executionUnitId, workspace_id: context.workspaceId, task_id: taskId,
         attempt_id: text(current.snapshot.attempt_id), task_revision: expectedRevision, intent_revision: integer(current.snapshot.intent_revision),
-        owner_epoch: context.ownerEpoch, recovery_epoch: this.#host.recoveryEpoch(), scope_key: scopeKeyV2(current.scope), current_revision: 1, active: 1, created_at: now, updated_at: now };
+        owner_epoch: context.ownerEpoch, recovery_epoch: this.#host.recoveryEpoch(),
+        global_cognition_epoch: global.cognition_epoch!, workspace_cognition_epoch: workspace.cognition_epoch!,
+        global_policy_epoch: global.policy_epoch!, workspace_policy_epoch: workspace.policy_epoch!, scope_key: scopeKeyV2(current.scope), current_revision: 1, active: 1, created_at: now, updated_at: now };
       this.#host.db.prepare(`INSERT INTO task_execution_v1(binding_id,execution_unit_id,workspace_id,task_id,attempt_id,task_revision,intent_revision,
-        owner_epoch,recovery_epoch,scope_key,current_revision,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        owner_epoch,recovery_epoch,global_cognition_epoch,workspace_cognition_epoch,global_policy_epoch,workspace_policy_epoch,scope_key,current_revision,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(row.binding_id!, row.execution_unit_id!, row.workspace_id!, row.task_id!, row.attempt_id!, row.task_revision!, row.intent_revision!, row.owner_epoch!,
-          row.recovery_epoch!, row.scope_key!, 1, 1, now, now);
+          row.recovery_epoch!, row.global_cognition_epoch!, row.workspace_cognition_epoch!, row.global_policy_epoch!, row.workspace_policy_epoch!, row.scope_key!, 1, 1, now, now);
       this.#insertSnapshot(row, 1, body, content, now);
       return this.#summary(row, body);
     });
@@ -391,7 +401,9 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       const owned = this.#owned(context, input.taskId, evidence.bindingId, false);
       // Stop observation is a historical fact. Expired eligibility must not prevent recording it.
       if (json(owned.body.closeEvidence ?? null) === json(evidence)) return this.#summary(owned.row, owned.body);
-      if (owned.body.closed || !closeExtends(owned.body.closeEvidence, evidence)) this.#host.fail("conflict");
+      if (owned.body.closed || !closeExtends(owned.body.closeEvidence, evidence)
+        || evidence.observedAt > this.#host.now() || evidence.observedAt < text(owned.row.created_at)
+        || evidence.processDisposition === "not_spawned" && !unspawned(owned.body)) this.#host.fail("conflict");
       return this.#append(owned, { ...owned.body, closeEvidence: evidence, closed: complete(evidence),
         binding: parseRuntimeBindingV1({ ...owned.body.binding, ...(complete(evidence) ? { state: "STOPPED" } : {}) }) });
     });
@@ -446,7 +458,8 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       if (captured.executionRevision !== currentRevision || json(captured.spec) !== json(body.spec) || json(captured.binding) !== json(body.binding)
         || captured.evidence.bindingId !== input.bindingId || !complete(captured.evidence)
         || captured.evidence.observedAt > now || captured.evidence.observedAt < text(row.created_at)
-        || !closeExtends(body.closeEvidence, captured.evidence)) this.#host.fail("conflict");
+        || !closeExtends(body.closeEvidence, captured.evidence)
+        || captured.evidence.processDisposition === "not_spawned" && !unspawned(body)) this.#host.fail("conflict");
       const current: TaskCoordinates = { task, snapshot: taskSnapshot, session, scope };
       return this.#append({ row, snapshot, body, current }, { ...body, closed: true, closeEvidence: captured.evidence,
         binding: parseRuntimeBindingV1({ ...body.binding, state: "STOPPED" }) });
@@ -560,6 +573,11 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         for (const key of ["binding_id", "execution_unit_id", "workspace_id", "task_id", "attempt_id"]) assertIdentifierV2(row[key]);
         for (const key of ["task_revision", "intent_revision", "owner_epoch", "current_revision"]) integer(row[key]);
         if (integer(row.recovery_epoch, true) > this.#host.recoveryEpoch()) throw new Error("Future execution epoch");
+        for (const [kind, scope] of [["global", { kind: "global" }], ["workspace", { kind: "workspace", workspaceId }]] as const) {
+          const actual = db.prepare("SELECT * FROM scope_catalog WHERE scope_key=?").get(scopeKeyV2(scope)) as Row | undefined;
+          if (!actual || integer(row[`${kind}_cognition_epoch`], true) > integer(actual.cognition_epoch, true)
+            || integer(row[`${kind}_policy_epoch`], true) > integer(actual.policy_epoch, true)) throw new Error("Unknown historical admission epochs");
+        }
         assertIsoTimestampV2(row.created_at); assertIsoTimestampV2(row.updated_at);
         if (row.scope_key !== scopeKeyV2(scope) || row.updated_at! < row.created_at!) throw new Error("Execution coordinates");
         const task = db.prepare("SELECT * FROM task_v1 WHERE id=? AND workspace_id=?").get(taskId, workspaceId) as Row | undefined;
@@ -600,6 +618,8 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
           exactSources(dependencies, previous ? [ref(previous), ref(currentTask), ref(input)] : [ref(allocation), ref(input)]);
           const value = this.#bodyValue(snapshot, scope, false), body = value === undefined ? undefined : this.#decode(value);
           if (body) {
+            for (const kind of ["global", "workspace"] as const)
+              if (body.spec.fence.cognition[kind] !== row[`${kind}_cognition_epoch`] || body.spec.fence.policy[kind] !== row[`${kind}_policy_epoch`]) throw new Error("Allocation admission fence projection");
             const source = body.spec.fence.sourceTask;
             if (body.binding.bindingId !== bindingId || body.spec.executionUnitId !== row.execution_unit_id || body.spec.workspaceId !== workspaceId
               || body.spec.sessionId !== task.session_id || body.spec.fence.owner.id !== row.attempt_id || body.spec.fence.owner.kind !== "task_attempt"
@@ -621,6 +641,13 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
               if (json(contract.modelProfile) !== json(body.spec.selectedModelProfile) || contract.toolProfile.id !== body.spec.toolProfile
                 || contract.runtimeProfile.revision !== body.binding.profileRevision) throw new Error("Execution Session profile mismatch");
             }
+            if (body.spec.fence.notAfter <= text(row.created_at)
+              || body.closeEvidence && (body.closeEvidence.observedAt < text(row.created_at) || body.closeEvidence.observedAt > text(snapshot.created_at))
+              || body.closeEvidence?.processDisposition === "not_spawned" && previous?.state !== "ALLOCATED") throw new Error("Execution historical close/fence time");
+            // Only eligibility-changing operations require an unexpired lease. Closing can occur later.
+            if ((!body.closeEvidence || priorBody && json(body.closeEvidence) === json(priorBody.closeEvidence ?? null)
+              || previous && previous.state !== snapshot.state && snapshot.state !== "STOPPED")
+              && body.spec.fence.notAfter <= text(snapshot.created_at)) throw new Error("Execution historical admission expired");
             if (!previous && (body.binding.observedRuntimeSessionIds.length || body.binding.sourceStreams.length || body.closeEvidence)) throw new Error("Initial execution facts");
             if (priorBody && (json(priorBody.spec) !== json(body.spec) || json(priorBody.sourceIdentity) !== json(body.sourceIdentity)
               || json(identity(priorBody.binding)) !== json(identity(body.binding))
@@ -646,6 +673,16 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         }
         if (!previous || row.active !== 1 - integer(previous.closed, true) || row.updated_at !== previous.created_at) throw new Error("Execution current pointer");
         all.set(bindingId, { row, scope });
+      }
+      // VERIFYING as a command's final state is only written by atomic settled intake.
+      // Resolve its retained source backwards too: receipt renaming must not erase the obligation.
+      for (const receipt of db.prepare(`SELECT r.* FROM task_receipt_v1 r JOIN task_snapshot_v1 s
+        ON s.task_id=r.entity_id AND s.revision=r.revision
+        WHERE r.entity_kind='task' AND r.command_kind='task.runtime' AND s.state='VERIFYING'`).all() as Row[]) {
+        const eventSources = sources(receipt).map(source => db.prepare("SELECT * FROM task_execution_event_v1 WHERE content_id=? AND content_version=?")
+          .get(source.contentId, source.contentVersion) as Row | undefined).filter(source => source !== undefined);
+        if (eventSources.length !== 1 || eventSources[0]!.task_id !== receipt.entity_id
+          || receipt.command_id !== `settled:${text(eventSources[0]!.event_id)}` || receipt.idempotency_key !== receipt.command_id) throw new Error("Settlement reverse source linkage");
       }
       const heads = new Map<string, Row>(), events = db.prepare("SELECT * FROM task_execution_event_v1 ORDER BY row_id").all() as Row[];
       const eventRevisions = new Map<string, { task: number; binding: number }>();
@@ -678,6 +715,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
           sequence: { domain: source[9], value: row.source_sequence } });
         if (row.event_id !== expectedId) throw new Error("Retained event source slot");
         if (binding.body) {
+          if (binding.body.spec.fence.notAfter <= text(row.recorded_at)) throw new Error("Event historical admission expired");
           const observed = binding.body.binding, stream = observed.sourceStreams.find(item => item.sourceStreamId === row.source_stream_id), declared = binding.body.sourceIdentity;
           if (!observed.observedRuntimeSessionIds.includes(text(source[3])) || !stream || stream.runtimeInstanceId !== source[4]
             || stream.surface !== source[8] || stream.sequenceDomain !== source[9] || declared.adapter !== source[5]
@@ -764,7 +802,8 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         if (priorRevision && (integer(row.task_revision) < priorRevision.task || integer(binding.row.revision) < priorRevision.binding)) throw new Error("Model history order");
         modelRevisions.set(bindingId, { task: integer(row.task_revision), binding: integer(binding.row.revision) });
         if (binding.row.state !== "BUSY") throw new Error("Model binding state");
-        if (binding.body && (ordinal > binding.body.spec.bounds.maxModelRequests || integer(row.max_tokens) > binding.body.spec.bounds.maxTokens)) throw new Error("Model bounds");
+        if (binding.body && (ordinal > binding.body.spec.bounds.maxModelRequests || integer(row.max_tokens) > binding.body.spec.bounds.maxTokens
+          || binding.body.spec.fence.notAfter <= text(row.created_at))) throw new Error("Model bounds");
         const body = this.#modelBody(row, execution.scope, false);
         if (body) {
           const pairs = { bindingId: "binding_id", requestId: "request_id", taskId: "task_id", attemptId: "attempt_id", taskRevision: "task_revision",

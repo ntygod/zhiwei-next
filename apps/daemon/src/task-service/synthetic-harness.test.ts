@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
+import { access } from "node:fs/promises";
+import { join } from "node:path";
+import { setImmediate as nextTick } from "node:timers/promises";
 import type { CriterionId, Task } from "../../../../packages/domain/src/index.ts";
 import type { LocalApiCommandV1, SessionCreateCommandV1 } from "../../../../packages/protocol/src/index.ts";
 import { createSessionDataClient, pairSyntheticSessionCli, runSessionCli } from "../../../cli/src/session-client.ts";
@@ -156,4 +159,65 @@ for (const window of ["handshake", "cancelling"] as const) test(`Retained custod
  const stopped = h.application.getTask(context, taskId); assert.equal(stopped.recovery, undefined); assert.equal(stopped.value.state, window === "handshake" ? "READY" : "CANCELLED");
  assert.equal(h.evidence(context, taskId).execution!.closed, true); assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
  if (window === "handshake") { await peer.releaseHandshake(); h.application.executeTask(context, change(stopped.value, "task.continue")); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.attempts.length, 2); }
+});
+
+for (const action of ["restart", "interruptControlPlane", "reconcileRetainedWorkers"] as const) test(`A rejected pre-close lifecycle operation does not poison later ${action}`, async t => {
+ const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close());
+ const originalApi = h.api, originalClose = originalApi.close;
+ originalApi.close = async () => { throw new Error("synthetic pre-close failure"); };
+ try { await assert.rejects(h.restart(), /synthetic pre-close failure/); }
+ finally { originalApi.close = originalClose; }
+ await h[action](); await h.reconcileRetainedWorkers(); await h.restart();
+ const origin = await h.api.listen(), pair = await pairSyntheticSessionCli(origin, h.api.issuePairingCode("cli"));
+ assert.deepEqual((await createSessionDataClient({ baseUrl: origin, credential: pair.credential }).snapshot(context.workspaceId)).tasks, []);
+});
+
+test("Concurrent API listen and restart closes the old port and permits later real Worker execution", async t => {
+ const peer = await createSyntheticWorkerTestPackage(), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); });
+ const oldApi = h.api, listening = oldApi.listen(), restarted = h.restart();
+ const origin = await listening; await restarted;
+ await assert.rejects(fetch(`${origin}/v1/capabilities`), TypeError); assert.notEqual(h.api, oldApi);
+ await h.reconcileRetainedWorkers(); await h.restart();
+ const currentOrigin = await h.api.listen(), pair = await pairSyntheticSessionCli(currentOrigin, h.api.issuePairingCode("cli"));
+ assert.deepEqual((await createSessionDataClient({ baseUrl: currentOrigin, credential: pair.credential }).snapshot(context.workspaceId)).tasks, []);
+ const { taskId } = create(h); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.state, "VERIFYING");
+ const execution = h.evidence(context, taskId).execution!; assert.equal(execution.closed, true); assert.ok(execution.closeEvidence);
+});
+
+test("Concurrent API listen, restart and repeated close finish without leaving a replacement API or accepting work", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); });
+ const { taskId } = create(h); await peer.waitForPrompt();
+ const listening = h.api.listen(), restarted = h.restart(), firstClose = h.close(), secondClose = h.close();
+ const origin = await listening; await Promise.all([restarted, firstClose, secondClose]);
+ await assert.rejects(fetch(`${origin}/v1/capabilities`), TypeError); await assert.rejects(h.api.listen());
+ await assert.rejects(h.runTask(context, taskId)); await assert.rejects(h.restart()); await assert.rejects(h.reconcileRetainedWorkers());
+});
+
+
+test("Cancellation observed at ALLOCATED prevents spawn and commits explicit not-spawned disposal before CANCELLED", async t => {
+ const peer = await createSyntheticWorkerTestPackage({ pauseHandshake: true }), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); }); const { taskId } = create(h);
+ const deadline = Date.now() + 10_000;
+ while (!h.evidence(context, taskId).execution) { assert.ok(Date.now() < deadline, "allocation becomes observable"); await nextTick(); }
+ const allocated = h.evidence(context, taskId).execution!; assert.equal(allocated.state, "ALLOCATED"); assert.equal(allocated.closed, false);
+ h.application.executeTask(context, change(h.application.getTask(context, taskId).value, "task.cancel")); await h.idle();
+ const task = h.application.getTask(context, taskId).value, execution = h.evidence(context, taskId).execution!;
+ assert.equal(task.state, "CANCELLED"); assert.equal(execution.closed, true); assert.equal(execution.dispatched, false);
+ assert.equal(execution.closeEvidence?.processDisposition, "not_spawned"); assert.equal(execution.closeEvidence?.stdoutEof, false); assert.equal(execution.closeEvidence?.stderrEof, false); assert.equal(execution.closeEvidence?.closeObserved, false);
+ assert.equal(execution.closeEvidence?.exitCode, null); assert.equal(execution.closeEvidence?.signal, null); assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
+ await assert.rejects(access(join(peer.root, "handshake-started")), error => (error as NodeJS.ErrnoException).code === "ENOENT");
+ await h.restart(); assert.equal(h.application.getTask(context, taskId).value.state, "CANCELLED"); assert.deepEqual(h.evidence(context, taskId).execution?.closeEvidence, execution.closeEvidence);
+});
+
+test("Ordinary missing package startup failure releases only proven non-spawned custody and remains cancellable", async t => {
+ const peer = await createSyntheticWorkerTestPackage(), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: join(peer.root, "missing-package"), nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); }); const { taskId } = create(h);
+ await assert.rejects(h.idle(), { code: "package" });
+ const before = h.application.getTask(context, taskId), execution = h.evidence(context, taskId).execution!;
+ assert.equal(before.value.state, "READY"); assert.equal(execution.closed, true); assert.equal(execution.dispatched, false); assert.equal(execution.closeEvidence?.processDisposition, "not_spawned"); assert.equal(execution.closeEvidence?.closeObserved, false);
+ assert.equal(h.evidence(context, taskId).modelRequests.length, 0);
+ h.application.executeTask(context, change(before.value, "task.cancel")); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.state, "CANCELLED");
+ await h.restart(); assert.equal(h.application.getTask(context, taskId).recovery, undefined);
 });

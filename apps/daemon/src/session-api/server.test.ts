@@ -207,3 +207,14 @@ test("Scoped task read/list/snapshot and CLI preserve blocked custody separately
     fixture.app.blockedCustody = false; assert.equal((await client.task(workspace, task.id)).recovery, undefined);
   } finally { await fixture.api.close(); }
 });
+
+test("Closing a starting HTTP API joins listen and real socket teardown for all close callers", async () => {
+  const api = createSyntheticSessionApi({ application: new FixtureApplication(), installationId: "synthetic-listen-close" });
+  try {
+    const listening = api.listen(); const firstClose = api.close(); const secondClose = api.close();
+    assert.equal(firstClose, secondClose, "concurrent disposers join the same teardown");
+    const origin = await listening; await Promise.all([firstClose, secondClose]);
+    await assert.rejects(fetch(`${origin}/v1/capabilities`), TypeError);
+    await assert.rejects(api.listen()); assert.throws(() => api.issuePairingCode("cli"));
+  } finally { await api.close(); }
+});

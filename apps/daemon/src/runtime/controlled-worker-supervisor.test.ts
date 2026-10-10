@@ -112,3 +112,13 @@ test("Supervisor accepts exact durable task identities without expanding the syn
   assert.equal(binding.owner.id, "attempt-persistent-1");
   assert.equal(binding.leaseEpoch, 2);
 });
+
+for (const phase of ["allocated", "preparing"] as const) test(`Supervisor forwards explicit ${phase} not-spawned evidence without claiming process EOF`, async t => {
+  const supervisor = await fixture(t), bindingId = supervisor.snapshot().binding.bindingId;
+  const rejected = phase === "preparing" ? assert.rejects(supervisor.runtime.start(supervisor.spec)) : Promise.resolve();
+  const close = await supervisor.runtime.dispose(bindingId); await rejected;
+  assert.equal(close.bindingId, bindingId); assert.equal(close.processDisposition, "not_spawned");
+  assert.equal(close.stdoutEof, false); assert.equal(close.stderrEof, false); assert.equal(close.closeObserved, false); assert.equal(close.exitCode, null); assert.equal(close.signal, null);
+  assert.equal("brokerEof" in close, false); assert.deepEqual(await supervisor.runtime.dispose(bindingId), close);
+  assert.equal(supervisor.snapshot().broker.receiverRequests.length, 0); await supervisor.close(); assert.equal(supervisor.snapshot().broker.cleanup, "disposed");
+});

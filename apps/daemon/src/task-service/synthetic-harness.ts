@@ -39,6 +39,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
   let daemonInstanceId = `synthetic-daemon-${randomUUID()}`, coordinator: SyntheticRecoveryCoordinatorV2;
   let closed = false, restarting = false, closing = false, lastFailure: unknown;
   let serial = Promise.resolve(), lifecycle = Promise.resolve();
+  // Each caller still receives its own failure; later lifecycle work must not inherit a rejected tail.
+  // Every operation below repeats the actual API/Worker close and Store checks before proceeding.
   const live = new Map<string, { context: SessionApiContext; supervisor: SyntheticWorkerSupervisor; stopping?: Promise<void>; suspended?: boolean }>();
   const observedCloses = new Map<string, { spec: TaskExecutionDetailsV1["spec"]; binding: TaskExecutionDetailsV1["binding"]; executionRevision: number; evidence: RuntimeProcessCloseEvidenceV1 }>();
   const boundary = (): TaskPersistenceBoundaryV1 => ({ daemonInstanceId,
@@ -74,7 +76,13 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       else if (task.state === "RUNNING") runtimeCommand(context, taskId, "interrupted", bindingId, "incomplete");
       await supervisor.close();
     })();
-    await active.stopping;
+    const pending = active.stopping;
+    try { await pending; }
+    catch (error) {
+      // Retain the exact Supervisor so an observed close can be persisted on a later retry.
+      if (active.stopping === pending) active.stopping = undefined;
+      throw error;
+    }
   };
   const application = createPersistentSessionApplication({ store, daemonInstanceId: () => daemonInstanceId,
     afterTaskCommand(context, taskId, kind) {
@@ -140,7 +148,15 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
         if (current(context, taskId).state === "RUNNING") runtimeCommand(context, taskId, "interrupted", supervisor.snapshot().binding.bindingId, "incomplete");
       }
       throw error;
-    } finally { if (!live.get(taskId)?.suspended) { if (supervisor) await supervisor.close(); live.delete(taskId); } }
+    } finally {
+      if (!live.get(taskId)?.suspended) {
+        if (supervisor) await supervisor.close();
+        // Physical disposal is not the durable close commit. Never discard custody after a
+        // persistence failure; cancellation/restart must be able to retry this exact evidence.
+        const persisted = store().executions.readExecution(context.workspaceId, taskId);
+        if (!persisted || persisted.closed) live.delete(taskId);
+      }
+    }
   };
   const runTask = (context: SessionApiContext, taskId: string): Promise<void> => {
     if (closed || restarting || !runtime) return Promise.reject(new SessionApiError("unsupported", "runtime_capability", 422));
@@ -173,7 +189,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     async interruptControlPlane() {
       if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
       restarting = true;
-      lifecycle = lifecycle.then(async () => { try {
+      lifecycle = lifecycle.catch(() => undefined).then(async () => { try {
         // Abrupt Store/control-plane loss; the enclosing synthetic launcher retains real Worker custody.
         for (const active of live.values()) active.suspended = true;
         await api.close(); coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`;
@@ -183,12 +199,12 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     },
     async reconcileRetainedWorkers() {
       if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
-      restarting = true; lifecycle = lifecycle.then(async () => { try { await reconcileRetained(); } finally { if (!closing) restarting = false; } }); return lifecycle;
+      restarting = true; lifecycle = lifecycle.catch(() => undefined).then(async () => { try { await reconcileRetained(); } finally { if (!closing) restarting = false; } }); return lifecycle;
     },
     async restart() {
       if (closed || restarting) throw new SessionApiError("unavailable", "dependency_down", 503);
       restarting = true;
-      lifecycle = lifecycle.then(async () => { try { await api.close(); await reconcileRetained(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`; coordinator = openSyntheticRecoveryCoordinatorV2(recoveryOptions()); store().tasks.fenceRestartedOwners(); api = createSyntheticSessionApi(apiOptions()); application.committed(); } finally { if (!closing) restarting = false; } });
+      lifecycle = lifecycle.catch(() => undefined).then(async () => { try { await api.close(); await reconcileRetained(); await Promise.all([...live.keys()].map(taskId => stop(taskId, "shutdown"))); await serial; coordinator.close(); daemonInstanceId = `synthetic-daemon-${randomUUID()}`; coordinator = openSyntheticRecoveryCoordinatorV2(recoveryOptions()); store().tasks.fenceRestartedOwners(); api = createSyntheticSessionApi(apiOptions()); application.committed(); } finally { if (!closing) restarting = false; } });
       return lifecycle;
     },
     async close() {

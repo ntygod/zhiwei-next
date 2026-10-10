@@ -295,6 +295,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     let previous = prior;
     for (const row of versions) {
       assertIdentifierV2(row.attempt_id); assertIsoTimestampV2(row.created_at);
+      if (previous && row.created_at! < previous.created_at!) throw new Error("task command chronology mismatch");
       if (!previous) {
         if (row.revision !== 1 || row.intent_revision !== 1 || row.state !== "CREATED") throw new Error("initial metadata mismatch");
       } else if (row.attempt_id !== previous.attempt_id) {
@@ -553,6 +554,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         if (!attempts.length || attempts.some((row, i) => row.attempt_no !== i + 1 || (i < attempts.length - 1 && row.active !== 0))) throw new Error("attempt order mismatch");
         for (const [index, attempt] of attempts.entries()) {
           assertIdentifierV2(attempt.id); assertIsoTimestampV2(attempt.created_at); assertIsoTimestampV2(attempt.updated_at);
+          if (index > 0 && attempt.created_at! < attempts[index - 1]!.updated_at!) throw new Error("attempt chronology mismatch");
           const history = rows.filter(row => row.attempt_id === attempt.id), first = history[0], last = history.at(-1);
           if (!first || !last || first.state !== "CREATED" || attempt.intent_revision !== first.intent_revision || history.some(row => row.intent_revision !== attempt.intent_revision)
             || attempt.created_at !== first.created_at || attempt.updated_at !== last.created_at || attempt.state !== last.state
@@ -618,6 +620,11 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         if (events.length !== range.length || events.some((event, index) => event.revision !== start + index + 1)
           || events.at(-1)?.cursor !== receipt.commit_cursor
           || this.#rows("SELECT cursor FROM task_outbox_v1 WHERE cursor>=? AND cursor<=?", integer(events[0]!.cursor), integer(receipt.commit_cursor)).length !== range.length) throw new Error("command final watermark mismatch");
+        if (!previous || previous.attempt_id !== snapshot.attempt_id) {
+          const authority = this.#row("SELECT * FROM session_revision_v1 WHERE session_id=? AND recovery_epoch<=? AND (event_cursor IS NULL OR event_cursor<?) ORDER BY revision DESC LIMIT 1",
+            string(task.session_id), integer(events[0]!.recovery_epoch), integer(events[0]!.cursor));
+          if (!authority || authority.requires_reauthorization !== 0) throw new Error("new attempt authorization history missing");
+        }
         for (let revision = start + 1; revision <= end; revision++) {
           const version = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(task.id), revision);
           if (!version || version.scope_key !== task.scope_key || version.owner_epoch !== snapshot.owner_epoch || version.created_at !== snapshot.created_at) throw new Error("command version coverage mismatch");

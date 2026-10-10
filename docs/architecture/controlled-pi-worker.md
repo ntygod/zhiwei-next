@@ -42,6 +42,14 @@ stdout RPC、fd3 extension lifecycle 与 Host actions 独立序列域；没有�
 
 每 binding 最多256条/1MiB未消费结构事件，超限明确失败，不悄悄丢终态。实际请求接受、agent_settled、工具成功、abort acknowledgement、EOF、exit 和 close 都是不同证据；Supervisor 始终报告 Task Outcome 尚未评估。P1-07 才消费真实 Task/Outcome 进行验证。
 
+## P1-04 关闭证据 v1 的可选扩展
+
+`RuntimeProcessCloseEvidenceV1` 新增可选 `processDisposition: "not_spawned"`，专门表达可信启动器关闭 spawn 接纳、等待异步 preparation 结束，并确认没有 ChildProcess/进程关闭等待句柄后的事实。Supervisor 原样转交精确 binding 的证据；HTTP 调用者不能用此标签或自报布尔值证明关闭。实际启动过的进程仍必须提供原有 EOF/close 观测。
+
+该分支要求 `stdoutEof`、`stderrEof`、`closeObserved` 全为 false，`exitCode`、`signal` 为 null；未知标签、额外字段或与实际进程观测矛盾的组合拒绝。Store 还须验证原 ALLOCATED、未派发、没有 Runtime Session/source stream 观测和完整历史，才能追加关闭事实；单独的 ALLOCATED 记录、PID 或经过时间不构成证明。持久关闭失败时仍保留实际 Supervisor custody，不能把失败丢弃后声称任务已取消。
+
+兼容决策：这是独立受控 Runtime v1 DTO 的可选扩展，不改变旧字段含义，不修改 SQL 迁移或已写入历史；旧 DTO/Fixture 继续接受。旧的全 false EOF/close 且无该标签仍为未知/不完整，不能自动升级为未启动。旧 reader 遇到新字段必须 fail closed；降级不删除标签或伪造 EOF，需要保留支持它的 reader 或前向修复。冻结的 [NormalizedRuntimeEvent v1](normalized-runtime-event-v1.md) 及其 Fixture 摘要保持原样。
+
 ## 开发验证与未验证项
 
 可执行普通开发检查包括：正式 strict/noEmit；纯 DTO/字节/响应关联；固定合成子进程握手、接受/settled/关闭、取消/超时清理、队列上限；固定合成 Broker 请求捕获与普通 file/memory/draft 生命周期。具体运行结果绑定 PR 当前提交记录，不能从本文推导通过。

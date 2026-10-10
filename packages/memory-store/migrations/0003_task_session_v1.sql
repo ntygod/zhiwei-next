@@ -478,6 +478,10 @@ CREATE TABLE task_execution_v1 (
   intent_revision INTEGER NOT NULL CHECK (intent_revision BETWEEN 1 AND 9007199254740991),
   owner_epoch INTEGER NOT NULL CHECK (owner_epoch BETWEEN 1 AND 9007199254740991),
   recovery_epoch INTEGER NOT NULL CHECK (recovery_epoch BETWEEN 0 AND 9007199254740991),
+  global_cognition_epoch INTEGER NOT NULL CHECK (global_cognition_epoch BETWEEN 0 AND 9007199254740991),
+  workspace_cognition_epoch INTEGER NOT NULL CHECK (workspace_cognition_epoch BETWEEN 0 AND 9007199254740991),
+  global_policy_epoch INTEGER NOT NULL CHECK (global_policy_epoch BETWEEN 0 AND 9007199254740991),
+  workspace_policy_epoch INTEGER NOT NULL CHECK (workspace_policy_epoch BETWEEN 0 AND 9007199254740991),
   scope_key TEXT NOT NULL CHECK (length(trim(scope_key)) > 0),
   current_revision INTEGER NOT NULL CHECK (current_revision BETWEEN 1 AND 9007199254740991),
   active INTEGER NOT NULL CHECK (active IN (0, 1)),
@@ -697,6 +701,10 @@ WHEN NEW.binding_id IS NOT OLD.binding_id
   OR NEW.intent_revision IS NOT OLD.intent_revision
   OR NEW.owner_epoch IS NOT OLD.owner_epoch
   OR NEW.recovery_epoch IS NOT OLD.recovery_epoch
+  OR NEW.global_cognition_epoch IS NOT OLD.global_cognition_epoch
+  OR NEW.workspace_cognition_epoch IS NOT OLD.workspace_cognition_epoch
+  OR NEW.global_policy_epoch IS NOT OLD.global_policy_epoch
+  OR NEW.workspace_policy_epoch IS NOT OLD.workspace_policy_epoch
   OR NEW.scope_key IS NOT OLD.scope_key
   OR NEW.created_at IS NOT OLD.created_at
   OR NEW.current_revision != OLD.current_revision + 1

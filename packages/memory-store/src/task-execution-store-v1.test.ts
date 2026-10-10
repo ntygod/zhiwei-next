@@ -543,16 +543,17 @@ function alteredSnapshotBody(f: ReturnType<typeof fixture>, revision: number, al
   const ref = { contentId: "11111111-1111-4111-8111-111111111111", contentVersion: 1 };
   f.store.stageContent({ ref, reservationId: "22222222-2222-4222-8222-222222222222", fence: f.store.currentFence(scope), privacy: "model-allowed",
     purpose: "cognition", retentionUntil: "2026-11-10T00:00:00.000Z", bytes: new TextEncoder().encode(canonicalJsonV1(envelope)) });
-  corruptExecutionRows(f, ["task_execution_snapshot_v1"], db => {
+  corruptExecutionRows(f, ["task_execution_snapshot_v1", "task_content_dependency_v1"], db => {
     db.prepare("UPDATE content_object SET state='available' WHERE content_id=?").run(ref.contentId);
     db.prepare(`INSERT INTO task_content_dependency_v1 SELECT source_id,source_version,?,1 FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?`)
       .run(ref.contentId, original.content_id!, original.content_version!);
+    db.prepare("DELETE FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?").run(original.content_id!, original.content_version!);
     db.prepare("UPDATE task_execution_snapshot_v1 SET content_id=?,content_version=1 WHERE binding_id=? AND revision=?")
       .run(ref.contentId, original.binding_id!, revision);
   });
 }
 test("available allocation bodies must match their exact input, installation and Session contract", async t => {
-  for (const variant of ["prompt", "installation", "contract", "model", "tool", "runtime-profile", "initial-observations", "initial-close"] as const) await t.test(variant, t => {
+  for (const variant of ["prompt", "installation", "contract", "model", "tool", "runtime-profile", "initial-observations", "initial-close", "expired-at-allocation"] as const) await t.test(variant, t => {
     const f = fixture(t); f.allocate();
     alteredSnapshotBody(f, 1, body => {
       if (variant === "prompt") body.spec.prompt = "Different synthetic input";
@@ -561,6 +562,7 @@ test("available allocation bodies must match their exact input, installation and
       else if (variant === "model") body.spec.selectedModelProfile.id = "other-model";
       else if (variant === "tool") body.spec.toolProfile = "controlled-read-memory-draft-v1";
       else if (variant === "runtime-profile") body.binding.profileRevision = 2;
+      else if (variant === "expired-at-allocation") body.spec.fence.notAfter = T0;
       else if (variant === "initial-observations") { body.binding.observedRuntimeSessionIds = f.ready.observedRuntimeSessionIds; body.binding.sourceStreams = f.ready.sourceStreams; }
       else body.closeEvidence = { schemaVersion: 1, bindingId: f.allocated.bindingId, stdoutEof: true, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: T0 };
     });
@@ -691,7 +693,7 @@ test("duplicate attempt bindings are rejected on verified reads even when both t
   const f = fixture(t); f.allocate(); f.close(); removeExecutionBodies(f);
   corruptExecutionRows(f, [], db => {
     db.exec(`INSERT INTO task_execution_v1 SELECT 'duplicate-binding','duplicate-execution',workspace_id,task_id,attempt_id,
-      task_revision,intent_revision,owner_epoch,recovery_epoch,scope_key,current_revision,active,created_at,updated_at FROM task_execution_v1`);
+      task_revision,intent_revision,owner_epoch,recovery_epoch,global_cognition_epoch,workspace_cognition_epoch,global_policy_epoch,workspace_policy_epoch,scope_key,current_revision,active,created_at,updated_at FROM task_execution_v1`);
     db.exec(`INSERT INTO task_execution_snapshot_v1 SELECT 'duplicate-binding',revision,task_id,task_revision,attempt_id,intent_revision,
       owner_epoch,recovery_epoch,scope_key,state,dispatched,closed,content_id,content_version,created_at FROM task_execution_snapshot_v1`);
   });
@@ -736,4 +738,136 @@ test("first runtime progress after a pause request uses the exact committed Task
   const f = fixture(t); f.start(); pauseRequest(f); const event = f.envelope(1); f.ingest(event); removeExecutionBodies(f);
   corruptExecutionRows(f, ["task_execution_event_v1", "task_outbox_v1", "task_content_dependency_v1"], db => moveEventTaskRevision(db, event.event.eventId, 3));
   rejectCorruptExecution(f);
+});
+
+test("managed execution body fixture preserves unchanged valid payloads and dependency roles", async t => {
+  for (const phase of ["allocated", "dispatched", "closed", "observed"] as const) await t.test(phase, t => {
+    const f = fixture(t); let revision: number;
+    if (phase === "allocated") revision = f.allocate().revision;
+    else { revision = f.start().revision;
+      if (phase === "closed") revision = f.close().revision;
+      if (phase === "observed") revision = f.store.executions.observeExecutionBinding(context, { taskId: f.taskId,
+        binding: { ...f.ready, state: "BUSY", observedRuntimeSessionIds: [...f.ready.observedRuntimeSessionIds, "native-additional"] } }).revision;
+    }
+    const expected = f.store.executions.readExecutionDetails(W, f.taskId);
+    alteredSnapshotBody(f, revision, () => {});
+    assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId), expected); f.reopen();
+    assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId), expected);
+  });
+});
+
+test("erased settled receipt cannot be renamed to bypass its final acknowledgement", t => {
+  const f = fixture(t); f.start(); const envelope = f.envelope(1, true); f.ingest(envelope); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_receipt_v1", "task_execution_ack_v1"], db => {
+    assert.equal(db.prepare("UPDATE task_receipt_v1 SET command_id='unrelated-command',idempotency_key='unrelated-key' WHERE command_id=?").run(`settled:${envelope.event.eventId}`).changes, 1);
+    db.prepare("UPDATE task_execution_ack_v1 SET commit_cursor=(SELECT commit_cursor FROM task_execution_event_v1 WHERE event_id=?) WHERE event_id=?").run(envelope.event.eventId, envelope.event.eventId);
+  });
+  rejectCorruptExecution(f);
+});
+
+test("normal close rejects future and pre-allocation observations without committing", async t => {
+  for (const variant of ["future-complete", "future-partial", "before-allocation"] as const) await t.test(variant, t => {
+    const f = fixture(t); if (variant === "before-allocation") f.setTime(T1); f.start();
+    const before = f.store.executions.readExecutionDetails(W, f.taskId), watermark = f.store.tasks.replay(W).highWatermark;
+    code(() => f.store.executions.closeExecution(context, { taskId: f.taskId, evidence: { schemaVersion: 1, bindingId: f.allocated.bindingId,
+      stdoutEof: true, stderrEof: variant !== "future-partial", closeObserved: variant !== "future-partial", exitCode: variant === "future-partial" ? null : 0,
+      signal: null, observedAt: variant === "before-allocation" ? T0 : T1 } }), "conflict");
+    assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId), before); assert.equal(f.store.tasks.replay(W).highWatermark, watermark);
+    f.reopen(); assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId), before);
+  });
+});
+
+test("available close history rejects evidence observed after its own committed snapshot", t => {
+  const f = fixture(t); f.start(); const revision = f.close().revision;
+  alteredSnapshotBody(f, revision, body => { body.closeEvidence.observedAt = T1; }); rejectCorruptExecution(f);
+});
+
+test("historical model and event admissions must precede the original lease deadline", async t => {
+  for (const role of ["model", "event"] as const) await t.test(role, t => {
+    const f = fixture(t); f.start(); if (role === "model") f.model(); else f.ingest(f.envelope(1));
+    const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+    const table = role === "model" ? "task_model_request_v1" : "task_execution_event_v1", row = db.prepare(`SELECT * FROM ${table}`).get()!; db.close();
+    f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-admission-body", at: T0, authorization: "synthetic-user-request",
+      targets: [{ kind: "content", scope: { kind: "task", workspaceId: W, taskId: f.taskId }, contentId: String(row.content_id), contentVersion: Number(row.content_version) }] });
+    corruptExecutionRows(f, [table, "content_object", "task_outbox_v1"], db => {
+      db.prepare(`UPDATE ${table} SET ${role === "model" ? "created_at" : "recorded_at"}=?`).run(EXPIRY);
+      db.prepare("UPDATE content_object SET created_at=? WHERE content_id=? AND content_version=?").run(EXPIRY, row.content_id!, row.content_version!);
+      if (role === "event") {
+        const progress = db.prepare("SELECT * FROM task_outbox_v1 WHERE cursor=?").get(row.commit_cursor!)!, event = JSON.parse(String(progress.event_json)); event.occurredAt = EXPIRY;
+        db.prepare("UPDATE task_outbox_v1 SET occurred_at=?,event_json=? WHERE cursor=?").run(EXPIRY, canonicalJsonV1(event), row.commit_cursor!);
+      }
+    });
+    rejectCorruptExecution(f);
+  });
+});
+
+test("not-spawned close is complete only for undispatched unobserved ALLOCATED execution", async t => {
+  for (const phase of ["allocated", "ready", "busy", "partial-eof"] as const) await t.test(phase, t => {
+    const f = fixture(t);
+    if (phase === "ready") f.prepare(); else if (phase === "busy") f.start(); else { f.allocate(); if (phase === "partial-eof") f.close(false); }
+    const evidence: RuntimeProcessCloseEvidenceV1 = { schemaVersion: 1, bindingId: f.allocated.bindingId, processDisposition: "not_spawned",
+      stdoutEof: false, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: T0 };
+    if (phase !== "allocated") { code(() => f.store.executions.closeExecution(context, { taskId: f.taskId, evidence }), "conflict"); return; }
+    const closed = f.store.executions.closeExecution(context, { taskId: f.taskId, evidence }); assert.equal(closed.closed, true); assert.equal(closed.state, "STOPPED");
+    assert.deepEqual(f.store.executions.closeExecution(context, { taskId: f.taskId, evidence }), closed); f.reopen();
+    const detail = f.store.executions.readExecutionDetails(W, f.taskId)!; assert.deepEqual(detail.closeEvidence, evidence); assert.equal(detail.dispatched, false);
+    const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+    assert.deepEqual(db.prepare("SELECT state FROM task_execution_snapshot_v1 ORDER BY revision").all().map(row => row.state), ["ALLOCATED", "STOPPED"]); db.close();
+  });
+});
+
+test("retained same-attempt commands cannot move backwards in time after body erasure", t => {
+  const f = fixture(t); f.setTime(T1); f.start(); f.setTime("2026-10-10T00:02:00.000Z"); pauseRequest(f); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_snapshot_v1", "content_object", "task_outbox_v1"], db => {
+    const at = "2026-10-10T00:03:00.000Z";
+    db.prepare("UPDATE task_snapshot_v1 SET created_at=? WHERE task_id=? AND revision=3").run(at, f.taskId);
+    db.prepare("UPDATE content_object SET created_at=? WHERE content_id IN (SELECT content_id FROM task_snapshot_v1 WHERE task_id=? AND revision=3)").run(at, f.taskId);
+    const progress = db.prepare("SELECT * FROM task_outbox_v1 WHERE entity_id=? AND event_type='task.state_changed' AND revision=3").get(f.taskId)!, event = JSON.parse(String(progress.event_json)); event.occurredAt = at;
+    db.prepare("UPDATE task_outbox_v1 SET occurred_at=?,event_json=? WHERE cursor=?").run(at, canonicalJsonV1(event), progress.cursor!);
+  });
+  rejectCorruptExecution(f);
+});
+
+test("allocation spec projects independently captured admission epochs", async t => {
+  for (const kind of ["global", "workspace"] as const) for (const family of ["cognition", "policy"] as const) await t.test(`${kind}/${family}`, t => {
+    const f = fixture(t); f.allocate();
+    alteredSnapshotBody(f, 1, body => { body.spec.fence[family][kind] += 100; }); rejectCorruptExecution(f);
+  });
+});
+
+test("retained allocation admission epochs reject future scope values even after body erasure", async t => {
+  for (const column of ["global_cognition_epoch", "workspace_cognition_epoch", "global_policy_epoch", "workspace_policy_epoch"]) await t.test(column, t => {
+    const f = fixture(t); f.allocate(); removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_execution_v1"], db => { db.exec(`UPDATE task_execution_v1 SET ${column}=100`); });
+    rejectCorruptExecution(f);
+  });
+});
+
+test("non-close execution observations cannot be committed at the historical lease deadline", async t => {
+  for (const phase of ["ready", "dispatch", "observed"] as const) await t.test(phase, t => {
+    const f = fixture(t); let revision: number;
+    if (phase === "ready") revision = f.prepare().revision;
+    else { revision = f.start().revision; if (phase === "observed") revision = f.store.executions.observeExecutionBinding(context, { taskId: f.taskId,
+      binding: { ...f.ready, state: "BUSY", observedRuntimeSessionIds: [...f.ready.observedRuntimeSessionIds, "native-extra"] } }).revision; }
+    corruptExecutionRows(f, ["task_execution_v1", "task_execution_snapshot_v1", "content_object"], db => {
+      db.prepare("UPDATE task_execution_v1 SET updated_at=?").run(EXPIRY);
+      db.prepare("UPDATE task_execution_snapshot_v1 SET created_at=? WHERE revision=?").run(EXPIRY, revision);
+      db.prepare("UPDATE content_object SET created_at=? WHERE content_id IN (SELECT content_id FROM task_execution_snapshot_v1 WHERE revision=?)").run(EXPIRY, revision);
+    });
+    rejectCorruptExecution(f);
+  });
+});
+
+test("trusted recovery accepts unspawned proof only for exact old ALLOCATED custody", async t => {
+  for (const phase of ["allocated", "ready", "busy"] as const) await t.test(phase, t => {
+    let recorded: CloseWitness | undefined;
+    const f = fixture(t, "model-allowed", undefined, { observedClose: () => recorded });
+    const active = phase === "allocated" ? f.allocate() : phase === "ready" ? f.prepare() : f.start();
+    recorded = { ...closeWitness(f), evidence: { schemaVersion: 1, bindingId: f.allocated.bindingId, processDisposition: "not_spawned",
+      stdoutEof: false, stderrEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: T0 } };
+    f.reopen(nextOwner.daemonInstanceId);
+    if (phase !== "allocated") { code(() => recover(f, active.revision), "conflict"); return; }
+    assert.equal(recover(f, active.revision).closed, true); f.reopen();
+    assert.deepEqual(f.store.executions.readExecutionDetails(W, f.taskId)!.closeEvidence, recorded.evidence);
+  });
 });

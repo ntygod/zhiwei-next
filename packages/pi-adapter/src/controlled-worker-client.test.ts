@@ -139,7 +139,7 @@ test("handshake, acceptance, settlement and confirmed close remain separate with
   const collecting = (async () => { for await (const event of client.events()) { events.push(event); if (event.data.kind === "agent.lifecycle" && event.data.phase === "settled") break; } })();
   const accepted = await client.request({ id: "prompt-1", type: "prompt", message: "ordinary synthetic text" });
   assert.equal(accepted.success, true); await collecting; assert.equal(client.state, "DRAINING");
-  const close = await client.dispose(); assert.equal(close.closeObserved, true); assert.equal(close.stdoutEof, true); assert.equal(close.brokerEof, true); assert.equal(close.exitCode, 0); assert.equal(client.state, "STOPPED");
+  const close = await client.dispose(); assert.equal(close.closeObserved, true); assert.equal(close.processDisposition, undefined); assert.equal(close.stdoutEof, true); assert.equal(close.brokerEof, true); assert.equal(close.exitCode, 0); assert.equal(client.state, "STOPPED");
   assert.deepEqual(await readdir(setup.stateDirectory), []);
   assert.ok(events.some(event => event.data.kind === "command.response" && event.data.phase === "preflight-result"));
   const output = events.filter(event => event.sequence.domain === "worker-output-and-process-boundaries");
@@ -160,14 +160,14 @@ test("pure command boundary denies arbitrary RPC, extra prompt fields, slash com
 
 test("dispose allocated client is idempotent and does not claim process close", async t => {
   const setup = await fixture(t), client = setup.client();
-  const evidence = await client.dispose(); assert.equal(evidence.closeObserved, false); assert.equal(evidence.stdoutEof, false); assert.equal(client.state, "STOPPED");
+  const evidence = await client.dispose(); assert.equal(evidence.closeObserved, false); assert.equal(evidence.stdoutEof, false); assert.equal(evidence.processDisposition, "not_spawned"); assert.equal(client.state, "STOPPED");
   assert.deepEqual(await client.dispose(), evidence); await assert.rejects(client.start(), isCode("state")); assert.deepEqual(await readdir(setup.stateDirectory), []);
 });
 test("dispose during asynchronous launch preparation prevents later spawn and cleans only its directory", async t => {
   const setup = await fixture(t), client = setup.client();
   const start = client.start(); const rejected = assert.rejects(start, isCode("state"));
   const evidence = await client.dispose(); await rejected;
-  assert.equal(evidence.closeObserved, false); assert.equal(client.state, "STOPPED"); assert.deepEqual(await readdir(setup.stateDirectory), []);
+  assert.equal(evidence.closeObserved, false); assert.equal(evidence.processDisposition, "not_spawned"); assert.equal(client.state, "STOPPED"); assert.deepEqual(await readdir(setup.stateDirectory), []);
   await assert.rejects(readFile(setup.observation, "utf8"), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
 
@@ -325,4 +325,13 @@ test("dispose after hello cannot publish READY from delayed handshake responses"
   }
   const close = await client.dispose(); await rejected;
   assert.equal(close.closeObserved, true); assert.equal(close.exitCode, 0); assert.equal(client.state, "STOPPED"); assert.equal(observedStates.includes("READY"), false);
+});
+
+test("Ordinary missing package failure proves not-spawned only after closing launch admission", async t => {
+  const setup = await fixture(t), client = setup.client({ packageDirectory: join(setup.stateDirectory, "missing-synthetic-package") });
+  await assert.rejects(client.start(), isCode("package"));
+  const evidence = await client.dispose(); assert.equal(evidence.processDisposition, "not_spawned");
+  assert.equal(evidence.closeObserved, false); assert.equal(evidence.stdoutEof, false); assert.equal(evidence.stderrEof, false); assert.equal(evidence.exitCode, null); assert.equal(evidence.signal, null);
+  assert.deepEqual(await client.dispose(), evidence); await assert.rejects(client.start(), isCode("state"));
+  await assert.rejects(readFile(setup.observation, "utf8"), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
