@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const catalogPath = "docs/planning/development-plan.json";
-const indexPath = "docs/planning/execution-mode.json";
+const indexPath = "docs/harness/execution-mode.json";
 const implementationDependencies = {
   "P0-01": [],
   "P0-02": [],

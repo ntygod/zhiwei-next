@@ -10,7 +10,9 @@ updated: 2026-10-10
 
 唯一 canonical [#108](https://github.com/ntygod/zhiwei-next/issues/108)，分支 `chore/108-development-acceptance`，基于已保护 main `e7077df36fe794e296008c7db88c175fb588013f`。PR103/P0-03 与 PR107/P0-04 已真实合入，最新完整 check 428/428；无开放 PR/Incident，PR99 closed unmerged、#98 暂停。
 
-本独立 R3 治理仅定案[代码开发与产品验收分离](../planning/development-and-acceptance.md)。原任务/验收 DAG 保留；新增执行索引记录实现依赖与双状态，不复制任务内容。本治理仍走旧规则，保护合入后下一独立实现直接进入 P1-01，合成输入编写正式领域/协议代码；不再循环新增 P0 准备卡。P0-01/02、D-04/D-08、G-2/G-5 仍未验收，不执行受限实验、不授予真实数据/模型/外发/凭据/部署许可。最终 HEAD 批准/CI/合入均以实时 GitHub 为准。
+本独立 R3 治理仅定案[代码开发与产品验收分离](development-and-acceptance.md)。原任务/验收 DAG 保留；新增执行索引记录实现依赖与双状态，不复制任务内容。本治理仍走旧规则，保护合入后下一独立实现直接进入 P1-01，合成输入编写正式领域/协议代码；不再循环新增 P0 准备卡。P0-01/02、D-04/D-08、G-2/G-5 仍未验收，不执行受限实验、不授予真实数据/模型/外发/凭据/部署许可。最终 HEAD 批准/CI/合入均以实时 GitHub 为准。
+
+当前 Draft [PR109](https://github.com/ntygod/zhiwei-next/pull/109) 已通过固定工具链 428 项原产品测试及 111 项执行模式/原 PR 分类回归。独立预审发现的新规则路径分类缺口已通过迁入现有 `docs/harness/` 保护范围修复；原分类器/Workflow 不改。Worker 当前 PR 来源续期仍待精确临时采集变更许可，未写 guard、未重跑，不得 Ready 或用旧来源代替。
 
 以下为历史工作快照，不是开放 WIP 或新选工入口。
 
@@ -215,14 +217,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本连续性表按现行 Harness 与 manifest 同步至 PR #103；PR #87 原来源保留在 Runtime 历史记录。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #109；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源尚待完成，未将正常 Worker success 作为原 failure-shape 来源。SDK / RPC parity 当前 `verified` Fixture 身份：
 
 ```text
 source state                 verified
-capture head                 1d70a667e454e1698156aa84f0869def9560f379
-capture workflow             38022110861
-capture artifact             11658418106
-capture artifact digest      sha256:26d9ca47fe61c72b4ab593f34cfd7df6613e2a95509c2c5c7c66bfacaef8dd57
+capture head                 2ae982c3c62764ad69fe9290c2f3e6ba70679425
+capture workflow             38037392722
+capture artifact             11663923009
+capture artifact digest      sha256:309294280c6c37c1dd7df2321fd8700854ff510a743cdf8dbb7d017ea220d2bb
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

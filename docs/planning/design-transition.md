@@ -52,7 +52,7 @@ harness.config.json/currentMilestone 与 project-state 的机器块同步为 P0�
 
 ## 下一开发者的进入条件
 
-先 Repository Reconciliation，再读设计总览/当前交接/具体任务卡；按[开发与验收分离](development-and-acceptance.md)选择实现就绪任务；P0 继续表示产品验收阶段，不能继续旧 M0 清单自动推进，也不能一次性重写所有包。设计文档不是代码实现事实。新依赖/Schema/协议/权限只在对应单目标 PR 引入，落实负例与恢复；数据相关改动必须使用实际存储验收。
+先 Repository Reconciliation，再读设计总览/当前交接/具体任务卡；按[开发与验收分离](../harness/development-and-acceptance.md)选择实现就绪任务；P0 继续表示产品验收阶段，不能继续旧 M0 清单自动推进，也不能一次性重写所有包。设计文档不是代码实现事实。新依赖/Schema/协议/权限只在对应单目标 PR 引入，落实负例与恢复；数据相关改动必须使用实际存储验收。
 
 #67 保持架构父项，#44 的“进度不靠反复询问模型”由 P1-04/08 与 P4-02/05 承接，两项原文和开放状态保留。#15 是低优先级治理噪声维护，不作为产品新阻塞。
 

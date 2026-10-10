@@ -96,7 +96,7 @@ function validate(data) {
 }
 
 function render(data) {
-  const lines = ["# 完整开发计划", "", "由 development-plan.json 生成；修改 JSON 后运行 node scripts/check-design-plan.mjs --write。全部任务是计划，不表示已完成；当前进度见 next-task-handoff.md 与真实 Issue/PR。", "", "每个任务对应一个可独立验收的 execution Issue/primary PR；范围过大时先保持同一用户结果拆分并更新依赖。每项均须 npm run check、相关场景、实际失败/恢复证据及 R2/R3 独立审查；高风险使用受控合成/测试资源。代码未完成或证据缺失不得勾选验收。", "", "本视图 depends 是产品验收/启用依赖；先满足依赖再验收或启用。代码开发按 development-and-acceptance.md 与 execution-mode.json 的真实技术依赖推进，未列任务仍遵守原依赖。遵守仓库 WIP 上限，条件任务不阻塞必需阶段。", "", "## 阶段", "", "| 阶段 | 用户结果 | 退出门 |", "|---|---|---|"];
+  const lines = ["# 完整开发计划", "", "由 development-plan.json 生成；修改 JSON 后运行 node scripts/check-design-plan.mjs --write。全部任务是计划，不表示已完成；当前进度见 next-task-handoff.md 与真实 Issue/PR。", "", "每个任务对应一个可独立验收的 execution Issue/primary PR；范围过大时先保持同一用户结果拆分并更新依赖。每项均须 npm run check、相关场景、实际失败/恢复证据及 R2/R3 独立审查；高风险使用受控合成/测试资源。代码未完成或证据缺失不得勾选验收。", "", "本视图 depends 是产品验收/启用依赖；先满足依赖再验收或启用。代码开发按 docs/harness/development-and-acceptance.md 与 docs/harness/execution-mode.json 的真实技术依赖推进，未列任务仍遵守原依赖。遵守仓库 WIP 上限，条件任务不阻塞必需阶段。", "", "## 阶段", "", "| 阶段 | 用户结果 | 退出门 |", "|---|---|---|"];
   for (const phase of data.phases) lines.push(`| ${phase.id} | ${phase.title} | ${phase.gate} |`);
   lines.push("", "## 产品验收/启用依赖总览", "", "| ID | 任务 | 验收/启用前置 | 风险 |", "|---|---|---|---|");
   for (const task of data.tasks) lines.push(`| ${task.id} | ${task.title} | ${task.depends.join(", ") || "无"} | ${task.risk} |`);

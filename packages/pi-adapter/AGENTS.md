@@ -33,6 +33,6 @@
 
 ## 当前范围
 
-当前产品验收阶段仍为 P0，不启用未验收产品执行。正式合成开发按[开发与验收分离](../../docs/planning/development-and-acceptance.md)的技术依赖推进；真实 Runtime/模型/外发许可与既有来源门仍独立满足。P1-03 按[任务卡](../../docs/planning/implementation-plan.md)交付受控 Worker，P1-06 才消费经过资格、预算和授权验证的不可变 ContextCapsule；只负责传输/记录实际输入，不自行选择记忆或改写认知状态。
+当前产品验收阶段仍为 P0，不启用未验收产品执行。正式合成开发按[开发与验收分离](../../docs/harness/development-and-acceptance.md)的技术依赖推进；真实 Runtime/模型/外发许可与既有来源门仍独立满足。P1-03 按[任务卡](../../docs/planning/implementation-plan.md)交付受控 Worker，P1-06 才消费经过资格、预算和授权验证的不可变 ContextCapsule；只负责传输/记录实际输入，不自行选择记忆或改写认知状态。
 
 上下文注入必须遵守[认知合同](../../docs/architecture/cognitive-loop.md)的发送与迟到结果屏障。主动决策、学习、权限语义仍在各自核心/组合边界；不得在 Pi Adapter 内建设通用跨 Agent 框架或静默增强 Prompt。

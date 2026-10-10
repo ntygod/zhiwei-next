@@ -28,7 +28,7 @@
 
 ### `apps/desktop` 与 `apps/web`
 
-按[开发与验收分离](../docs/planning/development-and-acceptance.md)满足对应实现依赖后可开发合成测试路径；真实入口启用仍须对应里程碑验收门。不因用户稍后验收把未测试能力默认启用。未来客户端也不得绕过 Daemon 直接读取数据库。
+按[开发与验收分离](../docs/harness/development-and-acceptance.md)满足对应实现依赖后可开发合成测试路径；真实入口启用仍须对应里程碑验收门。不因用户稍后验收把未测试能力默认启用。未来客户端也不得绕过 Daemon 直接读取数据库。
 
 ## 测试
 

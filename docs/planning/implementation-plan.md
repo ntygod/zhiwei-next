@@ -4,7 +4,7 @@
 
 每个任务对应一个可独立验收的 execution Issue/primary PR；范围过大时先保持同一用户结果拆分并更新依赖。每项均须 npm run check、相关场景、实际失败/恢复证据及 R2/R3 独立审查；高风险使用受控合成/测试资源。代码未完成或证据缺失不得勾选验收。
 
-本视图 depends 是产品验收/启用依赖；先满足依赖再验收或启用。代码开发按 development-and-acceptance.md 与 execution-mode.json 的真实技术依赖推进，未列任务仍遵守原依赖。遵守仓库 WIP 上限，条件任务不阻塞必需阶段。
+本视图 depends 是产品验收/启用依赖；先满足依赖再验收或启用。代码开发按 docs/harness/development-and-acceptance.md 与 docs/harness/execution-mode.json 的真实技术依赖推进，未列任务仍遵守原依赖。遵守仓库 WIP 上限，条件任务不阻塞必需阶段。
 
 ## 阶段
 

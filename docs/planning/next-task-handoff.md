@@ -4,7 +4,7 @@
 
 ## 先读
 
-根/目标目录 AGENTS、[开发与验收分离](development-and-acceptance.md)、[执行索引](execution-mode.json)、原 P1-01 [任务合同](implementation-plan.md#p1-01--建立认知与任务领域合同)、领域/数据/认知详设。依次区分真实实现依赖、用户稍后验收、真实启用许可。
+根/目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)、原 P1-01 [任务合同](implementation-plan.md#p1-01--建立认知与任务领域合同)、领域/数据/认知详设。依次区分真实实现依赖、用户稍后验收、真实启用许可。
 
 ## 已交付与仍未证明
 
@@ -14,7 +14,7 @@
 
 ## 下一唯一实现
 
-本治理按旧规则完成独立 R3、完整 check、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源之后，另起独立 P1-01 canonical 实现上下文。直接交付正式领域/Scope/认知状态、Observation v2/Local API DTO；技术依赖 P0-03 已实现。限定合成输入与确定性类型/单测，保留 v1，不接生产消费者/迁移/模型或真实数据。完整范围与待验清单见唯一[分工合同](development-and-acceptance.md#真实技术依赖与下一实现)。不再为允许编码新造 P0 纯计算任务。
+本治理按旧规则完成独立 R3、完整 check、当前 PR Runtime 来源、Ready CI、保护合入与 main 来源之后，另起独立 P1-01 canonical 实现上下文。直接交付正式领域/Scope/认知状态、Observation v2/Local API DTO；技术依赖 P0-03 已实现。限定合成输入与确定性类型/单测，保留 v1，不接生产消费者/迁移/模型或真实数据。完整范围与待验清单见唯一[分工合同](../harness/development-and-acceptance.md#真实技术依赖与下一实现)。不再为允许编码新造 P0 纯计算任务。
 
 后续 P1-02 依赖 P1-01，按真实临时 SQLite 完整性/事务测试开发；不得把纯内存 CAS 当持久化证明。服务接线按其技术依赖继续，真实入口默认关闭，许可/验收未满足不得开放。
 

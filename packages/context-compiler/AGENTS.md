@@ -20,7 +20,7 @@
 
 ## 当前范围
 
-当前公开编译入口仍是零泄漏/不可变胶囊哨兵；P0 验收未完成不启用真实 Context 注入。正式合成开发按[开发与验收分离](../../docs/planning/development-and-acceptance.md)的技术依赖推进，P1-06 实现仍须资格/版本/预算不变量。原 P0-04 组件按[精确准备边界](../../docs/planning/core-preparation-boundary.md)与[P0-04 合同](../../docs/planning/context-budget-preparation.md)，已增加内部纯预算/选择阶段；以下为该组件当前非保证，不扩大其测试结论。输入只是已取得的合成内存值，纯阶段不认证材料资格、不引入 authorized/qualified 许可布尔；输出预算选择结果而非 ContextCapsule，不生成请求快照/Exposure/Grant/fence。保留旧 compileContext 与哨兵，无 apps、存储、检索、hydrate、网络、模型或其他生产消费者。P1-06 按[认知合同](../../docs/architecture/cognitive-loop.md)与[任务卡](../../docs/planning/implementation-plan.md)交付正式编译/注入；Procedure 的正式消费等待 P2 的适用性与晋升门。检索编排、模型调用和持久化仍由调用方负责，本包不变为 Agent Loop。
+当前公开编译入口仍是零泄漏/不可变胶囊哨兵；P0 验收未完成不启用真实 Context 注入。正式合成开发按[开发与验收分离](../../docs/harness/development-and-acceptance.md)的技术依赖推进，P1-06 实现仍须资格/版本/预算不变量。原 P0-04 组件按[精确准备边界](../../docs/planning/core-preparation-boundary.md)与[P0-04 合同](../../docs/planning/context-budget-preparation.md)，已增加内部纯预算/选择阶段；以下为该组件当前非保证，不扩大其测试结论。输入只是已取得的合成内存值，纯阶段不认证材料资格、不引入 authorized/qualified 许可布尔；输出预算选择结果而非 ContextCapsule，不生成请求快照/Exposure/Grant/fence。保留旧 compileContext 与哨兵，无 apps、存储、检索、hydrate、网络、模型或其他生产消费者。P1-06 按[认知合同](../../docs/architecture/cognitive-loop.md)与[任务卡](../../docs/planning/implementation-plan.md)交付正式编译/注入；Procedure 的正式消费等待 P2 的适用性与晋升门。检索编排、模型调用和持久化仍由调用方负责，本包不变为 Agent Loop。
 
 胶囊不可变不代表永远可以发送或消费：调用边界必须在发送、结果接收/物化/发布时重验 epoch 与依赖；失效的胶囊作废重编，不原位修改或继续使用。
 

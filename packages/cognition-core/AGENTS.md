@@ -20,7 +20,7 @@
 
 ## 当前范围
 
-当前已实现的 Claim 代码仍是 Bootstrap 哨兵，不代表完整认知能力。当前产品验收阶段仍为 P0，不启用未验收产品行为；正式代码可按[开发与验收分离](../../docs/planning/development-and-acceptance.md)的实现依赖使用合成输入推进。另按 [P0-03 准备边界](../../docs/planning/core-preparation-boundary.md)允许纯内存 Task/Outcome 规则及合成确定性测试；无生产入口、I/O、模型或存储消费者。此范围在独立规划受审合入后才供下一实现任务使用，不代表 P0 或 P1 验收。
+当前已实现的 Claim 代码仍是 Bootstrap 哨兵，不代表完整认知能力。当前产品验收阶段仍为 P0，不启用未验收产品行为；正式代码可按[开发与验收分离](../../docs/harness/development-and-acceptance.md)的实现依赖使用合成输入推进。另按 [P0-03 准备边界](../../docs/planning/core-preparation-boundary.md)允许纯内存 Task/Outcome 规则及合成确定性测试；无生产入口、I/O、模型或存储消费者。此范围在独立规划受审合入后才供下一实现任务使用，不代表 P0 或 P1 验收。
 
 后续按 [design-v2 任务卡](../../docs/planning/implementation-plan.md)进入：P1-01/05/07 实现领域、显式记忆/纠错与结果；P2-01—05 实现自动候选、Procedure 与学习；P3-01/04 实现承诺和主动判断的纯规则。每项代码满足实现依赖与开发检查；产品验收/真实启用另须原任务依赖、安全和场景门，不能借设计或代码已完成跳过。模型/I/O/调度仍在应用组合边界，本包保持纯状态转换。
 

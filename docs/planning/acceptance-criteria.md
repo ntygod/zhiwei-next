@@ -2,7 +2,7 @@
 
 版本：design-v2。这是未来实现的发布合同，不是本设计 PR 已通过的产品验证。任务与场景归属以 [development-plan.json](development-plan.json) 为真源，[完整任务卡](implementation-plan.md)为生成视图。
 
-代码开发与本文件的产品验收分开，唯一执行语义见[开发与验收分离](development-and-acceptance.md)。AI 仍须完成开发所需类型/单元/集成检查；用户可以随后进行产品体验与正式场景验收。未运行不写通过，已实现不代表已启用。
+代码开发与本文件的产品验收分开，唯一执行语义见[开发与验收分离](../harness/development-and-acceptance.md)。AI 仍须完成开发所需类型/单元/集成检查；用户可以随后进行产品体验与正式场景验收。未运行不写通过，已实现不代表已启用。
 
 ## 所有阶段的红线
 

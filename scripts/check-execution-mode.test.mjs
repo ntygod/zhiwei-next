@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { validateExecutionMode } from "./check-execution-mode.mjs";
 
-// Every input below is an isolated in-memory fixture. No GitHub, recorded command,
-// Runtime, preintegration experiment, product activation, or real evidence runs.
+// Inputs are isolated in-memory fixtures plus local CLI fixtures for the unchanged
+// PR contract checker. No GitHub, recorded evidence command, Runtime, preintegration
+// experiment, product activation, or real evidence runs.
 const technicalEdges = [
   ["P0-01", []], ["P0-02", []], ["P0-03", []], ["P0-04", []],
   ["P1-01", ["P0-03"]], ["P1-02", ["P1-01"]],
@@ -259,3 +265,79 @@ rejects("rejects malformed acceptance references", (f) => { f.catalog.tasks[0].d
 rejects("rejects duplicate acceptance references", (f) => { f.catalog.tasks[1].depends.push("P0-01"); }, /duplicates/);
 rejects("rejects unknown acceptance references", (f) => { f.catalog.tasks[0].depends = ["P9-99"]; }, /unknown dependency/);
 rejects("rejects acceptance cycles", (f) => { f.catalog.tasks[0].depends = ["P0-02"]; }, /dependency cycle/);
+
+function checkGovernancePath(path, overrides = {}) {
+  const metadata = {
+    "work-item": "#123456",
+    "pr-role": "primary",
+    "owner-input": "none",
+    "supersedes-pr": "none",
+    risk: "R3",
+    "autonomous-merge": "no",
+    "independent-review": "required",
+    "governance-change": "yes",
+    "project-state": "updated",
+    rollback: "provided",
+    "main-incident-recovery": "no",
+    ...overrides,
+  };
+  const body = [
+    "## 目标与结果", "Isolated local governance fixture. Addresses #123456",
+    "## 范围与非目标", "Validate only the existing PR contract classifier.",
+    "## 风险与回滚", "Synthetic metadata; no changes or rollback are executed.",
+    "## 验证证据", "No remote evidence or review is claimed.",
+    "## 自主交付记录", "Local fixture only; no repository object is created.",
+    "<!--", "zhiwei-harness",
+    ...Object.entries(metadata).map(([key, value]) => `${key}: ${value}`), "-->",
+  ].join("\n");
+  const event = { pull_request: {
+    number: 123457,
+    title: "chore: validate execution mode governance",
+    body,
+    head: { ref: "chore/123456-execution-mode-fixture" },
+  } };
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "zhiwei-execution-mode-pr-"));
+  try {
+    const eventPath = join(temporaryRoot, "event.json");
+    writeFileSync(eventPath, JSON.stringify(event));
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL("./check-pr-contract.mjs", import.meta.url))], {
+      encoding: "utf8",
+      // Do not inherit tokens, startup hooks, or real PR metadata from the host.
+      env: { GITHUB_EVENT_PATH: eventPath, CHANGED_FILES_JSON: JSON.stringify([path]) },
+    });
+    assert.ifError(result.error);
+    assert.equal(result.signal, null, "PR contract fixture must exit normally");
+    return result;
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+for (const path of ["docs/harness/development-and-acceptance.md", "docs/harness/execution-mode.json"]) {
+  for (const risk of ["R0", "R1"]) test(`${path}: existing PR contract rejects ${risk}`, () => {
+    const result = checkGovernancePath(path, { risk });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(`Declared risk ${risk} is below machine-inferred minimum R2`));
+  });
+  test(`${path}: existing PR contract rejects R2 without governance declaration`, () => {
+    const result = checkGovernancePath(path, { risk: "R2", "governance-change": "no" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Changed files affect governance, but governance-change is not yes/);
+  });
+  test(`${path}: existing PR contract rejects R2 without independent review`, () => {
+    const result = checkGovernancePath(path, { risk: "R2", "independent-review": "not-required" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /R2 changes require independent AI review/);
+  });
+  test(`${path}: existing PR contract rejects R3 without a rollback plan`, () => {
+    const result = checkGovernancePath(path, { rollback: "not-required" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /R3 changes require a rollback or recovery plan/);
+  });
+  test(`${path}: existing PR contract accepts conservative R3 governance metadata`, () => {
+    const result = checkGovernancePath(path);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, "");
+    assert.match(result.stdout, /PR contract: OK \(1 files, minimum risk R2, work item #123456\)/);
+  });
+}
