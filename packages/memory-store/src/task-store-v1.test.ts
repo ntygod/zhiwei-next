@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { ids, type Task, type TaskAttemptId, type TaskId, type OutcomeId, type TaskState, type WorkingStateV2 } from "../../domain/src/index.ts";
-import { canonicalJsonV1, parseProductEventV1, parseLocalApiCommandV1, type SessionCreateCommandV1, type SessionContractV1 } from "../../protocol/src/index.ts";
+import { ids, type Task, type TaskAttemptId, type TaskId, type OutcomeId, type TaskState, type WorkingStateV2, type PrivacyV2 } from "../../domain/src/index.ts";
+import { canonicalJsonV1, parseProductEventV1, parseLocalApiCommandV1, type SessionCreateCommandV1, type SessionContractV1, type ExecutionSpecV1, type RuntimeBindingV1 } from "../../protocol/src/index.ts";
 import { CognitiveStoreErrorV2, openSyntheticCognitionStoreV2, type SyntheticCognitionStoreV2, type TaskPersistenceBoundaryV1, type TaskStoreContextV1 } from "./index.ts";
 import { applyTaskMigrationsV1, configureCognitiveDatabaseV2 } from "./cognitive-schema-v2.ts";
 import { TaskStoreEngineV1, type TaskStoreHostV1 } from "./task-store-v1.ts";
@@ -27,6 +27,7 @@ const reduce: TaskPersistenceBoundaryV1["reduce"] = (current, command, context) 
     return { versions: [task, mutate(task, "READY")] };
   }
   if (!current) throw new Error("missing task");
+  if (command.payload.kind === "task.runtime" && command.payload.event === "start") return { versions: [mutate(current, "RUNNING", context.now)] };
   if (command.payload.kind === "task.cancel") { const cancelling = mutate(current, "CANCELLING", context.now); return { versions: [cancelling, mutate(cancelling, "CANCELLED")] }; }
   if (command.payload.kind === "task.retry") {
     const task: Task = { ...structuredClone(current), revision: current.revision + 1, state: "CREATED", updatedAt: context.now,
@@ -35,10 +36,10 @@ const reduce: TaskPersistenceBoundaryV1["reduce"] = (current, command, context) 
   }
   throw new Error("unsupported synthetic reduction");
 };
-function fixture(t: TestContext, reducer: TaskPersistenceBoundaryV1["reduce"] = reduce, advancing = false) {
+function fixture(t: TestContext, reducer: TaskPersistenceBoundaryV1["reduce"] = reduce, advancing = false, privacy: PrivacyV2 = "local-only") {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-task-normal-rebuild-")), dataRoot = join(root, "data"), controlRoot = join(root, "control"); mkdirSync(dataRoot);
   let n = 0, ticks = 0, at = T0, store: SyntheticCognitionStoreV2 | undefined;
-  const boundary = (daemonInstanceId: string): TaskPersistenceBoundaryV1 => ({ daemonInstanceId, contentPolicy: { privacy: "local-only", retentionUntil: RETENTION }, ids: { next: kind => kind === "content" || kind === "reservation" ? uuid(++n) : `${kind}-${++n}` }, reduce: reducer });
+  const boundary = (daemonInstanceId: string): TaskPersistenceBoundaryV1 => ({ daemonInstanceId, contentPolicy: { privacy, retentionUntil: RETENTION }, ids: { next: kind => kind === "content" || kind === "reservation" ? uuid(++n) : `${kind}-${++n}` }, reduce: reducer });
   const options = { dataRoot, controlRoot, installationId: "task-installation", clock: { now: () => advancing ? new Date(Date.parse(at) + ticks++).toISOString() : at } };
   store = openSyntheticCognitionStoreV2({ ...options, mode: "create", taskPersistence: boundary(context.daemonInstanceId) });
   t.after(() => { store?.close(); rmSync(root, { recursive: true, force: true }); });
@@ -236,4 +237,90 @@ test("Outbox rejects canonical wrong scope, owner, version, input and source fac
       code(() => f.store.tasks.snapshot(WORKSPACE), "corruption");
       code(() => f.reopen(), "corruption");
     });
+});
+
+
+function startStoredExecution(f: ReturnType<typeof fixture>, taskId: string, sessionId: string): void {
+  const request = input(f, taskId), recorded = f.store.tasks.recordRuntimeInput(context, request);
+  const global = f.store.registerScope({ kind: "global" }), workspace = f.store.registerScope({ kind: "workspace", workspaceId: WORKSPACE });
+  const spec: ExecutionSpecV1 = { schemaVersion: 1, executionUnitId: "execution-input-check", workspaceId: WORKSPACE, sessionId, prompt: request.text,
+    requestSnapshotRef: recorded.contentRef, fence: { installationId: "task-installation", recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: request.attemptId },
+      sourceTask: { taskId, attemptId: request.attemptId, intentRevision: 1 }, contractRevision: 1, leaseEpoch: 1,
+      cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: RETENTION },
+    selectedModelProfile: contract.modelProfile, toolProfile: "none", bounds: { maxOutputBytes: 1024, maxDurationMs: 1000, maxTokens: 100, maxModelRequests: 1, maxToolCalls: 0 }, controlledCwdRef: "synthetic-input-cwd" };
+  const binding: RuntimeBindingV1 = { schemaVersion: 1, bindingId: "binding-input-check", executionUnitId: spec.executionUnitId, workspaceId: WORKSPACE, sessionId,
+    owner: { kind: "task_attempt", id: request.attemptId }, workerInstanceId: "worker-input-check", leaseEpoch: 1, profileRevision: 1,
+    runtime: { implementation: "synthetic", version: "1.0.0" }, state: "ALLOCATED", observedRuntimeSessionIds: [], sourceStreams: [] };
+  f.store.executions.allocateExecution(context, { taskId, expectedRevision: request.expectedRevision, spec, binding });
+  const ready = f.store.executions.markExecutionReady(context, { taskId, binding: { ...binding, state: "READY", observedRuntimeSessionIds: ["native-input-check"], sourceStreams: [{ sourceStreamId: "stream-input-check", surface: "rpc", runtimeInstanceId: "runtime-input-check", sequenceDomain: "output" }] } });
+  f.store.tasks.executeTask(context, { schemaVersion: 1, commandId: "start-input-check", idempotencyKey: "start-input-check", workspaceId: WORKSPACE,
+    expectedRevision: request.expectedRevision, payload: { kind: "task.runtime", taskId, event: "start", evidenceRefs: [{ id: ready.bindingId, revision: ready.revision }] } });
+}
+
+test("all input kinds reject extra metadata or reused command rows before reads and reopen", async t => {
+  for (const kind of ["user_command", "internal_command", "runtime_input"] as const)
+    for (const variant of ["owner", "intent", "duplicate", "wrong-kind", "revoked-duplicate"] as const)
+      await t.test(`${kind}/${variant}`, t => {
+        const f = fixture(t, reduce, false, "model-allowed"), c = create(f);
+        if (kind === "internal_command") startStoredExecution(f, c.taskId, c.sessionId);
+        else if (kind === "runtime_input") f.store.tasks.recordRuntimeInput(context, input(f, c.taskId));
+        if (variant === "revoked-duplicate") {
+          const scope = { kind: "task" as const, workspaceId: WORKSPACE, taskId: c.taskId };
+          f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-input-projection", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope }] });
+          f.reopen(); // Revoked content alone remains a structurally valid store.
+        }
+        const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+        try {
+          const original = db.prepare("SELECT * FROM task_input_v1 WHERE task_id=? AND kind=? ORDER BY ordinal LIMIT 1").get(c.taskId, kind)!;
+          const ordinal = db.prepare("SELECT max(ordinal)+1 AS n FROM task_input_v1 WHERE attempt_id=?").get(original.attempt_id!)!.n;
+          db.prepare("INSERT INTO task_input_v1(id,task_id,attempt_id,task_revision,intent_revision,kind,ordinal,owner_epoch,content_id,content_version,scope_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+            .run(`extra-${kind}-${variant}`, original.task_id!, original.attempt_id!, original.task_revision!, variant === "intent" ? 999 : original.intent_revision!,
+              variant === "wrong-kind" ? kind === "user_command" ? "internal_command" : "user_command" : kind, ordinal!, variant === "owner" ? 999 : original.owner_epoch!, original.content_id!, original.content_version!, original.scope_key!);
+          assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+        } finally { db.close(); }
+        code(() => f.store.tasks.getTask(WORKSPACE, c.taskId), "corruption");
+        code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+        code(() => f.reopen(), "corruption");
+      });
+});
+
+test("reverse input, receipt, WorkingState and dependency coverage survives body revocation", async t => {
+  for (const target of ["input", "receipt", "working", "dependency", "observation"] as const) await t.test(target, t => {
+    const f = fixture(t), c = create(f);
+    f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-coverage", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope: { kind: "task", workspaceId: WORKSPACE, taskId: c.taskId } }] });
+    const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+    try {
+      // Isolated row-corruption fixture: restore the identical trigger SQL before validation.
+      // No application guard is disabled, and no restore or backup operation is used.
+      const table = target === "input" ? "task_input_v1" : target === "receipt" ? "task_receipt_v1" : target === "working" ? "working_state_v1" : target === "dependency" ? "task_content_dependency_v1" : "observation_v2";
+      const triggers = db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table);
+      db.exec("BEGIN");
+      for (const trigger of triggers) db.exec(`DROP TRIGGER "${trigger.name}"`);
+      if (target === "input") db.prepare("DELETE FROM task_input_v1 WHERE task_id=?").run(c.taskId);
+      else if (target === "receipt") db.prepare("DELETE FROM task_receipt_v1 WHERE entity_kind='task' AND entity_id=?").run(c.taskId);
+      else if (target === "working") db.prepare("DELETE FROM working_state_v1 WHERE task_id=?").run(c.taskId);
+      else if (target === "dependency") db.exec("DELETE FROM task_content_dependency_v1");
+      else db.exec("DELETE FROM observation_v2");
+      for (const trigger of triggers) db.exec(String(trigger.sql));
+      db.exec("COMMIT");
+    } finally { db.close(); }
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption");
+    code(() => f.reopen(), "corruption");
+  });
+});
+
+
+test("revoked metadata still rejects invented attempts and terminal Outcomes", async t => {
+  for (const variant of ["attempt-state", "outcome"] as const) await t.test(variant, t => {
+    const f = fixture(t), c = create(f);
+    if (variant === "outcome") f.store.tasks.executeTask(context, action("task.cancel", c.taskId, 2));
+    f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-terminal-metadata", at: T0, authorization: "synthetic-user-request", targets: [{ kind: "scope", scope: { kind: "task", workspaceId: WORKSPACE, taskId: c.taskId } }] });
+    const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+    try {
+      if (variant === "attempt-state") db.prepare("UPDATE task_attempt_v1 SET state='RUNNING' WHERE task_id=?").run(c.taskId);
+      else db.prepare("INSERT INTO task_outcome_v1(id,revision,task_id,attempt_id,intent_revision,status,snapshot_revision,recorded_at) SELECT 'invented-outcome',1,task_id,attempt_id,intent_revision,'completed',revision,created_at FROM task_snapshot_v1 WHERE task_id=? AND state='CANCELLED'").run(c.taskId);
+      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    } finally { db.close(); }
+    code(() => f.store.tasks.replay(WORKSPACE), "corruption"); code(() => f.reopen(), "corruption");
+  });
 });

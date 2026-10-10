@@ -359,3 +359,109 @@ test("recovery close rejects a clock earlier than its persisted execution snapsh
   code(() => recover(f, active.revision), "conflict"); assert.equal(calls, 0);
   f.setTime(T1); assert.equal(recover(f, active.revision).closed, true);
 });
+
+
+function removeExecutionBodies(f: ReturnType<typeof fixture>, purge = false): void {
+  const scope = { kind: "task" as const, workspaceId: W, taskId: f.taskId }, refs = f.store.tasks.contentRefs(W, f.taskId);
+  f.store.applyControlIntent({ kind: "FORGET", operationId: "forget-integrity-fixture", at: T0, authorization: "synthetic-user-request",
+    targets: [{ kind: "scope", scope }] });
+  if (purge) for (const ref of refs) f.store.purgeContent(scope, ref);
+}
+function corruptExecutionRows(f: ReturnType<typeof fixture>, tables: readonly string[], mutate: (db: DatabaseSync) => void): void {
+  const db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
+  try {
+    // Isolated synthetic row-corruption fixture. Put the identical trigger definitions
+    // back before a public verified read; this does not exercise backup or restore.
+    const triggers = tables.flatMap(table => db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table));
+    db.exec("BEGIN");
+    for (const trigger of triggers) db.exec(`DROP TRIGGER "${trigger.name}"`);
+    mutate(db);
+    for (const trigger of triggers) db.exec(String(trigger.sql));
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    db.exec("COMMIT");
+  } finally { db.close(); }
+}
+function rejectCorruptExecution(f: ReturnType<typeof fixture>): void {
+  code(() => f.store.tasks.replay(W), "corruption");
+  code(() => f.store.executions.readExecution(W, f.taskId), "corruption");
+  code(() => f.reopen(), "corruption");
+}
+test("unavailable bodies retain unique execution payload ownership", async t => {
+  for (const variant of ["model-copy", "snapshot-copy", "input-as-model", "task-as-model", "event-as-model"] as const) {
+    await t.test(variant, t => {
+      const f = fixture(t); f.start(); f.model(); f.ingest(f.envelope(1)); removeExecutionBodies(f);
+      corruptExecutionRows(f, [], db => {
+        if (variant === "snapshot-copy") {
+          db.exec(`INSERT INTO task_execution_snapshot_v1 SELECT binding_id,revision+1,task_id,task_revision,attempt_id,intent_revision,
+            owner_epoch,recovery_epoch,scope_key,state,dispatched,closed,content_id,content_version,created_at
+            FROM task_execution_snapshot_v1 WHERE revision=(SELECT max(revision) FROM task_execution_snapshot_v1)`);
+          db.exec("UPDATE task_execution_v1 SET current_revision=current_revision+1");
+        } else {
+          const replacement = variant === "input-as-model" ? "SELECT content_id,content_version FROM task_input_v1 WHERE kind='runtime_input'"
+            : variant === "task-as-model" ? "SELECT content_id,content_version FROM task_snapshot_v1 WHERE revision=3"
+            : variant === "event-as-model" ? "SELECT content_id,content_version FROM task_execution_event_v1"
+            : "SELECT content_id,content_version FROM task_model_request_v1";
+          const ref = db.prepare(replacement).get()!;
+          db.prepare(`INSERT INTO task_model_request_v1 SELECT binding_id,'forged-next-request',task_id,attempt_id,task_revision,intent_revision,
+            owner_epoch,recovery_epoch,ordinal+1,max_tokens,scope_key,?,?,created_at FROM task_model_request_v1`)
+            .run(ref.content_id!, ref.content_version!);
+        }
+      });
+      rejectCorruptExecution(f);
+    });
+  }
+});
+test("snapshot, event and model dependency coverage remains mandatory after revocation or purge", async t => {
+  for (const purge of [false, true]) for (const table of ["task_execution_snapshot_v1", "task_execution_event_v1", "task_model_request_v1"]) {
+    for (const role of ["binding", "task", "input"] as const) await t.test(`${purge ? "purged" : "revoked"} ${table} ${role}`, t => {
+      const f = fixture(t); f.start(); f.model(); f.ingest(f.envelope(1)); removeExecutionBodies(f, purge);
+      corruptExecutionRows(f, ["task_content_dependency_v1"], db => {
+        const target = db.prepare(`SELECT * FROM ${table} ORDER BY rowid DESC LIMIT 1`).get()!;
+        const sourceTable = role === "binding" ? "task_execution_snapshot_v1" : role === "task" ? "task_snapshot_v1" : "task_input_v1";
+        const deleted = db.prepare(`DELETE FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?
+          AND (source_id,source_version) IN (SELECT content_id,content_version FROM ${sourceTable}${role === "input" ? " WHERE kind='runtime_input'" : ""})`)
+          .run(target.content_id!, target.content_version!);
+        assert.equal(deleted.changes, 1);
+      });
+      rejectCorruptExecution(f);
+    });
+  }
+});
+test("unavailable event and model payloads still require a dispatched historical binding dependency", async t => {
+  for (const table of ["task_execution_event_v1", "task_model_request_v1"]) await t.test(table, t => {
+    const f = fixture(t); f.start(); f.model(); f.ingest(f.envelope(1)); removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_content_dependency_v1"], db => {
+      const target = db.prepare(`SELECT * FROM ${table}`).get()!;
+      db.prepare(`DELETE FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?
+        AND (source_id,source_version) IN (SELECT content_id,content_version FROM task_execution_snapshot_v1)`)
+        .run(target.content_id!, target.content_version!);
+      db.prepare(`INSERT INTO task_content_dependency_v1 SELECT content_id,content_version,?,?
+        FROM task_execution_snapshot_v1 WHERE revision=2`).run(target.content_id!, target.content_version!);
+    });
+    rejectCorruptExecution(f);
+  });
+});
+test("revoked event acknowledgements retain exact progress or deterministic settlement receipt linkage", async t => {
+  for (const settled of [false, true]) await t.test(settled ? "settled" : "progress", t => {
+    const f = fixture(t); f.start(); const envelope = f.envelope(1, settled); f.ingest(envelope);
+    if (!settled) f.ingest(f.envelope(2));
+    removeExecutionBodies(f);
+    corruptExecutionRows(f, ["task_execution_ack_v1"], db => {
+      const wrong = settled ? db.prepare("SELECT commit_cursor FROM task_execution_event_v1 WHERE event_id=?").get(envelope.event.eventId)!.commit_cursor
+        : db.prepare("SELECT max(commit_cursor) AS cursor FROM task_execution_event_v1").get()!.cursor;
+      db.prepare("UPDATE task_execution_ack_v1 SET commit_cursor=? WHERE event_id=?").run(wrong!, envelope.event.eventId);
+    });
+    rejectCorruptExecution(f);
+  });
+});
+
+test("revoked settlement receipt retains the exact source event dependency", t => {
+  const f = fixture(t); f.start(); const envelope = f.envelope(1, true); f.ingest(envelope); removeExecutionBodies(f);
+  corruptExecutionRows(f, ["task_content_dependency_v1"], db => {
+    const event = db.prepare("SELECT * FROM task_execution_event_v1 WHERE event_id=?").get(envelope.event.eventId)!;
+    const receipt = db.prepare("SELECT * FROM task_receipt_v1 WHERE command_id=?").get(`settled:${envelope.event.eventId}`)!;
+    assert.equal(db.prepare("DELETE FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?")
+      .run(event.content_id!, event.content_version!, receipt.content_id!, receipt.content_version!).changes, 1);
+  });
+  rejectCorruptExecution(f);
+});

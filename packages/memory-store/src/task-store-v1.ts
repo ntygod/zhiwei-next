@@ -4,7 +4,7 @@ import { assertIdentifierV2, assertRevisionV2, assertPrivacyV2, assertIsoTimesta
   scopeKeyV2, isTerminalTaskState, sameTaskIntent,
   type ContentRefV2, type ScopeV2, type PrivacyV2, type EvidenceRefV2, type Task, type TaskState, type WorkingStateV2 } from "../../domain/src/index.ts";
 import { canonicalJsonV1, parseSessionTaskV1, parseSessionCreateCommandV1, parseSessionV1, parseLocalApiCommandV1,
-  parseLocalApiReceiptV1, parseProductEventV1, parseObservationV2, parseNormalizedRuntimeEnvelopeV1,
+  parseLocalApiReceiptV1, parseSessionApiReceiptV1, parseProductEventV1, parseObservationV2, parseNormalizedRuntimeEnvelopeV1,
   type LocalApiCommandV1, type LocalApiResultV1, type ProductEventV1, type SessionCreateCommandV1, type SessionV1,
   type TaskSummaryV1, type NormalizedRuntimeEnvelopeV1 } from "../../protocol/src/index.ts";
 import type { CognitiveStoreErrorCodeV2 } from "./cognitive-store-v2.ts";
@@ -416,21 +416,28 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
   /** Called inside the same explicit snapshot as each read and before/after every write. */
   validateRows(): void {
     try {
-      const snapshots = new Map<string, Task>(), currentTasks = new Map<string, Task>();
+      const snapshots = new Map<string, Task>(), currentTasks = new Map<string, Task>(), aggregateContents = new Set<string>();
       for (const row of this.#rows("SELECT * FROM session_v1")) {
         assertIdentifierV2(row.id); assertIdentifierV2(row.workspace_id); assertIdentifierV2(row.owner_instance_id);
         assertRevisionV2(row.revision); assertRevisionV2(row.owner_epoch); assertRevisionV2(row.contract_revision);
         if (row.scope_key !== scopeKeyV2(sessionScope(string(row.workspace_id), string(row.id))) || integer(row.owner_epoch) > integer(row.revision)) throw new Error("session projection mismatch");
+        const contentKey = json(ref(row)); if (aggregateContents.has(contentKey)) throw new Error("reused aggregate content"); aggregateContents.add(contentKey);
         const body = this.#body(row, sessionScope(string(row.workspace_id), string(row.id)), false);
         if (body) { exact(body, ["schemaVersion", "contract", "command", "receipt"]); const command = parseSessionCreateCommandV1(body.command);
           if (body.schemaVersion !== 1 || json(command.payload.contract) !== json(body.contract) || command.workspaceId !== row.workspace_id) throw new Error("contract mismatch"); this.#session(row, false); }
       }
       for (const taskRow of this.#rows("SELECT * FROM task_v1")) {
+        for (const field of ["id", "workspace_id", "session_id"]) assertIdentifierV2(taskRow[field]);
         const rows = this.#rows("SELECT * FROM task_snapshot_v1 WHERE task_id=? ORDER BY revision", string(taskRow.id));
         if (!rows.length || rows.length !== taskRow.current_revision || taskRow.scope_key !== scopeKeyV2(taskScope(string(taskRow.workspace_id), string(taskRow.id)))) throw new Error("task snapshot gap");
         let prior: Task | undefined;
         for (const [index, row] of rows.entries()) {
           if (row.revision !== index + 1 || row.scope_key !== taskRow.scope_key) throw new Error("task revision projection");
+          const contentKey = json(ref(row)); if (aggregateContents.has(contentKey)) throw new Error("reused aggregate content"); aggregateContents.add(contentKey);
+          const workingRow = this.#row("SELECT * FROM working_state_v1 WHERE task_id=? AND task_revision=?", string(taskRow.id), integer(row.revision));
+          if (!workingRow || workingRow.scope_key !== row.scope_key || workingRow.attempt_id !== row.attempt_id || json(ref(workingRow)) !== json(ref(row))) throw new Error("working state projection missing");
+          const predecessor = index === 0 ? this.#row("SELECT * FROM session_v1 WHERE id=?", string(taskRow.session_id))! : rows[index - 1]!;
+          if (!this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?", string(predecessor.content_id), integer(predecessor.content_version), string(row.content_id), integer(row.content_version))) throw new Error("task history dependency missing");
           const body = this.#body(row, taskScope(string(taskRow.workspace_id), string(taskRow.id)), false); if (!body) { prior = undefined; continue; }
           exact(body, ["schemaVersion", "task", "workingState"], ["command", "receipt"]);
           if (body.schemaVersion !== 1 || (body.command === undefined) !== (body.receipt === undefined)) throw new Error("invalid task body");
@@ -448,37 +455,148 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
               || event.observedAt !== evidence.observedAt || evidence.fragmentId !== undefined || event.integrity.status !== "complete") throw new Error("working evidence mismatch");
             if (event.content.availability !== "available" || !this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?", event.content.ref.contentId, event.content.ref.contentVersion, string(row.content_id), integer(row.content_version))) throw new Error("working evidence dependency missing");
           }
-          const workingRow = this.#row("SELECT * FROM working_state_v1 WHERE task_id=? AND task_revision=?", task.id, task.revision);
-          if (!workingRow || json(ref(workingRow)) !== json(ref(row))) throw new Error("working state missing");
-          const predecessor = index === 0 ? this.#row("SELECT * FROM session_v1 WHERE id=?", task.sessionId)! : rows[index - 1]!;
-          if (!this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?", string(predecessor.content_id), integer(predecessor.content_version), string(row.content_id), integer(row.content_version))) throw new Error("task history dependency missing");
           snapshots.set(json([task.id, task.revision]), task); prior = task; if (index === rows.length - 1) currentTasks.set(task.id, task);
         }
         const attempts = this.#rows("SELECT * FROM task_attempt_v1 WHERE task_id=? ORDER BY attempt_no", string(taskRow.id));
         if (!attempts.length || attempts.some((row, i) => row.attempt_no !== i + 1 || (i < attempts.length - 1 && row.active !== 0))) throw new Error("attempt order mismatch");
+        for (const [index, attempt] of attempts.entries()) {
+          const history = rows.filter(row => row.attempt_id === attempt.id), first = history[0], last = history.at(-1);
+          if (!first || !last || first.state !== "CREATED" || attempt.intent_revision !== first.intent_revision || history.some(row => row.intent_revision !== attempt.intent_revision)
+            || attempt.created_at !== first.created_at || attempt.updated_at !== last.created_at || attempt.state !== last.state
+            || attempt.active !== (isTerminalTaskState(last.state as TaskState) ? 0 : 1)
+            || index > 0 && integer(first.revision) !== integer(rows.filter(row => row.attempt_id === attempts[index - 1]!.id).at(-1)!.revision) + 1) throw new Error("attempt snapshot projection mismatch");
+        }
         const current = currentTasks.get(string(taskRow.id));
         if (current && (current.attempts.length !== attempts.length || attempts.some((row, i) => { const attempt = current.attempts[i]!;
           return row.id !== attempt.id || row.state !== attempt.state || row.intent_revision !== attempt.intent.revision || row.created_at !== attempt.createdAt || row.updated_at !== attempt.updatedAt || row.active !== (isTerminalTaskState(attempt.state) ? 0 : 1); }))) throw new Error("attempt projection mismatch");
       }
       for (const row of this.#rows("SELECT * FROM task_outcome_v1")) {
+        assertIdentifierV2(row.id);
+        const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), integer(row.snapshot_revision));
+        if (!snapshot || snapshot.attempt_id !== row.attempt_id || snapshot.intent_revision !== row.intent_revision || snapshot.created_at !== row.recorded_at
+          || row.status !== "unverifiable" || snapshot.state !== "UNVERIFIABLE" || row.revision !== 1) throw new Error("outcome snapshot projection mismatch");
         const task = snapshots.get(json([row.task_id, row.snapshot_revision])), outcome = task?.attempts.find(attempt => attempt.id === row.attempt_id)?.outcomes.find(item => item.id === row.id && item.revision === row.revision);
         if (task && (!outcome || outcome.status !== row.status || outcome.intentRevision !== row.intent_revision || outcome.recordedAt !== row.recorded_at)) throw new Error("outcome projection mismatch");
       }
+      // The bounded P1-04 writer only appends an initial all-unknown interruption Outcome.
+      // No success verifier or subsequent adjudication writer exists in this version.
+      for (const row of this.#rows("SELECT * FROM task_snapshot_v1 WHERE state IN ('COMPLETED','PARTIAL','FAILED','CANCELLED','UNVERIFIABLE')")) {
+        const outcomes = this.#rows("SELECT * FROM task_outcome_v1 WHERE task_id=? AND snapshot_revision=?", string(row.task_id), integer(row.revision));
+        if (row.state === "UNVERIFIABLE" ? outcomes.length !== 1 : outcomes.length !== 0 || row.state !== "CANCELLED") throw new Error("terminal outcome coverage mismatch");
+      }
       for (const task of currentTasks.values()) for (const attempt of task.attempts) for (const outcome of attempt.outcomes)
         if (!this.#row("SELECT 1 FROM task_outcome_v1 WHERE id=? AND revision=? AND task_id=? AND attempt_id=?", outcome.id, outcome.revision, task.id, attempt.id)) throw new Error("outcome missing");
-      const ordinals = new Map<string, number>();
-      for (const row of this.#rows("SELECT i.*,t.workspace_id FROM task_input_v1 i JOIN task_v1 t ON t.id=i.task_id ORDER BY i.attempt_id,i.ordinal")) {
+      // A command receipt covers every consecutive Task version in its transaction.
+      // This coverage remains checkable after its managed body has been revoked or purged.
+      const commandEnds = new Map<string, number>(), commandStarts = new Map<number, number>();
+      for (const receipt of this.#rows("SELECT * FROM task_receipt_v1 WHERE entity_kind='task' AND command_kind!='task.runtime-input' ORDER BY entity_id,revision")) {
+        const task = this.#row("SELECT * FROM task_v1 WHERE id=?", string(receipt.entity_id));
+        const end = integer(receipt.revision), start = commandEnds.get(string(receipt.entity_id)) ?? 0;
+        const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(receipt.entity_id), end);
+        if (!task || !snapshot || !["task.create", "task.cancel", "task.pause", "task.continue", "task.retry", "task.revise-request", "task.runtime"].includes(string(receipt.command_kind))
+          || task.workspace_id !== receipt.workspace_id || task.scope_key !== receipt.scope_key || json(ref(receipt)) !== json(ref(snapshot))
+          || end <= start || end - start > 16 || (start === 0) !== (receipt.command_kind === "task.create")) throw new Error("command receipt projection mismatch");
+        const scope = taskScope(string(task.workspace_id), string(task.id)), finalBody = this.#body(snapshot, scope, false);
+        for (let revision = start + 1; revision <= end; revision++) {
+          const version = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(task.id), revision);
+          if (!version || version.scope_key !== task.scope_key || version.owner_epoch !== snapshot.owner_epoch || version.created_at !== snapshot.created_at) throw new Error("command version coverage mismatch");
+          const body = this.#body(version, scope, false);
+          if (body && (!body.command || !body.receipt || finalBody && (json(body.command) !== json(finalBody.command) || json(body.receipt) !== json(finalBody.receipt)))) throw new Error("command version body mismatch");
+        }
+        commandStarts.set(integer(receipt.commit_cursor), start); commandEnds.set(string(task.id), end);
+      }
+      for (const task of this.#rows("SELECT id,current_revision FROM task_v1")) if (commandEnds.get(string(task.id)) !== task.current_revision) throw new Error("task command coverage missing");
+      const ordinals = new Map<string, number>(), usedReceipts = new Set<number>(), userContents = new Set<string>(), inputContents = new Set<string>();
+      const dependency = (source: Row, target: Row): void => {
+        if (!this.#row("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?",
+          string(source.content_id), integer(source.content_version), string(target.content_id), integer(target.content_version))) throw new Error("input dependency missing");
+      };
+      for (const row of this.#rows("SELECT i.*,t.workspace_id,t.session_id FROM task_input_v1 i JOIN task_v1 t ON t.id=i.task_id ORDER BY i.attempt_id,i.ordinal")) {
+        assertIdentifierV2(row.id);
         const last = ordinals.get(string(row.attempt_id)) ?? 0; if (row.ordinal !== last + 1) throw new Error("input gap"); ordinals.set(string(row.attempt_id), integer(row.ordinal));
-        const body = this.#body(row, taskScope(string(row.workspace_id), string(row.task_id)), false);
-        if (body && row.kind === "runtime_input") {
-          exact(body, ["schemaVersion", "input", "command", "receipt"]); const input = body.input;
-          exact(input, ["schemaVersion", "id", "taskId", "attemptId", "taskRevision", "intentRevision", "ownerEpoch", "ordinal", "kind", "contractRevision", "text", "createdAt"]);
-          if (input.schemaVersion !== 1 || input.id !== row.id || input.taskId !== row.task_id || input.attemptId !== row.attempt_id || input.taskRevision !== row.task_revision
-            || input.intentRevision !== row.intent_revision || input.ownerEpoch !== row.owner_epoch || input.ordinal !== row.ordinal || input.kind !== row.kind || typeof input.text !== "string" || !input.text.trim()) throw new Error("input projection mismatch");
-          assertIsoTimestampV2(input.createdAt); assertRevisionV2(input.contractRevision);
-        } else if (body && body.command === undefined) throw new Error("command input missing");
+        const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), integer(row.task_revision));
+        const attempt = this.#row("SELECT * FROM task_attempt_v1 WHERE task_id=? AND id=?", string(row.task_id), string(row.attempt_id));
+        const session = this.#row("SELECT * FROM session_v1 WHERE id=? AND workspace_id=?", string(row.session_id), string(row.workspace_id));
+        const scope = taskScope(string(row.workspace_id), string(row.task_id));
+        if (!snapshot || !attempt || !session || snapshot.attempt_id !== row.attempt_id || snapshot.scope_key !== row.scope_key || row.scope_key !== scopeKeyV2(scope)
+          || snapshot.intent_revision !== row.intent_revision || snapshot.owner_epoch !== row.owner_epoch || attempt.intent_revision !== row.intent_revision) throw new Error("input snapshot projection mismatch");
+        const runtime = row.kind === "runtime_input", internal = row.kind === "internal_command";
+        if (!internal) { const key = json(ref(row)); if (inputContents.has(key) || aggregateContents.has(key)) throw new Error("reused input content"); inputContents.add(key); }
+        const candidates = this.#rows("SELECT * FROM task_receipt_v1 WHERE entity_kind='task' AND entity_id=? AND revision=?", string(row.task_id), integer(row.task_revision))
+          .filter(receipt => runtime ? receipt.command_kind === "task.runtime-input" && json(ref(receipt)) === json(ref(row))
+            : receipt.command_kind !== "task.runtime-input" && (receipt.command_kind === "task.runtime") === internal && json(ref(receipt)) === json(ref(snapshot)));
+        if (candidates.length !== 1) throw new Error("input receipt missing");
+        const receipt = candidates[0]!, cursor = integer(receipt.commit_cursor);
+        if (usedReceipts.has(cursor) || receipt.workspace_id !== row.workspace_id || receipt.scope_key !== row.scope_key) throw new Error("duplicate command input");
+        usedReceipts.add(cursor);
+        const body = this.#body(row, scope, false), receiptBody = this.#body(receipt, scope, false);
+        const start = runtime ? integer(row.task_revision) : commandStarts.get(cursor)!;
+        if (runtime) { dependency(snapshot, row); dependency(session, row); }
+        else if (internal) { if (json(ref(row)) !== json(ref(snapshot))) throw new Error("internal input body mismatch"); }
+        else {
+          if (json(ref(row)) === json(ref(snapshot))) throw new Error("user input cannot be task body");
+          dependency(session, row);
+          if (start > 0) dependency(this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), start)!, row);
+          for (let revision = start + 1; revision <= integer(row.task_revision); revision++) dependency(row, this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), revision)!);
+          const observations = this.#rows("SELECT * FROM observation_v2 WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version));
+          if (observations.length !== 1) throw new Error("user input Observation missing");
+          const observation = parseObservationV2(parseStored(string(observations[0]!.event_json)));
+          if (json(observation.scope) !== json(scope) || observation.actor !== "user" || observation.kind !== "user_input" || observation.sourceTrust !== "user-direct"
+            || observation.observedAt !== snapshot.created_at || observation.recordedAt !== snapshot.created_at || observation.integrity.status !== "complete"
+            || observation.source.streamId !== `task-command:${row.task_id}` || observation.source.adapter !== "local-api" || observation.source.surface !== "local-api"
+            || observation.source.eventType !== "task-command" || observation.source.runtime !== null || observation.source.productSessionId !== null
+            || observation.source.runtimeSessionId !== null || observation.source.runtimeInstanceId !== null
+            || Object.values(observation.correlation).some(value => value !== null)) throw new Error("user input Observation mismatch");
+          const key = json(ref(row)); if (userContents.has(key)) throw new Error("duplicate user content"); userContents.add(key);
+        }
+        if (body) {
+          if (runtime) {
+            exact(body, ["schemaVersion", "input", "command", "receipt"]); const input = body.input;
+            exact(input, ["schemaVersion", "id", "taskId", "attemptId", "taskRevision", "intentRevision", "ownerEpoch", "ordinal", "kind", "contractRevision", "text", "createdAt"]);
+            if (input.schemaVersion !== 1 || input.id !== row.id || input.taskId !== row.task_id || input.attemptId !== row.attempt_id || input.taskRevision !== row.task_revision
+              || input.intentRevision !== row.intent_revision || input.ownerEpoch !== row.owner_epoch || input.ordinal !== row.ordinal || input.kind !== row.kind
+              || input.contractRevision !== session.contract_revision || typeof input.text !== "string" || !input.text.trim() || Buffer.byteLength(input.text) > 1024 * 1024) throw new Error("input projection mismatch");
+            assertIsoTimestampV2(input.createdAt); assertRevisionV2(input.contractRevision);
+            exact(body.command, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]);
+            exact(body.command.payload, ["kind", "taskId", "attemptId", "intentRevision", "text"]);
+            if (body.command.schemaVersion !== 1 || body.command.payload.kind !== "task.runtime-input" || body.command.payload.taskId !== row.task_id
+              || body.command.payload.attemptId !== row.attempt_id || body.command.payload.intentRevision !== row.intent_revision || body.command.payload.text !== input.text) throw new Error("runtime input command mismatch");
+          } else if (internal) exact(body, ["schemaVersion", "task", "workingState", "command", "receipt"]);
+          else exact(body, ["schemaVersion", "command"]);
+          if (body.schemaVersion !== 1) throw new Error("input body version mismatch");
+          const command = runtime ? body.command as { commandId: string; idempotencyKey: string; workspaceId: string; expectedRevision: number; payload: { kind: string } }
+            : this.#command(body.command as TaskStoreCommandV1);
+          if (command.commandId !== receipt.command_id || command.idempotencyKey !== receipt.idempotency_key || command.workspaceId !== row.workspace_id
+            || command.expectedRevision !== start || command.payload.kind !== receipt.command_kind) throw new Error("input command receipt mismatch");
+          if (!runtime) {
+            const parsed = command as TaskStoreCommandV1;
+            if (internal !== (parsed.payload.kind === "task.runtime") || parsed.payload.kind === "task.create" && parsed.payload.sessionId !== row.session_id
+              || parsed.payload.kind === "task.runtime" && parsed.payload.taskId !== row.task_id
+              || "targetRef" in parsed.payload && parsed.payload.targetRef.id !== row.task_id) throw new Error("input command target mismatch");
+          }
+          if (internal) {
+            const runtimeCommand = command as TaskRuntimeCommandV1;
+            if (runtimeCommand.payload.event !== "prepare" && !runtimeCommand.payload.evidenceRefs?.length) throw new Error("internal evidence missing");
+            for (const evidence of runtimeCommand.payload.evidenceRefs ?? []) {
+              const binding = this.#row("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? AND revision=? AND task_id=? AND attempt_id=?", evidence.id, evidence.revision, string(row.task_id), string(row.attempt_id));
+              const event = evidence.revision === 1 ? this.#row("SELECT * FROM task_execution_event_v1 WHERE event_id=? AND task_id=? AND attempt_id=?", evidence.id, string(row.task_id), string(row.attempt_id)) : undefined;
+              const source = binding ?? event; if (!source) throw new Error("internal evidence target missing");
+              if (binding && runtimeCommand.payload.event === "start" && (binding.state !== "READY" || binding.dispatched !== 0 || binding.closed !== 0)
+                || binding && ["interrupted", "confirm-stop", "confirm-pause"].includes(runtimeCommand.payload.event) && binding.closed !== 1) throw new Error("internal evidence state mismatch");
+              for (let revision = start + 1; revision <= integer(row.task_revision); revision++) dependency(source, this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), revision)!);
+            }
+          }
+          if (receiptBody && (json(body.command) !== json(receiptBody.command) || (runtime || internal) && json(body.receipt) !== json(receiptBody.receipt))) throw new Error("input command body mismatch");
+        }
+      }
+      for (const receipt of this.#rows("SELECT commit_cursor FROM task_receipt_v1 WHERE entity_kind='task'")) if (!usedReceipts.has(integer(receipt.commit_cursor))) throw new Error("receipt input missing");
+      for (const row of this.#rows("SELECT event_json FROM observation_v2")) {
+        const event = parseObservationV2(parseStored(string(row.event_json)));
+        if (event.source.adapter === "local-api" && event.source.eventType === "task-command"
+          && (event.content.availability !== "available" || !userContents.has(json(event.content.ref)))) throw new Error("orphan command Observation");
       }
       for (const row of this.#rows("SELECT * FROM task_receipt_v1")) {
+        for (const field of ["principal_id", "command_kind", "idempotency_key", "command_id", "workspace_id", "entity_id"]) assertIdentifierV2(row[field]);
         const scope = row.entity_kind === "task" ? taskScope(string(row.workspace_id), string(row.entity_id)) : sessionScope(string(row.workspace_id), string(row.entity_id));
         const body = this.#body(row, scope, false), event = this.#row("SELECT * FROM task_outbox_v1 WHERE cursor=?", integer(row.commit_cursor));
         if (!event || event.workspace_id !== row.workspace_id || event.entity_kind !== row.entity_kind || event.entity_id !== row.entity_id || event.revision !== row.revision) throw new Error("receipt cursor mismatch");
@@ -486,7 +604,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           const command = body.command as { commandId: string; idempotencyKey: string; workspaceId: string; payload: { kind: string } }, receipt = body.receipt as TaskStoreReceiptV1;
           if (!command || command.commandId !== row.command_id || command.idempotencyKey !== row.idempotency_key || command.workspaceId !== row.workspace_id || command.payload.kind !== row.command_kind
             || !receipt || receipt.commandId !== row.command_id || receipt.aggregate.kind !== row.entity_kind || receipt.aggregate.id !== row.entity_id || receipt.aggregate.revision !== row.revision) throw new Error("receipt body mismatch");
-          if (receipt.aggregate.kind === "task") parseLocalApiReceiptV1({ ...receipt, eventCursor: "validated" });
+          exact(receipt, ["schemaVersion", "commandId", "status", "aggregate", "result"]);
+          parseSessionApiReceiptV1({ ...receipt, eventCursor: "validated" });
+          if (receipt.aggregate.kind === "task") {
+            const task = snapshots.get(json([row.entity_id, row.revision]));
+            const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.entity_id), integer(row.revision));
+            if (!snapshot || receipt.result.kind !== "task" || receipt.result.taskState !== snapshot.state || receipt.result.intentRevision !== snapshot.intent_revision
+              || task && json(receipt.result) !== json(receiptResult(task))) throw new Error("receipt result mismatch");
+          } else if (row.command_kind !== "session.create" || receipt.result.kind !== "session" || receipt.result.ownerEpoch !== 1) throw new Error("session receipt mismatch");
         }
       }
       let cursor = 0;

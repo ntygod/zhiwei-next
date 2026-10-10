@@ -495,16 +495,52 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       return rows.map(row => ({ ...this.#modelBody(row, taskScope(workspaceId, taskId), true)!, contentRef: ref(row) }));
     });
   }
-  #dependency(target: ContentRefV2, source: ContentRefV2): void {
-    if (!this.#host.db.prepare(`SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? AND target_id=? AND target_version=?`)
-      .get(source.contentId, source.contentVersion, target.contentId, target.contentVersion)) this.#host.fail("corruption");
-  }
   /** Called by the owning store inside its verified read/write snapshot, including before migration commits. */
   validateRows(): void {
     if (!this.#host.db.isTransaction) return this.#host.fail("corruption");
     this.#parse("corruption", () => {
       const db = this.#host.db, executions = db.prepare("SELECT * FROM task_execution_v1 ORDER BY rowid").all() as Row[];
-      const all = new Map<string, { row: Row; scope: ScopeV2; body: Body | undefined }>();
+      const key = (value: ContentRefV2): string => json([value.contentId, value.contentVersion]);
+      const taskBodies = new Map<string, Row>(), runtimeInputs = new Map<string, Row>(), claimed = new Set<string>();
+      // Body removal does not remove role ownership or the managed dependency graph.
+      // Execution payloads always have fresh refs; only the Task command projections share refs.
+      for (const table of ["session_v1", "task_snapshot_v1", "task_input_v1", "working_state_v1", "task_receipt_v1",
+        "observation_v2", "claim_version", "cognitive_snapshot"]) {
+        for (const row of db.prepare(`SELECT * FROM ${table} WHERE content_id IS NOT NULL`).all() as Row[]) {
+          const id = key(ref(row)); claimed.add(id);
+          if (table === "task_snapshot_v1") {
+            if (taskBodies.has(id)) throw new Error("Shared Task snapshot body");
+            taskBodies.set(id, row);
+          }
+          if (table === "task_input_v1" && row.kind === "runtime_input") {
+            if (runtimeInputs.has(id)) throw new Error("Shared runtime input body");
+            runtimeInputs.set(id, row);
+          }
+        }
+      }
+      const claimBody = (row: Row): void => {
+        const id = key(ref(row));
+        if (claimed.has(id)) throw new Error("Reused execution content role");
+        claimed.add(id);
+      };
+      const sources = (row: Row): ContentRefV2[] => (db.prepare(`SELECT source_id AS content_id,source_version AS content_version
+        FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?`).all(row.content_id!, row.content_version!) as Row[]).map(ref);
+      const exactSources = (actual: readonly ContentRefV2[], expected: readonly ContentRefV2[]): void => {
+        if (actual.length !== expected.length || new Set(expected.map(key)).size !== expected.length
+          || actual.some(source => !expected.some(other => key(source) === key(other)))) throw new Error("Execution dependency roles");
+      };
+      type Snapshot = { row: Row; task: Row; input: Row; body: Body | undefined };
+      const snapshotsByContent = new Map<string, Snapshot>();
+      const all = new Map<string, { row: Row; scope: ScopeV2 }>();
+      const bindingDependency = (row: Row, task: Row): Snapshot => {
+        const dependencies = sources(row), bindings = dependencies.map(source => snapshotsByContent.get(key(source))).filter(value => value !== undefined);
+        if (bindings.length !== 1) throw new Error("Execution binding dependency");
+        const binding = bindings[0]!;
+        if (binding.row.binding_id !== row.binding_id || binding.row.closed !== 0 || binding.row.dispatched !== 1
+          || !["BUSY", "DRAINING"].includes(text(binding.row.state)) || task.revision! < binding.task.revision!) throw new Error("Execution dependency authority");
+        exactSources(dependencies, [ref(binding.row), ref(task), ref(binding.input)]);
+        return binding;
+      };
       for (const row of executions) {
         const bindingId = text(row.binding_id), taskId = text(row.task_id), workspaceId = text(row.workspace_id), scope = taskScope(workspaceId, taskId);
         for (const key of ["binding_id", "execution_unit_id", "workspace_id", "task_id", "attempt_id"]) assertIdentifierV2(row[key]);
@@ -517,7 +553,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
           || allocation.intent_revision !== row.intent_revision || allocation.scope_key !== row.scope_key) throw new Error("Allocation projection");
         const snapshots = db.prepare("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? ORDER BY revision").all(bindingId) as Row[];
         if (snapshots.length !== row.current_revision) throw new Error("Execution history gap");
-        let previous: Row | undefined, priorBody: Body | undefined, lastBody: Body | undefined;
+        let previous: Row | undefined, priorBody: Body | undefined, previousTask: Row | undefined, executionInput: Row | undefined;
         for (const [index, snapshot] of snapshots.entries()) {
           if (snapshot.revision !== index + 1) throw new Error("Execution revision gap");
           for (const key of ["binding_id", "task_id", "task_revision", "attempt_id", "intent_revision", "owner_epoch", "recovery_epoch", "scope_key"])
@@ -530,6 +566,21 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
               || !(before === after || before === "ALLOCATED" && after === "READY" || before === "READY" && after === "BUSY"
                 || before === "BUSY" && after === "DRAINING" || after === "STOPPED")) throw new Error("Execution state rewind");
           }
+          claimBody(snapshot);
+          const dependencies = sources(snapshot), inputs = dependencies.map(source => runtimeInputs.get(key(source))).filter(value => value !== undefined);
+          const tasks = dependencies.map(source => taskBodies.get(key(source))).filter(value => value !== undefined);
+          if (inputs.length !== 1 || tasks.length !== 1) throw new Error("Execution snapshot dependency roles");
+          const input = inputs[0]!, currentTask = tasks[0]!;
+          if (input.task_id !== taskId || input.attempt_id !== row.attempt_id || input.owner_epoch !== row.owner_epoch
+            || input.intent_revision !== row.intent_revision || input.scope_key !== row.scope_key || input.task_revision! > row.task_revision!
+            || executionInput && key(ref(executionInput)) !== key(ref(input))) throw new Error("Execution input projection");
+          if (currentTask.task_id !== taskId || currentTask.attempt_id !== row.attempt_id || currentTask.intent_revision !== row.intent_revision
+            || currentTask.scope_key !== row.scope_key || currentTask.revision! < row.task_revision!
+            || previousTask && currentTask.revision! < previousTask.revision!
+            || currentTask.owner_epoch !== row.owner_epoch && !(snapshot.closed === 1 && currentTask.owner_epoch! > row.owner_epoch!)
+            || !previous && currentTask.revision !== allocation.revision
+            || previous?.state === "READY" && snapshot.state === "BUSY" && currentTask.state !== "RUNNING") throw new Error("Execution Task dependency");
+          exactSources(dependencies, previous ? [ref(previous), ref(currentTask), ref(input)] : [ref(allocation), ref(input)]);
           const value = this.#bodyValue(snapshot, scope, false), body = value === undefined ? undefined : this.#decode(value);
           if (body) {
             const source = body.spec.fence.sourceTask;
@@ -538,22 +589,18 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
               || source?.taskId !== taskId || source.attemptId !== row.attempt_id || source.intentRevision !== row.intent_revision
               || body.spec.fence.leaseEpoch !== row.owner_epoch || body.spec.fence.recoveryEpoch !== String(row.recovery_epoch)
               || body.binding.state !== snapshot.state || Number(body.dispatched) !== snapshot.dispatched || Number(body.closed) !== snapshot.closed) throw new Error("Execution body projection");
-            const input = db.prepare("SELECT * FROM task_input_v1 WHERE content_id=? AND content_version=?").get(body.spec.requestSnapshotRef.contentId, body.spec.requestSnapshotRef.contentVersion) as Row | undefined;
-            if (!input || input.task_id !== taskId || input.attempt_id !== row.attempt_id || input.kind !== "runtime_input" || input.owner_epoch !== row.owner_epoch
-              || input.intent_revision !== row.intent_revision || input.task_revision! > row.task_revision!) throw new Error("Execution input projection");
-            this.#dependency(ref(snapshot), body.spec.requestSnapshotRef);
-            if (!previous) this.#dependency(ref(snapshot), ref(allocation));
-            if (previous) this.#dependency(ref(snapshot), ref(previous));
+            if (key(body.spec.requestSnapshotRef) !== key(ref(input))) throw new Error("Execution input reference");
             if (priorBody && (json(priorBody.spec) !== json(body.spec) || json(priorBody.sourceIdentity) !== json(body.sourceIdentity)
               || json(identity(priorBody.binding)) !== json(identity(body.binding))
               || !prefix(priorBody.binding.sourceStreams, body.binding.sourceStreams)
               || !prefix(priorBody.binding.observedRuntimeSessionIds, body.binding.observedRuntimeSessionIds)
               || priorBody.closeEvidence && !body.closeEvidence || body.closeEvidence && !closeExtends(priorBody.closeEvidence, body.closeEvidence))) throw new Error("Execution facts rewritten");
           }
-          previous = snapshot; priorBody = body; lastBody = body;
+          snapshotsByContent.set(key(ref(snapshot)), { row: snapshot, task: currentTask, input, body });
+          previous = snapshot; priorBody = body; previousTask = currentTask; executionInput = input;
         }
         if (!previous || row.active !== 1 - integer(previous.closed, true) || row.updated_at !== previous.created_at) throw new Error("Execution current pointer");
-        all.set(bindingId, { row, scope, body: lastBody });
+        all.set(bindingId, { row, scope });
       }
       const heads = new Map<string, Row>(), events = db.prepare("SELECT * FROM task_execution_event_v1 ORDER BY row_id").all() as Row[];
       for (const row of events) {
@@ -565,6 +612,8 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         const task = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(row.task_id!, row.task_revision!) as Row | undefined;
         if (!task || task.attempt_id !== row.attempt_id || task.owner_epoch !== row.owner_epoch || task.intent_revision !== row.intent_revision
           || row.task_revision! < execution.row.task_revision!) throw new Error("Event task projection");
+        claimBody(row);
+        const binding = bindingDependency(row, task);
         const source = JSON.parse(text(row.source_key)) as unknown;
         if (!Array.isArray(source) || source.length !== 10 || json(source) !== row.source_key || source.some(item => typeof item !== "string")
           || source[0] !== row.binding_id || source[1] !== row.source_stream_id || source[2] !== execution.row.workspace_id) throw new Error("Event source projection");
@@ -580,9 +629,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
           const e = envelope.event;
           if (json([envelope.bindingId, envelope.sourceStreamId, e.workspaceId, e.runtimeSessionId, e.runtimeInstanceId, e.source.adapter,
             e.source.runtime.implementation, e.source.runtime.version, e.source.surface, e.sequence.domain]) !== row.source_key) throw new Error("Full source identity");
-          if (execution.body && this.#checkEnvelope(execution.body, envelope) !== row.source_key) throw new Error("Unobserved source");
-          this.#dependency(ref(row), ref(task));
-          if (execution.body) this.#dependency(ref(row), execution.body.spec.requestSnapshotRef);
+          if (binding.body && this.#checkEnvelope(binding.body, envelope) !== row.source_key) throw new Error("Unobserved source");
         }
         const progress = db.prepare("SELECT * FROM task_outbox_v1 WHERE cursor=?").get(row.commit_cursor!) as Row | undefined;
         if (!progress || progress.workspace_id !== execution.row.workspace_id || progress.entity_kind !== "task" || progress.entity_id !== row.task_id
@@ -592,9 +639,31 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         if (json(event) !== progress.event_json || event.eventId !== progress.event_id || event.workspaceId !== progress.workspace_id
           || event.aggregate.id !== row.task_id || event.aggregate.kind !== "task" || event.aggregate.revision !== row.task_revision
           || event.occurredAt !== row.recorded_at || event.type !== "task.progress" || json(event.payload) !== json({ phase: "working" })) throw new Error("Canonical progress");
-        const ack = db.prepare("SELECT a.*,o.workspace_id,o.entity_id FROM task_execution_ack_v1 a JOIN task_outbox_v1 o ON o.cursor=a.commit_cursor WHERE a.event_id=?").get(row.event_id!) as Row | undefined;
-        if (!ack || ack.commit_cursor! < row.commit_cursor! || ack.workspace_id !== execution.row.workspace_id || ack.entity_id !== row.task_id
-          || envelope && !(envelope.event.data.kind === "agent.lifecycle" && envelope.event.data.phase === "settled") && ack.commit_cursor !== row.commit_cursor) throw new Error("Final commit acknowledgement");
+        const ack = db.prepare("SELECT * FROM task_execution_ack_v1 WHERE event_id=?").get(row.event_id!) as Row | undefined;
+        const settledId = `settled:${text(row.event_id)}`;
+        const receipts = db.prepare(`SELECT * FROM task_receipt_v1 WHERE command_kind='task.runtime' AND workspace_id=?
+          AND entity_kind='task' AND entity_id=? AND (command_id=? OR idempotency_key=?)`)
+          .all(execution.row.workspace_id!, row.task_id!, settledId, settledId) as Row[];
+        if (receipts.length > 1) throw new Error("Ambiguous settlement acknowledgement");
+        const receipt = receipts[0];
+        if (envelope && Boolean(receipt) !== (envelope.event.data.kind === "agent.lifecycle" && envelope.event.data.phase === "settled")) throw new Error("Settlement receipt projection");
+        if (receipt) {
+          const final = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(row.task_id!, receipt.revision!) as Row | undefined;
+          if (receipt.command_id !== settledId || receipt.idempotency_key !== settledId || receipt.command_kind !== "task.runtime"
+            || receipt.workspace_id !== execution.row.workspace_id || receipt.entity_kind !== "task" || receipt.entity_id !== row.task_id
+            || receipt.scope_key !== row.scope_key || receipt.commit_cursor! <= row.commit_cursor! || !final || final.state !== "VERIFYING"
+            || integer(final.revision) <= integer(row.task_revision) || final.attempt_id !== row.attempt_id || final.intent_revision !== row.intent_revision
+            || final.owner_epoch !== row.owner_epoch || key(ref(receipt)) !== key(ref(final))
+            || !sources(final).some(source => key(source) === key(ref(row)))) throw new Error("Settlement receipt identity");
+          const value = this.#bodyValue(final, execution.scope, false);
+          if (value !== undefined) {
+            exact(value, ["schemaVersion", "task", "workingState", "command", "receipt"]);
+            exact(value.command, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]);
+            if (value.command.expectedRevision !== row.task_revision || json(value.command.payload) !== json({ kind: "task.runtime", taskId: row.task_id,
+              event: "settled", completeness: "complete", evidenceRefs: [{ id: row.event_id, revision: 1 }] })) throw new Error("Settlement source evidence");
+          }
+        }
+        if (!ack || ack.commit_cursor !== (receipt?.commit_cursor ?? row.commit_cursor)) throw new Error("Final commit acknowledgement");
       }
       const checkpoints = db.prepare("SELECT * FROM task_execution_stream_v1").all() as Row[];
       if (checkpoints.length !== heads.size) throw new Error("Orphan source checkpoint");
@@ -616,14 +685,15 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
           if (row[key] !== execution.row[key]) throw new Error("Model owner projection");
         const task = db.prepare("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?").get(row.task_id!, row.task_revision!) as Row | undefined;
         if (!task || task.state !== "RUNNING" || task.attempt_id !== row.attempt_id || task.owner_epoch !== row.owner_epoch || task.intent_revision !== row.intent_revision) throw new Error("Model task projection");
-        if (execution.body && (ordinal > execution.body.spec.bounds.maxModelRequests || integer(row.max_tokens) > execution.body.spec.bounds.maxTokens)) throw new Error("Model bounds");
+        claimBody(row);
+        const binding = bindingDependency(row, task);
+        if (binding.row.state !== "BUSY") throw new Error("Model binding state");
+        if (binding.body && (ordinal > binding.body.spec.bounds.maxModelRequests || integer(row.max_tokens) > binding.body.spec.bounds.maxTokens)) throw new Error("Model bounds");
         const body = this.#modelBody(row, execution.scope, false);
         if (body) {
           const pairs = { bindingId: "binding_id", requestId: "request_id", taskId: "task_id", attemptId: "attempt_id", taskRevision: "task_revision",
             intentRevision: "intent_revision", ownerEpoch: "owner_epoch", recoveryEpoch: "recovery_epoch", ordinal: "ordinal", maxTokens: "max_tokens", createdAt: "created_at" } as const;
           for (const [field, column] of Object.entries(pairs)) if (body[field as keyof typeof pairs] !== row[column]) throw new Error("Model body projection");
-          this.#dependency(ref(row), ref(task));
-          if (execution.body) this.#dependency(ref(row), execution.body.spec.requestSnapshotRef);
         }
       }
     });
