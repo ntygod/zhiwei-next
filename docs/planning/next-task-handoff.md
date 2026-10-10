@@ -1,6 +1,6 @@
 # 下一开发上下文交接
 
-当前唯一实现是 [#114](https://github.com/ntygod/zhiwei-next/issues/114)，分支 `feat/114-controlled-pi-worker`，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。P1-02 / PR113 已完整交付并关闭 #112，正常 check 582/582；新 P1-03 正在开发，精确当前 PR/HEAD/批准/CI 需实时回读。
+当前唯一实现是 [#114](https://github.com/ntygod/zhiwei-next/issues/114)，分支 `feat/114-controlled-pi-worker`，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。P1-02 / PR113 已完整交付并关闭 #112。P1-03 代码提交 `d5ff61a9f000d9efdd0e79442ee9278ac7364da4` 已发布，正式工具链完整 check 669/669、严格类型120 roots；唯一 [PR115](https://github.com/ntygod/zhiwei-next/pull/115) 待最终完整 HEAD 独立 R3、Ready/live、保护合入与 main 回读。索引的 implemented 是代码证据，不是已合入或产品验收。完整交付后下一独立实现 P1-04，开工先从 main reconciliation，不能复用 #114/PR115。
 
 ## 先读
 
@@ -11,6 +11,8 @@
 官方 Pi0.84.1 `bin.pi` CLI JSONL 唯一路径；正式传输、监督生命周期与全部工具/模型 Broker。原状态探针不是生产实现，root SDK46 不支持声明不绕过。只由固定合成构造器消费；不增加诊断服务的执行 route，不使用诊断 token 授权数据。原 #90/preintegration-safety 及等价争议 Private/链接替换/注入/备份攻击实验不重跑或换路，相关验收保持 `not_run`。
 
 不触真实模型账户、凭据、用户数据或生产部署。P0-01/02、D-04/D-08 与 G-2/G-5 的限制原样保留。PR99 closed unmerged、#98 原型暂停未交付，不恢复视觉打磨。
+
+官方 Pi CLI 与新一方扩展的实际组合尚未运行；现有合成进程测试不认证 Pi 的真实 Agent Loop。旧 Runtime 来源仅证明原冻结合同，受限/产品验收均 `not_run`。源码/边界和未支持项见 [受控 Worker](../architecture/controlled-pi-worker.md)。
 
 ## 后续责任
 

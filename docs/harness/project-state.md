@@ -10,9 +10,11 @@ updated: 2026-10-10
 
 canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker` / Draft [PR115](https://github.com/ntygod/zhiwei-next/pull/115)，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
 
-当前开发正式 CLI JSONL Worker 传输、Daemon Supervisor 与工具/模型 Broker；真实入口默认关闭，仅固定合成材料/接收器。新一方扩展合同见 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)，已由独立有限决策审查接受，具体实现仍待最终 HEAD R3；不把 unknown 边界的本地编译当上游 SDK 类型支持。root SDK46 诊断保留，精确工具链/官方入口不变。原 #90 及同等争议攻防动态实验不重跑，Z08/Z09 真实安全验收 `not_run`。
+已发布代码提交 `d5ff61a9f000d9efdd0e79442ee9278ac7364da4` 实现正式 CLI JSONL Worker 传输、Daemon Supervisor 与工具/模型 Broker；真实入口默认关闭，仅固定合成材料/接收器。新一方扩展合同见 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)，已由独立有限决策审查接受，具体实现仍待最终 HEAD R3；不把 unknown 边界的本地编译当上游 SDK 类型支持。root SDK46 诊断保留，精确工具链/官方入口不变。原 #90 及同等争议攻防动态实验不重跑，Z08/Z09 真实安全验收 `not_run`。
 
-P1-04 承接真实 Session/Task/Attempt/输入及 WorkingState 存储，P1-06 消费 WorkingState；P1-07 基于 P1-04 精确历史完成 Outcome/Episode；P1-09 仅 Alpha 验收。本项不扩大 Task 存储范围或伪造持久授权。当前候选仍须完整原检查、最终独立 R3、本 PR Runtime 来源、Ready/live、保护合入与 main 回读。
+P1-04 承接真实 Session/Task/Attempt/输入及 WorkingState 存储，P1-06 消费 WorkingState；P1-07 基于 P1-04 精确历史完成 Outcome/Episode；P1-09 仅 Alpha 验收。本项不扩大 Task 存储范围或伪造持久授权。正式 Node22.23.1/npm10.9.8 完整原 `npm run check` 已 exit0，669/669 测试、120 严格类型 roots；合成协议进程加载真实一方扩展并经真实 fd3/Broker 执行固定工具链，不冒充官方 Pi Agent Loop 兼容验收。官方 CLI 与新扩展组合、Z08/Z09 受限安全验收和真实接入均 `not_run`。执行索引 `implemented` 引用已存在代码，下一实现为 P1-04，须本 PR 完成交付后才开工。
+
+本 PR SDK 原来源 `bbed4d68dad41cbab176ea6a50b8f83b7cf4d494` / run `38046401917`，Worker 原来源 `f065131f4f3687ba0cefdeec91f09c19b62e5bcf` / run `38047135909`。Worker attempt1 job `114198829942` / artifact `11668370944` 与 attempt2 job `114199156806` / artifact `11667816687` 的原 ZIP、来源身份、完整对象相等及原 attempt1 后续字节回读已通过原校验；两次捕获失败仍保持失败事实。原比较器已恢复精确 blob `fba36da923a94cd2b9ba024f020089e3ef313d90`，Workflow/normalizer/接受条件未改。当前候选仍待最终完整 HEAD 新独立 R3、Ready/live、保护合入与 main 回读，不能视作已合入。
 
 以下段落保留原开发期快照，不代表当前 WIP。
 
