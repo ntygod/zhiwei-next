@@ -35,9 +35,9 @@
 
 ## 数据 API 与 CLI
 
-独立 loopback 数据 API 使用短期一次性配对码。Host/Origin 固定，浏览器 HttpOnly/SameSite=Strict Cookie+CSRF，CLI 独立 Bearer；诊断 token 与模型凭据不互用。所有读取和事件发布前校验 Scope。
+独立 loopback 数据 API 使用短期一次性配对码。Host 固定；浏览器写入严格校验 Origin、HttpOnly/SameSite=Strict Cookie 与独立 CSRF。浏览器 GET/SSE 若带 Origin 必须精确匹配；未带 Origin 时仅接受浏览器控制的 `Sec-Fetch-Site: same-origin`、`Sec-Fetch-Mode: cors|same-origin`、`Sec-Fetch-Dest: empty` 三项，缺失、跨站或导航请求拒绝。该读策略适配 [Fetch 的 Origin 规则](https://fetch.spec.whatwg.org/#append-a-request-origin-header)，不是放宽写入验证。CLI 独立 Bearer；诊断 token 与模型凭据不互用。所有读取和事件发布前校验 Scope。
 
-外部 cursor 用平台 AES-256-GCM，绑定 installation/principal/scope/recovery/projection/purpose/expiry。内存密钥丢失要求新快照，不丢失 Task/receipt。task/session 是独立产品 projection，不冒称认知 Outbox 的统一序号；快照和水位同 SQLite 读取事务。
+外部 cursor 用平台 AES-256-GCM，绑定 installation/principal/scope/recovery/projection/purpose/expiry。内存密钥丢失要求新快照，不丢失 Task/receipt。task/session 是独立产品 projection，不冒称认知 Outbox 的统一序号；快照和水位同 SQLite 读取事务。HTTP 快照每页至多 50 个 Session/Task summary，并维持 1 MiB 字节及结构预算；`nextCursor` 专用加密命名空间绑定相同 Scope、世代、提交水位和偏移。续页重新授权，水位变化返回 410 `snapshot_required`，绝不拼接不同时刻视图。CLI 完成所有页后才交付完整快照；`snapshotPages()` 允许有界逐页处理，完整内存聚合另限 16 MiB、每类 65536 项和 100 万结构节点，超过时明确失败，不限制持久创建数量。分页期间的页是暂存视图，失败须丢弃；完成后从首个 `asOfCursor` 接 SSE，所有页的该 token 均表示同一内部水位。当前服务每次续页仍读取完整 Store 快照；这是读取成本限制，不将 100 个资源冒充损坏。
 
 SSE 在成功提交后唤醒并从持久 Outbox 回放；空闲心跳不查模型或轮询 Store。有界队列、慢消费者关闭、重复 eventId 和断线/cursor 重连明确处理。CLI 只经 API 查询/回放，不直读数据库。
 

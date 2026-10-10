@@ -53,6 +53,8 @@ export interface SessionSnapshotV1 {
   readonly tasks: readonly TaskSummaryV1[];
   readonly asOfCursor: string;
 }
+/** One bounded HTTP page. Continuations are pinned to the same authorized commit watermark. */
+export interface SessionSnapshotPageV1 extends SessionSnapshotV1 { readonly nextCursor?: string }
 export interface SessionTaskListV1 {
   readonly tasks: readonly TaskSummaryV1[];
   readonly nextCursor?: string;

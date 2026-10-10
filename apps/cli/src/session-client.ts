@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import type { Task } from "../../../packages/domain/src/index.ts";
 import {
-  canonicalJsonV1, decodeSessionApiJsonV1, deserializeProductEventV1, parseLocalApiErrorV1,
-  parseProductEventV1, parseSessionSnapshotV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
-  type ProductEventV1, type SessionApiReadV1, type SessionPairResponseV1, type SessionSnapshotV1,
-  type SessionTaskListV1, type SessionV1,
+  canonicalJsonV1, decodeSessionApiJsonV1, deserializeProductEventV1, parseSessionApiErrorV1,
+  parseProductEventV1, parseSessionSnapshotPageV1, parseSessionSnapshotV1, sessionSnapshotAssemblyBytesV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
+  type ProductEventV1, type SessionApiReadV1, type SessionPairResponseV1, type SessionSnapshotV1, type SessionSnapshotPageV1,
+  type SessionTaskListV1, type SessionV1, type TaskSummaryV1,
 } from "../../../packages/protocol/src/index.ts";
 
 type ClientErrorCode = "invalid_configuration" | "invalid_response" | "response_too_large" | "daemon_unavailable" | "redirect_refused" | "snapshot_required" | "reauthentication_required" | "unsupported_protocol" | "request_rejected" | "stream_disconnected";
@@ -40,7 +40,7 @@ async function responseJson(response: Response): Promise<unknown> {
   } catch (error) { if (error instanceof SessionClientError) throw error; return fail("invalid_response"); }
   finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
 }
-function errorCode(error: ReturnType<typeof parseLocalApiErrorV1>): never {
+function errorCode(error: ReturnType<typeof parseSessionApiErrorV1>): never {
   if (error.error.code === "unauthenticated") fail("reauthentication_required");
   if (["cursor_expired", "event_gap", "snapshot_required", "slow_consumer"].includes(error.error.reason)) fail("snapshot_required");
   if (error.error.code === "unsupported") fail("unsupported_protocol");
@@ -49,8 +49,8 @@ function errorCode(error: ReturnType<typeof parseLocalApiErrorV1>): never {
 async function checkStatus(response: Response): Promise<void> {
   if (response.status >= 300 && response.status <= 399) { await response.body?.cancel(); fail("redirect_refused"); }
   if (response.ok) return;
-  let error: ReturnType<typeof parseLocalApiErrorV1>;
-  try { error = parseLocalApiErrorV1(await responseJson(response)); } catch (failure) { if (failure instanceof SessionClientError) throw failure; return fail("invalid_response"); }
+  let error: ReturnType<typeof parseSessionApiErrorV1>;
+  try { error = parseSessionApiErrorV1(await responseJson(response)); } catch (failure) { if (failure instanceof SessionClientError) throw failure; return fail("invalid_response"); }
   errorCode(error);
 }
 /** Synthetic pairing returns a short-lived in-memory credential. It never stores it on disk. */
@@ -83,10 +83,27 @@ export function createSessionDataClient(options: SessionClientOptions) {
       return { schemaVersion: 1, value, asOfCursor: token(body.asOfCursor) };
     } catch (error) { if (error instanceof SessionClientError) throw error; return fail("invalid_response"); }
   };
-  return {
-    async snapshot(workspaceId: string): Promise<SessionSnapshotV1> {
-      try { const value = parseSessionSnapshotV1(await query("/v1/snapshot", { workspaceId })); if (value.workspaceId !== workspaceId) fail("invalid_response"); return value; }
+  async function* snapshotPages(workspaceId: string): AsyncGenerator<SessionSnapshotPageV1> {
+    let cursor: string | undefined;
+    do {
+      let value: SessionSnapshotPageV1;
+      try { value = parseSessionSnapshotPageV1(await query("/v1/snapshot", { workspaceId, ...(cursor === undefined ? {} : { cursor }) })); }
       catch (error) { if (error instanceof SessionClientError) throw error; return fail("invalid_response"); }
+      if (value.workspaceId !== workspaceId || (value.nextCursor !== undefined && value.nextCursor === cursor)) fail("invalid_response");
+      yield value; cursor = value.nextCursor;
+    } while (cursor !== undefined);
+  }
+  return {
+    // Pages are provisional until iteration completes; a changed watermark fails the whole view.
+    snapshotPages,
+    async snapshot(workspaceId: string): Promise<SessionSnapshotV1> {
+      const sessions: SessionV1[] = []; const tasks: TaskSummaryV1[] = []; let asOfCursor = ""; let bytes = 0;
+      for await (const page of snapshotPages(workspaceId)) {
+        bytes += Buffer.byteLength(JSON.stringify(page)); if (bytes > sessionSnapshotAssemblyBytesV1) fail("response_too_large");
+        asOfCursor ||= page.asOfCursor; sessions.push(...page.sessions); tasks.push(...page.tasks);
+      }
+      try { return parseSessionSnapshotV1({ schemaVersion: 1, workspaceId, sessions, tasks, asOfCursor }); }
+      catch { return fail("invalid_response"); }
     },
     session: (workspaceId: string, id: string): Promise<SessionApiReadV1<SessionV1>> => read(`/v1/sessions/${encodeURIComponent(id)}`, workspaceId, parseSessionV1),
     task: (workspaceId: string, id: string): Promise<SessionApiReadV1<Task>> => read(`/v1/tasks/${encodeURIComponent(id)}`, workspaceId, parseSessionTaskV1),
@@ -117,7 +134,7 @@ export function createSessionDataClient(options: SessionClientOptions) {
             const fields = new Map<string, string>();
             for (const line of frame.split("\n")) { const match = /^(id|event|data): (.*)$/.exec(line); if (!match || fields.has(match[1]!)) fail("unsupported_protocol"); fields.set(match[1]!, match[2]!); }
             if (fields.get("event") === "stream.error") {
-              try { errorCode(parseLocalApiErrorV1(decodeSessionApiJsonV1(fields.get("data") ?? ""))); } catch (error) { if (error instanceof SessionClientError) throw error; fail("invalid_response"); }
+              try { errorCode(parseSessionApiErrorV1(decodeSessionApiJsonV1(fields.get("data") ?? ""))); } catch (error) { if (error instanceof SessionClientError) throw error; fail("invalid_response"); }
             }
             if (fields.size !== 3) fail("unsupported_protocol");
             let event: ProductEventV1;

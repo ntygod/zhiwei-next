@@ -403,7 +403,11 @@ WHEN NEW.cursor IS NOT OLD.cursor
   OR NEW.recovery_epoch IS NOT OLD.recovery_epoch
   OR NEW.occurred_at IS NOT OLD.occurred_at
   OR NEW.event_json IS NOT OLD.event_json
-  OR (OLD.publish_state != 'pending' AND NEW.publish_state IS NOT OLD.publish_state)
+  OR NOT (
+    NEW.publish_state IS OLD.publish_state
+    OR (OLD.publish_state = 'pending' AND NEW.publish_state IN ('published', 'quarantined'))
+    OR (OLD.publish_state = 'published' AND NEW.publish_state = 'quarantined')
+  )
 BEGIN
   SELECT RAISE(ABORT, 'task_outbox_v1 guard update');
 END;

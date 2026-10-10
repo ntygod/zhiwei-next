@@ -48,3 +48,22 @@ test("Task transport rejects multiple active attempts and current intent drift",
   const cancelled = { ...task, state: "CANCELLED", attempts: [{ ...attempt, state: "CANCELLED", cancellationRequested: true, completeness: "complete" }] };
   assert.equal(parseSessionTaskV1(cancelled).state, "CANCELLED");
 });
+
+test("Snapshot pages bound worst-case legal profile references without capping the assembled inventory at 100", async () => {
+  const { parseSessionSnapshotPageV1, parseSessionSnapshotV1 } = await import("./session-api-v1.ts");
+  const session = (index: number) => ({ schemaVersion: 1, id: `session-${index}`.padEnd(256, "s"), workspaceId: "w".repeat(256), revision: Number.MAX_SAFE_INTEGER, ownerEpoch: Number.MAX_SAFE_INTEGER, contract: { ...contract(), ...Object.fromEntries(["runtimeProfile", "modelProfile", "toolProfile", "policyProfile", "dataProfile", "compilerProfile"].map(key => [key, { id: "p".repeat(256), revision: Number.MAX_SAFE_INTEGER }])) }, createdAt: "2026-10-10T00:00:00.000Z", updatedAt: "2026-10-10T00:00:00.000Z" });
+  const page = { schemaVersion: 1, workspaceId: "w".repeat(256), sessions: Array.from({ length: 50 }, (_, index) => session(index)), tasks: [], asOfCursor: "c".repeat(2048), nextCursor: "n".repeat(2048) };
+  assert.equal(parseSessionSnapshotPageV1(page).sessions.length, 50); assert.ok(new TextEncoder().encode(JSON.stringify(page)).byteLength < 1_048_576);
+  assert.throws(() => parseSessionSnapshotPageV1({ ...page, sessions: [...page.sessions, session(51)] }));
+  assert.throws(() => parseSessionSnapshotPageV1({ ...page, sessions: [], nextCursor: "next" }));
+  assert.equal(parseSessionSnapshotV1({ schemaVersion: 1, workspaceId: "w".repeat(256), sessions: Array.from({ length: 1001 }, (_, index) => session(index)), tasks: [], asOfCursor: "cursor" }).sessions.length, 1001);
+});
+
+test("Session error parser recognizes transport recovery reasons but rejects unknown and retryable-invalid extensions", async () => {
+  const { parseSessionApiErrorV1 } = await import("./session-api-v1.ts");
+  const input = { schemaVersion: 1, error: { code: "unavailable", reason: "snapshot_required", safeMessage: "Reload snapshot.", retryable: false, diagnosticId: "diagnostic-fixture" } };
+  for (const reason of ["snapshot_required", "event_gap", "slow_consumer"]) assert.equal(parseSessionApiErrorV1({ ...input, error: { ...input.error, reason } }).error.reason, reason);
+  assert.throws(() => parseSessionApiErrorV1({ ...input, error: { ...input.error, reason: "unknown_reason" } }));
+  assert.throws(() => parseSessionApiErrorV1({ ...input, error: { ...input.error, retryable: true } }));
+  assert.throws(() => parseSessionApiErrorV1({ ...input, error: { ...input.error, secret: "forbidden" } }));
+});

@@ -279,6 +279,25 @@ test("session/task revisions, owner fencing and consumer/outbox progress are mon
   } finally { db.close(); }
 });
 
+test("task Outbox publication can be quarantined without permitting any state rewind", () => {
+  const states = ["pending", "published", "quarantined"] as const;
+  for (const before of states) for (const after of states) temporaryDatabase(filePath => {
+    const { db, pragmas } = open(filePath);
+    try {
+      populate(db);
+      db.prepare("UPDATE task_outbox_v1 SET publish_state=? WHERE cursor=1").run(before);
+      const update = () => db.prepare("UPDATE task_outbox_v1 SET publish_state=? WHERE cursor=1").run(after);
+      const allowed = before === after || before === "pending" || before === "published" && after === "quarantined";
+      if (allowed) assert.equal(update().changes, 1, `${before} -> ${after}`);
+      else assert.throws(update, /guard update/, `${before} -> ${after}`);
+      assert.equal(scalar(db, "SELECT publish_state FROM task_outbox_v1 WHERE cursor=1"), allowed ? after : before);
+      assert.throws(() => db.exec("UPDATE task_outbox_v1 SET event_json='changed' WHERE cursor=1"), /guard update/);
+      assert.throws(() => db.exec("UPDATE task_outbox_v1 SET recovery_epoch=2 WHERE cursor=1"), /guard update/);
+      withTaskSnapshotV1(db, pragmas, state => assert.deepEqual(state.integrity, ["ok"]));
+    } finally { db.close(); }
+  });
+});
+
 test("execution stream positions advance by source sequence rather than requiring contiguous events", () => {
   const { db, pragmas } = open(":memory:");
   try {

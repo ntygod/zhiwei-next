@@ -25,6 +25,7 @@ export interface SessionApiApplication {
   getSession(context: SessionApiContext, id: string): SessionApiCommitted<SessionV1>;
   getTask(context: SessionApiContext, id: string): SessionApiCommitted<Task>;
   listTasks(context: SessionApiContext, query: Readonly<{ state?: string; limit: number; after?: string }>): SessionApiCommitted<Readonly<{ tasks: readonly TaskSummaryV1[]; nextAfter?: string }>>;
+  /** Consistent view; each collection has stable ID order for watermark-pinned transport paging. */
   snapshot(context: SessionApiContext): SessionApiSnapshot;
   replay(context: SessionApiContext, query: Readonly<{ afterCommitCursor: number; limit: number }>): SessionApiReplay;
 }

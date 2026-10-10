@@ -149,3 +149,43 @@ test("Slow HTTP subscribers are bounded and durable events remain replayable aft
     slow.destroy(); slow = undefined; const reconnect = await fixture.call(eventPath + `&afterCursor=${snapshot.asOfCursor}`, pair.headers); const replay = await frames(reconnect, 1); assert.match(replay[0]!, /"eventId":"event-1"/);
   } finally { slow?.destroy(); await fixture.api.close(); }
 });
+
+test("Authenticated snapshots page more than 100 sessions and tasks and reject stale or cross-purpose continuation", async () => {
+  const fixture = await setup();
+  try {
+    const pair = await fixture.pair();
+    for (let index = 1; index <= 101; index++) {
+      const session = await fixture.call("/v1/sessions", pair.headers, sessionCommand(index)); assert.equal(session.status, 201); await session.arrayBuffer();
+      const task = await fixture.call("/v1/tasks", pair.headers, taskCommand(index)); assert.equal(task.status, 201); await task.arrayBuffer();
+    }
+    const { createSessionDataClient, SessionEventTracker } = await import("../../../cli/src/session-client.ts");
+    const client = createSessionDataClient({ baseUrl: fixture.base, credential: pair.body.credential! });
+    const complete = await client.snapshot(workspace); assert.equal(complete.sessions.length, 101); assert.equal(complete.tasks.length, 101); assert.doesNotThrow(() => new SessionEventTracker(complete));
+    let total = 0; let pages = 0;
+    for await (const page of client.snapshotPages(workspace)) { const count = page.sessions.length + page.tasks.length; assert.ok(count <= 50); assert.ok(Buffer.byteLength(JSON.stringify(page)) <= 1_048_576); total += count; pages++; }
+    assert.equal(total, 202); assert.equal(pages, 5);
+    const first = await (await fixture.call(snapshotPath, pair.headers)).json(); assert.ok(first.nextCursor);
+    assert.equal((await fixture.call(eventPath + `&afterCursor=${first.nextCursor}`, pair.headers)).status, 410);
+    const b = await fixture.pair("cli", "b"); assert.equal((await fixture.call(`/v1/snapshot?workspaceId=synthetic-workspace-b&cursor=${first.nextCursor}`, b.headers)).status, 410);
+    await fixture.call("/v1/sessions", pair.headers, sessionCommand(102));
+    const stale = await fixture.call(snapshotPath + `&cursor=${first.nextCursor}`, pair.headers); assert.equal(stale.status, 410); assert.equal((await stale.json()).error.reason, "snapshot_required");
+    const stream = await fixture.call(eventPath, { ...pair.headers, "last-event-id": complete.asOfCursor }); assert.match((await frames(stream, 1))[0]!, /session.created/);
+  } finally { await fixture.api.close(); }
+});
+
+test("Cookie GET and SSE accept genuine same-origin Fetch Metadata without Origin, but writes and cross-site reads fail closed", async () => {
+  const fixture = await setup();
+  try {
+    const pair = await fixture.pair("browser");
+    const headers = { cookie: pair.headers.cookie!, "sec-fetch-site": "same-origin", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" };
+    const response = await fixture.call(snapshotPath, headers); assert.equal(response.status, 200); const snapshot = await response.json();
+    for (const site of ["cross-site", "same-site", "none"]) assert.equal((await fixture.call(snapshotPath, { ...headers, "sec-fetch-site": site })).status, 403);
+    assert.equal((await fixture.call(snapshotPath, { cookie: headers.cookie, "sec-fetch-site": "same-origin" })).status, 403);
+    assert.equal((await fixture.call(snapshotPath, { ...headers, "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" })).status, 403);
+    assert.equal((await fixture.call(snapshotPath, { ...headers, origin: "http://invalid.example" })).status, 403);
+    assert.equal((await fixture.call(snapshotPath, { ...headers, origin: fixture.base, "sec-fetch-site": "cross-site" })).status, 403);
+    assert.equal((await fixture.call("/v1/sessions", { ...headers, "x-zhiwei-csrf": pair.body.csrfToken! }, sessionCommand())).status, 403);
+    const stream = await fixture.call(eventPath + `&afterCursor=${snapshot.asOfCursor}`, headers); assert.equal(stream.status, 200);
+    await fixture.call("/v1/sessions", pair.headers, sessionCommand()); assert.match((await frames(stream, 1))[0]!, /session.created/);
+  } finally { await fixture.api.close(); }
+});

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { SessionApiError, type SessionApiContext } from "./service.ts";
-interface CursorBinding extends SessionApiContext { readonly purpose: "events" | "tasks"; readonly filter?: string }
+interface CursorBinding extends SessionApiContext { readonly purpose: "events" | "tasks" | "snapshot"; readonly filter?: string }
 export interface CursorPosition { readonly commitCursor: number; readonly after?: string }
 interface CursorKey { readonly id: string; readonly secret: Buffer; readonly nonces: Set<string>; count: number }
 export interface SessionCursorOptions {

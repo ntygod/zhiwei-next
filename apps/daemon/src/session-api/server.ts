@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   CognitiveProtocolError, deserializeLocalApiCommandV1, deserializeSessionCreateCommandV1, deserializeSessionPairRequestV1,
-  parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
+  parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotPageV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
   type LocalApiErrorV1,
 } from "../../../../packages/protocol/src/index.ts";
 import { assertIdentifierV2 } from "../../../../packages/domain/src/index.ts";
@@ -212,11 +212,24 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       }
       const resource = /^\/v1\/(sessions|tasks)\/([^/]+)$/.exec(url.pathname);
       if (!["/v1/tasks", "/v1/snapshot", "/v1/events"].includes(url.pathname) && !resource) throw new SessionApiError("not_found", "not_found", 404);
-      validateQuery(url, url.pathname === "/v1/tasks" ? ["workspaceId", "state", "cursor", "limit"] : url.pathname === "/v1/events" ? ["workspaceId", "afterCursor"] : ["workspaceId"]);
+      validateQuery(url, url.pathname === "/v1/tasks" ? ["workspaceId", "state", "cursor", "limit"] : url.pathname === "/v1/events" ? ["workspaceId", "afterCursor"] : url.pathname === "/v1/snapshot" ? ["workspaceId", "cursor"] : ["workspaceId"]);
       const context = authorize(authentication, readIdentifier(url.searchParams.get("workspaceId")));
       if (url.pathname === "/v1/snapshot") {
+        const binding = { ...context, purpose: "snapshot" as const };
+        const token = url.searchParams.get("cursor"); const position = token === null ? undefined : cursor.decode(binding, token);
         const result = app.snapshot(context);
-        writeJson(response, 200, responseValue(parseSessionSnapshotV1, { schemaVersion: 1, workspaceId: context.workspaceId, sessions: result.sessions, tasks: result.tasks, asOfCursor: encode(context, result.commitCursor) })); return;
+        // Each page comes from a consistent read; only an unchanged watermark can extend the view.
+        if (position && position.commitCursor !== result.commitCursor) throw new SessionApiError("unavailable", "snapshot_required", 410);
+        const offsetText = position?.after ?? "0";
+        if (!/^(?:0|[1-9][0-9]{0,14})$/.test(offsetText)) throw new SessionApiError("unavailable", "cursor_expired", 410);
+        const offset = Number(offsetText); const total = result.sessions.length + result.tasks.length;
+        if (!Number.isSafeInteger(total) || offset > total) throw new SessionApiError("corruption", "integrity_failed", 500);
+        const sessions = result.sessions.slice(offset, offset + 50);
+        const tasks = result.tasks.slice(Math.max(0, offset - result.sessions.length), Math.max(0, offset - result.sessions.length) + 50 - sessions.length);
+        const next = offset + sessions.length + tasks.length;
+        // Session has bounded profile refs, Task only summaries; the page parser also enforces byte/node budgets.
+        writeJson(response, 200, responseValue(parseSessionSnapshotPageV1, { schemaVersion: 1, workspaceId: context.workspaceId, sessions, tasks,
+          asOfCursor: encode(context, result.commitCursor), ...(next < total ? { nextCursor: cursor.encode(binding, { commitCursor: result.commitCursor, after: String(next) }) } : {}) })); return;
       }
       if (url.pathname === "/v1/events") {
         if ((request.headersDistinct["last-event-id"]?.length ?? 0) > 1) invalid();

@@ -76,3 +76,14 @@ test("CLI rejects duplicate JSON fields and even empty snapshots from another wo
   try { const client = createSessionDataClient({ baseUrl: fixture.baseUrl, credential }); await assert.rejects(client.snapshot(workspace), isError("invalid_response")); duplicate = false; await assert.rejects(client.snapshot(workspace), isError("invalid_response")); }
   finally { await fixture.close(); }
 });
+
+test("A stale snapshot continuation fails atomically instead of returning a partial client view", async () => {
+  let requests = 0;
+  const fixture = await server((request, response) => {
+    requests++;
+    if (request.url!.includes("cursor=next_page")) json(response, errorBody("unavailable", "snapshot_required"), 410);
+    else json(response, { ...snapshot(), tasks: [{ id: "task-1", workspaceId: workspace, sessionId: "session-1", revision: 2, intentRevision: 1, state: "READY", updatedAt: at }], nextCursor: "next_page" });
+  });
+  try { await assert.rejects(createSessionDataClient({ baseUrl: fixture.baseUrl, credential }).snapshot(workspace), isError("snapshot_required")); assert.equal(requests, 2); }
+  finally { await fixture.close(); }
+});

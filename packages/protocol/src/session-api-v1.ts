@@ -1,8 +1,8 @@
 import { assertTaskIntent, assertTaskOutcomeHistory, isTerminalTaskState, sameTaskIntent, type Task, type TaskAttempt, type TaskState } from "../../domain/src/index.ts";
-import { decodeWireJson, identifier, invalid, keys, list, member, object, revision, textValue, timestamp, unique, version, wireBoundary } from "./cognitive-wire.ts";
-import { canonicalJsonV1 } from "./lossless-json.ts";
-import { parseLocalApiReceiptV1 } from "./local-api-v1-response.ts";
-import type { SessionApiReceiptV1, SessionSnapshotV1, ProductEventV1, SessionContractV1, SessionCreateCommandV1, SessionPairRequestV1, SessionV1, TaskSummaryV1 } from "./session-api-v1-types.ts";
+import { CognitiveProtocolError, decodeWireJson, identifier, invalid, keys, list, member, object, revision, textValue, timestamp, unique, version, wireBoundary } from "./cognitive-wire.ts";
+import { canonicalJsonV1, snapshotJsonValue } from "./lossless-json.ts";
+import { parseLocalApiErrorV1, parseLocalApiReceiptV1 } from "./local-api-v1-response.ts";
+import type { SessionApiReceiptV1, SessionSnapshotV1, SessionSnapshotPageV1, ProductEventV1, SessionContractV1, SessionCreateCommandV1, SessionPairRequestV1, SessionV1, TaskSummaryV1 } from "./session-api-v1-types.ts";
 export * from "./session-api-v1-types.ts";
 export const sessionTaskStatesV1 = ["CREATED", "READY", "RUNNING", "VERIFYING", "WAITING_INPUT", "WAITING_APPROVAL", "PAUSED", "CANCELLING", "NEEDS_RECONCILIATION", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "UNVERIFIABLE"] as const;
 function contract(input: unknown): void {
@@ -156,15 +156,46 @@ export function parseSessionApiReceiptV1(input: unknown): SessionApiReceiptV1 {
     return value as unknown as SessionApiReceiptV1;
   });
 }
+export const sessionSnapshotAssemblyBytesV1 = 16_777_216;
+function snapshotFields(value: Record<string, unknown>, maximum: number): SessionSnapshotV1 {
+  version(value.schemaVersion, 1); const workspaceId = identifier(value.workspaceId); const asOfCursor = textValue(value.asOfCursor, 2048);
+  const sessions = list(value.sessions, maximum).map(parseSessionV1); const tasks = list(value.tasks, maximum).map(parseTaskSummaryV1);
+  unique(sessions.map(session => session.id)); unique(tasks.map(task => task.id));
+  if ([...sessions, ...tasks].some(row => row.workspaceId !== workspaceId)) invalid();
+  return Object.freeze({ schemaVersion: 1, workspaceId, sessions: Object.freeze(sessions), tasks: Object.freeze(tasks), asOfCursor });
+}
+/** Complete client-side view, separate from the 1 MiB wire-page budget. Streaming consumers may
+ * process pages without assembling this bounded convenience representation. */
 export function parseSessionSnapshotV1(input: unknown): SessionSnapshotV1 {
+  try {
+    const value = object(snapshotJsonValue(input, { maxDepth: 32, maxNodes: 1_000_000, maxStringLength: 1_048_576, maxContainerEntries: 65_536 }));
+    if (new TextEncoder().encode(JSON.stringify(value)).byteLength > sessionSnapshotAssemblyBytesV1) throw new CognitiveProtocolError("too_large");
+    keys(value, ["schemaVersion", "workspaceId", "sessions", "tasks", "asOfCursor"]);
+    return snapshotFields(value, 65_536);
+  } catch (error) { if (error instanceof CognitiveProtocolError) throw error; throw new CognitiveProtocolError(); }
+}
+export function parseSessionSnapshotPageV1(input: unknown): SessionSnapshotPageV1 {
   return wireBoundary(input, value => {
-    keys(value, ["schemaVersion", "workspaceId", "sessions", "tasks", "asOfCursor"]); version(value.schemaVersion, 1); identifier(value.workspaceId); textValue(value.asOfCursor, 2048);
-    const sessions = list(value.sessions, 100).map(parseSessionV1); const tasks = list(value.tasks, 100).map(parseTaskSummaryV1);
-    unique(sessions.map(session => session.id)); unique(tasks.map(task => task.id));
-    if ([...sessions, ...tasks].some(row => row.workspaceId !== value.workspaceId)) invalid();
-    return value as unknown as SessionSnapshotV1;
+    keys(value, ["schemaVersion", "workspaceId", "sessions", "tasks", "asOfCursor"], ["nextCursor"]);
+    const parsed = snapshotFields(value, 50);
+    if (parsed.sessions.length + parsed.tasks.length > 50 || (value.nextCursor !== undefined && parsed.sessions.length + parsed.tasks.length === 0)) invalid();
+    return { ...parsed, ...(value.nextCursor === undefined ? {} : { nextCursor: textValue(value.nextCursor, 2048) }) };
   });
 }
 
 /** Lossless JSON syntax boundary only; consumers must still apply the specific response DTO parser. */
 export function decodeSessionApiJsonV1(input: string): unknown { return decodeWireJson(input); }
+
+/** Session transport adds bounded recovery/auth reasons to the unchanged core error contract. */
+export function parseSessionApiErrorV1(input: unknown): ReturnType<typeof parseLocalApiErrorV1> {
+  return wireBoundary(input, value => {
+    const error = object(value.error); const reason = error.reason;
+    const representative = error.code === "unavailable" && ["snapshot_required", "event_gap", "slow_consumer"].includes(reason as string) ? "cursor_expired"
+      : error.code === "forbidden" && ["origin_mismatch", "csrf_mismatch"].includes(reason as string) ? "action_not_granted"
+      : error.code === "idempotency_conflict" && reason === "idempotency_conflict" ? "key_reused" : undefined;
+    if (representative === undefined) return parseLocalApiErrorV1(value);
+    // Reuse every core shape/boolean/retryability check; the returned reason is never rewritten.
+    const parsed = parseLocalApiErrorV1({ ...value, error: { ...error, reason: representative } });
+    return { ...parsed, error: { ...parsed.error, reason: reason as string } };
+  });
+}

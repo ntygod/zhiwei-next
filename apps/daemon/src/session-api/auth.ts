@@ -63,7 +63,14 @@ export class SyntheticSessionAuthenticator {
       if (!cookies || cookies.length !== 1) deny();
       const matches = cookies[0]!.split(";").map(value => value.trim()).filter(value => value.startsWith("zhiwei_data_session="));
       if (matches.length !== 1 || !/^zhiwei_data_session=data_browser_[A-Za-z0-9_-]{43}$/.test(matches[0]!)) deny();
-      if (request.headersDistinct.origin?.length !== 1 || request.headersDistinct.origin[0] !== expectedOrigin) throw new SessionApiError("forbidden", "origin_mismatch", 403);
+      const origin = request.headersDistinct.origin;
+      const metadata = (name: string, allowed: readonly string[]) => request.headersDistinct[name]?.length === 1 && allowed.includes(request.headersDistinct[name]![0]!);
+      // Same-origin fetch/EventSource GET commonly omits Origin. Browser-controlled Fetch Metadata
+      // admits only same-origin, non-navigation fetches; absence/cross-site remains fail closed.
+      const sameOriginRead = request.method === "GET" && origin === undefined
+        && metadata("sec-fetch-site", ["same-origin"]) && metadata("sec-fetch-mode", ["cors", "same-origin"]) && metadata("sec-fetch-dest", ["empty"]);
+      const contradictorySite = request.headersDistinct["sec-fetch-site"] !== undefined && !metadata("sec-fetch-site", ["same-origin"]);
+      if (contradictorySite || (!sameOriginRead && (origin?.length !== 1 || origin[0] !== expectedOrigin))) throw new SessionApiError("forbidden", "origin_mismatch", 403);
       token = matches[0]!.slice("zhiwei_data_session=".length); kind = "browser";
     }
     const key = hash(token); const entry = this.#credentials.get(key);
