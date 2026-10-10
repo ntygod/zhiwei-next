@@ -194,6 +194,9 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
+    throw new Error(
+      "PR103 recapture-only guard: complete comparison passed; preserve source failure shape for provenance renewal.",
+    );
     return;
   }
   if (outputIndex >= 0) {
