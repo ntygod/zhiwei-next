@@ -6,6 +6,14 @@ status: active
 updated: 2026-10-10
 -->
 
+## 当前工作：P0-04 预算准备规划 #104（2026-10-10）
+
+canonical [#104](https://github.com/ntygod/zhiwei-next/issues/104)，唯一分支 `docs/104-context-budget-plan`，基于 main `c32a13d65fbf484e099bca432502f03ba00a61e1`。PR103/#102 已交付 P0-03，69新增/393完整测试通过，无生产消费者。本项仅定案[P0-04 纯预算/选择准备](../planning/context-budget-preparation.md)及精确准备边界，不实现算法；最终 HEAD 旧规则独立 R3/CI/来源/保护合入前不得使用新规则。
+
+P0-04 depends=[]；P1-01 在原 P0-02/P0-03 之外增加 P0-04 以满足旧完整阶段门，P1-06 保留 P1-05 并追加 P0-04 作为未来消费者。checker/Workflow、P0-01/P0-02、D-04/D-08 和受限实验约束不变；不运行受限实验、不恢复 PR99 或旧取消会话。预算结果不是可发送 Capsule/资格/Exposure，组件证据不认定 Z14/Z15 正式通过。实际 PR、HEAD、验收与合入以 GitHub 回读为准。
+
+以下旧“当前工作”段落是历史快照，不是开放 WIP；准确下一步见[当前交接](../planning/next-task-handoff.md)。
+
 ## 当前工作：P0-03 纯 Task/Outcome 组件 #102（2026-10-10）
 
 canonical [#102](https://github.com/ntygod/zhiwei-next/issues/102)，唯一分支 `feat/102-task-outcome-core`，基于已保护合入的 main `79f156b8abcb5110e62f89427a021c6e8384eaf4`。规划 #100 / PR101 已交付；本独立任务依生效的 [P0-03 准备边界](../planning/core-preparation-boundary.md)实现 domain/cognition-core 纯 Task/Attempt/Outcome 类型、规则及确定性测试，尚未完成验证与交付。实际 primary PR 和精确 HEAD 以 GitHub 为准。
@@ -195,10 +203,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 8ca8446f848960bbf0bdaac49029b17b9d1637a6
-capture workflow             38017852560
-capture artifact             11656453345
-capture artifact digest      sha256:073a6427794415ff028f8545ab91ba6681ab2cad415b90b7dc09a5aa1d954aef
+capture head                 322bf58985c44307a2546b047eb3368839b52358
+capture workflow             38020190525
+capture artifact             11657289511
+capture artifact digest      sha256:dd83752cd4a5eca520f14135f7f6e9ca514b92a0b0e0956b487f2c49c3403de3
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

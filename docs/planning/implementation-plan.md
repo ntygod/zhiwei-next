@@ -24,12 +24,13 @@
 | P0-01 | 定案接入前安全与保留基线 | 无 | R3 |
 | P0-02 | 测量 Ledger 与冻结产品验收夹具 | P0-01 | R3 |
 | P0-03 | 准备纯 Task 与 Outcome 领域规则 | 无 | R2 |
-| P1-01 | 建立认知与任务领域合同 | P0-02, P0-03 | R2 |
+| P0-04 | 准备纯上下文预算与选择 | 无 | R2 |
+| P1-01 | 建立认知与任务领域合同 | P0-02, P0-03, P0-04 | R2 |
 | P1-02 | 实现正文生命周期与认知事务存储 | P1-01 | R3 |
 | P1-03 | 接通受控 Pi Worker 与工具/模型边界 | P1-02 | R3 |
 | P1-04 | 接通 Session、任务摄取与事件 API | P1-03 | R3 |
 | P1-05 | 交付可纠正记忆与检索 | P1-04 | R3 |
-| P1-06 | 交付认知协调与受预算上下文 | P1-05 | R3 |
+| P1-06 | 交付认知协调与受预算上下文 | P1-05, P0-04 | R3 |
 | P1-07 | 交付结果验证、Episode 与使用记录 | P1-06 | R2 |
 | P1-08 | 交付项目工作台与记忆纠错界面 | P1-07 | R3 |
 | P1-09 | 验收连续协作 Alpha | P1-08 | R3 |
@@ -141,11 +142,39 @@
 
 **不做：**不执行或替代接入前安全实验，不接真实数据、Runtime、模型、数据库、网络或外部副作用；不实现通用框架、API DTO、真实恢复或学习。
 
+## P0-04 · 准备纯上下文预算与选择
+
+**结果：**用已取得的合成内存材料验证 C06 的稳定选择、固定渲染与精确预算计算，供后续 P1-06 消费；结果不是可发送 ContextCapsule 或资格证明。
+
+**前置：**无；**风险：**R2；**类型：**必需。
+
+**触及：**`packages/context-compiler`、`packages/domain`。
+
+**合同：**[detailed-design.md](../../docs/architecture/detailed-design.md)、[cognitive-pipelines.md](../../docs/architecture/cognitive-pipelines.md)、[cognitive-loop.md](../../docs/architecture/cognitive-loop.md)、[core-preparation-boundary.md](../../docs/planning/core-preparation-boundary.md)、[context-budget-preparation.md](../../docs/planning/context-budget-preparation.md)。
+
+**完成条件：**
+
+- 显式基础块、contextLimit/reservedOutput/mandatoryProtocolOverhead 与精确 TokenCounter 注入；精确 id/version/source refs、稳定序号、required 和不可拆冲突组仅为计算输入
+- 按专篇定案 availableInput、4096/25%/余量上限、60/25/15 整数余数、required 占比、空类别借用、去重/异内容拒绝、跳过与最终重计数/最低可选组移除
+- 确定性测试覆盖数值/计数器异常、基础与必需项超限、排序平局/输入排列、冲突组完整性、引用成本、深不可变与无输入修改；原 compileContext 导出和哨兵保持
+- 仅报告 Z14 预算选择组件证据；不认证 Z14/Z15 端到端、材料资格、真实发送、请求快照或 P1 正式接入
+
+**必须验证的失败：**
+
+- 必需项不可截断或静默删除；无法满足预算显式 budget_conflict，计数异常不可 fallback 为估算
+- 不引入 authorized/qualified 布尔许可、存储/检索/hydrate/网络/模型/Grant/Exposure/RequestSnapshot/fence 或 apps 消费者
+
+**场景：**Z14。
+
+**回滚：**通过受审 PR revert 纯组件；无生产消费者、迁移或持久数据，保留旧导出与哨兵。
+
+**不做：**不做材料资格判定或 C05 检索编排，不接真实数据或生产入口，不执行/替代受限安全实验，不替换正式 C06 编译与发送流程。
+
 ## P1-01 · 建立认知与任务领域合同
 
 **结果：**代码准确表达五类记忆、假设、目标与任务，提供纯状态转换。
 
-**前置：**P0-02, P0-03；**风险：**R2；**类型：**必需。
+**前置：**P0-02, P0-03, P0-04；**风险：**R2；**类型：**必需。
 
 **触及：**`packages/domain`、`packages/cognition-core`、`packages/protocol`。
 
@@ -280,7 +309,7 @@
 
 **结果：**Agent 能基于项目状态与合格记忆选择继续、澄清或执行，并解释依据。
 
-**前置：**P1-05；**风险：**R3；**类型：**必需。
+**前置：**P1-05, P0-04；**风险：**R3；**类型：**必需。
 
 **触及：**`apps/daemon`、`packages/context-compiler`、`packages/pi-adapter`。
 
@@ -1081,7 +1110,7 @@
 | Z11 | 取消/崩溃/重启 | P1-04, P1-09 |
 | Z12 | 订阅/游标/配对认证 | P1-04, P1-09 |
 | Z13 | 检索资格/重建/预算 | P1-05, P1-09, X2-01 |
-| Z14 | 上下文组成/真实发送 | P1-06, P1-09 |
+| Z14 | 上下文组成/真实发送 | P0-04, P1-06, P1-09 |
 | Z15 | 未知项/决策有界/并发纠正 | P1-06, P1-09 |
 | Z16 | 任务验证与不可验证 | P0-03, P1-07, P1-09 |
 | Z17 | Episode/采用/结果关联 | P1-07, P1-09 |
