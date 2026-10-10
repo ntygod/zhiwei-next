@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     2679e561bdbf98e94c143219cbef59e3b591bf86
-workflow run     37922999709
-artifact id      11612682909
-artifact digest  sha256:718e1ff6a693a27bbd51538a13ac931e1d8de66e527fd0e329ab35623d4b6d40
+capture head     0641b5cf1710cc2dbb4be6d99f1f321e863ff4b4
+workflow run     38015299672
+artifact id      11656340371
+artifact digest  sha256:0b45fca75d676cd664de35bc24b8c6d48c43ed5402e2d64eeacdb3060e3a439f
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `37922999709`属于当前PR #97，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38015299672`属于当前PR #101，机器`display_title`绑定PR action、更新时间与Capture HEAD；来源HEAD是当前候选的严格祖先，因此后续Ready gate可以同时证明当前PR归属、Workflow/Artifact身份和祖先关系。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 
