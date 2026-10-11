@@ -10,9 +10,13 @@ import { SessionApiError, type SessionApiContext } from "../session-api/service.
 import { createSyntheticControlledWorkerSupervisor, type SyntheticWorkerSupervisor } from "../runtime/controlled-worker-supervisor.ts";
 import { createPersistentSessionApplication, syntheticTaskPrompt, type PersistentSessionApplication } from "./application.ts";
 import { reducePersistentTask } from "./task-reducer.ts";
+import { reduceExplicitMemory, qualifiesExplicitMemory } from "../memory-service/memory-rules.ts";
+import { createPersistentMemoryApplication } from "../memory-service/application.ts";
+import type { MemoryPersistenceV1 } from "../../../../packages/memory-store/src/index.ts";
 export interface SyntheticTaskSessionHarness {
   readonly mode: "synthetic-fixtures-only"; readonly production: "unsupported";
   readonly application: PersistentSessionApplication; readonly api: SyntheticSessionApi;
+  readonly memories: MemoryPersistenceV1;
   evidence(context: SessionApiContext, taskId: string): Readonly<{ execution?: TaskExecutionDetailsV1; runtimeInputs: readonly RuntimeInputSnapshotV1[]; modelRequests: readonly TaskModelRequestSnapshotV1[] }>;
   runTask(context: SessionApiContext, taskId: string): Promise<void>;
   idle(): Promise<void>; restart(): Promise<void>; interruptControlPlane(): Promise<void>; reconcileRetainedWorkers(): Promise<void>; close(): Promise<void>;
@@ -51,7 +55,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     recoveryCustody: { observedClose(input) { const record = observedCloses.get(input.binding.bindingId); return record ? structuredClone(record) : undefined; } },
     runtimeSourceIdentity: { bindingImplementation: "pi", adapter: "pi", implementation: "@earendil-works/pi-coding-agent", version: "0.84.1" },
     contentPolicy: { privacy: "model-allowed", retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reducePersistentTask });
-  const recoveryOptions = () => ({ recoveryRoot, controlRoot, installationId, clock: { now: () => new Date().toISOString() }, taskPersistence: boundary() });
+  const recoveryOptions = () => ({ recoveryRoot, controlRoot, installationId, clock: { now: () => new Date().toISOString() }, taskPersistence: boundary(),
+    memoryPersistence: { contentPolicy: { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory } });
   try {
     coordinator = createSyntheticRecoveryCoordinatorV2({ ...recoveryOptions(), generationId: randomUUID() });
     coordinator.store.registerScope({ kind: "global" });
@@ -119,7 +124,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       }
     },
   });
-  const apiOptions = () => ({ application, installationId, recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
+  const memories = createPersistentMemoryApplication({ store, authorize: application.authorize });
+  const apiOptions = () => ({ application, memory: memories, installationId, recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
   let api = createSyntheticSessionApi(apiOptions()), apiNeedsReplacement = false;
   const closeApi = async () => { await api.close(); apiNeedsReplacement = true; };
   const publishApi = () => { if (apiNeedsReplacement) { api = createSyntheticSessionApi(apiOptions()); apiNeedsReplacement = false; } };
@@ -224,7 +230,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     if (recovered.length) { await serial; for (const [taskId, active] of recovered) releaseClosedCustody(taskId, active); }
   };
   return {
-    mode: "synthetic-fixtures-only", production: "unsupported", application, get api() { return api; }, runTask,
+    mode: "synthetic-fixtures-only", production: "unsupported", application, memories, get api() { return api; }, runTask,
     evidence(context, taskId) { const task = current(context, taskId), attemptId = task.attempts.at(-1)!.id, execution = store().executions.readExecutionDetails(context.workspaceId, taskId); return { ...(execution ? { execution } : {}), runtimeInputs: store().tasks.listRuntimeInputs(context.workspaceId, taskId, attemptId).value, modelRequests: store().executions.listModelRequests(context.workspaceId, taskId, attemptId) }; },
     async idle() { await serial; if (lastFailure) { const error = lastFailure; lastFailure = undefined; throw error; } },
     async interruptControlPlane() {

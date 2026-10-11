@@ -5,14 +5,15 @@ import {
   assertIdentifierV2, assertIsoTimestampV2, assertScopeV2, assertPrivacyV2,
   assertRevisionV2, assertContentRefV2, assertMemoryClaimV2, assertMemoryCandidateV2, sameScopeV2, scopeKeyV2,
   isScopeWithinV2,
-  type ScopeV2, type PrivacyV2, type ContentRefV2, type MemoryClaimV2, type MemoryCandidateV2,
+  type ScopeV2, type PrivacyV2, type ContentRefV2, type MemoryClaimV2, type MemoryCandidateV2, type EvidenceRefV2,
 } from "../../domain/src/index.ts";
 import {
   canonicalJsonV1, parseObservationV2, serializeObservationV2,
-  type ObservationV2, type LocalApiCommandV1,
+  parseLocalApiCommandV1, parseLocalApiMemoryInputV1, parseLocalApiMemorySearchV1, parseLocalApiReceiptV1,
+  type ObservationV2, type LocalApiCommandV1, type LocalApiMemoryInputV1, type LocalApiMemorySearchV1,
 } from "../../protocol/src/index.ts";
 import {
-  configureCognitiveDatabaseV2, applyTaskMigrationsV1, verifyTaskDatabaseV1,
+  configureCognitiveDatabaseV2, applyMemoryMigrationsV1, verifyMemoryDatabaseV1,
 } from "./cognitive-schema-v2.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 import { ContentFilesV2, type ContentFileDescriptorV2 } from "./content-files-v2.ts";
@@ -30,6 +31,8 @@ import { TaskStoreEngineV1, type TaskStoreHostV1 } from "./task-store-v1.ts";
 import { TaskExecutionStoreEngineV1 } from "./task-execution-store-v1.ts";
 import type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1 } from "./task-store-v1-types.ts";
 import type { TaskExecutionPersistenceV1 } from "./task-execution-v1-types.ts";
+import type { MemoryPersistenceBoundaryV1, MemoryPersistenceV1, MemoryContextV1, MemoryCommandV1, MemoryCommitV1, MemorySearchReadV1, MemoryExplanationV1, MemoryMaterialV1 } from "./memory-store-v1-types.ts";
+import { rankMemoryTextsV1 } from "./memory-fts-v1.ts";
 
 /** Default-disabled synthetic composition; no real data or external model boundary. */
 export interface SyntheticCognitionStoreOptionsV2 {
@@ -39,6 +42,7 @@ export interface SyntheticCognitionStoreOptionsV2 {
   readonly mode: "create" | "open" | "migrate-v1";
   readonly clock: { now(): string };
   readonly taskPersistence?: TaskPersistenceBoundaryV1;
+  readonly memoryPersistence?: MemoryPersistenceBoundaryV1;
 }
 export interface CognitionFenceV2 {
   readonly installationId: string;
@@ -141,6 +145,7 @@ export class SyntheticCognitionStoreV2 {
   #taskComposing = false;
   readonly #taskEngine: TaskStoreEngineV1;
   readonly #executionEngine: TaskExecutionStoreEngineV1;
+  readonly #memoryBoundary: MemoryPersistenceBoundaryV1 | undefined;
 
   private constructor(options: SyntheticCognitionStoreOptionsV2, db: DatabaseSync,
     pragmas: ReturnType<typeof configureCognitiveDatabaseV2>, files: ContentFilesV2,
@@ -178,6 +183,9 @@ export class SyntheticCognitionStoreV2 {
       ...(configured.recoveryCustody ? { recoveryCustody: Object.freeze({ observedClose: configured.recoveryCustody.observedClose.bind(configured.recoveryCustody) }) } : {}),
       ids: Object.freeze({ next: configured.ids.next.bind(configured.ids) }), reduce: configured.reduce }) : undefined;
     this.#taskEngine = new TaskStoreEngineV1(host, boundary); this.#executionEngine = new TaskExecutionStoreEngineV1(host, boundary);
+    const memory = options.memoryPersistence;
+    this.#memoryBoundary = memory ? Object.freeze({ contentPolicy: Object.freeze(structuredClone(memory.contentPolicy)),
+      ids: Object.freeze({ next: memory.ids.next.bind(memory.ids) }), reduce: memory.reduce, qualifies: memory.qualifies }) : undefined;
   }
 
   static open(options: SyntheticCognitionStoreOptionsV2): SyntheticCognitionStoreV2 {
@@ -208,7 +216,7 @@ export class SyntheticCognitionStoreV2 {
       const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
       const hasState = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='store_state'").get()
         && db.prepare("SELECT 1 FROM store_state WHERE singleton=1").get();
-      applyTaskMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
+      applyMemoryMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
       const state = db.prepare("SELECT * FROM store_state WHERE singleton=1").get();
       if (!state) {
         if (options.mode === "open") fail("corruption");
@@ -235,6 +243,11 @@ export class SyntheticCognitionStoreV2 {
 
   get tasks(): TaskPersistenceStoreV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#taskEngine; }
   get executions(): TaskExecutionPersistenceV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#executionEngine; }
+  get memories(): MemoryPersistenceV1 {
+    if (!this.#memoryBoundary) fail("unsupported");
+    return { capture: (context, input) => this.#captureMemory(context, input), execute: (context, command) => this.#executeMemory(context, command),
+      search: (context, query, audience) => this.#searchMemories(context, query, audience), explain: (context, scope, id, version) => this.#explainMemory(context, scope, id, version) };
+  }
 
   #now(): string { const now = this.#transactionNow ?? this.#options.clock.now(); assertIsoTimestampV2(now); return now; }
   #row(sql: string, ...values: (string | number | null)[]): Row | undefined { return this.#db.prepare(sql).get(...values) as Row | undefined; }
@@ -269,7 +282,7 @@ export class SyntheticCognitionStoreV2 {
       if (!reconciling) this.#checkControl();
       this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
       this.#db.exec(write ? "BEGIN IMMEDIATE" : "BEGIN");
-      verifyTaskDatabaseV1(this.#db, this.#pragmas);
+      verifyMemoryDatabaseV1(this.#db, this.#pragmas);
       this.#validateRows();
       if (!reconciling) this.#checkControl();
       const result = body();
@@ -334,18 +347,19 @@ export class SyntheticCognitionStoreV2 {
     if (checkTime && states.length === 1 && states[0] === "available") this.#notForgotten(scope, { kind: "content", id: ref.contentId, version: ref.contentVersion });
     return row;
   }
-  #taskBodyBytes(row: Row): Uint8Array {
+  #taskBodyBytes(row: Row, memory = false): Uint8Array {
     const value = parse(new TextDecoder("utf-8", { fatal: true }).decode(this.#files.read(this.#descriptor(row))));
     plainDataRecord(value, ["format", "dependencies", "record"]);
     const envelope = value as { format: string; dependencies: ContentRefV2[]; record: unknown };
-    if (envelope.format !== "task-managed-content-v1" || !Array.isArray(envelope.dependencies)) fail("corruption");
+    if (envelope.format !== (memory ? "memory-managed-content-v1" : "task-managed-content-v1") || !Array.isArray(envelope.dependencies)) fail("corruption");
     for (const ref of envelope.dependencies) assertContentRefV2(ref);
     const order = (refs: readonly ContentRefV2[]) => refs.map(refKey).sort();
-    const expected = this.#rows("SELECT source_id AS content_id,source_version AS content_version FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", text(row.content_id), number(row.content_version)).map(contentRef);
+    const table = memory ? "memory_content_dependency_v1" : "task_content_dependency_v1";
+    const expected = this.#rows(`SELECT source_id AS content_id,source_version AS content_version FROM ${table} WHERE target_id=? AND target_version=?`, text(row.content_id), number(row.content_version)).map(contentRef);
     if (json(order(envelope.dependencies)) !== json(order(expected))) fail("corruption");
     return new TextEncoder().encode(json(envelope.record));
   }
-  #writeTaskBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ContentRefV2 {
+  #writeTaskBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: Readonly<{ ids: { next(kind: "content" | "reservation"): string }; contentPolicy: TaskPersistenceBoundaryV1["contentPolicy"] }>, memory = false): ContentRefV2 {
     if (!this.#taskComposing || !this.#db.isTransaction) fail("corruption");
     this.#notForgotten(scope); this.#scope(scope);
     const unique = [...new Map(dependencies.map(ref => { assertContentRefV2(ref); return [refKey(ref), structuredClone(ref)] as const; })).values()];
@@ -363,13 +377,14 @@ export class SyntheticCognitionStoreV2 {
     assertContentRefV2(content); assertIdentifierV2(reservation);
     if (retentionUntil <= this.#now()) fail("unavailable");
     this.#notForgotten(scope, { kind: "content", id: content.contentId, version: 1 });
-    const fence = this.#currentFence(scope), bytes = new TextEncoder().encode(json({ format: "task-managed-content-v1", dependencies: unique, record: body }));
+    const fence = this.#currentFence(scope), bytes = new TextEncoder().encode(json({ format: memory ? "memory-managed-content-v1" : "task-managed-content-v1", dependencies: unique, record: body }));
     this.#db.prepare("INSERT INTO content_object(content_id,content_version,scope_key,privacy,state,purpose,retention_until,created_at,reservation_id,digest,byte_count,fence_json) VALUES(?,?,?,?,'staged','cognition',?,?,?,NULL,NULL,?)")
       .run(content.contentId, 1, scopeKeyV2(scope), privacy, retentionUntil, this.#now(), reservation, json(fence));
     const descriptor = this.#files.stage({ contentId: content.contentId, version: 1, reservationId: reservation }, bytes); this.#files.publish(descriptor);
     this.#db.prepare("UPDATE content_object SET digest=?,byte_count=? WHERE content_id=? AND content_version=? AND state='staged'").run(descriptor.digest, descriptor.byteCount, content.contentId, 1);
     this.#publish(content, fence, privacy);
-    for (const source of unique) this.#db.prepare("INSERT INTO task_content_dependency_v1(source_id,source_version,target_id,target_version) VALUES(?,?,?,?)").run(source.contentId, source.contentVersion, content.contentId, 1);
+    const table = memory ? "memory_content_dependency_v1" : "task_content_dependency_v1";
+    for (const source of unique) this.#db.prepare(`INSERT INTO ${table}(source_id,source_version,target_id,target_version) VALUES(?,?,?,?)`).run(source.contentId, source.contentVersion, content.contentId, 1);
     return content;
   }
   #recordTaskCommand(scope: ScopeV2, command: LocalApiCommandV1, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ReturnType<TaskStoreHostV1["recordCommandEvidence"]> {
@@ -926,7 +941,7 @@ export class SyntheticCognitionStoreV2 {
       const source = nodes.shift()!, key = json(source); if (seen.has(key)) continue; seen.add(key);
       if (seen.size > 100000) fail("corruption");
       if (source.kind === "content") {
-        for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1 WHERE source_id=? AND source_version=?", source.id, source.version)) {
+        for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1 WHERE source_id=? AND source_version=? UNION ALL SELECT * FROM memory_content_dependency_v1 WHERE source_id=? AND source_version=?", source.id, source.version, source.id, source.version)) {
           const content = this.#row("SELECT * FROM content_object WHERE content_id=? AND content_version=?", text(edge.target_id), number(edge.target_version));
           if (!content) fail("corruption"); targets.set(refKey(contentRef(content)), content);
           nodes.push({ kind: "content", id: text(content.content_id), version: number(content.content_version) });
@@ -1287,22 +1302,23 @@ export class SyntheticCognitionStoreV2 {
       }
       for (const row of this.#rows("SELECT * FROM lifecycle_change")) {
         assertIdentifierV2(row.id); assertIdentifierV2(row.entity_id); assertIsoTimestampV2(row.at);
-        if (!["corrected", "source_forgotten", "source_corrected", "control_restricted"].includes(text(row.reason_code))) fail("corruption");
+        if (!["corrected", "source_forgotten", "source_corrected", "control_restricted", "user_disputed"].includes(text(row.reason_code))) fail("corruption");
         const receipt = this.#row("SELECT * FROM outbox WHERE cursor=?", number(row.cursor)); if (!receipt) fail("corruption");
         if (row.kind === "claim" && !this.#row("SELECT 1 FROM claim_version WHERE scope_key=? AND claim_id=? AND version=?", text(row.scope_key), text(row.entity_id), number(row.version))) fail("corruption");
         if (row.kind === "content" && !contents.has(refKey({ contentId: text(row.entity_id), contentVersion: number(row.version) }))) fail("corruption");
       }
       for (const row of this.#rows("SELECT * FROM outbox")) {
         number(row.cursor); assertIdentifierV2(row.event_id); assertIdentifierV2(row.entity_id); assertIsoTimestampV2(row.created_at);
-        if (!["observation.appended", "claim.committed", "cognition.committed", "content.forgotten", "content.restricted", "source.suppressed", "content.orphaned"].includes(text(row.type))
+        if (!["observation.appended", "claim.committed", "claim.disputed", "cognition.committed", "content.forgotten", "content.restricted", "source.suppressed", "content.orphaned"].includes(text(row.type))
           || number(row.recovery_epoch) > number(state.recovery_epoch)
           || number(row.cognition_epoch) > number(this.#scope(scopes.get(text(row.scope_key))!).cognition_epoch)) fail("corruption");
         if (row.type === "observation.appended" && (!observations.has(text(row.entity_id)) || row.version !== 1
           || scopeKeyV2(observations.get(text(row.entity_id))!.scope) !== row.scope_key)) fail("corruption");
         if (row.type === "claim.committed" && !this.#row("SELECT 1 FROM claim_version WHERE claim_id=? AND version=? AND scope_key=?", text(row.entity_id), number(row.version), text(row.scope_key))) fail("corruption");
+        if (row.type === "claim.disputed" && !this.#row("SELECT 1 FROM lifecycle_change WHERE cursor=? AND reason_code='user_disputed' AND kind='claim' AND entity_id=? AND version=? AND scope_key=? AND from_state='ACTIVE' AND to_state='DISPUTED'", number(row.cursor), text(row.entity_id), number(row.version), text(row.scope_key))) fail("corruption");
         if (row.type === "cognition.committed" && !this.#row("SELECT 1 FROM cognitive_snapshot WHERE kind=? AND id=? AND revision=? AND scope_key=?", text(row.entity_kind), text(row.entity_id), number(row.version), text(row.scope_key))) fail("corruption");
       }
-      for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
+      for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1 UNION ALL SELECT * FROM memory_content_dependency_v1")) {
         const source = contents.get(refKey({ contentId: text(edge.source_id), contentVersion: number(edge.source_version) }));
         const target = contents.get(refKey({ contentId: text(edge.target_id), contentVersion: number(edge.target_version) }));
         if (!source || !target) fail("corruption");
@@ -1313,11 +1329,313 @@ export class SyntheticCognitionStoreV2 {
           || (target.state === "available" && source.state !== "available")) fail("corruption");
       }
       this.#taskEngine.validateRows(); this.#executionEngine.validateRows();
+      this.#validateMemoryRows();
       if (this.#db.prepare("PRAGMA foreign_key_check").all().length) fail("corruption");
     } catch (error) {
       if (error instanceof CognitiveStoreErrorV2 && error.code === "sqlite") throw error;
       if (["ERR_SQLITE_ERROR", "sqlite"].includes((error as { code?: string })?.code ?? "")) fail("sqlite");
       fail("corruption");
+    }
+  }
+  #withMemory<T>(write: boolean, body: () => T): T {
+    if (!this.#memoryBoundary) fail("unsupported");
+    return this.#transaction(write, () => { const prior = this.#taskComposing; this.#taskComposing = true;
+      try { return body(); } finally { this.#taskComposing = prior; } });
+  }
+  #memoryScope(context: MemoryContextV1, scope: ScopeV2): void {
+    assertIdentifierV2(context.principalId); assertIdentifierV2(context.workspaceId); assertScopeV2(scope);
+    if (scope.kind === "global" || scope.workspaceId !== context.workspaceId) fail("unavailable");
+    this.#scope(scope);
+    if (scope.kind === "session" && !this.#row("SELECT 1 FROM session_v1 WHERE id=? AND workspace_id=?", scope.sessionId, context.workspaceId)) fail("unavailable");
+    if (scope.kind === "task" && !this.#row("SELECT 1 FROM task_v1 WHERE id=? AND workspace_id=?", scope.taskId, context.workspaceId)) fail("unavailable");
+  }
+  #memoryRow(context: MemoryContextV1, key: string): Row | undefined {
+    return this.#row("SELECT * FROM memory_command_v1 WHERE principal_id=? AND workspace_id=? AND idempotency_key=?", context.principalId, context.workspaceId, key);
+  }
+  #memorySemantic(input: LocalApiMemoryInputV1 | MemoryCommandV1): string {
+    const { commandId: _id, ...semantic } = input; return json(semantic);
+  }
+  #memoryReplay(row: Row, input: LocalApiMemoryInputV1 | MemoryCommandV1, scope: ScopeV2): void {
+    if (row.scope_key !== scopeKeyV2(scope)) fail("conflict");
+    const body = this.#content(contentRef(row), scope);
+    const original = JSON.parse(new TextDecoder().decode(this.#taskBodyBytes(body, true))) as { input: LocalApiMemoryInputV1 | MemoryCommandV1 };
+    if (this.#memorySemantic(original.input) !== this.#memorySemantic(input)) fail("conflict");
+  }
+  #memoryEvidence(evidence: readonly EvidenceRefV2[], privacy?: PrivacyV2): ContentRefV2[] {
+    return evidence.map(ref => {
+      if (ref.fragmentId !== undefined) fail("unsupported");
+      const row = this.#row("SELECT * FROM observation_v2 WHERE id=?", ref.source.id);
+      if (!row || row.availability !== "available") fail("unavailable");
+      const event = parseObservationV2(parse(row.event_json));
+      if (event.content.availability !== "available" || event.integrity.status !== "complete"
+        || event.revision !== ref.source.revision || !sameScopeV2(event.scope, ref.scope)
+        || event.privacy !== ref.privacy || event.sourceTrust !== ref.sourceTrust || event.observedAt !== ref.observedAt) fail("validation");
+      const content = this.#content(event.content.ref, event.scope);
+      if (privacy === "model-allowed" && content.privacy === "local-only") fail("unavailable");
+      if (this.#row("SELECT state FROM source_stream WHERE stream_id=?", event.source.streamId)?.state !== "complete") fail("unavailable");
+      return event.content.ref;
+    });
+  }
+  #recordMemoryInput(context: MemoryContextV1, scope: ScopeV2, input: LocalApiMemoryInputV1 | MemoryCommandV1, privacy: PrivacyV2, dependencies: readonly ContentRefV2[]): { content: ContentRefV2; evidence: EvidenceRefV2; cursor: number } {
+    const boundary = this.#memoryBoundary!;
+    const content = this.#writeTaskBody(scope, { input, principalId: context.principalId }, dependencies, { ...boundary, contentPolicy: { ...boundary.contentPolicy, privacy } }, true);
+    const stored = this.#content(content, scope), now = this.#now(), id = boundary.ids.next("observation");
+    const event = parseObservationV2({ schemaVersion: 2, id, revision: 1, scope, privacy: stored.privacy,
+      sourceTrust: "user-direct", observedAt: now, recordedAt: now, actor: "user", kind: "user_input",
+      source: { streamId: `memory-input:${id}`, adapter: "local-api", surface: "local-api", sourceSequence: 1, runtime: null,
+        productSessionId: scope.kind === "session" ? scope.sessionId : null, runtimeSessionId: null, runtimeInstanceId: null, eventType: "memory-input" },
+      correlation: { taskAttempt: null, turnId: null, toolCallId: null, causationId: null, correlationId: null },
+      content: { availability: "available", ref: content }, integrity: { status: "complete" } });
+    const receipt = this.appendObservation(event, this.#currentFence(scope), boundary.ids.next("event"));
+    return { content, cursor: receipt.cursor, evidence: { source: { kind: "observation", id, revision: 1 }, scope,
+      privacy: event.privacy, sourceTrust: event.sourceTrust, observedAt: now, role: "supports" } };
+  }
+  #saveMemoryCommand(context: MemoryContextV1, input: LocalApiMemoryInputV1 | MemoryCommandV1, scope: ScopeV2,
+    kind: string, proof: { content: ContentRefV2; evidence: EvidenceRefV2 }, operationId: string, result: unknown | null, cursor: number | null): void {
+    this.#db.prepare("INSERT INTO memory_command_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(context.principalId, context.workspaceId, input.idempotencyKey, scopeKeyV2(scope), kind,
+        proof.content.contentId, proof.content.contentVersion, proof.evidence.source.id, operationId, this.#now(), result === null ? null : json(result), cursor);
+  }
+  #captureMemory(context: MemoryContextV1, raw: LocalApiMemoryInputV1): ReturnType<MemoryPersistenceV1["capture"]> {
+    const input = parseLocalApiMemoryInputV1(raw);
+    if (input.workspaceId !== context.workspaceId) fail("unavailable");
+    return this.#withMemory(true, () => {
+      this.#memoryScope(context, input.scope);
+      const row = this.#memoryRow(context, input.idempotencyKey);
+      if (row) { this.#memoryReplay(row, input, input.scope); if (row.operation_kind !== "memory.input") fail("conflict");
+        return { ...(parse(row.result_json) as { evidence: EvidenceRefV2 }), commitCursor: number(row.commit_cursor), replay: true }; }
+      const proof = this.#recordMemoryInput(context, input.scope, input, input.privacy, []);
+      this.#saveMemoryCommand(context, input, input.scope, "memory.input", proof, this.#memoryBoundary!.ids.next("event"), { evidence: proof.evidence }, proof.cursor);
+      return { evidence: proof.evidence, commitCursor: proof.cursor, replay: false };
+    });
+  }
+  #stageMemoryRaw(scope: ScopeV2, bytes: Uint8Array, purpose: "claim" | "cognition", privacy: PrivacyV2, retentionUntil: string, dependencies: readonly ContentRefV2[] = []): ContentRefV2 {
+    const boundary = this.#memoryBoundary!, fence = this.#currentFence(scope);
+    const ref = { contentId: boundary.ids.next("content"), contentVersion: 1 };
+    this.stageContent({ ref, reservationId: boundary.ids.next("reservation"), fence, privacy, purpose, retentionUntil, bytes });
+    this.#publish(ref, fence, privacy);
+    for (const source of dependencies) this.#db.prepare("INSERT INTO memory_content_dependency_v1 VALUES(?,?,?,?)").run(source.contentId, source.contentVersion, ref.contentId, 1);
+    return ref;
+  }
+  #memoryCommit(command: MemoryCommandV1, id: string, version: number, revision: number): Omit<MemoryCommitV1, "commitCursor" | "replay"> {
+    return { receipt: { schemaVersion: 1, commandId: command.commandId, status: "committed", aggregate: { kind: "claim", id, revision },
+      result: { kind: "memory", affectedRefs: [{ kind: "claim", id, revision }], cognitionEpoch: this.#currentFence(command.payload.scope).cognitionEpoch } }, claimVersion: version };
+  }
+  #executeMemory(context: MemoryContextV1, raw: MemoryCommandV1): MemoryCommitV1 {
+    const parsed = parseLocalApiCommandV1(raw);
+    if (!parsed.payload.kind.startsWith("memory.")) fail("unsupported");
+    const command = parsed as MemoryCommandV1, payload = command.payload;
+    if (command.workspaceId !== context.workspaceId) fail("unavailable");
+    const prepared = this.#withMemory(true, () => {
+      this.#memoryScope(context, payload.scope);
+      const replay = this.#memoryRow(context, command.idempotencyKey);
+      if (replay) { this.#memoryReplay(replay, command, payload.scope);
+        if (replay.result_json !== null) return { ...(parse(replay.result_json) as Omit<MemoryCommitV1, "commitCursor" | "replay">), commitCursor: number(replay.commit_cursor), replay: true };
+        return replay; }
+      let currentRow: Row | undefined, current: MemoryClaimV2 | undefined;
+      if (payload.kind !== "memory.remember") {
+        const aggregate = this.#row("SELECT * FROM claim WHERE id=? AND scope_key=?", payload.targetRef.id, scopeKeyV2(payload.scope));
+        if (!aggregate) fail("unavailable");
+        if (aggregate.revision !== command.expectedRevision || aggregate.current_version !== payload.targetVersion.version) fail("revision_conflict");
+        currentRow = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", payload.targetRef.id, payload.targetVersion.version)!;
+        if (currentRow.status === "FORGOTTEN") fail("unavailable");
+        if (payload.kind !== "memory.forget") { current = this.#hydrateClaim(currentRow, true); this.#validateEvidence(current); }
+      }
+      const eventId = this.#memoryBoundary!.ids.next("event");
+      if (payload.kind === "memory.forget") {
+        // Durable preparation precedes the independent control journal. The command contains no copied body.
+        const proof = this.#recordMemoryInput(context, payload.scope, command, "local-only", []);
+        this.#saveMemoryCommand(context, command, payload.scope, payload.kind, proof, eventId, null, null);
+        return this.#memoryRow(context, command.idempotencyKey)!;
+      }
+      const dependencies = this.#memoryEvidence(payload.evidenceRefs, "privacy" in payload ? payload.privacy : current!.privacy);
+      let claimContent: ContentRefV2 | undefined;
+      let retentionUntil = this.#memoryBoundary!.contentPolicy.retentionUntil;
+      for (const ref of dependencies) {
+        const source = this.#row("SELECT retention_until FROM content_object WHERE content_id=? AND content_version=?", ref.contentId, ref.contentVersion)!;
+        if (text(source.retention_until) < retentionUntil) retentionUntil = text(source.retention_until);
+      }
+      if (payload.kind !== "memory.dispute") {
+        claimContent = this.#stageMemoryRaw(payload.scope, new TextEncoder().encode(payload.statement), "claim", payload.privacy, retentionUntil);
+        dependencies.push(claimContent);
+      } else dependencies.push(contentRef(currentRow!));
+      const proof = this.#recordMemoryInput(context, payload.scope, command, "privacy" in payload ? payload.privacy : current!.privacy, dependencies);
+      const reduction = this.#memoryBoundary!.reduce({ command, ...(current ? { current } : {}), now: this.#now(),
+        claimId: current?.id ?? this.#memoryBoundary!.ids.next("claim"), candidateId: this.#memoryBoundary!.ids.next("candidate"), confirmation: proof.evidence });
+      let committed: CognitiveCommitReceiptV2, resultClaim: MemoryClaimV2;
+      if (reduction.kind === "accept") {
+        if (!claimContent || payload.kind === "memory.dispute") fail("validation");
+        const pendingContent = this.#stageMemoryRaw(payload.scope, new TextEncoder().encode(json(reduction.pending)), "cognition", reduction.pending.privacy, retentionUntil, [claimContent]);
+        this.commitCognitiveRecord("candidate", { record: reduction.pending, expectedRevision: 0, content: pendingContent, fence: this.#currentFence(payload.scope), eventId: `${eventId}:pending` });
+        const acceptedContent = this.#stageMemoryRaw(payload.scope, new TextEncoder().encode(json(reduction.accepted)), "cognition", reduction.accepted.privacy, retentionUntil, [claimContent]);
+        committed = this.commitCandidateAcceptance({ candidate: reduction.accepted, candidateExpectedRevision: 1, candidateContent: acceptedContent,
+          claim: reduction.claim, claimExpectedRevision: command.expectedRevision, claimContent, fence: this.#currentFence(payload.scope), eventId }).claim;
+        resultClaim = reduction.claim;
+      } else {
+        if (payload.kind !== "memory.dispute" || !current || json(reduction.previous) !== json(current)) fail("validation");
+        const next = reduction.current; assertMemoryClaimV2(next);
+        if (next.status !== "DISPUTED" || next.revision !== current.revision + 1 || next.updatedAt !== this.#now()
+          || json({ ...next, status: current.status, revision: current.revision, updatedAt: current.updatedAt }) !== json(current)) fail("validation");
+        this.#db.prepare("UPDATE claim_version SET status='DISPUTED',revision=?,updated_at=? WHERE claim_id=? AND version=?").run(next.revision, next.updatedAt, next.id, next.version);
+        this.#db.prepare("UPDATE claim SET revision=? WHERE id=?").run(next.revision, next.id);
+        this.#bump(next.scope); committed = this.#outbox(eventId, next.scope, "claim.disputed", next.id, next.version, "claim");
+        this.#lifecycle(committed, next.scope, "claim", next.id, next.version, current.status, next.status, "user_disputed");
+        this.#invalidateDependents("claim", next.id, next.version, false, committed); resultClaim = next;
+      }
+      const result = this.#memoryCommit(command, resultClaim.id, resultClaim.version, resultClaim.revision);
+      this.#saveMemoryCommand(context, command, payload.scope, payload.kind, proof, eventId, result, committed.cursor);
+      return { ...result, commitCursor: committed.cursor, replay: false };
+    });
+    if ("receipt" in prepared) return prepared as MemoryCommitV1;
+    const row = prepared as Row;
+    if (payload.kind !== "memory.forget") fail("corruption");
+    this.applyControlIntent({ kind: "FORGET", operationId: text(row.operation_id), at: text(row.at), authorization: "synthetic-user-request",
+      targets: [{ kind: "claim", scope: payload.scope, id: payload.targetRef.id, version: payload.targetVersion.version }] });
+    return this.#withMemory(true, () => {
+      const latest = this.#row("SELECT revision FROM claim WHERE id=? AND scope_key=?", payload.targetRef.id, scopeKeyV2(payload.scope))!;
+      const event = this.#row("SELECT cursor FROM outbox WHERE type='content.forgotten' AND entity_id=? AND scope_key=?", text(row.operation_id), scopeKeyV2(payload.scope));
+      if (!event) fail("corruption"); const cursor = number(event.cursor);
+      const result = this.#memoryCommit(command, payload.targetRef.id, payload.targetVersion.version, number(latest.revision));
+      this.#db.prepare("UPDATE memory_command_v1 SET result_json=?,commit_cursor=? WHERE principal_id=? AND workspace_id=? AND idempotency_key=? AND result_json IS NULL")
+        .run(json(result), cursor, context.principalId, context.workspaceId, command.idempotencyKey);
+      return { ...result, commitCursor: cursor, replay: false };
+    });
+  }
+  #searchMemories(context: MemoryContextV1, raw: LocalApiMemorySearchV1, audience: "user" | "model" = "user"): MemorySearchReadV1 {
+    const query = parseLocalApiMemorySearchV1(raw);
+    if (!["user", "model"].includes(audience)) fail("validation");
+    return this.#withMemory(false, () => {
+      this.#memoryScope(context, query.scope); const now = this.#now(), knownAt = query.knownAt ?? now;
+      if (knownAt > now) fail("validation");
+      const scopes = this.#rows("SELECT * FROM scope_catalog").filter(row => isScopeWithinV2(scopeFrom(row), query.scope));
+      const material: MemoryMaterialV1[] = [];
+      for (const scoped of scopes) for (const aggregate of this.#rows("SELECT * FROM claim WHERE scope_key=? ORDER BY id", text(scoped.scope_key))) {
+        const versions = this.#rows("SELECT * FROM claim_version WHERE claim_id=? ORDER BY version DESC", text(aggregate.id));
+        const row = versions.find(version => (parse(version.metadata_json) as { createdAt: string }).createdAt <= knownAt);
+        if (!row || row.status === "FORGOTTEN") continue;
+        try {
+          let claim = this.#hydrateClaim(row, true); this.#validateEvidence(claim);
+          const changes = this.#rows("SELECT * FROM lifecycle_change WHERE kind='claim' AND entity_id=? AND version=? AND at<=? ORDER BY cursor,id", claim.id, claim.version, knownAt);
+          const { supersededBy: _later, ...base } = claim;
+          const last = changes.at(-1);
+          claim = { ...base, status: last ? last.to_state as MemoryClaimV2["status"] : "ACTIVE",
+            revision: number(row.initial_revision) + changes.length, updatedAt: last ? text(last.at) : text(row.initial_updated_at),
+            ...(last?.to_state === "SUPERSEDED" ? { supersededBy: { claimId: claim.id, version: number(row.superseded_by_version) } } : {}) };
+          if (this.#memoryBoundary!.qualifies(claim, query, audience, now)) material.push({ claim, currentStatus: row.status as MemoryClaimV2["status"], historical: knownAt < now || (query.validAt !== undefined && query.validAt !== now) });
+        } catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; }
+      }
+      const ranking = rankMemoryTextsV1(material.map(item => item.claim), query.query, query.limit);
+      const selected = ranking.rows.map(rank => material.find(item => item.claim.id === rank.id && item.claim.version === rank.version)!);
+      return { material: selected, ranking, fence: this.#currentFence(query.scope), commitCursor: this.#memoryWatermark(query.scope) };
+    });
+  }
+  #memoryWatermark(scope: ScopeV2): number {
+    const scopes = this.#rows("SELECT scope_key,scope_json FROM scope_catalog").filter(row => isScopeWithinV2(scopeFrom(row), scope));
+    return Math.max(0, ...scopes.map(row => number(this.#row("SELECT coalesce(max(cursor),0) AS n FROM outbox WHERE scope_key=?", text(row.scope_key))!.n)));
+  }
+  #explainMemory(context: MemoryContextV1, scope: ScopeV2, id: string, version?: number): MemoryExplanationV1 {
+    assertIdentifierV2(id); if (version !== undefined) assertRevisionV2(version);
+    return this.#withMemory(false, () => {
+      this.#memoryScope(context, scope);
+      const aggregate = this.#row("SELECT * FROM claim WHERE id=? AND scope_key=?", id, scopeKeyV2(scope));
+      if (!aggregate) fail("unavailable");
+      const rows = this.#rows("SELECT * FROM claim_version WHERE claim_id=? ORDER BY version DESC LIMIT 50", id);
+      const available = (row: Row) => { const body = this.#row("SELECT * FROM content_object WHERE content_id=? AND content_version=?", text(row.content_id), number(row.content_version));
+        return row.status !== "FORGOTTEN" && body?.state === "available" && text(body.retention_until) > this.#now(); };
+      const row = version === undefined ? rows[0] : this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", id, version);
+      if (!row) fail("unavailable");
+      let value: MemoryClaimV2 | undefined;
+      if (available(row)) { try { value = this.#hydrateClaim(row, true); this.#validateEvidence(value); }
+        catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; } }
+      const evidence = new Map((value?.evidence ?? []).map(ref => [ref.source.id, ref]));
+      // Refuting commands are protected evidence, not amendments to immutable claim evidence.
+      for (const commandRow of this.#rows("SELECT * FROM memory_command_v1 WHERE scope_key=? AND operation_kind='memory.dispute' AND result_json IS NOT NULL", scopeKeyV2(scope))) {
+        const result = parse(commandRow.result_json) as { receipt: { aggregate: { id: string } }; claimVersion: number };
+        if (result.receipt.aggregate.id !== id || result.claimVersion !== number(row.version)) continue;
+        const observation = this.listObservations(scope).find(event => event.id === commandRow.observation_id);
+        if (observation?.content.availability === "available") evidence.set(observation.id, { source: { kind: "observation", id: observation.id, revision: 1 }, scope,
+          privacy: observation.privacy, sourceTrust: observation.sourceTrust, observedAt: observation.observedAt, role: "refutes" });
+      }
+      const sources = [...evidence.values()].slice(0, 100).map(ref => {
+        const observation = this.listObservations(ref.scope).find(event => event.id === ref.source.id)!;
+        let excerpt: string | undefined;
+        if (observation.content.availability === "available" && observation.source.adapter === "local-api" && observation.source.eventType === "memory-input") {
+          const body = this.#content(observation.content.ref, observation.scope);
+          const stored = JSON.parse(new TextDecoder().decode(this.#taskBodyBytes(body, true))) as { input?: LocalApiMemoryInputV1 | MemoryCommandV1 };
+          const input = stored.input;
+          if (input && "text" in input) excerpt = input.text.slice(0, 1024);
+          else if (input && "payload" in input && "reason" in input.payload) excerpt = input.payload.reason.slice(0, 1024);
+        }
+        return { observation, ...(excerpt === undefined ? {} : { excerpt }) };
+      });
+      return { id, scope, currentVersion: number(aggregate.current_version), versions: rows.map(item => ({ version: number(item.version), revision: number(item.revision),
+        status: item.status as MemoryClaimV2["status"], createdAt: (parse(item.metadata_json) as { createdAt: string }).createdAt, updatedAt: text(item.updated_at), available: available(item) })),
+        ...(value ? { value } : {}), sources, affected: this.#rows("SELECT target_kind,target_id,target_version FROM dependency_edge WHERE source_kind='claim' AND source_id=? AND source_version=?", id, number(row.version))
+          .map(edge => ({ kind: text(edge.target_kind), id: text(edge.target_id), version: number(edge.target_version) })), commitCursor: this.#memoryWatermark(scope) };
+    });
+  }
+  #validateMemoryRows(): void {
+    const commands = this.#rows("SELECT * FROM memory_command_v1");
+    for (const edge of this.#rows("SELECT * FROM memory_content_dependency_v1")) {
+      if (commands.some(row => row.content_id === edge.target_id && row.content_version === edge.target_version)) continue;
+      const snapshot = this.#row("SELECT * FROM cognitive_snapshot WHERE kind='candidate' AND content_id=? AND content_version=?", text(edge.target_id), number(edge.target_version));
+      if (!snapshot) fail("corruption");
+      const accepted = this.#row("SELECT * FROM cognitive_snapshot WHERE kind='candidate' AND id=? AND revision=2", text(snapshot.id));
+      const metadata = accepted ? parseCognitiveRecordMetadataV2(parse(accepted.metadata_json)) : undefined;
+      if (metadata?.kind !== "candidate" || !metadata.acceptedClaim) fail("corruption");
+      const source = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", metadata.acceptedClaim.claimId, metadata.acceptedClaim.version);
+      if (!source || source.content_id !== edge.source_id || source.content_version !== edge.source_version) fail("corruption");
+    }
+    for (const snapshot of this.#rows("SELECT * FROM cognitive_snapshot WHERE kind='candidate'")) {
+      const accepted = this.#row("SELECT * FROM cognitive_snapshot WHERE kind='candidate' AND id=? AND revision=2", text(snapshot.id));
+      const metadata = accepted ? parseCognitiveRecordMetadataV2(parse(accepted.metadata_json)) : undefined;
+      if (metadata?.kind !== "candidate" || !metadata.acceptedClaim
+        || !commands.some(row => row.result_json !== null && row.operation_kind !== "memory.input" && (() => {
+          const result = parse(row.result_json) as { receipt: MemoryCommitV1["receipt"]; claimVersion: number };
+          return result.receipt.aggregate.id === metadata.acceptedClaim!.claimId && result.claimVersion === metadata.acceptedClaim!.version;
+        })())) continue;
+      const source = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", metadata.acceptedClaim.claimId, metadata.acceptedClaim.version)!;
+      const edges = this.#rows("SELECT * FROM memory_content_dependency_v1 WHERE target_id=? AND target_version=?", text(snapshot.content_id), number(snapshot.content_version));
+      if (edges.length !== 1 || edges[0]!.source_id !== source.content_id || edges[0]!.source_version !== source.content_version) fail("corruption");
+    }
+    for (const row of commands) {
+      assertIdentifierV2(row.principal_id); assertIdentifierV2(row.workspace_id); assertIdentifierV2(row.idempotency_key);
+      assertIdentifierV2(row.operation_id); assertIsoTimestampV2(row.at);
+      const scoped = this.#row("SELECT * FROM scope_catalog WHERE scope_key=?", text(row.scope_key)); if (!scoped) fail("corruption");
+      const scope = scopeFrom(scoped); if (scope.kind === "global" || scope.workspaceId !== row.workspace_id) fail("corruption");
+      const body = this.#content(contentRef(row), scope, ["available", "revoked", "purged"], false);
+      const observation = this.#row("SELECT * FROM observation_v2 WHERE id=?", text(row.observation_id));
+      if (!observation || observation.scope_key !== row.scope_key || observation.content_id !== row.content_id || observation.content_version !== row.content_version) fail("corruption");
+      let input: LocalApiMemoryInputV1 | MemoryCommandV1 | undefined;
+      if (body.state === "available") {
+        const record = JSON.parse(new TextDecoder().decode(this.#taskBodyBytes(body, true))) as { input: unknown; principalId: string };
+        plainDataRecord(record, ["input", "principalId"]);
+        if (record.principalId !== row.principal_id) fail("corruption");
+        input = row.operation_kind === "memory.input" ? parseLocalApiMemoryInputV1(record.input) : parseLocalApiCommandV1(record.input) as MemoryCommandV1;
+        if (input.workspaceId !== row.workspace_id || input.idempotencyKey !== row.idempotency_key
+          || scopeKeyV2("scope" in input ? input.scope : input.payload.scope) !== row.scope_key
+          || ("payload" in input && input.payload.kind !== row.operation_kind)) fail("corruption");
+      }
+      const proof = parseObservationV2(parse(observation.event_json));
+      if (proof.actor !== "user" || proof.sourceTrust !== "user-direct" || proof.kind !== "user_input" || proof.recordedAt !== row.at || proof.observedAt !== row.at
+        || proof.source.adapter !== "local-api" || proof.source.eventType !== "memory-input") fail("corruption");
+      if (row.result_json === null) { if (row.operation_kind !== "memory.forget" || row.commit_cursor !== null) fail("corruption"); continue; }
+      const result = parse(row.result_json) as { evidence?: EvidenceRefV2; receipt?: MemoryCommitV1["receipt"]; claimVersion?: number };
+      const event = this.#row("SELECT * FROM outbox WHERE cursor=? AND scope_key=?", number(row.commit_cursor), text(row.scope_key)); if (!event) fail("corruption");
+      if (row.operation_kind === "memory.input") {
+        const source = parseObservationV2(parse(observation.event_json));
+        if (!result.evidence || result.evidence.source.id !== source.id || json(result.evidence) !== json({ source: { kind: "observation", id: source.id, revision: 1 }, scope,
+          privacy: source.privacy, sourceTrust: source.sourceTrust, observedAt: source.observedAt, role: "supports" }) || event.type !== "observation.appended" || event.entity_id !== source.id) fail("corruption");
+      } else {
+        const receipt = parseLocalApiReceiptV1({ ...result.receipt, eventCursor: "stored-memory-cursor" });
+        if (receipt.aggregate.kind !== "claim" || receipt.result.kind !== "memory" || result.claimVersion !== event.version && row.operation_kind !== "memory.forget"
+          || (input && receipt.commandId !== input.commandId)
+          || !this.#row("SELECT 1 FROM claim_version WHERE claim_id=? AND version=? AND scope_key=?", receipt.aggregate.id, result.claimVersion!, text(row.scope_key))) fail("corruption");
+        if (row.operation_kind === "memory.forget") {
+          const intent = this.#journal.read().records.find(record => record.intent.operationId === row.operation_id)?.intent;
+          if (!intent || intent.kind !== "FORGET" || event.type !== "content.forgotten" || event.entity_id !== row.operation_id) fail("corruption");
+        } else if (event.entity_id !== receipt.aggregate.id || event.type !== (row.operation_kind === "memory.dispute" ? "claim.disputed" : "claim.committed")) fail("corruption");
+      }
     }
   }
   close(): void {

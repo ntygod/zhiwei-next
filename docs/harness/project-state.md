@@ -8,9 +8,11 @@ updated: 2026-10-11
 
 ## 当前工作：P1-05 可纠正记忆与检索 #118（2026-10-11）
 
-canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `codex/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
+canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `feat/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
 
-本项实现显式输入、remember/search/correct/forget/explain 及其配对 API，采用既有领域/存储合同与 FTS5；当前已编写纯资格选择与请求内可重建索引，服务接线继续开发。验证只补行为变化和具体问题，最终仍走原完整 check、R3、来源与保护合入。实现进度与 Z04/Z06/Z13 产品验收分开，后者保持 not_run；真实入口不启用，受限旧安全实验不运行。
+已接通显式输入、remember/search/correct/dispute/forget/explain 及配对 API：core 资格与接受、固定前向 schema4、命令/证据/版本/回执事务、双时间历史、请求内 FTS5、遗忘续接。新增 7 项正常开发验证通过（含真实 schema3→4、控制提交后回执中断续接），首批 6 项资格/检索已通过。ADR0020 已独立设计审查；最终完整 check、当前 HEAD 独立 R3、当前 PR 来源、Ready/live 和保护合入仍待完成。Z04/Z06/Z13 产品验收保持 not_run，真实入口不启用，受限旧安全实验不运行。
+
+初始 [Draft PR119](https://github.com/ntygod/zhiwei-next/pull/119) 的 `codex/` 前缀被原 PR 合同拒绝，已关闭且未合入；同一 #118 代码保留，改用原允许的 `feat/` primary 继续交付。
 
 所有者安排 Gemini 负责最终前端设计；当前专注能力和稳定 API，#98 原型继续暂停。以下 #116 内容为保留的开发期快照，不是当前 WIP 或合入后阻塞。
 

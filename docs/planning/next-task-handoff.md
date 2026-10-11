@@ -1,12 +1,12 @@
 # 下一开发上下文交接
 
-当前唯一实现是 [#118](https://github.com/ntygod/zhiwei-next/issues/118) / `codex/118-memory-service`：原 P1-05 可纠正记忆与检索。基线 protected main `163d658c632ae8887a032a3a787c81300126cc35` 已含 P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，#116 完成交付关闭；最终 R3、1080 项原完整 CI、Ready/live、合入树和 main provenance 均已回读。
+当前唯一实现是 [#118](https://github.com/ntygod/zhiwei-next/issues/118) / `feat/118-memory-service`：原 P1-05 可纠正记忆与检索。基线 protected main `163d658c632ae8887a032a3a787c81300126cc35` 已含 P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，#116 完成交付关闭；最终 R3、1080 项原完整 CI、Ready/live、合入树和 main provenance 均已回读。
 
 ## 本项任务
 
 先读根与目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-05 合同](implementation-plan.md#p1-05--交付可纠正记忆与检索)。领域、认知流水线和持久化仍为原事实源；不从本摘要推导额外权限。
 
-已编写纯作用域/隐私/状态/时间资格选择，以及请求内 SQLite FTS5 排序。后续接通实际 Observation 来源、幂等记忆命令、精确历史/纠正/遗忘、解释与配对 API。利用已有 core 转换和 Store 完整性；不新增自动抽取、向量或通用 Provider。最终前端布局和视觉由所有者安排 Gemini，当前只交付功能接口。
+已编写完整显式输入/记忆/纠正/争议/遗忘/历史/解释和配对 API，纯资格选择先于请求内 FTS5 排序。新的七项正常开发场景含迁移和遗忘回执中断续接；ADR0020 已独立设计审查，最终完整检查/当前 HEAD R3/来源/Ready/live/保护合入仍须完成。初始 Draft119 因原分支命名门禁关闭未合入，同一 #118 移至 `feat/` primary 继续。最终前端布局和视觉由所有者安排 Gemini；不新增自动抽取、向量或通用 Provider。
 
 每个行为用最少足够的正常合成开发检查验证，复用已通过的相同源码证据；不重复无改动全量验证，不做假想攻防矩阵。最终完整 check、当前 HEAD 独立 R3、当前 PR 原 Runtime 来源、Ready/live 与受保护合入继续执行。
 
