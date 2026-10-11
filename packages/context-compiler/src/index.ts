@@ -73,3 +73,5 @@ export function compileContext(
     entries: Object.freeze(entries),
   });
 }
+export { compileCognitiveContextV1 } from "./cognitive-context.ts";
+export type { CognitiveContextInputV1, CognitiveContextResultV1 } from "./cognitive-context.ts";
