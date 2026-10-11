@@ -14,6 +14,8 @@ canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `fea
 
 唯一开放 primary 为 [PR120](https://github.com/ntygod/zhiwei-next/pull/120)，已发布实现提交 `bc687d67e2c377c4a702874ecb1cbdddb0ff04c6`。初始 [Draft PR119](https://github.com/ntygod/zhiwei-next/pull/119) 的 `codex/` 前缀被原 PR 合同拒绝，已关闭且未合入；同一 #118 代码和设计审查保留，原分支回收。
 
+PR120 原 SDK来源run38113263898 / headbc687d6，Worker来源run38113554778 / head9fecea8 / attempts1/2 已按原 run/job/ZIP/成对 validators 验证，两个原 result.json 字节相同、完整对象与正常成功比较相等。临时 guard已移除，正式 comparator恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90；原 Workflow/validator/内容不改。最终完整检查、实现冷审和 Ready/live/合入仍待实际完成。
+
 所有者安排 Gemini 负责最终前端设计；当前专注能力和稳定 API，#98 原型继续暂停。以下 #116 内容为保留的开发期快照，不是当前 WIP 或合入后阻塞。
 
 ## 历史工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
