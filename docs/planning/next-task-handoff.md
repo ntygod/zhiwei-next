@@ -12,6 +12,8 @@
 
 每个行为用最少足够的正常合成开发检查验证，复用已通过的相同源码证据；不重复无改动全量验证，不做假想攻防矩阵。最终完整 check、当前 HEAD 独立 R3、当前 PR 原 Runtime 来源、Ready/live 与受保护合入继续执行。
 
+正常重启问题回复已补齐：owner fencing 后确认停止旧 attempt，实际输入重新授权并建立新 attempt，历史问题/计数保留。cognitive-context-v1 必须关联已提交胶囊，不退回裸输入。PR122 的原 SDK/Worker 来源已按原完整比较和双 attempt ZIP验证续期（run38145094526 /38146677440），原比较器精确恢复；来源事实以两 manifest 为准。下一步完成当前 HEAD 原生完整 CI、独立 R3、实际 Ready/live 和保护交付。容器不能解析Windows worktree Git路径，不靠跳过main provenance获得绿色。
+
 ## 保持边界
 
 真实入口关闭，只使用虚构临时材料。Z14/Z15 产品验收保持 not_run；官方 Pi+新扩展完整组合与 P0-01/02、D-04/D-08、G-2/G-5 不由本项认证。旧 #90/preintegration-safety、Private/链接替换/备份攻击及等价争议动态诊断禁跑，具体拒绝不得换路绕过。
