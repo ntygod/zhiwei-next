@@ -101,3 +101,5 @@ export { createHypothesis, transitionHypothesis } from "./hypothesis-transitions
 export type { HypothesisActionV2, HypothesisTransitionV2 } from "./hypothesis-transitions-v2.ts";
 export { createGoal, transitionGoal, reviseGoal } from "./goal-transitions-v2.ts";
 export type { GoalCriterionResultV2, GoalActionV2, GoalTransitionV2, GoalRevisionV2, GoalRevisionResultV2 } from "./goal-transitions-v2.ts";
+export { qualifyMemoryClaimV2 } from "./memory-selection-v2.ts";
+export type { MemorySelectionV2 } from "./memory-selection-v2.ts";

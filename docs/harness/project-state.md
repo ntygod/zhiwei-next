@@ -3,10 +3,18 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-10
+updated: 2026-10-11
 -->
 
-## 当前工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
+## 当前工作：P1-05 可纠正记忆与检索 #118（2026-10-11）
+
+canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `codex/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
+
+本项实现显式输入、remember/search/correct/forget/explain 及其配对 API，采用既有领域/存储合同与 FTS5；当前已编写纯资格选择与请求内可重建索引，服务接线继续开发。验证只补行为变化和具体问题，最终仍走原完整 check、R3、来源与保护合入。实现进度与 Z04/Z06/Z13 产品验收分开，后者保持 not_run；真实入口不启用，受限旧安全实验不运行。
+
+所有者安排 Gemini 负责最终前端设计；当前专注能力和稳定 API，#98 原型继续暂停。以下 #116 内容为保留的开发期快照，不是当前 WIP 或合入后阻塞。
+
+## 历史工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
 
 canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分支 `feat/116-persistent-task-sessions` / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。开工 reconciliation 无开放 PR/Incident，#44/#67 人类输入已核对；P1-03/PR115 已完整交付并关闭 #114。
 
