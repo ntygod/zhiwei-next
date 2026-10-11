@@ -38,6 +38,10 @@ test("Cognitive context filters before counting, renders attribution, deduplicat
 test("Context requires current task/working versions and exact required memory, with explicit budget failure", () => {
   const memory = claim("required"), base = input([memory]);
   assert.deepEqual(compileCognitiveContextV1({ ...base, workingState: { ...working, task: { ...working.task, revision: 1 } } }), { ok: false, error: "invalid_input", reason: "invalid_input" });
+  const otherSession = { kind: "session" as const, workspaceId, sessionId: "synthetic-other-session" };
+  const counted: string[] = [];
+  assert.deepEqual(compileCognitiveContextV1({ ...input([memory], counted), workingState: { ...working, scope: otherSession, evidence: [{ ...evidence, scope: otherSession }] } }), { ok: false, error: "invalid_input", reason: "invalid_input" });
+  assert.equal(counted.length, 0);
   assert.deepEqual(compileCognitiveContextV1({ ...base, requiredClaims: [{ claimId: "missing", version: 1 }] }), { ok: false, error: "invalid_input", reason: "required_unavailable" });
   const overflow = compileCognitiveContextV1({ ...base, budget: { contextLimit: 10, reservedOutput: 0, mandatoryProtocolOverhead: 0 } });
   assert.equal(overflow.ok, false); if (!overflow.ok) assert.equal(overflow.error, "budget_conflict");

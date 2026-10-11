@@ -34,11 +34,14 @@ export function compileCognitiveContextV1(input: CognitiveContextInputV1): Cogni
     assertIdentifierV2(task.id); assertIdentifierV2(task.workspaceId); assertIdentifierV2(task.sessionId); assertRevisionV2(task.revision); assertTaskIntent(task.intent);
     assertWorkingStateV2(working); assertIdentifierV2(input.modelProfile.id); assertRevisionV2(input.modelProfile.revision);
     const attempt = task.attempts.at(-1);
+    const inTask = (candidate: ScopeV2) => isScopeWithinV2(candidate, scope)
+      && (candidate.kind !== "task" || candidate.taskId === task.id)
+      && (candidate.kind !== "session" || candidate.sessionId === task.sessionId);
     if (scope.kind !== "workspace" || scope.workspaceId !== task.workspaceId || !attempt || attempt.taskId !== task.id
       || attempt.workspaceId !== task.workspaceId || attempt.intent.revision !== task.intent.revision
       || working.task.id !== task.id || working.task.revision !== task.revision || working.intentRevision !== task.intent.revision
       || working.taskAttempt.taskId !== task.id || working.taskAttempt.attemptId !== attempt.id || working.taskAttempt.intentRevision !== task.intent.revision
-      || !isScopeWithinV2(working.scope, scope) || working.privacy !== "model-allowed"
+      || !inTask(working.scope) || working.privacy !== "model-allowed" || working.evidence.some(source => !inTask(source.scope))
       || !["READY", "RUNNING"].includes(task.state) || compiledAt < task.updatedAt || compiledAt < working.updatedAt
       || !Array.isArray(input.claims) || input.claims.length > 100 || !Array.isArray(input.requiredClaims)) invalid();
     const required = new Map<string, number>();
@@ -47,9 +50,6 @@ export function compileCognitiveContextV1(input: CognitiveContextInputV1): Cogni
       if (required.has(wanted.claimId) && required.get(wanted.claimId) !== wanted.version) invalid();
       required.set(wanted.claimId, wanted.version);
     }
-    const inTask = (candidate: ScopeV2) => isScopeWithinV2(candidate, scope)
-      && (candidate.kind !== "task" || candidate.taskId === task.id)
-      && (candidate.kind !== "session" || candidate.sessionId === task.sessionId);
     const eligible = new Map<string, MemoryClaimV2>();
     for (const claim of input.claims) {
       assertMemoryClaimV2(claim);

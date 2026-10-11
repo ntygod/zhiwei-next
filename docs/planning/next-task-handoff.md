@@ -6,7 +6,7 @@
 
 先读根与目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-06 合同](implementation-plan.md#p1-06--交付认知协调与受预算上下文)。领域、认知流水线和持久化仍为原事实源；不从本摘要推导额外权限。
 
-首批 compileCognitiveContextV1 复用已交付预算阶段，增加当前任务/WorkingState 与合格 Claim 的不可变胶囊；3项组件检查、157个严格类型roots及架构检查通过。此输出不是发送许可。继续在同一 primary 接入有界决策、快照/read-set 持久化与真实受控合成接收；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)仍为Proposed，接线选择须先独立设计审查。最终前端布局和视觉由所有者安排 Gemini；不新增自动学习、向量或通用 Provider。
+首批 compileCognitiveContextV1 复用已交付预算阶段，增加当前任务/WorkingState 与合格 Claim 的不可变胶囊；3项组件检查、157个严格类型roots及架构检查通过。此输出不是发送许可。唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)获独立提案字节设计批准并Accepted，指出的WorkingState跨Session计数前缺口已修复，3项场景通过。继续在同一primary接入有界决策、快照/read-set持久化与受控合成接收，最终实现HEAD另做R3。最终前端布局和视觉由所有者安排 Gemini；不新增自动学习、向量或通用 Provider。
 
 每个行为用最少足够的正常合成开发检查验证，复用已通过的相同源码证据；不重复无改动全量验证，不做假想攻防矩阵。最终完整 check、当前 HEAD 独立 R3、当前 PR 原 Runtime 来源、Ready/live 与受保护合入继续执行。
 

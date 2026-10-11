@@ -10,7 +10,7 @@ updated: 2026-10-11
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
 
-首批纯编译入口复用P0-04预算阶段，输出带精确版本/来源、选择理由及计数的不可变胶囊；3项正常组件检查通过，旧compileContext与预算组件保持。此输出不证明已授权或已发送。快照持久化、有限决策和实际受控接收仍在本项继续实现；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)为Proposed，接线选择须独立设计审查。Z14/Z15产品验收not_run，真实入口保持关闭，UI由所有者安排Gemini。
+首批纯编译入口复用P0-04预算阶段，输出带精确版本/来源、选择理由及计数的不可变胶囊；3项正常组件检查、157严格类型roots与架构检查通过，旧compileContext与预算组件保持。此输出不证明已授权或已发送。唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)。[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)的Proposed提案字节获独立设计批准并Accepted；审查指出的WorkingState跨Session关联在计数前修复，原3项场景通过。快照持久化、有限决策和实际受控接收仍继续实现，最终HEAD另须R3。Z14/Z15产品验收not_run，真实入口保持关闭，UI由所有者安排Gemini。
 
 ## 已交付：P1-05 可纠正记忆与检索 #118（2026-10-11）
 

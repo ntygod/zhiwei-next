@@ -1,9 +1,11 @@
 # ADR 0021：有界认知协调与上下文快照接线
 
-- 状态：Proposed
+- 状态：Accepted（仅设计；实现及产品验收另需当前 HEAD 证据）
 - 日期：2026-10-11
 - 工作项：#121 / P1-06
 - 被取代关系：细化 ADR0017 的 Context/有限决策与 ADR0019 的受控调用接线；不替代既有 Runtime、Task、快照 v1 或遗忘合同。
+
+独立审查：[PR122 设计记录](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6109122422)批准 Proposed 提案 SHA256 `d103fb55e6ffb9c97c62ba6608fbfd3e6f27078b38e4c7bb44997329edb8e46f`；该记录不批准任何实现 HEAD。其指出的 WorkingState 跨 Session 关联缺口已加入计数前检查和原组件场景。
 
 ## 背景
 
