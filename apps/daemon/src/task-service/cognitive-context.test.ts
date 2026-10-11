@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import test, { describe, type TestContext } from "node:test";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import type { ScopeV2, PrivacyV2, MemoryClaimV2, CriterionId } from "../../../../packages/domain/src/index.ts";
 import { parseLocalApiCommandV1, parseExecutionSpecV1, type SessionContractV1, type SessionCreateCommandV1, type LocalApiCommandV1 } from "../../../../packages/protocol/src/index.ts";
 import { openSyntheticCognitionStoreV2, type TaskStoreContextV1, type ContextPersistenceBoundaryV1, type MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
@@ -52,6 +53,8 @@ function change(claim: MemoryClaimV2, payload: MemoryCommandV1["payload"]): Memo
   const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: claim.revision, payload };
 }
 function target(claim: MemoryClaimV2) { return { scope: claim.scope, targetRef: { kind: "claim" as const, id: claim.id, revision: claim.revision }, targetVersion: { claimId: claim.id, version: claim.version } }; }
+// Each scenario owns its temporary installation and receiver; bound their parallelism.
+describe("normal cognitive context and Worker scenarios", { concurrency: 2 }, () => {
 test("the cognitive compiler profile rejects raw Runtime input without a committed capsule", t => {
   const f = fixture(t), task = f.store.tasks.getTask(context.workspaceId, f.taskId).value!, id = randomUUID();
   assert.throws(() => f.store.tasks.recordRuntimeInput(context, { commandId: id, idempotencyKey: id, taskId: f.taskId, expectedRevision: task.revision,
@@ -293,11 +296,17 @@ test("a cognitive Session with the default sample request executes through its c
 });
 test("Cognitive Worker rejects correction before send and after its last received request", async t => {
  for (const stage of ["prompt", "final"] as const) {
-  const peer = await createSyntheticWorkerTestPackage(stage === "prompt" ? { pausePrompt: true } : { pauseFinal: true });
+  const peer = await createSyntheticWorkerTestPackage({ pausePrompt: true, ...(stage === "final" ? { pauseFinal: true } : {}) });
   const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
-  t.after(async () => { await h.close(); await peer.remove(); }); const f = cognitiveFixture(h); await h.coordinateTask(harnessContext, f.taskId);
+  t.after(async () => { await peer.releasePrompt(); await peer.releaseFinal(); await h.close(); await peer.remove(); }); const f = cognitiveFixture(h); await h.coordinateTask(harnessContext, f.taskId);
   const run = h.runCognitiveTask(harnessContext, f.taskId); void run.catch(() => undefined);
-  if (stage === "prompt") await peer.waitForPrompt(); else await peer.waitForFinal();
+  let finished = false; void run.then(() => { finished = true; }, () => { finished = true; });
+  while (h.evidence(harnessContext, f.taskId).execution?.state !== "BUSY") {
+   if (finished) { await run; assert.fail("Cognitive Worker did not dispatch."); }
+   await delay(100);
+  }
+  await peer.waitForPrompt();
+  if (stage === "final") { await peer.releasePrompt(); await peer.waitForFinal(); }
   f.correct(); if (stage === "prompt") await peer.releasePrompt(); else await peer.releaseFinal();
   await assert.rejects(run); await assert.rejects(h.idle());
   const task = h.application.getTask(harnessContext, f.taskId).value, evidence = h.evidence(harnessContext, f.taskId);
@@ -317,4 +326,5 @@ test("a persisted cognitive question accepts its exact real response after owner
  const ready = h.application.getTask(harnessContext, f.taskId).value; assert.equal(ready.state, "READY"); assert.notEqual(ready.attempts.at(-1)!.id, waiting.attempts.at(-1)!.id); assert.equal(ready.attempts[0]!.state, "CANCELLED");
  const next = await h.coordinateTask(harnessContext, f.taskId); assert.notEqual(next.boundary.id, planned.boundary.id); assert.equal(next.boundary.callCount, 1);
  assert.ok(next.context.capsule.rendering.fullText.includes("use plain text")); await h.restart(); assert.equal(h.application.getTask(harnessContext, f.taskId).value.state, "READY");
+});
 });
