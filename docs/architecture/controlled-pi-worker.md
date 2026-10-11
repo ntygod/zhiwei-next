@@ -2,6 +2,8 @@
 
 工作项 [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一 [PR115](https://github.com/ntygod/zhiwei-next/pull/115)。[ADR0019](../adr/0019-controlled-pi-broker-extension.md)补充一方运行时扩展边界；官方 CLI 方向仍由 ADR0013 决定。本页描述新代码的开发接线，不代表 Z08/Z09、安全接入或官方新组合已验收。
 
+P1-04 的持久 Task、输入/绑定和关闭证据接线见[持久任务与会话](persistent-task-sessions.md)，不把该合成组合升级为生产授权。
+
 ## 消费路径与责任
 
 ```text
@@ -39,6 +41,14 @@ READY 必须匹配实际 fd3 一方握手、真实 session identity、精确 Pro
 stdout RPC、fd3 extension lifecycle 与 Host actions 独立序列域；没有跨域全序。Actual Runtime Session 与 product Session、Worker instance 与 PID、command ID 与模型 request ID 分开。不伪造 Run/Turn/Message ID。未知事件只留固定安全诊断，失败不保存未知敏感正文或思维链 hash。
 
 每 binding 最多256条/1MiB未消费结构事件，超限明确失败，不悄悄丢终态。实际请求接受、agent_settled、工具成功、abort acknowledgement、EOF、exit 和 close 都是不同证据；Supervisor 始终报告 Task Outcome 尚未评估。P1-07 才消费真实 Task/Outcome 进行验证。
+
+## P1-04 关闭证据 v1 的可选扩展
+
+`RuntimeProcessCloseEvidenceV1` 新增可选 `processDisposition: "not_spawned"`，专门表达可信启动器关闭 spawn 接纳、等待异步 preparation 结束，并确认没有 ChildProcess/进程关闭等待句柄后的事实。Supervisor 原样转交精确 binding 的证据；HTTP 调用者不能用此标签或自报布尔值证明关闭。实际启动过的进程仍必须提供原有 EOF/close 观测。
+
+该分支要求 `stdoutEof`、`stderrEof`、`closeObserved` 全为 false，`exitCode`、`signal` 为 null；未知标签、额外字段或与实际进程观测矛盾的组合拒绝。Store 还须验证原 ALLOCATED、未派发、没有 Runtime Session/source stream 观测和完整历史，才能追加关闭事实；单独的 ALLOCATED 记录、PID 或经过时间不构成证明。持久关闭失败时仍保留实际 Supervisor custody，不能把失败丢弃后声称任务已取消。
+
+兼容决策：这是独立受控 Runtime v1 DTO 的可选扩展，不改变旧字段含义，不修改 SQL 迁移或已写入历史；旧 DTO/Fixture 继续接受。旧的全 false EOF/close 且无该标签仍为未知/不完整，不能自动升级为未启动。旧 reader 遇到新字段必须 fail closed；降级不删除标签或伪造 EOF，需要保留支持它的 reader 或前向修复。冻结的 [NormalizedRuntimeEvent v1](normalized-runtime-event-v1.md) 及其 Fixture 摘要保持原样。
 
 ## 开发验证与未验证项
 

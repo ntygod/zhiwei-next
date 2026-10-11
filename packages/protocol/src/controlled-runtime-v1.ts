@@ -119,6 +119,8 @@ export interface RuntimeStopAcknowledgementV1 {
 }
 /** Transport observations, not task success or proof of absent external effects. */
 export interface RuntimeProcessCloseEvidenceV1 {
+  /** Trusted launch boundary closed before spawn; absence never implies this proof. */
+  readonly processDisposition?: "not_spawned";
   readonly schemaVersion: typeof controlledRuntimeSchemaVersion;
   readonly bindingId: string;
   readonly stdoutEof: boolean;
@@ -304,17 +306,22 @@ export function parseRuntimeStopAcknowledgementV1(input: unknown): RuntimeStopAc
 }
 export function parseRuntimeProcessCloseEvidenceV1(input: unknown): RuntimeProcessCloseEvidenceV1 {
   return wireBoundary(input, record => {
-    keys(record, ["schemaVersion", "bindingId", "stdoutEof", "stderrEof", "closeObserved", "exitCode", "signal", "observedAt"]);
+    keys(record, ["schemaVersion", "bindingId", "stdoutEof", "stderrEof", "closeObserved", "exitCode", "signal", "observedAt"], ["processDisposition"]);
     version(record.schemaVersion, controlledRuntimeSchemaVersion);
     if (typeof record.stdoutEof !== "boolean" || typeof record.stderrEof !== "boolean" || typeof record.closeObserved !== "boolean") invalid();
     const exitCode = record.exitCode === null ? null : revision(record.exitCode, true);
     const signal = record.signal === null ? null : identifier(record.signal);
     if (exitCode !== null && signal !== null) invalid();
     if (!record.closeObserved && (exitCode !== null || signal !== null)) invalid();
+    if (record.processDisposition !== undefined) {
+      member(record.processDisposition, ["not_spawned"]);
+      if (record.stdoutEof || record.stderrEof || record.closeObserved || exitCode !== null || signal !== null) invalid();
+    }
     return {
       schemaVersion: controlledRuntimeSchemaVersion, bindingId: identifier(record.bindingId),
       stdoutEof: record.stdoutEof, stderrEof: record.stderrEof, closeObserved: record.closeObserved,
       exitCode, signal, observedAt: timestamp(record.observedAt),
+      ...(record.processDisposition === undefined ? {} : { processDisposition: "not_spawned" as const }),
     };
   });
 }

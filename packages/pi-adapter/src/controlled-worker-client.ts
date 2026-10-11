@@ -141,6 +141,7 @@ export interface ControlledPiCommandReceipt {
   readonly success: boolean;
 }
 export interface ControlledPiCloseEvidence {
+  readonly processDisposition?: "not_spawned";
   readonly stdoutEof: boolean;
   readonly stderrEof: boolean;
   readonly brokerEof: boolean;
@@ -321,6 +322,7 @@ export function createControlledPiWorkerClient(input: ControlledPiWorkerOptions)
   let closeResolve: ((result: ControlledPiCloseEvidence) => void) | undefined;
   let closeReject: ((error: ControlledPiWorkerError) => void) | undefined;
   let closePromise: Promise<ControlledPiCloseEvidence> | undefined;
+  let unspawnedClose: Promise<ControlledPiCloseEvidence> | undefined;
   const queue: { event: NormalizedRuntimeEventV1; bytes: number }[] = [];
   const early: Projected[] = [];
   const pending = new Map<string, Pending>();
@@ -666,13 +668,19 @@ export function createControlledPiWorkerClient(input: ControlledPiWorkerOptions)
   }
   async function dispose(): Promise<ControlledPiCloseEvidence> {
     if (!closePromise) {
-      closing = true;
-      if (!failure) state = "DRAINING";
-      await preparation?.catch(() => {});
-      if (runDirectory) await checked("cleanup", () => rm(runDirectory!, { recursive: true, force: true }));
-      if (!failure || failure.code === "state") state = "STOPPED";
-      terminal = true; wake?.(); wake = undefined;
-      return { stdoutEof: false, stderrEof: false, brokerEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: options.now() };
+      unspawnedClose ??= (async () => {
+        // Closing admission is synchronous. start() rechecks it after every preparation await
+        // and immediately before its non-awaiting spawn boundary.
+        closing = true;
+        if (!failure) state = "DRAINING";
+        await preparation?.catch(() => {});
+        if (child || closePromise) fail("cleanup");
+        if (runDirectory) await checked("cleanup", () => rm(runDirectory!, { recursive: true, force: true }));
+        if (!failure || failure.code === "state") state = "STOPPED";
+        terminal = true; wake?.(); wake = undefined;
+        return { processDisposition: "not_spawned" as const, stdoutEof: false, stderrEof: false, brokerEof: false, closeObserved: false, exitCode: null, signal: null, observedAt: options.now() };
+      })();
+      return unspawnedClose;
     }
     if (!closing && !closeObserved && !failure) {
       const wasStarting = state === "STARTING";

@@ -1,4 +1,4 @@
-/** Internal fixed v2 schema boundary; the public v1 ledger remains unchanged. */
+/** Internal fixed schema boundaries; public v1 and v2 entry points remain version-strict. */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
@@ -24,6 +24,16 @@ const COGNITIVE_MIGRATIONS_V2: readonly ObservationLedgerMigration[] = Object.fr
     version: 2,
     name: "cognitive-persistence-v2",
     sql: readFileSync(new URL("../migrations/0002_cognitive_persistence_v2.sql", import.meta.url), "utf8"),
+  }),
+]);
+
+// A distinct fixed source preserves the exact v2 compatibility boundary.
+const TASK_MIGRATIONS_V1: readonly ObservationLedgerMigration[] = Object.freeze([
+  ...COGNITIVE_MIGRATIONS_V2,
+  Object.freeze({
+    version: 3,
+    name: "task-session-v1",
+    sql: readFileSync(new URL("../migrations/0003_task_session_v1.sql", import.meta.url), "utf8"),
   }),
 ]);
 
@@ -668,11 +678,20 @@ function validateAllRuntimeRows(database: DatabaseSync): StoredRuntimeEventV1[] 
 }
 
 
+/** Carry a caller-owned validation failure through the SQLite operation boundary. */
+class ProductRowsValidationFailure extends Error {
+  readonly failure: unknown;
+  constructor(failure: unknown) {
+    super("Product row validation failed.");
+    this.failure = failure;
+  }
+}
+
 function safeSqliteBoundary<T>(message: string, work: () => T): T {
   try {
     return work();
   } catch (error) {
-    if (error instanceof ObservationLedgerError || error instanceof ObservationLedgerMigrationError) throw error;
+    if (error instanceof ObservationLedgerError || error instanceof ObservationLedgerMigrationError || error instanceof ProductRowsValidationFailure) throw error;
     throw new ObservationLedgerError("sqlite", message, { cause: error });
   }
 }
@@ -712,7 +731,7 @@ const expectedSchemas = new Map<number, ObservationLedgerSchemaManifest>();
 function buildExpectedSchemaManifest(version: number): ObservationLedgerSchemaManifest {
   const cached = expectedSchemas.get(version);
   if (cached !== undefined) return cached;
-  const migrations = COGNITIVE_MIGRATIONS_V2.slice(0, version);
+  const migrations = TASK_MIGRATIONS_V1.slice(0, version);
   // Reject forbidden top-level transaction/PRAGMA SQL before executing reference DDL.
   if (migrations.length > 0) assertObservationLedgerMigrationSet(migrations);
   const reference = new DatabaseSync(":memory:");
@@ -745,8 +764,9 @@ function verifyInstalledPrefix(
   database: DatabaseSync,
   expectedPragmas: CognitivePragmaSnapshotV2,
   version: number,
+  fixedMigrations: readonly ObservationLedgerMigration[] = COGNITIVE_MIGRATIONS_V2,
 ): VerifiedCognitiveDatabaseV2 {
-  const migrations = assertObservationLedgerMigrationState(database, COGNITIVE_MIGRATIONS_V2);
+  const migrations = assertObservationLedgerMigrationState(database, fixedMigrations);
   if (migrations.length !== version) {
     throw new ObservationLedgerCorruptionError("Cognitive persistence schema version is inconsistent.");
   }
@@ -817,4 +837,67 @@ export function withCognitiveSnapshotV2<T>(
 ): T {
   // The callback belongs to the caller: preserve its domain/error category.
   return inSnapshot(database, () => reader(verifyCognitiveDatabaseV2(database, expectedPragmas)));
+}
+
+/** Internal fixed-v3 migration; never exposed as an override in a store open API. */
+export function applyTaskMigrationsV1(
+  database: DatabaseSync,
+  options: {
+    readonly clock: MigrationClock;
+    readonly expectedPragmas: CognitivePragmaSnapshotV2;
+    /** The store validates existing cognitive and task rows before migration commit. */
+    readonly validateProductRows?: () => void;
+  },
+): readonly AppliedObservationLedgerMigration[] {
+  try {
+    return safeSqliteBoundary("Could not migrate task SQLite persistence.", () => {
+      return applyObservationLedgerMigrations(database, {
+        migrations: TASK_MIGRATIONS_V1,
+        clock: options.clock,
+        validateBeforePending: ({ applied }) => {
+          inSnapshot(database, () => verifyInstalledPrefix(database, options.expectedPragmas, applied.length, TASK_MIGRATIONS_V1));
+        },
+        validateAfterPending: () => {
+          withTaskSnapshotV1(database, options.expectedPragmas, () => {
+            try { options.validateProductRows?.(); }
+            catch (error) { throw new ProductRowsValidationFailure(error); }
+            if (!database.isTransaction) {
+              throw new ObservationLedgerCorruptionError("Task product validation ended its SQLite transaction.");
+            }
+          });
+        },
+      });
+    });
+  } catch (error) {
+    // Product validation owns its error categories; SQLite setup/schema failures
+    // still pass through the normal SQLite classification above.
+    if (error instanceof ProductRowsValidationFailure) throw error.failure;
+    throw error;
+  }
+}
+
+/** The caller must retain the snapshot while validating and consuming product rows. */
+export function verifyTaskDatabaseV1(
+  database: DatabaseSync,
+  expectedPragmas: CognitivePragmaSnapshotV2,
+): VerifiedCognitiveDatabaseV2 {
+  return safeSqliteBoundary("Could not verify task SQLite persistence.", () => {
+    if (!database.isTransaction) throw new ObservationLedgerCorruptionError("Task verification requires an explicit SQLite snapshot.");
+    return verifyInstalledPrefix(database, expectedPragmas, 3, TASK_MIGRATIONS_V1);
+  });
+}
+
+/** Fixed-v3 validation and its reader share exactly one SQLite snapshot. */
+export function withTaskSnapshotV1<T>(
+  database: DatabaseSync,
+  expectedPragmas: CognitivePragmaSnapshotV2,
+  reader: (verified: VerifiedCognitiveDatabaseV2) => T,
+): T {
+  return inSnapshot(database, () => {
+    const result = reader(verifyTaskDatabaseV1(database, expectedPragmas));
+    if (!safeSqliteBoundary("Could not inspect task SQLite snapshot.", () => database.isTransaction)) {
+      throw new ObservationLedgerCorruptionError("Task snapshot ended before its reader completed.");
+    }
+    return result;
+  });
 }

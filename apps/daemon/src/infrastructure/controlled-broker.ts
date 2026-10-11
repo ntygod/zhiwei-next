@@ -288,13 +288,15 @@ function syntheticReplyFixture(index: number, scenario: "text" | "tools"): Contr
 
 export async function createSyntheticControlledBroker(
   input: ExecutionSpecV1,
-  options: Readonly<{ scenario?: "text" | "tools"; now?: () => number }> = {},
+  options: Readonly<{ scenario?: "text" | "tools"; now?: () => number; beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void }> = {},
 ): Promise<SyntheticControlledBroker> {
   const spec = parseSyntheticBrokerSpec(input);
-  if (Object.keys(options).some(key => key !== "scenario" && key !== "now")) reject();
+  if (Object.keys(options).some(key => key !== "scenario" && key !== "now" && key !== "beforeSyntheticModelReceive")) reject();
   const scenario = options.scenario ?? "text";
   if (scenario !== "text" && scenario !== "tools") reject("unsupported");
   if (options.now !== undefined && typeof options.now !== "function") reject();
+  if (options.beforeSyntheticModelReceive !== undefined && typeof options.beforeSyntheticModelReceive !== "function") reject();
+  const beforeSyntheticModelReceive = options.beforeSyntheticModelReceive;
   const now = options.now ?? Date.now;
   const startedAt = now();
   if (!Number.isFinite(startedAt)) reject();
@@ -369,7 +371,8 @@ export async function createSyntheticControlledBroker(
         reservedTokens += request.maxTokens;
         const record = freeze({ requestId: request.requestId, executionUnitId: spec.executionUnitId, workspaceId: spec.workspaceId, modelProfile: spec.selectedModelProfile, fence: spec.fence, maxTokens: request.maxTokens, context: request.context, serializedBytes: Buffer.byteLength(JSON.stringify(request.context)) });
         requests.push(record);
-        // No await or caller hook exists between capture and first-party receiver entry.
+        // Trusted synchronous durable-input commit precedes the receiver. Async return is rejected.
+        if (beforeSyntheticModelReceive?.(record) !== undefined) reject();
         const result = receiveSyntheticModel(record, reply);
         return freeze({ requestId: request.requestId, ok: true, result });
       }

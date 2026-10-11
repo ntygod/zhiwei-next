@@ -9,6 +9,7 @@ import { canonicalJsonV1 } from "../../protocol/src/index.ts";
 import { acquireCoordinatorLockV2, type CoordinatorLockV2 } from "./coordinator-lock-v2.ts";
 import { openRecoveryJournalV2, type RecoveryJournalStateV2 } from "./recovery-journal-v2.ts";
 import { openSyntheticCognitionStoreV2, type SyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
+import type { TaskPersistenceBoundaryV1 } from "./task-store-v1-types.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 
 const FORMAT = "synthetic-cognitive-snapshot-v2";
@@ -67,6 +68,7 @@ export interface SyntheticRecoveryOptionsV2 {
   readonly controlRoot: string;
   readonly installationId: string;
   readonly clock: { now(): string };
+  readonly taskPersistence?: TaskPersistenceBoundaryV1;
 }
 export interface CreateSyntheticRecoveryOptionsV2 extends SyntheticRecoveryOptionsV2 {
   readonly generationId: string;
@@ -129,7 +131,7 @@ function integer(value: unknown, minimum = 0): asserts value is number {
 function uuid(value: unknown): asserts value is string { if (typeof value !== "string" || !UUID.test(value)) fail("validation"); }
 function hash(value: unknown): asserts value is string { if (typeof value !== "string" || !HASH.test(value)) fail("validation"); }
 function state(value: Record<string, unknown>): void {
-  assertIdentifierV2(value.installationId); if (value.schemaVersion !== 2) fail("validation");
+  assertIdentifierV2(value.installationId); if (value.schemaVersion !== 2 && value.schemaVersion !== 3) fail("validation");
   integer(value.controlSequence); integer(value.recoveryEpoch); hash(value.controlChecksum);
   if (value.recoveryEpoch > value.controlSequence) fail("validation");
 }
@@ -301,7 +303,7 @@ function outside(parent: string, child: string): boolean {
 }
 function options(input: SyntheticRecoveryOptionsV2): SyntheticRecoveryOptionsV2 {
   return validated(() => {
-    object(input, ["recoveryRoot", "controlRoot", "installationId", "clock"]);
+    object(input, ["recoveryRoot", "controlRoot", "installationId", "clock", ...(Object.hasOwn(input, "taskPersistence") ? ["taskPersistence"] : [])]);
     assertIdentifierV2(input.installationId); assertIsoTimestampV2(input.clock.now());
     for (const path of [input.recoveryRoot, input.controlRoot]) {
       if (typeof path !== "string" || !isAbsolute(path) || path.includes("\0") || path.length > 4096 || resolve(path) !== path) fail("validation");
@@ -355,7 +357,7 @@ export class SyntheticRecoveryCoordinatorV2 {
   }
   static create(input: CreateSyntheticRecoveryOptionsV2): SyntheticRecoveryCoordinatorV2 {
     return safe(() => {
-      validated(() => { object(input, ["recoveryRoot", "controlRoot", "installationId", "clock", "generationId"]); uuid(input.generationId); });
+      validated(() => { object(input, ["recoveryRoot", "controlRoot", "installationId", "clock", "generationId", ...(Object.hasOwn(input, "taskPersistence") ? ["taskPersistence"] : [])]); uuid(input.generationId); });
       const { generationId, ...base } = input; const config = options(base); directory(config.recoveryRoot);
       if (readdirSync(config.recoveryRoot).length !== 0) fail("conflict");
       const lock = acquireCoordinatorLockV2({ dataRoot: config.recoveryRoot, installationId: config.installationId });
@@ -364,7 +366,7 @@ export class SyntheticRecoveryCoordinatorV2 {
         createDirectory(join(config.recoveryRoot, "generations")); createDirectory(join(config.recoveryRoot, "snapshots"));
         const root = join(config.recoveryRoot, "generations", generationId); createDirectory(root);
         store = openSyntheticCognitionStoreV2({ dataRoot: root, controlRoot: config.controlRoot,
-          installationId: config.installationId, mode: "create", clock: config.clock });
+          installationId: config.installationId, mode: "create", clock: config.clock, ...(config.taskPersistence ? { taskPersistence: config.taskPersistence } : {}) });
         createDirectory(join(config.controlRoot, CATALOG_DIRECTORY));
         createDirectory(join(config.controlRoot, PURGE_DIRECTORY));
         const boundary = store[cognitiveRecoveryPortV2].verifyRecoveryBoundary();
@@ -394,7 +396,7 @@ export class SyntheticRecoveryCoordinatorV2 {
         const receipt = readCanonical(join(root, "synthetic-generation.json"), parseSyntheticActiveGenerationV2);
         if (serialize(receipt) !== serialize(active)) fail("recovery_required");
         store = openSyntheticCognitionStoreV2({ dataRoot: root, controlRoot: config.controlRoot,
-          installationId: config.installationId, mode: "open", clock: config.clock });
+          installationId: config.installationId, mode: "open", clock: config.clock, ...(config.taskPersistence ? { taskPersistence: config.taskPersistence } : {}) });
         const coordinator = new SyntheticRecoveryCoordinatorV2(config, lock, active, store);
         coordinator.#check(); coordinator.#verifyCurrent(store); return coordinator;
       } catch (error) {
@@ -603,7 +605,7 @@ export class SyntheticRecoveryCoordinatorV2 {
       let candidate: SyntheticCognitionStoreV2 | undefined;
       try {
         candidate = openSyntheticCognitionStoreV2({ dataRoot: candidateRoot, controlRoot: this.#options.controlRoot,
-          installationId: this.#options.installationId, mode: "open", clock: this.#options.clock });
+          installationId: this.#options.installationId, mode: "open", clock: this.#options.clock, ...(this.#options.taskPersistence ? { taskPersistence: this.#options.taskPersistence } : {}) });
         // Normal open first applies CURRENT independent FORGET/privacy/retention
         // records inside the isolated candidate, with no consumer reference.
         const reconciled = candidate[cognitiveRecoveryPortV2].verifyRecoveryBoundary();

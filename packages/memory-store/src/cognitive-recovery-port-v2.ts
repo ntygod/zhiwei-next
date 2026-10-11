@@ -3,7 +3,7 @@ export const cognitiveRecoveryPortV2: unique symbol = Symbol("cognitive-recovery
 
 export interface CognitiveRecoveryStateV2 {
   readonly installationId: string;
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 2 | 3;
   readonly controlSequence: number;
   readonly controlChecksum: string;
   readonly recoveryEpoch: number;

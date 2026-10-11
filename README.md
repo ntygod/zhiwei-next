@@ -84,3 +84,5 @@ docs/
 ## 许可证
 
 仓库当前公开可读，许可证仍标记为 `UNLICENSED`；公开仓库不表示已授予开源许可。在首次产品发布前单独完成许可证决策，不默认沿用旧仓库许可证。
+
+P1-04 当前合成实施边界见[持久任务与会话](docs/architecture/persistent-task-sessions.md)；不启用真实入口。

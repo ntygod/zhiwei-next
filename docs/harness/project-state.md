@@ -6,7 +6,23 @@ status: active
 updated: 2026-10-10
 -->
 
-## 当前工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
+## 当前工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
+
+canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分支 `feat/116-persistent-task-sessions` / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。开工 reconciliation 无开放 PR/Incident，#44/#67 人类输入已核对；P1-03/PR115 已完整交付并关闭 #114。
+
+完整代码已发布于 PR117，后续独立审查持续修复持久行完整性；实现固定前向 schema3、SessionContract/ownerEpoch、Task/Attempt/unknown Outcome 精确历史、WorkingState/真实 Observation/输入、receipt/Outbox/快照、独立配对/CSRF/Scope API、CLI 和受控 Worker 持久接线。全部代码只用于自有临时合成安装，普通入口仍诊断-only。
+
+该候选在工作区不可访问后重新构建，历史组件结果没有作为新证据。后续已实现有界一致快照分页、浏览器同源读、实际 Supervisor custody 保留时的控制面中断恢复，以及正文撤销后仍保留的结构性历史校验。完整 OS Daemon 死亡且丢失 custody 后的 orphan 发现/回收仍 unsupported/not_run，不以 owner fencing 或 PID 推断进程关闭。
+
+独立审查持续检查持久字段完整性与真实合成进程边界。`552f4d73679b28148355a63b827d3d0a0a509068` 的精确 HEAD 原完整 check 已确认 exit0：1019/1019测试、144 strict roots（Node22.23.1/npm10.9.8）；独立 R3 仍为 BLOCKED，保留四组已复现问题：close失败重试、物理关闭后领域确认失败、正文失效后runtime必要依赖、READY恢复投影无回放水位变化。先前各轮错误与修复记录均保留；覆盖清单和绿色检查不能替代这些失败路径的证明。后续候选需逐项回归、原完整检查、全新独立 R3、Ready/live、保护合入与 main 回读，尚未交付。
+
+执行索引 `implemented` 引用已存在代码；Z10/Z11/Z12 产品验收保持 `not_run`，官方 Pi CLI+新扩展完整进程组合也 `not_run`。P1-05 为下一实现，但须本 PR 完成交付与新 reconciliation 后才开工。成功验证/Episode 属于 P1-07；不靠模型查询进度，不开启后台自治。
+
+PR117 原 SDK/Worker 来源及全部原 ZIP 从同一 artifact 读回，摘要与原保存值一致；原完整比较/validator 重新验证，无 Runtime 重新采集。比较器恢复精确原 blob `fba36da923a94cd2b9ba024f020089e3ef313d90`；Workflow/normalizer/接受条件未改。来源元数据不代表产品验收或新扩展组合可用。
+
+原 #90/preintegration-safety、Private/链接替换/备份攻击及等价争议动态诊断不运行，不绕过具体拒绝。v1/0001/0002、Accepted 范围不改；真实模型/账户凭据、个人数据、外发、部署、新持续权限不启用。D-04/D-08 与 G-2/G-5 维持原门。
+
+## 历史工作：P1-03 受控 Worker 与 Broker #114（2026-10-10）
 
 canonical [#114](https://github.com/ntygod/zhiwei-next/issues/114)，唯一分支 `feat/114-controlled-pi-worker` / Draft [PR115](https://github.com/ntygod/zhiwei-next/pull/115)，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。开工 reconciliation 无开放 PR/Incident、远端仅 protected main；#44/#67 最新人类输入已读。P1-02 / PR113 已完成最终 R3、582 项完整 check、Ready/live、保护合入与 main 来源回读，#112 已关闭。实现依赖已就绪，产品验收仍 `not_run`。
 
@@ -255,14 +271,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #115；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #117；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 bbed4d68dad41cbab176ea6a50b8f83b7cf4d494
-capture workflow             38046401917
-capture artifact             11666774064
-capture artifact digest      sha256:f20227db00a34e4d2511244d30a5b541915982dbc648b44ea7a847e3335433c9
+capture head                 2e1b741b6823e0ff27db07e1f591cc31eeabeb66
+capture workflow             38049123665
+capture artifact             11668144722
+capture artifact digest      sha256:87ab6c3171e2edf81a9761b1d1c811833b128c47bf34f1dad03afff64c42fd0b
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

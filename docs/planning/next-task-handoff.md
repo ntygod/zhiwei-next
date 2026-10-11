@@ -1,26 +1,19 @@
 # 下一开发上下文交接
 
-当前唯一实现是 [#114](https://github.com/ntygod/zhiwei-next/issues/114)，分支 `feat/114-controlled-pi-worker`，基于已保护 main `5d43a27d39406df9c73cb7d9276c8baf91156608`。P1-02 / PR113 已完整交付并关闭 #112。P1-03 代码提交 `d5ff61a9f000d9efdd0e79442ee9278ac7364da4` 已发布，正式工具链完整 check 669/669、严格类型120 roots；唯一 [PR115](https://github.com/ntygod/zhiwei-next/pull/115) 待最终完整 HEAD 独立 R3、Ready/live、保护合入与 main 回读。索引的 implemented 是代码证据，不是已合入或产品验收。完整交付后下一独立实现 P1-04，开工先从 main reconciliation，不能复用 #114/PR115。
+当前 [#116](https://github.com/ntygod/zhiwei-next/issues/116) / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已发布完整 P1-04 代码 `5d378978b18f7f0368ca241d5cba0a1d2f326fd8`。新重建树完整检查766/766、144 strict roots；当前最终HEAD独立R3、Ready/live、保护合入与main回读须实际完成，不能从本文件推导已经合入。
 
-## 先读
+## 先完成交付
 
-根/目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)、原 P1-03 [任务合同](implementation-plan.md#p1-03--接通受控-pi-worker-与工具模型边界)、Pi/运行协调/安全/部署详设与 [ADR0019](../adr/0019-controlled-pi-broker-extension.md)。先区分技术实现依赖、产品验收和真实接入许可。
+保持唯一 canonical Issue/primary PR/工作分支，不另开整合或验证PR。比较器已精确恢复原blob，原PR117 artifacts重新读回/完整比较通过，不重新采集Runtime。完整HEAD变化后更新检查和独立审查，严格原Ready CI/保护合入/main provenance；核实后关闭#116，#44 owner-input保持开放。源码重建使用新验证，不复用不可访问旧树的通过数字。
 
-## 本次范围
+## 下一实现 P1-05
 
-官方 Pi0.84.1 `bin.pi` CLI JSONL 唯一路径；正式传输、监督生命周期与全部工具/模型 Broker。原状态探针不是生产实现，root SDK46 不支持声明不绕过。只由固定合成构造器消费；不增加诊断服务的执行 route，不使用诊断 token 授权数据。原 #90/preintegration-safety 及等价争议 Private/链接替换/注入/备份攻击实验不重跑或换路，相关验收保持 `not_run`。
+P1-04 完成交付后重新 reconciliation：读最新 main、AGENTS/局部规则、原 [任务目录](implementation-plan.md)、[执行索引](../harness/execution-mode.json)、[开发与验收分离](../harness/development-and-acceptance.md)及 P1-05 精确合同，再建立唯一新工作项。不得凭本摘要扩展范围。
 
-不触真实模型账户、凭据、用户数据或生产部署。P0-01/02、D-04/D-08 与 G-2/G-5 的限制原样保留。PR99 closed unmerged、#98 原型暂停未交付，不恢复视觉打磨。
+实现依赖按已发布代码推进，用户可后验收；正常类型、领域、隔离事务/进程开发验证必须继续。P1-04 Session/Task/WorkingState/输入与精确执行历史真源已经可供后续消费者使用；P1-06 完整认知循环、P1-07 验证/Episode、P1-08 UI，P1-09仅Alpha验收，不把真实缺口推给验收阶段。
 
-官方 Pi CLI 与新一方扩展的实际组合尚未运行；现有合成进程测试不认证 Pi 的真实 Agent Loop。旧 Runtime 来源仅证明原冻结合同，受限/产品验收均 `not_run`。源码/边界和未支持项见 [受控 Worker](../architecture/controlled-pi-worker.md)。
+## 保持边界
 
-## 后续责任
+真实入口仍关闭，只用虚构临时材料；官方Pi+新扩展完整进程组合和产品Z10/Z11/Z12均not_run。旧#90/preintegration-safety、Private/链接替换/备份攻击及等价争议动态诊断禁跑，具体拒绝原文上报不得换路。v1、0001/0002、旧Accepted范围不改；不接真实模型/账户凭据、个人数据、外发、部署或新持续权限；#98原型仍暂停。
 
-- P1-04 真实 Session/Task/Attempt/输入事务及 WorkingState 存储；P1-06 是 WorkingState 消费者。
-- P1-07 Outcome/Episode 基于 P1-04 精确历史接线，不能把当前 `unsupported` 持久入口当作完整交付。
-- P1-09 只负责 Alpha 端到端验收，不负责上述存储实现。
-- P1-02 raw synthetic opener 不机械强制 active generation 所有权；未来 launcher 必须通过 recovery coordinator 选中当前 store，不能直接打开非活跃世代。
-
-## 交付门
-
-正常类型、纯单元与受控合成进程生命周期、原完整 `npm run check`，最终完整 HEAD 新独立 R3、当前 PR 的原 SDK/Worker 来源、Ready/live、保护合入及 main 回读。不修改 Workflow/normalizer/接受条件，不把旧 PR 来源当当前来源。产品/受限攻防验收单独留待用户，不能凭组件测试记通过。
+已应用schema3无破坏性down migration；回滚停新接纳、关闭API、排空/停止Worker，保留已提交历史，通过新受审revert PR或前向修复执行。
