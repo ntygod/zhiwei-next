@@ -6,9 +6,9 @@
 
 先读根与目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-06 合同](implementation-plan.md#p1-06--交付认知协调与受预算上下文)。领域、认知流水线和持久化仍为原事实源；不从本摘要推导额外权限。
 
-首批 compileCognitiveContextV1 复用已交付预算阶段，增加当前任务/WorkingState 与合格 Claim 的不可变胶囊；3项组件检查、157个严格类型roots及架构检查通过。此输出不是发送许可。唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)获独立提案字节设计批准并Accepted，指出的WorkingState跨Session计数前缺口已修复，3项场景通过。继续在同一primary接入有界决策、快照/read-set持久化与受控合成接收，最终实现HEAD另做R3。最终前端布局和视觉由所有者安排 Gemini；不新增自动学习、向量或通用 Provider。
+唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)与不可变决定记录补充均已独立设计批准。实现已串起 compileCognitiveContextV1、同视图资格/read-set、protected capsule/RuntimeInput、持久两次调用上限、六动作决定和现有受控 Worker 的实际接收。澄清/等待问题保留在 Task/WorkingState，实际 task.respond 精确匹配问题后产生新 revision；取消/继续/查询走确定性路径，不能用 task.continue 跳过待输入。
 
-现已补持久 Context 入口、固定 schema5、同视图 read-set、胶囊/RuntimeInput 原子提交和正文依赖，6项正常合成存储场景及3项迁移/协议场景通过。认知保留表尚未消费，继续完成有界协调、实际请求绑定与迟到结果复验；不把此阶段标成完成。
+固定 schema5→6 保存预约、实际请求及每次不可变决定，保留0001—0005和旧严格读取器。实际请求重新计数，并在发送及最终事件落库复验当前来源；同 attempt 的 READY→RUNNING 必须有原准备证明。正常组件/临时存储/受控进程场景已验证预算失败、隐藏材料、两次上限、等待/回复、注入和发送前/最后请求后纠正。首个 Runtime 记忆工具只读当前胶囊已选且仍合格材料，结果连同精确引用进入实际请求；补检索由有界协调完成。完整原 check、当前 HEAD R3、PR122 原来源和 Ready/live/保护交付仍继续，不从局部绿色认定交付完成。
 
 每个行为用最少足够的正常合成开发检查验证，复用已通过的相同源码证据；不重复无改动全量验证，不做假想攻防矩阵。最终完整 check、当前 HEAD 独立 R3、当前 PR 原 Runtime 来源、Ready/live 与受保护合入继续执行。
 

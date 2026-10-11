@@ -135,7 +135,7 @@ function integer(value: unknown, minimum = 0): asserts value is number {
 function uuid(value: unknown): asserts value is string { if (typeof value !== "string" || !UUID.test(value)) fail("validation"); }
 function hash(value: unknown): asserts value is string { if (typeof value !== "string" || !HASH.test(value)) fail("validation"); }
 function state(value: Record<string, unknown>): void {
-  assertIdentifierV2(value.installationId); if (![2, 3, 4, 5].includes(value.schemaVersion as number)) fail("validation");
+  assertIdentifierV2(value.installationId); if (![2, 3, 4, 5, 6].includes(value.schemaVersion as number)) fail("validation");
   integer(value.controlSequence); integer(value.recoveryEpoch); hash(value.controlChecksum);
   if (value.recoveryEpoch > value.controlSequence) fail("validation");
 }

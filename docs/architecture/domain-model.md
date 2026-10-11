@@ -85,6 +85,8 @@ Task: CREATED → READY → RUNNING → VERIFYING → COMPLETED | PARTIAL | FAIL
 
 Task 的 intentRevision 在请求、目标、验收或授权范围发生语义变化时递增；普通运行状态的 revision/CAS 与它分开。每次派发绑定 taskAttempt、intentRevision、cognitionEpoch、policyEpoch、recoveryEpoch 和精确依赖版本，避免把普通进度更新误判为目标变化。
 
+P1-06 的首个合成消费者将 clarify/wait 决定保留为 WAITING_INPUT 与 WorkingState 的问题 ID、未知条件及下一步；模型提案不写成 user-direct Observation，也不建立 Outcome。匹配问题的实际 task.respond 保留真实用户输入后恢复同 attempt 的 READY、新 Task/WorkingState revision，并形成下一认知边界；task.continue 不提供输入、不能跳过等待。其余未决项、精确来源和历史保留，机制与能力范围见 [ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)。
+
 NEEDS_RECONCILIATION 经可信回执或明确用户核对后进入 VERIFYING，再按已发生结果转为 CANCELLED/PARTIAL/FAILED 等终态；继续工作须新 attempt 与有效授权。PAUSED 只能在停止新派发且运行体已确认到达可暂停边界后显示，不能把仍不可取消的在途外部动作伪装为已暂停。
 
 PolicyGrant 状态为 ACTIVE/REVOKED/EXPIRED/INACTIVE；恢复旧备份统一产生新的 recoveryEpoch，历史 Grant 仅作审计且不得转回 ACTIVE，用户重新授权创建新 Grant。它与正常 Worker 重启（保留未撤销的当前授权并重验）不是同一种恢复。

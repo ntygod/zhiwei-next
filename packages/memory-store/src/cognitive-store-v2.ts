@@ -13,7 +13,7 @@ import {
   type ObservationV2, type LocalApiCommandV1, type LocalApiMemoryInputV1, type LocalApiMemorySearchV1,
 } from "../../protocol/src/index.ts";
 import {
-  configureCognitiveDatabaseV2, applyContextMigrationsV1, verifyContextDatabaseV1,
+  configureCognitiveDatabaseV2, applyDecisionMigrationsV1, verifyDecisionDatabaseV1,
 } from "./cognitive-schema-v2.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 import { ContentFilesV2, type ContentFileDescriptorV2 } from "./content-files-v2.ts";
@@ -172,6 +172,12 @@ export class SyntheticCognitionStoreV2 {
       writeBody: (scope, body, dependencies, boundary) => this.#writeTaskBody(scope, body, dependencies, boundary),
       recordCommandEvidence: (scope, command, dependencies, boundary) => this.#recordTaskCommand(scope, command, dependencies, boundary),
       executionForReduction: (workspaceId, taskId) => this.#executionEngine.currentForReduction(workspaceId, taskId),
+      validateCognitiveBoundary: (context, boundaryId) => {
+        const boundary = this.#row("SELECT capsule_id FROM cognitive_boundary_v1 WHERE id=? AND workspace_id=?", boundaryId, context.workspaceId);
+        if (!boundary) fail("unavailable"); this.#contextEngine.assertCurrent(context, text(boundary.capsule_id));
+      },
+      validateRuntimeContext: (context, spec, binding, request) => this.#contextEngine.validateRuntimeContext(context, spec, binding, request),
+      linkRuntimeContext: (context, spec, binding, requestId) => this.#contextEngine.linkRuntimeContext(context, spec, binding, requestId),
       onExecutionSettled: (context, envelope) => {
         const execution = this.#row("SELECT task_id FROM task_execution_v1 WHERE binding_id=? AND workspace_id=?", envelope.bindingId, context.workspaceId);
         if (!execution) fail("unavailable");
@@ -196,6 +202,19 @@ export class SyntheticCognitionStoreV2 {
       compile: context.compile.bind(context), countActualRequest: context.countActualRequest.bind(context) }) : undefined;
     this.#contextEngine = new ContextStoreEngineV1({ ...host, tasks: this.#taskEngine, currentFence: scope => this.#currentFence(scope),
       materials: (context, task, query, required) => this.#contextMaterials(context, task, query, required),
+      validateMaterial: material => {
+        plainDataRecord(material, ["claim", "content", "sources"]); assertMemoryClaimV2(material.claim);
+        const row = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", material.claim.id, material.claim.version);
+        if (!row || json(contentRef(row)) !== json(material.content)) fail("corruption");
+        const original = this.#hydrateClaim(row, false);
+        if (json(immutableClaimMetadata(original)) !== json(immutableClaimMetadata(material.claim)) || original.statement !== material.claim.statement || material.claim.status !== "ACTIVE"
+          || material.claim.revision < number(row.initial_revision) || material.claim.revision > number(row.revision)) fail("corruption");
+        const sources = material.claim.evidence.map(evidence => {
+          const source = this.#row("SELECT event_json FROM observation_v2 WHERE id=?", evidence.source.id); if (!source) fail("corruption");
+          const event = parseObservationV2(parse(source.event_json)); if (event.content.availability !== "available" || event.revision !== evidence.source.revision) fail("corruption"); return event.content.ref;
+        });
+        if (json(sources) !== json(material.sources)) fail("corruption");
+      },
       evidenceContents: working => {
         const scope = working.scope; if (scope.kind === "global") fail("unavailable");
         if (working.evidence.some(source => source.privacy !== "model-allowed" || source.scope.kind === "global"
@@ -233,7 +252,7 @@ export class SyntheticCognitionStoreV2 {
       const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
       const hasState = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='store_state'").get()
         && db.prepare("SELECT 1 FROM store_state WHERE singleton=1").get();
-      applyContextMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
+      applyDecisionMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
       const state = db.prepare("SELECT * FROM store_state WHERE singleton=1").get();
       if (!state) {
         if (options.mode === "open") fail("corruption");
@@ -300,7 +319,7 @@ export class SyntheticCognitionStoreV2 {
       if (!reconciling) this.#checkControl();
       this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
       this.#db.exec(write ? "BEGIN IMMEDIATE" : "BEGIN");
-      verifyContextDatabaseV1(this.#db, this.#pragmas);
+      verifyDecisionDatabaseV1(this.#db, this.#pragmas);
       this.#validateRows();
       if (!reconciling) this.#checkControl();
       const result = body();
@@ -1131,7 +1150,7 @@ export class SyntheticCognitionStoreV2 {
 
   #recoveryState(): CognitiveRecoveryStateV2 {
     const state = this.#state();
-    return { installationId: text(state.installation_id), schemaVersion: 5,
+    return { installationId: text(state.installation_id), schemaVersion: 6,
       controlSequence: number(state.applied_control_sequence), controlChecksum: text(state.applied_control_checksum),
       recoveryEpoch: number(state.recovery_epoch) };
   }

@@ -4,7 +4,7 @@
   "mode": "synthetic-development",
   "taskCatalog": "docs/planning/development-plan.json",
   "acceptanceDependencyField": "depends",
-  "nextImplementation": "P1-06",
+  "nextImplementation": "P1-07",
   "tasks": [
     {
       "id": "P0-01",
@@ -120,9 +120,9 @@
         "P1-05",
         "P0-04"
       ],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "acceptance_status": "not_run",
-      "implementation_evidence": ["https://github.com/ntygod/zhiwei-next/issues/121"],
+      "implementation_evidence": ["https://github.com/ntygod/zhiwei-next/issues/121", "https://github.com/ntygod/zhiwei-next/pull/122", "apps/daemon/src/task-service/cognitive-coordinator.ts", "packages/memory-store/src/context-store-v1.ts", "apps/daemon/src/task-service/cognitive-context.test.ts"],
       "acceptance_evidence": []
     },
     {

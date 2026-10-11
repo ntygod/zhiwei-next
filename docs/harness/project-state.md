@@ -10,9 +10,11 @@ updated: 2026-10-11
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
 
-首批纯编译入口复用P0-04预算阶段，输出带精确版本/来源、选择理由及计数的不可变胶囊；3项正常组件检查、157严格类型roots与架构检查通过，旧compileContext与预算组件保持。此输出不证明已授权或已发送。唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)。[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)的Proposed提案字节获独立设计批准并Accepted；审查指出的WorkingState跨Session关联在计数前修复，原3项场景通过。快照持久化、有限决策和实际受控接收仍继续实现，最终HEAD另须R3。Z14/Z15产品验收not_run，真实入口保持关闭，UI由所有者安排Gemini。
+唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)。[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)及其前向中间决定补充均获独立设计批准；实现接通资格/预算胶囊、同视图 read-set 与 RuntimeInput、同一边界最多两次的持久调用预约、不可变六动作决定，以及既有受控 Worker/接收端。澄清/等待进入 WAITING_INPUT 并保留问题、未知项和依据；只有匹配问题的实际 task.respond 才恢复 READY、新 revision 与新认知边界。respond/stop 与 Runtime settled 都不形成成功 Outcome。
 
-Context 固定前向 schema5 与持久 read-set 已接线：Task/WorkingState/配置/当前精确 Claim 和来源从同一 SQLite 视图取得，保护胶囊与原 RuntimeInput v1 原子提交，正文依赖连通既有遗忘机制。6项正常临时数据库场景通过，另3项 schema4→5/旧严格 reader/六动作协议场景通过；旧0001—0004不改。认知调用保留表已建但协调、实际发送及迟到结果入口尚未完成，不认定 P1-06 实现或产品验收完成。
+固定 schema5 后追加 schema6，不改已应用0001—0005；旧严格入口保留，恢复声明报告物理6、未知7拒绝。实际执行请求关联胶囊，完整请求重新计数，发送和最终事件提交同步复验 read-set、精确来源与绑定；仅带精确 READY→RUNNING 准备证明的同 attempt 启动可承接胶囊。现有正常场景已证明预算失败、隐藏材料不入计数/发送、检索/修复上限、纠正/遗忘拒收、持久等待、实际 Worker 注入与最后请求后纠正；记忆工具复用同一检查并将结果保留在实际请求中。最终完整 check、当前 HEAD 独立 R3、PR122 原 Runtime 来源及 Ready/live/保护合入仍待完成。
+
+首个消费者仍为自有临时合成安装：固定 cognitive-context-v1 编译 profile、synthetic Unicode scalar counter、脚本接收端；Runtime memory.search/inspect 限于当前胶囊已选材料，新增检索在协调边界完成。真实 structuredDecision、任意等待订阅、官方 Pi+新扩展完整组合及 Z14/Z15 产品验收保持 unsupported/not_run；真实入口关闭，UI由所有者安排Gemini。旧安全/备份实验不运行。
 
 ## 已交付：P1-05 可纠正记忆与检索 #118（2026-10-11）
 

@@ -32,3 +32,15 @@ Store 增加固定 schema5 与 Context 端口，Domain/Protocol 增加明确版�
 必要开发场景贯穿 Task/WorkingState/记忆→有界决定→预算胶囊→已提交快照→受控接收，验证必需超预算、隐藏材料不计数/不发送、最多两次及无进展、发送前纠正/撤销与最后请求后的迟到拒收。原完整 check、当前 HEAD 独立 R3、Runtime 来源与 Ready/live 门禁保持；Z14/Z15 产品验收 not_run。受限旧安全/备份实验不运行。
 
 回滚关闭协调/长期记忆注入并回到既有无长期记忆受控 profile；代码经新受审 revert PR，保留任务/请求/记忆真源与最新控制日志。schema5 仅前向修复，不降级或回退遗忘。
+
+## 前向补充提案：中间决定记录
+
+状态：Accepted（仅设计补充）；[独立设计记录](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6109350063)批准 Proposed 整文件 SHA256 `0088812aa8156f56ff7abe7d1a320126e6582d92f70fec8486d19702c2451b85`，不批准实现HEAD。不改变已接受的六动作、同一 Task/attempt、最多两次、正文保护和发送/结果复验合同。schema5 已进入分支并用于隔离临时数据库，继续实现时不重写它。另以固定前向0006追加 `cognitive_decision_v1`：每次合法模型提案和协调器明确终止保存独立不可变版本，记录 boundary、当前 capsule、调用数、动作、必要摘要和来源；不保存非法原始输出或思维链。首次 retrieve 保留记录但 boundary 仍 open，补检索/修复消耗同一 boundary 的第二次预约；最终响应、执行、澄清、等待或终止才写当前决定指针。最多两个模型提案及一次确定性终止；调用计数不随错误、重试、重启或新胶囊重置。
+
+历史决定正文关联精确胶囊、已预约输入、已记录实际请求及前一决定，投影逐项验证且纳入既有正文依赖撤销。物理最新 Schema 随真实迁移报告为6，旧2/3/4/5严格入口与历史恢复格式保持，未知7拒绝；不运行备份/capture/restore实验。此补充需要独立设计审查，并仍由最终HEAD R3审查和原完整门禁约束。
+
+## 首个合成实现的能力范围
+
+固定 Session compiler profile 为 cognitive-context-v1；原 fixed-synthetic-input profile 继续用于既有无长期记忆执行。决定模型只接受同一 Broker 的 scripted receiver，未证明的真实 structuredDecision 返回 unsupported。clarify/wait 首版都绑定一个 user-input 问题/条件：内部 task.runtime/cognitive-wait 只消费 Store 已提交的决定，不伪造用户 Observation；task.respond 保存真实输入，精确问题匹配后建立下一 revision，task.continue 不能替代它。不提供任意订阅、期限调度或自动模型轮询。
+
+执行仍由既有 Worker 完成。胶囊对应的 READY→RUNNING 只在 exact task.runtime/start、同 attempt/intent/owner 和原 READY binding 依赖证明成立时承接；其余 Task/WorkingState/配置/材料/epoch 变化都拒绝。实际请求与原胶囊的关联、完整请求计数和最终事件复验在现有同步事务/接收屏障中完成。首个 Runtime memory.search/inspect 只读该胶囊已选、当前仍合格材料，固定受控工具复用此端口；新增检索在协调边界完成，因此无需在执行中另建来源或模型循环。Unicode scalar 计数和协议 peer 都是合成开发证据，不能代表真实 Provider tokenizer 或官方 Pi 完整组合验收。

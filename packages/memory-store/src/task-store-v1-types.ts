@@ -1,4 +1,4 @@
-import type { ContentRefV2, PrivacyV2, EvidenceRefV2, Task, TaskEvidenceRef, TaskState, WorkingStateV2 } from "../../domain/src/index.ts";
+import type { ContentRefV2, PrivacyV2, EvidenceRefV2, Task, TaskEvidenceRef, TaskState, WorkingStateV2, CognitiveDecisionV1 } from "../../domain/src/index.ts";
 import type { TaskRecoveryCustodyV1 } from "./task-execution-v1-types.ts";
 import type { LocalApiCommandV1, ProductEventV1, SessionApiReceiptV1, SessionCreateCommandV1, SessionV1, TaskSummaryV1 } from "../../protocol/src/index.ts";
 
@@ -12,7 +12,8 @@ export interface TaskRuntimeCommandV1 {
   readonly payload: Readonly<{
     kind: "task.runtime";
     taskId: string;
-    event: "prepare" | "start" | "settled" | "confirm-stop" | "confirm-pause" | "interrupted" | "effects-unknown";
+    event: "prepare" | "start" | "settled" | "confirm-stop" | "confirm-pause" | "interrupted" | "effects-unknown" | "cognitive-wait";
+    boundaryId?: string;
     completeness?: "complete" | "incomplete";
     evidenceRefs?: readonly TaskEvidenceRef[];
   }>;
@@ -28,6 +29,9 @@ export interface TaskReductionContextV1 {
   readonly requiresReauthorization: boolean;
   readonly evidence: readonly EvidenceRefV2[];
   readonly privacy: PrivacyV2;
+  readonly workingState?: WorkingStateV2;
+  /** Resolved from a committed proposal by the Store; never copied from a user command. */
+  readonly cognitiveDecision?: CognitiveDecisionV1;
   readonly activeExecution?: Readonly<{ bindingId: string; state: string; dispatched: boolean; closed: boolean }>;
 }
 export interface TaskReductionV1 {

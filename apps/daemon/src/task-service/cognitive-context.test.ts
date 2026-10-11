@@ -6,26 +6,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ScopeV2, PrivacyV2, MemoryClaimV2 } from "../../../../packages/domain/src/index.ts";
-import { parseLocalApiCommandV1, type SessionContractV1 } from "../../../../packages/protocol/src/index.ts";
+import { parseLocalApiCommandV1, parseExecutionSpecV1, type SessionContractV1 } from "../../../../packages/protocol/src/index.ts";
 import { openSyntheticCognitionStoreV2, type TaskStoreContextV1, type ContextPersistenceBoundaryV1, type MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
 import { compileCognitiveContextV1 } from "../../../../packages/context-compiler/src/index.ts";
 import { reducePersistentTask } from "./task-reducer.ts";
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "../memory-service/memory-rules.ts";
 import { syntheticContextBoundaryV1, syntheticContextCounterV1 } from "./synthetic-context-boundary.ts";
+import { createSyntheticDecisionModelV1 } from "./synthetic-decision-model.ts";
+import { coordinateCognitiveBoundaryV1 } from "./cognitive-coordinator.ts";
+import type { SyntheticDecisionFixtureV1 } from "../infrastructure/controlled-broker.ts";
+import { createSyntheticControlledWorkerSupervisor, type SyntheticWorkerSupervisor } from "../runtime/controlled-worker-supervisor.ts";
+import { createSyntheticWorkerTestPackage } from "../runtime/controlled-worker-test-fixture.ts";
 
 const T0 = "2026-10-11T00:00:00.000Z", T1 = "2026-10-11T01:00:00.000Z";
 const context: TaskStoreContextV1 = { principalId: "synthetic-owner", workspaceId: "synthetic-context-workspace", daemonInstanceId: "synthetic-daemon", ownerEpoch: 1 };
 const scope: ScopeV2 = { kind: "workspace", workspaceId: context.workspaceId };
-const contract: SessionContractV1 = { schemaVersion: 1, runtimeProfile: { id: "runtime-test", revision: 1 }, modelProfile: { id: "synthetic-v1", revision: 1 }, toolProfile: { id: "none", revision: 1 }, policyProfile: { id: "policy-test", revision: 1 }, dataProfile: { id: "data-test", revision: 1 }, compilerProfile: { id: "compiler-test", revision: 1 }, interactionKind: "interactive" };
-function fixture(t: TestContext, boundary = syntheticContextBoundaryV1) {
+const contract: SessionContractV1 = { schemaVersion: 1, runtimeProfile: { id: "runtime-test", revision: 1 }, modelProfile: { id: "synthetic-v1", revision: 1 }, toolProfile: { id: "none", revision: 1 }, policyProfile: { id: "policy-test", revision: 1 }, dataProfile: { id: "data-test", revision: 1 }, compilerProfile: { id: "cognitive-context-v1", revision: 1 }, interactionKind: "interactive" };
+function fixture(t: TestContext, boundary = syntheticContextBoundaryV1, toolProfile = "none", realTime = false) {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-context-normal-")), dataRoot = join(root, "data"), controlRoot = join(root, "control"); mkdirSync(dataRoot);
   let now = T0;
-  const options = { dataRoot, controlRoot, installationId: "synthetic-context-installation", clock: { now: () => now },
-    taskPersistence: { daemonInstanceId: context.daemonInstanceId, ids: { next: () => randomUUID() }, contentPolicy: { privacy: "model-allowed" as const, retentionUntil: "2026-11-11T00:00:00.000Z" }, reduce: reducePersistentTask },
+  const options = { dataRoot, controlRoot, installationId: "synthetic-context-installation", clock: { now: () => realTime ? new Date().toISOString() : now },
+    taskPersistence: { daemonInstanceId: context.daemonInstanceId, ids: { next: () => randomUUID() }, runtimeSourceIdentity: { bindingImplementation: "pi", adapter: "pi", implementation: "@earendil-works/pi-coding-agent", version: "0.84.1" }, contentPolicy: { privacy: "model-allowed" as const, retentionUntil: "2026-11-11T00:00:00.000Z" }, reduce: reducePersistentTask },
     memoryPersistence: { ids: { next: () => randomUUID() }, contentPolicy: { privacy: "model-allowed" as const, retentionUntil: "2026-11-11T00:00:00.000Z" }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory }, contextPersistence: boundary };
   let store = openSyntheticCognitionStoreV2({ ...options, mode: "create" }); store.registerScope(scope);
   t.after(() => { try { store.close(); } finally { rmSync(root, { recursive: true, force: true }); } });
-  const sessionId = store.tasks.createSession(context, { schemaVersion: 1, commandId: randomUUID(), idempotencyKey: randomUUID(), workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "session.create", contract } }).receipt.aggregate.id;
+  const sessionId = store.tasks.createSession(context, { schemaVersion: 1, commandId: randomUUID(), idempotencyKey: randomUUID(), workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "session.create", contract: { ...contract, toolProfile: { id: toolProfile, revision: 1 } } } }).receipt.aggregate.id;
   const taskId = store.tasks.executeTask(context, parseLocalApiCommandV1({ schemaVersion: 1, commandId: randomUUID(), idempotencyKey: randomUUID(), workspaceId: context.workspaceId, expectedRevision: 0,
     payload: { kind: "task.create", sessionId, executionProfile: contract.runtimeProfile, request: "SYNTHETIC_ONLY：按照灯塔要求准备报告", constraints: ["只使用虚构输入"], acceptanceChecks: [{ id: "synthetic-check", revision: 1, description: "人工稍后核对报告", required: true, method: "user-confirmation" }] } })).receipt.aggregate.id;
   return { dataRoot, taskId, sessionId, get store() { return store; }, time(at: string) { now = at; }, reopen() { store.close(); store = openSyntheticCognitionStoreV2({ ...options, mode: "open" }); },
@@ -45,6 +50,78 @@ function change(claim: MemoryClaimV2, payload: MemoryCommandV1["payload"]): Memo
   const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: claim.revision, payload };
 }
 function target(claim: MemoryClaimV2) { return { scope: claim.scope, targetRef: { kind: "claim" as const, id: claim.id, revision: claim.revision }, targetVersion: { claimId: claim.id, version: claim.version } }; }
+test("Runtime memory tools return only current selected scoped material and actual requests retain it", async t => {
+  const f = fixture(t, syntheticContextBoundaryV1, "controlled-read-memory-draft-v1", true), memory = f.remember(), hidden = f.remember("SYNTHETIC_ONLY：灯塔 private-tool-data", "local-only");
+  const initial = f.prepare(), port = await model(f, initial, "execute"); t.after(() => port.close());
+  const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: port, ids: { next: randomUUID } });
+  const peer = await createSyntheticWorkerTestPackage(); t.after(() => peer.remove());
+  const global = f.store.currentFence({ kind: "global" }), workspace = f.store.currentFence(scope), task = f.store.tasks.getTask(context.workspaceId, f.taskId).value!;
+  let supervisor: SyntheticWorkerSupervisor | undefined, reads = 0;
+  supervisor = await createSyntheticControlledWorkerSupervisor({ packageDirectory: peer.root, nodeExecutable: process.execPath, scenario: "tools", compiledInput: result.context,
+    taskIdentity: { executionUnitId: randomUUID(), workspaceId: context.workspaceId, sessionId: f.sessionId, requestSnapshotRef: result.context.runtimeInput.contentRef,
+      fence: { installationId: global.installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: initial.capsule.attemptId }, sourceTask: { taskId: f.taskId, attemptId: initial.capsule.attemptId, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: context.ownerEpoch,
+        cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60000).toISOString() } },
+    beforeSyntheticModelReceive(record) { f.store.executions.recordModelRequest(context, { taskId: f.taskId, bindingId: supervisor!.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); },
+    memoryReader: { read() {
+      reads++; const input = { capsuleId: initial.capsule.id, bindingId: supervisor!.snapshot().binding.bindingId };
+      const rows = f.store.contexts.searchRuntimeMemory(context, { ...input, query: "灯塔" }); assert.deepEqual(rows.map(claim => claim.id), [memory.id]);
+      assert.equal(f.store.contexts.inspectRuntimeMemory(context, { ...input, claim: { claimId: memory.id, version: memory.version } }).statement, memory.statement);
+      assert.throws(() => f.store.contexts.inspectRuntimeMemory(context, { ...input, claim: { claimId: hidden.id, version: hidden.version } }), { code: "unavailable" });
+      return JSON.stringify(rows);
+    } },
+  }); t.after(() => supervisor!.close());
+  f.store.executions.allocateExecution(context, { taskId: f.taskId, expectedRevision: task.revision, spec: supervisor.spec, binding: supervisor.snapshot().binding });
+  const binding = await supervisor.runtime.start(supervisor.spec); f.store.executions.markExecutionReady(context, { taskId: f.taskId, binding });
+  const ready = f.store.executions.readExecution(context.workspaceId, f.taskId)!, commandId = randomUUID();
+  f.store.tasks.executeTask(context, { schemaVersion: 1, commandId, idempotencyKey: commandId, workspaceId: context.workspaceId, expectedRevision: task.revision,
+    payload: { kind: "task.runtime", taskId: f.taskId, event: "start", evidenceRefs: [{ id: binding.bindingId, revision: ready.revision }] } });
+  const collecting = (async () => { for await (const envelope of supervisor!.runtime.events(binding.bindingId)) {
+    f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: supervisor!.snapshot().binding }); f.store.executions.ingestExecutionEvent(context, { taskId: f.taskId, envelope });
+    if (envelope.event.stability === "settled") break;
+  } })(); void collecting.catch(() => undefined);
+  f.store.executions.markExecutionDispatched(context, { taskId: f.taskId, bindingId: binding.bindingId }); await supervisor.runtime.dispatch(binding.bindingId); await collecting;
+  const close = await supervisor.runtime.dispose(binding.bindingId); f.store.executions.closeExecution(context, { taskId: f.taskId, evidence: close });
+  assert.equal(reads, 1); const requests = f.store.executions.listModelRequests(context.workspaceId, f.taskId, initial.capsule.attemptId);
+  assert.equal(requests.length, 4); assert.deepEqual(supervisor.snapshot().broker.modelRequests, supervisor.snapshot().broker.receiverRequests);
+  assert.ok(JSON.stringify(requests.at(-1)!.context).includes(memory.id)); assert.ok(!JSON.stringify(requests).includes("private-tool-data"));
+  f.reopen(); assert.equal(f.store.executions.listModelRequests(context.workspaceId, f.taskId, initial.capsule.attemptId).length, 4);
+});
+test("clarify and wait persist pending input; only an exact actual response opens a new boundary", async t => {
+  for (const action of ["clarify", "wait"] as const) {
+    const f = fixture(t), initial = f.prepare(), scripted = await model(f, initial, action); t.after(() => scripted.close());
+    const prior = f.store.tasks.readWorkingState(context.workspaceId, f.taskId).value!;
+    const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: scripted, ids: { next: randomUUID } });
+    const decision = result.boundary.decisions.at(-1)!.decision;
+    const questionId = decision.action === "clarify" ? decision.question.id : decision.action === "wait" ? decision.condition.id : assert.fail("expected pending input");
+    const waiting = f.store.tasks.getTask(context.workspaceId, f.taskId).value!, working = f.store.tasks.readWorkingState(context.workspaceId, f.taskId).value!;
+    assert.equal(waiting.state, "WAITING_INPUT"); assert.equal(waiting.attempts.at(-1)!.outcomes.length, 0);
+    assert.deepEqual(working.pendingInput, [questionId]); assert.ok(working.unknown.length); assert.deepEqual(prior.pendingInput, []);
+    const command = (payload: object) => parseLocalApiCommandV1({ schemaVersion: 1, commandId: randomUUID(), idempotencyKey: randomUUID(), workspaceId: context.workspaceId, expectedRevision: waiting.revision, payload: { targetRef: { kind: "task", id: f.taskId, revision: waiting.revision }, ...payload } });
+    assert.throws(() => f.store.tasks.executeTask(context, command({ kind: "task.continue" })));
+    assert.throws(() => f.store.tasks.executeTask(context, command({ kind: "task.respond", pendingQuestionId: "wrong-question", response: "SYNTHETIC_ONLY：错误问题" })), { code: "revision_conflict" });
+    f.reopen(); const cached = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: scripted, ids: { next: randomUUID } });
+    assert.equal(cached.boundary.callCount, 1); assert.equal(scripted.snapshot().receiverRequests.length, 1);
+    const response = "SYNTHETIC_ONLY：请按照灯塔补充说明继续。";
+    f.store.tasks.executeTask(context, command({ kind: "task.respond", pendingQuestionId: questionId, response }));
+    const nextWorking = f.store.tasks.readWorkingState(context.workspaceId, f.taskId).value!;
+    assert.deepEqual(nextWorking.pendingInput, []); assert.ok(nextWorking.known.includes(response));
+    assert.ok(nextWorking.evidence.some(item => item.sourceTrust === "user-direct"));
+    const next = f.prepare(); assert.match(next.runtimeInput.snapshot.text, /补充说明/);
+    const boundary = f.store.contexts.openBoundary(context, { id: randomUUID(), capsuleId: next.capsule.id });
+    assert.notEqual(boundary.id, result.boundary.id); assert.equal(boundary.callCount, 0);
+    assert.equal(f.store.contexts.readBoundary(context.workspaceId, f.taskId, result.boundary.id).callCount, 1);
+    f.reopen(); assert.ok(f.store.tasks.readWorkingState(context.workspaceId, f.taskId).value!.known.includes(response));
+  }
+});
+async function model(f: ReturnType<typeof fixture>, initial: ReturnType<typeof f.prepare>, scripted: SyntheticDecisionFixtureV1) {
+  const global = f.store.currentFence({ kind: "global" }), workspace = f.store.currentFence(scope), task = initial.capsule;
+  const spec = parseExecutionSpecV1({ schemaVersion: 1, executionUnitId: randomUUID(), workspaceId: context.workspaceId, sessionId: f.sessionId, prompt: initial.runtimeInput.snapshot.text,
+    requestSnapshotRef: initial.runtimeInput.contentRef, selectedModelProfile: task.modelProfile, toolProfile: "none", controlledCwdRef: "synthetic-decision-cwd",
+    fence: { installationId: global.installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: task.attemptId }, sourceTask: { taskId: task.taskId, attemptId: task.attemptId, intentRevision: task.intentRevision }, contractRevision: 1, leaseEpoch: context.ownerEpoch,
+      cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now()+60000).toISOString() },
+    bounds: { maxOutputBytes: 65536, maxDurationMs: 60000, maxTokens: 8192, maxModelRequests: 2, maxToolCalls: 0 } });
+  return createSyntheticDecisionModelV1({ spec, store: () => f.store, context, fixture: scripted });
+}
 
 test("one current view commits an immutable attributed capsule and exact Runtime input atomically", t => {
   const f = fixture(t), memory = f.remember(), saved = f.prepare();
@@ -56,7 +133,7 @@ test("one current view commits an immutable attributed capsule and exact Runtime
   f.reopen(); assert.deepEqual(f.store.contexts.read(context.workspaceId, f.taskId, saved.capsule.id), saved);
   const replay = f.prepare(saved.capsule.id); assert.equal(replay.runtimeInput.replay, true); assert.equal(replay.runtimeInput.snapshot.id, saved.runtimeInput.snapshot.id);
   const db = new DatabaseSync(join(f.dataRoot, "product.sqlite")); try {
-    assert.equal(db.prepare("PRAGMA journal_mode").get()!.journal_mode, "wal"); assert.equal(db.prepare("PRAGMA integrity_check").get()!.integrity_check, "ok"); assert.equal(db.prepare("PRAGMA user_version").get()!.user_version, 5);
+    assert.equal(db.prepare("PRAGMA journal_mode").get()!.journal_mode, "wal"); assert.equal(db.prepare("PRAGMA integrity_check").get()!.integrity_check, "ok"); assert.equal(db.prepare("PRAGMA user_version").get()!.user_version, 6);
     assert.ok(db.prepare("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND target_id=?").get(saved.contentRef.contentId, saved.runtimeInput.contentRef.contentId));
   } finally { db.close(); }
 });
@@ -98,4 +175,71 @@ test("projection corruption is rejected on the next verified read", t => {
   const f = fixture(t); f.remember(); const saved = f.prepare(), db = new DatabaseSync(join(f.dataRoot, "product.sqlite"));
   try { db.prepare("UPDATE context_capsule_v1 SET compiled_at=? WHERE id=?").run(T1, saved.capsule.id); } finally { db.close(); }
   assert.throws(() => f.store.contexts.read(context.workspaceId, f.taskId, saved.capsule.id), { code: "corruption" });
+});
+
+test("retrieval uses the same durable boundary, records both decisions and delivers exact current context", async t => {
+  const f = fixture(t); f.remember(); f.remember("SYNTHETIC_ONLY：辅助报告采用三句话格式。");
+  const initial = f.prepare(), port = await model(f, initial, "retrieve-execute"); t.after(() => port.close());
+  const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: port, ids: { next: () => randomUUID() } });
+  assert.equal(result.boundary.callCount, 2); assert.deepEqual(result.boundary.decisions.map(record => record.decision.action), ["retrieve", "execute"]); assert.equal(result.boundary.status, "decided");
+  assert.equal(port.snapshot().receiverRequests.length, 2); assert.deepEqual(port.snapshot().modelRequests, port.snapshot().receiverRequests);
+  assert.equal(result.context.capsule.report.selected.length, 2); assert.match(result.context.runtimeInput.snapshot.text, /紫色/); assert.match(result.context.runtimeInput.snapshot.text, /三句话/);
+  assert.throws(() => f.store.contexts.reserveDecisionCall(context, { boundaryId: result.boundary.id, capsuleId: result.context.capsule.id, requestId: randomUUID(), purpose: "repair" }), { code: "conflict" });
+  assert.equal(f.store.tasks.getTask(context.workspaceId, f.taskId).value!.state, "READY");
+  f.reopen(); assert.deepEqual(f.store.contexts.readBoundary(context.workspaceId, f.taskId, result.boundary.id), result.boundary);
+  const cached = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial: result.context, model: port, ids: { next: () => randomUUID() } });
+  assert.equal(cached.boundary.id, result.boundary.id); assert.equal(port.snapshot().receiverRequests.length, 2);
+});
+test("one malformed decision consumes a call before one bounded repair succeeds", async t => {
+  const f = fixture(t); f.remember(); const initial = f.prepare(), port = await model(f, initial, "bad-json-repair"); t.after(() => port.close());
+  const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: port, ids: { next: () => randomUUID() } });
+  assert.equal(result.boundary.callCount, 2); assert.equal(result.boundary.decisions.length, 1); assert.equal(result.boundary.decisions[0]!.decision.action, "execute"); assert.equal(port.snapshot().receiverRequests.length, 2);
+  f.reopen(); assert.equal(f.store.contexts.readBoundary(context.workspaceId, f.taskId, result.boundary.id).callCount, 2);
+});
+test("bad JSON, illegal refs, repeated retrieval and no progress stop within the persisted call limit", async t => {
+  for (const scripted of ["bad-json", "invalid-reference", "repeated-retrieve", "no-progress"] as const) {
+    const f = fixture(t); f.remember(); f.remember("SYNTHETIC_ONLY：辅助报告采用三句话格式。"); const initial = f.prepare(), port = await model(f, initial, scripted); t.after(() => port.close());
+    const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: port, ids: { next: () => randomUUID() } });
+    assert.equal(result.boundary.status, "stopped"); const last = result.boundary.decisions.at(-1)!.decision;
+    assert.equal(last.action, "stop"); assert.equal(result.boundary.callCount, scripted === "no-progress" ? 1 : 2); assert.equal(port.snapshot().receiverRequests.length, result.boundary.callCount);
+    assert.equal(f.store.tasks.getTask(context.workspaceId, f.taskId).value!.attempts.at(-1)!.outcomes.length, 0);
+  }
+});
+test("unsupported structured decision records a deterministic stop without invoking a model", async t => {
+  const f = fixture(t); f.remember(); const initial = f.prepare(); let calls = 0;
+  const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, ids: { next: () => randomUUID() },
+    model: { profile: initial.capsule.modelProfile, structuredDecision: "unsupported", async invoke() { calls++; throw new Error("Must not call"); } } });
+  assert.equal(calls, 0); assert.equal(result.boundary.callCount, 0); assert.equal(result.boundary.decisions[0]!.origin, "coordinator-stop"); assert.equal(result.boundary.status, "stopped");
+});
+test("correction or explicit forget before the actual receiver rejects the reserved request", async t => {
+  for (const kind of ["correct", "forget"] as const) {
+    const f = fixture(t), memory = f.remember(), initial = f.prepare(), port = await model(f, initial, "execute"); t.after(() => port.close());
+    const boundary = f.store.contexts.openBoundary(context, { id: randomUUID(), capsuleId: initial.capsule.id });
+    const call = f.store.contexts.reserveDecisionCall(context, { boundaryId: boundary.id, capsuleId: initial.capsule.id, requestId: randomUUID(), purpose: "initial" });
+    f.time(T1);
+    f.store.memories.execute(context, change(memory, kind === "forget" ? { kind: "memory.forget", ...target(memory), mode: "logical" }
+      : { kind: "memory.correct", ...target(memory), privacy: memory.privacy, claimKind: memory.kind, statement: "SYNTHETIC_ONLY：灯塔报告采用琥珀色。", evidenceRefs: [memory.evidence[0]!], validFrom: T0 }));
+    const { input: _input, contentRef: _ref, ...request } = call;
+    await assert.rejects(port.invoke(request), { code: kind === "forget" ? "unavailable" : "revision_conflict" });
+    assert.equal(port.snapshot().receiverRequests.length, 0); assert.equal(f.store.contexts.readBoundary(context.workspaceId, f.taskId, boundary.id).callCount, 1);
+  }
+});
+test("the final response after the last model request is rejected when its exact memory version changed", async t => {
+  const f = fixture(t), memory = f.remember(), initial = f.prepare(), port = await model(f, initial, "respond"); t.after(() => port.close());
+  await assert.rejects(coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, ids: { next: () => randomUUID() },
+    model: { profile: port.profile, structuredDecision: port.structuredDecision, async invoke(request) {
+      const response = await port.invoke(request); f.time(T1);
+      f.store.memories.execute(context, change(memory, { kind: "memory.correct", ...target(memory), privacy: memory.privacy, claimKind: memory.kind, statement: "SYNTHETIC_ONLY：灯塔报告采用琥珀色。", evidenceRefs: [memory.evidence[0]!], validFrom: T0 }));
+      return response;
+    } } }), { code: "revision_conflict" });
+  assert.equal(port.snapshot().receiverRequests.length, 1); assert.equal(f.store.tasks.getTask(context.workspaceId, f.taskId).value!.attempts.at(-1)!.outcomes.length, 0);
+});
+test("the actual composed decision request is counted and rejected even when the capsule itself fits", t => {
+  const baseline = fixture(t).prepare(), budget = { contextLimit: baseline.capsule.report.inputTokens + 512, reservedOutput: 512, mandatoryProtocolOverhead: 0 };
+  const boundary: ContextPersistenceBoundaryV1 = { ...syntheticContextBoundaryV1, budget,
+    compile: input => compileCognitiveContextV1({ ...input, scope, budget, counter: syntheticContextCounterV1 }) };
+  const f = fixture(t, boundary), initial = f.prepare(), saved = f.store.contexts.openBoundary(context, { id: randomUUID(), capsuleId: initial.capsule.id });
+  assert.equal(initial.capsule.report.inputTokens, initial.capsule.report.availableInput);
+  assert.throws(() => f.store.contexts.reserveDecisionCall(context, { boundaryId: saved.id, capsuleId: initial.capsule.id, requestId: randomUUID(), purpose: "initial" }), { code: "budget_exceeded" });
+  assert.equal(f.store.contexts.readBoundary(context.workspaceId, f.taskId, saved.id).callCount, 0);
 });

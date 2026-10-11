@@ -46,6 +46,11 @@ const CONTEXT_MIGRATIONS_V1: readonly ObservationLedgerMigration[] = Object.free
   Object.freeze({ version: 5, name: "cognitive-context-v1",
     sql: readFileSync(new URL("../migrations/0005_cognitive_context_v1.sql", import.meta.url), "utf8") }),
 ]);
+const DECISION_MIGRATIONS_V1: readonly ObservationLedgerMigration[] = Object.freeze([
+  ...CONTEXT_MIGRATIONS_V1,
+  Object.freeze({ version: 6, name: "cognitive-decision-record-v1",
+    sql: readFileSync(new URL("../migrations/0006_cognitive_decision_record_v1.sql", import.meta.url), "utf8") }),
+]);
 
 export interface CognitivePragmaSnapshotV2 {
   readonly journalMode: string;
@@ -741,7 +746,7 @@ const expectedSchemas = new Map<number, ObservationLedgerSchemaManifest>();
 function buildExpectedSchemaManifest(version: number): ObservationLedgerSchemaManifest {
   const cached = expectedSchemas.get(version);
   if (cached !== undefined) return cached;
-  const migrations = CONTEXT_MIGRATIONS_V1.slice(0, version);
+  const migrations = DECISION_MIGRATIONS_V1.slice(0, version);
   // Reject forbidden top-level transaction/PRAGMA SQL before executing reference DDL.
   if (migrations.length > 0) assertObservationLedgerMigrationSet(migrations);
   const reference = new DatabaseSync(":memory:");
@@ -869,6 +874,9 @@ export function applyMemoryMigrationsV1(database: DatabaseSync, options: Paramet
 export function applyContextMigrationsV1(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1]): readonly AppliedObservationLedgerMigration[] {
   return applyProductMigrations(database, options, CONTEXT_MIGRATIONS_V1);
 }
+export function applyDecisionMigrationsV1(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1]): readonly AppliedObservationLedgerMigration[] {
+  return applyProductMigrations(database, options, DECISION_MIGRATIONS_V1);
+}
 function applyProductMigrations(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1], source: readonly ObservationLedgerMigration[]): readonly AppliedObservationLedgerMigration[] {
   try {
     return safeSqliteBoundary("Could not migrate task SQLite persistence.", () => {
@@ -908,6 +916,12 @@ export function verifyContextDatabaseV1(database: DatabaseSync, expectedPragmas:
   return safeSqliteBoundary("Could not verify context SQLite persistence.", () => {
     if (!database.isTransaction) throw new ObservationLedgerCorruptionError("Context verification requires an explicit SQLite snapshot.");
     return verifyInstalledPrefix(database, expectedPragmas, 5, CONTEXT_MIGRATIONS_V1);
+  });
+}
+export function verifyDecisionDatabaseV1(database: DatabaseSync, expectedPragmas: CognitivePragmaSnapshotV2): VerifiedCognitiveDatabaseV2 {
+  return safeSqliteBoundary("Could not verify decision SQLite persistence.", () => {
+    if (!database.isTransaction) throw new ObservationLedgerCorruptionError("Decision verification requires an explicit SQLite snapshot.");
+    return verifyInstalledPrefix(database, expectedPragmas, 6, DECISION_MIGRATIONS_V1);
   });
 }
 

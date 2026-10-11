@@ -26,4 +26,6 @@ export interface CognitiveDecisionInputV1 {
   readonly capabilities: readonly ("respond" | "clarify" | "retrieve" | "execute" | "wait" | "stop")[];
   readonly unknown: readonly string[];
   readonly remainingCalls: 0 | 1;
+  readonly purpose: "initial" | "repair" | "retrieval";
+  readonly preparedAt: string;
 }

@@ -1,4 +1,4 @@
-import { assertIdentifierV2, assertRevisionV2, type CognitiveDecisionV1, type ContextClaimRefV1 } from "../../domain/src/index.ts";
+import { assertIdentifierV2, assertRevisionV2, assertIsoTimestampV2, type CognitiveDecisionV1, type CognitiveDecisionInputV1, type ContextClaimRefV1 } from "../../domain/src/index.ts";
 import { canonicalJsonV1 } from "./lossless-json.ts";
 import { decodeWireJson } from "./cognitive-wire.ts";
 
@@ -53,4 +53,42 @@ export function serializeCognitiveDecisionV1(value: unknown): string { return ca
 export function deserializeCognitiveDecisionV1(value: string): CognitiveDecisionV1 {
   if (value.length > 16384) throw new Error("Oversize decision");
   return parseCognitiveDecisionV1(decodeWireJson(value));
+}
+
+/** Fixed Runtime-neutral transport projection; no permission or Provider configuration. */
+export function cognitiveDecisionRequestContextV1(input: CognitiveDecisionInputV1): import("./lossless-json.ts").JsonValue {
+  return { systemPrompt: "Return one JSON decision with schemaVersion=1, action respond/clarify/retrieve/execute/wait/stop, summary and exact claimRefs. Use only the supplied fields. Do not return reasoning, grants or a successful Outcome.",
+    messages: [{ role: "user", content: [{ type: "text", text: canonicalJsonV1(input) }], timestamp: Date.parse(input.preparedAt) }], tools: [] };
+}
+export function parseCognitiveDecisionInputV1(value: unknown): CognitiveDecisionInputV1 {
+  exact(value, ["schemaVersion", "boundaryId", "ordinal", "capsuleId", "task", "workingState", "context", "claimRefs", "capabilities", "unknown", "remainingCalls", "purpose", "preparedAt"]);
+  if (value.schemaVersion !== 1 || value.ordinal !== 1 && value.ordinal !== 2 || value.remainingCalls !== 2 - (value.ordinal as number)
+    || !["initial", "repair", "retrieval"].includes(value.purpose as string)) throw new Error("Invalid decision input version");
+  assertIdentifierV2(value.boundaryId); assertIdentifierV2(value.capsuleId); bounded(value.context, 262144);
+  assertIsoTimestampV2(value.preparedAt);
+  exact(value.task, ["id", "revision", "attemptId", "intentRevision"]);
+  assertIdentifierV2(value.task.id); assertIdentifierV2(value.task.attemptId); assertRevisionV2(value.task.revision); assertRevisionV2(value.task.intentRevision);
+  exact(value.workingState, ["id", "revision"]); assertIdentifierV2(value.workingState.id); assertRevisionV2(value.workingState.revision);
+  // Reuse the exact-reference parser; the finite proposal below is only a syntax carrier.
+  parseCognitiveDecisionV1({ schemaVersion: 1, action: "stop", summary: "input validation", claimRefs: value.claimRefs, reason: "declined" });
+  for (const field of ["capabilities", "unknown"]) {
+    const items = value[field]; if (!Array.isArray(items) || items.length > 100 || Reflect.ownKeys(items).length !== items.length + 1) throw new Error("Invalid decision input list");
+    for (let i = 0; i < items.length; i++) { const descriptor = Object.getOwnPropertyDescriptor(items, String(i)); if (!descriptor || !("value" in descriptor)) throw new Error("Invalid input item"); bounded(descriptor.value, 8192); }
+  }
+  const capabilities = value.capabilities as string[];
+  if (new Set(capabilities).size !== capabilities.length || capabilities.some(item => !["respond", "clarify", "retrieve", "execute", "wait", "stop"].includes(item))) throw new Error("Invalid decision capability");
+  return JSON.parse(canonicalJsonV1(value)) as CognitiveDecisionInputV1;
+}
+export interface CognitiveDecisionModelRequestV1 {
+  readonly requestId: string;
+  readonly boundaryId: string;
+  readonly capsuleId: string;
+  readonly ordinal: 1 | 2;
+  readonly context: import("./lossless-json.ts").JsonValue;
+  readonly maxTokens: number;
+}
+export interface CognitiveDecisionModelPortV1 {
+  readonly profile: Readonly<{ id: string; revision: number }>;
+  readonly structuredDecision: "synthetic-scripted" | "unsupported";
+  invoke(request: CognitiveDecisionModelRequestV1): Promise<Readonly<{ text: string }>>;
 }
