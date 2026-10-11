@@ -60,7 +60,10 @@ test("Explicit input → remember → correct → dispute → forget persists ex
   f.store.memories.execute(context, update(corrected, { kind: "memory.dispute", ...target(corrected), reason: "SYNTHETIC_ONLY：需要核对新的颜色。", evidenceRefs: [] }));
   assert.equal(f.search().material.length, 0);
   const disputed = f.store.memories.explain(context, scope, saved.id).value!; assert.equal(disputed.status, "DISPUTED");
-  assert.ok(f.store.memories.explain(context, scope, saved.id).sources.some(source => source.excerpt?.includes("需要核对")));
+  const refutation = f.store.memories.explain(context, scope, saved.id).sources.find(source => source.excerpt?.includes("需要核对"))!; assert.ok(refutation);
+  f.store.applyControlIntent({ kind: "SOURCE_SUPPRESS", operationId: randomUUID(), at: T2, authorization: "synthetic-user-request", scope,
+    bindingId: refutation.observation.source.streamId, resourceId: "synthetic-dispute-source" });
+  assert.ok(f.store.memories.explain(context, scope, saved.id).sources.every(source => source.observation.id !== refutation.observation.id));
   const forgetting = update(disputed, { kind: "memory.forget", ...target(disputed), mode: "logical" });
   const forgotten = f.store.memories.execute(context, forgetting); f.reopen();
   assert.deepEqual(f.store.memories.execute(context, forgetting), { ...forgotten, replay: true });
@@ -112,14 +115,18 @@ test("A committed forget whose receipt was interrupted resumes the same control 
 });
 
 test("A prepared forget interrupted before journal blocks reads and completes before the reopened store is exposed", t => {
-  const f = fixture(t), saved = f.remember(), claim = f.search().material[0]!.claim;
-  const command = update(claim, { kind: "memory.forget", ...target(claim), mode: "logical" });
-  f.store.applyControlIntent = () => { throw new Error("Synthetic interruption before journal."); };
-  assert.throws(() => f.store.memories.execute(context, command));
-  assert.throws(() => f.search(), { code: "recovery_required" });
-  f.time(T1); f.reopen(); assert.equal(f.search().material.length, 0);
-  assert.equal(f.store.memories.explain(context, scope, saved.id).versions[0]!.status, "FORGOTTEN");
-  const replay = f.store.memories.execute(context, command); assert.equal(replay.replay, true); assert.equal(replay.receipt.commandId, command.commandId);
+  for (const recovery of ["open", "reconcile"] as const) {
+    const f = fixture(t), saved = f.remember(), claim = f.search().material[0]!.claim;
+    const command = update(claim, { kind: "memory.forget", ...target(claim), mode: "logical" }), apply = f.store.applyControlIntent.bind(f.store);
+    f.store.applyControlIntent = () => { throw new Error("Synthetic interruption before journal."); };
+    assert.throws(() => f.store.memories.execute(context, command)); assert.throws(() => f.search(), { code: "recovery_required" });
+    f.time(T1);
+    if (recovery === "open") f.reopen();
+    else { assert.throws(() => f.store.reconcileControl(), { code: "recovery_required" }); assert.throws(() => f.search(), { code: "recovery_required" });
+      f.store.applyControlIntent = apply; f.store.reconcileControl(); }
+    assert.equal(f.search().material.length, 0); assert.equal(f.store.memories.explain(context, scope, saved.id).versions[0]!.status, "FORGOTTEN");
+    const replay = f.store.memories.execute(context, command); assert.equal(replay.replay, true); assert.equal(replay.receipt.commandId, command.commandId);
+  }
 });
 
 test("Existing P1-02 public acceptance records support dispute and forget without new acceptance dependencies", t => {

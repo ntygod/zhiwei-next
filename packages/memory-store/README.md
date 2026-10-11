@@ -17,7 +17,7 @@ P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发
 
 `memoryPersistence` 注入应用组合的纯 reducer/资格选择、ID 与内容政策；Store 不导入 cognition-core。`memories.capture/execute/search/explain` 提供实际 Observation 输入、remember/correct/dispute/forget、精确历史、检索和解释。应用层沿用配对身份，HTTP payload 不能指定 actor、sourceTrust 或 principal。数据 route 为 POST `/v1/memory/inputs`、`commands`、`search`、`explain`；普通 Daemon 启动仍为诊断入口。
 
-固定前向 `0004_memory_service_v1.sql` 追加受保护命令回执与内容依赖；0001—0003 不变，原 v1/v2/v3 独立入口对 schema4 拒绝。幂等键按 principal/Workspace 定位，去掉 commandId 后比较原受管请求；正文到期/撤销后不重新执行。纠正的候选/新 Claim/旧版 supersede/回执同事务，旧 revision 返回冲突。遗忘先 durable 准备，再写独立控制日志并对账，最后提交回执，原 operationId/时间支持重开续接；命令副本和 Candidate 正文参与失效闭包。
+固定前向 `0004_memory_service_v1.sql` 追加受保护命令回执与内容依赖；0001—0003 不变，原 v1/v2/v3 独立入口对 schema4 拒绝。内部恢复边界准确声明4，纯格式 parser保留2/3历史并拒绝未知版本。幂等键按 principal/Workspace 定位，去掉 commandId 后比较原受管请求；正文到期/撤销后不重新执行。纠正的候选/新 Claim/旧版 supersede/回执同事务，旧 revision 返回冲突。遗忘先 durable 准备，再写独立控制日志并对账，最后提交回执；启动与公开对账均在开放读取前续完准备，失败保持 recovery_required，沿原 operationId/时间继续。命令副本和本流程产生的 Candidate 正文参与失效闭包，既有正式 P1-02 接受记录不被误认成新流程依赖。
 
 检索在同一 snapshot 内选择 Scope 和版本，再检查当前隐私、正文/证据可用性与双时间，historical 标记区分过去与当前。最多返回 50 条；解释返回最新 50 个版本的元数据，指定旧版仍受当前政策限制。无正文时不返回占位 Claim。请求内 FTS5 trigram 只包含合格 Claim；少于三个 Unicode 字符的查询使用明确的 `scoped-short-query` 字面扫描。无持久索引副本、raw 对话全文索引或向量服务，不声明规模性能和中文分词产品验收。
 

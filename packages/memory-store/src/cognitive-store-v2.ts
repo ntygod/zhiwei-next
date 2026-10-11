@@ -225,8 +225,7 @@ export class SyntheticCognitionStoreV2 {
           .run(options.installationId, head.controlSequence, head.checksum, head.recoveryEpoch);
       } else if (options.mode !== "open") fail("conflict");
       store.reconcileControl();
-      const memoryRecovery = store.#transaction(false, () => !!store.#row("SELECT 1 FROM memory_command_v1 WHERE result_json IS NULL LIMIT 1"));
-      if (memoryRecovery) store.#reconcilePreparedMemoryForgets();
+      store.#transaction(false, () => undefined);
       if (options.taskPersistence) store.#taskEngine.fenceRestartedOwners();
       return store;
     } catch (error) {
@@ -902,7 +901,7 @@ export class SyntheticCognitionStoreV2 {
     this.#gate = true;
     try {
       const record = this.#journal.append(intent);
-      this.reconcileControl();
+      this.#reconcileJournalControl();
       return { controlSequence: record.controlSequence, recoveryEpoch: record.recoveryEpoch, logicalCommitted: true };
     } catch (error) {
       // A durable intent cannot be withdrawn if SQLite fails. All reads remain gated until reconciliation.
@@ -1022,6 +1021,9 @@ export class SyntheticCognitionStoreV2 {
   }
 
   reconcileControl(): void {
+    if (this.#reconcileJournalControl()) this.#reconcilePreparedMemoryForgets();
+  }
+  #reconcileJournalControl(): boolean {
     if (this.#closed) fail("closed"); this.#gate = true;
     try {
       let control = this.#journal.read();
@@ -1036,7 +1038,8 @@ export class SyntheticCognitionStoreV2 {
         if (state.applied_control_checksum !== expected || (record && state.recovery_epoch !== record.recoveryEpoch)) fail("recovery_required");
         for (const pending of control.records.slice(sequence)) this.#applyRecord(pending);
       }, true);
-      this.#gate = false; this.#transaction(false, () => undefined);
+      this.#gate = false;
+      return this.#transaction(false, () => !!this.#row("SELECT 1 FROM memory_command_v1 WHERE result_json IS NULL LIMIT 1"));
     } catch (error) {
       this.#gate = true;
       if (error instanceof CognitiveStoreErrorV2) throw error;
@@ -1110,7 +1113,7 @@ export class SyntheticCognitionStoreV2 {
 
   #recoveryState(): CognitiveRecoveryStateV2 {
     const state = this.#state();
-    return { installationId: text(state.installation_id), schemaVersion: 3,
+    return { installationId: text(state.installation_id), schemaVersion: 4,
       controlSequence: number(state.applied_control_sequence), controlChecksum: text(state.applied_control_checksum),
       recoveryEpoch: number(state.recovery_epoch) };
   }
@@ -1580,9 +1583,12 @@ export class SyntheticCognitionStoreV2 {
       for (const commandRow of this.#rows("SELECT * FROM memory_command_v1 WHERE scope_key=? AND operation_kind='memory.dispute' AND result_json IS NOT NULL", scopeKeyV2(scope))) {
         const result = parse(commandRow.result_json) as { receipt: { aggregate: { id: string } }; claimVersion: number };
         if (result.receipt.aggregate.id !== id || result.claimVersion !== number(row.version)) continue;
-        const observation = this.listObservations(scope).find(event => event.id === commandRow.observation_id);
-        if (observation?.content.availability === "available") evidence.set(observation.id, { source: { kind: "observation", id: observation.id, revision: 1 }, scope,
-          privacy: observation.privacy, sourceTrust: observation.sourceTrust, observedAt: observation.observedAt, role: "refutes" });
+        const source = this.#row("SELECT event_json FROM observation_v2 WHERE id=?", text(commandRow.observation_id))!;
+        const observation = parseObservationV2(parse(source.event_json));
+        const ref: EvidenceRefV2 = { source: { kind: "observation", id: observation.id, revision: 1 }, scope,
+          privacy: observation.privacy, sourceTrust: observation.sourceTrust, observedAt: observation.observedAt, role: "refutes" };
+        try { this.#memoryEvidence([ref]); evidence.set(observation.id, ref); }
+        catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; }
       }
       const sources = [...evidence.values()].slice(0, 100).map(ref => {
         const observation = this.listObservations(ref.scope).find(event => event.id === ref.source.id)!;
