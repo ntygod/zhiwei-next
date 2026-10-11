@@ -54,6 +54,19 @@ test("Cognitive Worker rejects correction before send and after its last receive
   assert.equal(evidence.modelRequests.length, stage === "prompt" ? 0 : 1); assert.equal(evidence.execution!.closed, true);
  }
 });
+test("a persisted cognitive question accepts its exact real response after owner fencing and opens a new boundary", async t => {
+ const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close()); const f = cognitiveFixture(h);
+ const planned = await h.coordinateTask(context, f.taskId, "clarify"), question = planned.boundary.decisions.at(-1)!.decision;
+ if (question.action !== "clarify") assert.fail("clarify fixture");
+ const waiting = h.application.getTask(context, f.taskId).value, oldOwner = h.application.getSession(context, waiting.sessionId).value.ownerEpoch;
+ await h.restart(); assert.ok(h.application.getSession(context, waiting.sessionId).value.ownerEpoch > oldOwner);
+ assert.equal(h.application.getTask(context, f.taskId).value.state, "WAITING_INPUT");
+ const id = randomUUID(); h.application.executeTask(context, { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: waiting.revision,
+   payload: { kind: "task.respond", targetRef: { kind: "task", id: f.taskId, revision: waiting.revision }, pendingQuestionId: question.question.id, response: "SYNTHETIC_ONLY: use plain text." } });
+ const ready = h.application.getTask(context, f.taskId).value; assert.equal(ready.state, "READY"); assert.notEqual(ready.attempts.at(-1)!.id, waiting.attempts.at(-1)!.id); assert.equal(ready.attempts[0]!.state, "CANCELLED");
+ const next = await h.coordinateTask(context, f.taskId); assert.notEqual(next.boundary.id, planned.boundary.id); assert.equal(next.boundary.callCount, 1);
+ assert.ok(next.context.capsule.rendering.fullText.includes("use plain text")); await h.restart(); assert.equal(h.application.getTask(context, f.taskId).value.state, "READY");
+});
 
 test("Committed history/idempotency survives restart and continuation creates a new attempt", async t => {
  const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close());

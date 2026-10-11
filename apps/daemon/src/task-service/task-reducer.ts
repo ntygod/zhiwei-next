@@ -1,5 +1,5 @@
 import { ids, isTerminalTaskState, type Task, type TaskId, type TaskAttemptId, type OutcomeId } from "../../../../packages/domain/src/index.ts";
-import { createTask, transitionTask, retryTask, reviseTaskIntent, waitForCognitiveInputV1, respondToCognitiveInputV1, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
+import { createTask, transitionTask, retryTask, reviseTaskIntent, waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
 import type { TaskStoreCommandV1, TaskReductionContextV1, TaskReductionV1 } from "../../../../packages/memory-store/src/index.ts";
 /** Only the Store's locked current Task is reduced; no caller history or external I/O. */
 export function reducePersistentTask(current: Task | undefined, command: TaskStoreCommandV1, context: TaskReductionContextV1): TaskReductionV1 {
@@ -59,6 +59,7 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
     }
     case "task.respond": {
       if (!context.cognitiveDecision || !context.workingState) throw new Error("Pending decision required.");
+      if (context.requiresReauthorization) return restartTaskWithCognitiveInputV1(task, context.workingState, context.cognitiveDecision, command.payload.pendingQuestionId, command.payload.response, context.evidence, change(), context.attemptId as TaskAttemptId, stopped());
       const result = respondToCognitiveInputV1(task, context.workingState, context.cognitiveDecision, command.payload.pendingQuestionId, command.payload.response, context.evidence, change());
       return { versions: [result.task], workingStates: [result.workingState] };
     }

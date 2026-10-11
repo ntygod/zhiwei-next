@@ -270,7 +270,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     if (!boundaryId || taskRow.state !== (waiting ? "READY" : "WAITING_INPUT")) this.#host.fail("conflict");
     const boundary = this.#row("SELECT * FROM cognitive_boundary_v1 WHERE id=? AND workspace_id=? AND task_id=?", boundaryId, context.workspaceId, string(taskRow.task_id));
     if (!boundary || boundary.status !== "decided" || boundary.attempt_id !== taskRow.attempt_id || boundary.intent_revision !== taskRow.intent_revision
-      || boundary.owner_epoch !== context.ownerEpoch || boundary.task_revision !== integer(taskRow.revision) - (waiting ? 0 : 1)) this.#host.fail("revision_conflict");
+      || boundary.owner_epoch !== taskRow.owner_epoch || integer(boundary.owner_epoch) > context.ownerEpoch || waiting && boundary.owner_epoch !== context.ownerEpoch
+      || boundary.task_revision !== integer(taskRow.revision) - (waiting ? 0 : 1)) this.#host.fail("revision_conflict");
     const row = this.#row("SELECT * FROM cognitive_decision_v1 WHERE boundary_id=? ORDER BY revision DESC LIMIT 1", boundaryId);
     if (!row || !["clarify", "wait"].includes(string(row.action)) || json(ref(row)) !== json({ contentId: boundary.decision_content_id, contentVersion: boundary.decision_content_version })) this.#host.fail("conflict");
     if (waiting) this.#host.validateCognitiveBoundary(context, boundaryId);
@@ -329,7 +330,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       "task.pause": ["RUNNING"], "task.retry": ["CREATED,READY"],
       "task.continue": ["READY", "CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
       "task.revise-request": ["CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
-      "task.respond": ["READY"],
+      "task.respond": ["READY", "CANCELLING,CANCELLED,CREATED,READY"],
       "task.runtime": ["READY", "RUNNING", "VERIFYING", "CANCELLED", "PAUSED", "UNVERIFIABLE", "VERIFYING,UNVERIFIABLE", "WAITING_INPUT"],
     };
     if (!sequences[kind]?.includes(states)) throw new Error("command state span mismatch");
@@ -342,7 +343,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       } else if (row.attempt_id !== previous.attempt_id) {
         if (!isTerminalTaskState(previous.state as TaskState) || row.state !== "CREATED"
           || row.intent_revision !== integer(previous.intent_revision) + (kind === "task.revise-request" ? 1 : 0)
-          || !["task.retry", "task.continue", "task.revise-request"].includes(kind)) throw new Error("new attempt metadata mismatch");
+          || !["task.retry", "task.continue", "task.revise-request", "task.respond"].includes(kind)) throw new Error("new attempt metadata mismatch");
       } else {
         const transitions: Readonly<Partial<Record<TaskState, readonly TaskState[]>>> = {
           CREATED: ["READY"], READY: ["RUNNING", "CANCELLING", "WAITING_INPUT"], RUNNING: ["RUNNING", "VERIFYING", "PAUSED", "CANCELLING"],
@@ -901,7 +902,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
                 JOIN task_snapshot_v1 s ON s.task_id=t.id AND s.revision=r.revision
                 JOIN task_attempt_v1 a ON a.id=s.attempt_id
                 WHERE r.entity_kind='task' AND r.workspace_id=? AND t.session_id=? AND r.commit_cursor>?
-                  AND r.command_kind IN ('task.create','task.retry','task.continue','task.revise-request')
+                  AND r.command_kind IN ('task.create','task.retry','task.continue','task.revise-request','task.respond')
                   AND s.owner_epoch=? AND s.created_at=? AND a.created_at=? ORDER BY r.commit_cursor LIMIT 1`,
                 event.workspaceId, event.aggregate.id, integer(row.cursor), integer(row.owner_epoch), event.occurredAt, event.occurredAt);
               if (!receipt) throw new Error("outbox reauthorization missing command");

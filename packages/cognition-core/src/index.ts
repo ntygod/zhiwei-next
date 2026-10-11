@@ -103,4 +103,4 @@ export { createGoal, transitionGoal, reviseGoal } from "./goal-transitions-v2.ts
 export type { GoalCriterionResultV2, GoalActionV2, GoalTransitionV2, GoalRevisionV2, GoalRevisionResultV2 } from "./goal-transitions-v2.ts";
 export { qualifyMemoryClaimV2 } from "./memory-selection-v2.ts";
 export type { MemorySelectionV2 } from "./memory-selection-v2.ts";
-export { validateCognitiveDecisionV1, cognitivePendingInputV1, waitForCognitiveInputV1, respondToCognitiveInputV1 } from "./decision-v1.ts";
+export { validateCognitiveDecisionV1, cognitivePendingInputV1, waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1 } from "./decision-v1.ts";

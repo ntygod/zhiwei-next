@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ids, type TaskId, type TaskAttemptId, type CriterionId, type WorkingStateV2, type CognitiveDecisionV1, type EvidenceRefV2 } from "../../domain/src/index.ts";
 import { createTask, transitionTask, type TaskChange } from "./task-transitions.ts";
-import { waitForCognitiveInputV1, respondToCognitiveInputV1 } from "./decision-v1.ts";
+import { waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1 } from "./decision-v1.ts";
 const T0 = "2026-10-11T00:00:00.000Z", T1 = "2026-10-11T01:00:00.000Z";
 function fixture() {
   const created = createTask({ id: "synthetic-task" as TaskId, attemptId: "synthetic-attempt" as TaskAttemptId, workspaceId: ids.workspace("synthetic-workspace"), sessionId: ids.session("synthetic-session"), revision: 1,
@@ -25,6 +25,18 @@ test("a cognitive question and exact user response preserve unknowns, history an
   assert.equal(response.task.state, "READY"); assert.equal(response.task.attempts[0]!.id, f.task.attempts[0]!.id); assert.equal(response.task.intent.revision, 1);
   assert.deepEqual(response.workingState.pendingInput, []); assert.deepEqual(response.workingState.unknown, f.working.unknown); assert.ok(response.workingState.known.includes("SYNTHETIC_ONLY: plain text"));
   assert.deepEqual({ task: f.task, working: f.working, decision: f.decision }, original); assert.equal(waiting.task.state, "WAITING_INPUT");
+});
+test("a fenced cognitive response retains confirmed stop history and requires a fresh attempt", () => {
+  const f = fixture(), waiting = waitForCognitiveInputV1(f.task, f.working, f.decision, f.change(2)), original = structuredClone(waiting);
+  const receipt = { taskId: waiting.task.id, attemptId: waiting.task.attempts[0]!.id, workspaceId: waiting.task.workspaceId, intentRevision: 1, at: T1, evidence: [{ id: "synthetic-no-execution", revision: 1 }] };
+  const next = restartTaskWithCognitiveInputV1(waiting.task, waiting.workingState, f.decision, "synthetic-question", "SYNTHETIC_ONLY: plain text", [f.evidence], f.change(3, T1), "synthetic-next-attempt" as TaskAttemptId, receipt);
+  assert.deepEqual(next.versions.map(task => task.state), ["CANCELLING", "CANCELLED", "CREATED", "READY"]);
+  assert.equal(next.versions.at(-1)!.attempts[0]!.state, "CANCELLED"); assert.equal(next.versions.at(-1)!.attempts[1]!.id, "synthetic-next-attempt");
+  assert.equal(next.workingStates.at(-1)!.taskAttempt.attemptId, "synthetic-next-attempt"); assert.deepEqual(next.workingStates.at(-1)!.pendingInput, []);
+  assert.ok(next.workingStates.at(-1)!.known.includes("SYNTHETIC_ONLY: plain text")); assert.deepEqual(waiting, original);
+  assert.throws(() => restartTaskWithCognitiveInputV1(waiting.task, waiting.workingState, f.decision, "synthetic-question", "answer", [], f.change(3, T1), "new" as TaskAttemptId, receipt));
+  assert.throws(() => restartTaskWithCognitiveInputV1(waiting.task, waiting.workingState, f.decision, "synthetic-question", "answer", [f.evidence], f.change(3, T1), waiting.task.attempts[0]!.id, receipt));
+  assert.throws(() => restartTaskWithCognitiveInputV1(waiting.task, waiting.workingState, f.decision, "synthetic-question", "answer", [f.evidence], f.change(3, T1), "new" as TaskAttemptId, { ...receipt, taskId: "foreign" as TaskId }));
 });
 test("cognitive input rejects stale revision, foreign scope, wrong questions and missing user evidence", () => {
   const f = fixture(); assert.throws(() => waitForCognitiveInputV1(f.task, f.working, f.decision, f.change(1)));
