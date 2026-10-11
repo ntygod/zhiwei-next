@@ -106,10 +106,11 @@
       "implementation_depends": [
         "P1-04"
       ],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "acceptance_status": "not_run",
       "implementation_evidence": [
-        "https://github.com/ntygod/zhiwei-next/issues/118"
+        "https://github.com/ntygod/zhiwei-next/pull/120",
+        "https://github.com/ntygod/zhiwei-next/commit/bc687d67e2c377c4a702874ecb1cbdddb0ff04c6"
       ],
       "acceptance_evidence": []
     },

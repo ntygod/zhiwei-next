@@ -1373,6 +1373,7 @@ export class SyntheticCognitionStoreV2 {
       const content = this.#content(event.content.ref, event.scope);
       if (privacy === "model-allowed" && content.privacy === "local-only") fail("unavailable");
       if (this.#row("SELECT state FROM source_stream WHERE stream_id=?", event.source.streamId)?.state !== "complete") fail("unavailable");
+      if (this.#row("SELECT 1 FROM source_suppression WHERE scope_key=? AND binding_id=?", scopeKeyV2(event.scope), event.source.streamId)) fail("unavailable");
       return event.content.ref;
     });
   }
@@ -1439,7 +1440,7 @@ export class SyntheticCognitionStoreV2 {
         if (aggregate.revision !== command.expectedRevision || aggregate.current_version !== payload.targetVersion.version) fail("revision_conflict");
         currentRow = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", payload.targetRef.id, payload.targetVersion.version)!;
         if (currentRow.status === "FORGOTTEN") fail("unavailable");
-        if (payload.kind !== "memory.forget") { current = this.#hydrateClaim(currentRow, true); this.#validateEvidence(current); }
+        if (payload.kind !== "memory.forget") current = this.#hydrateClaim(currentRow, true);
       }
       const eventId = this.#memoryBoundary!.ids.next("event");
       if (payload.kind === "memory.forget") {
@@ -1514,7 +1515,7 @@ export class SyntheticCognitionStoreV2 {
         const row = versions.find(version => (parse(version.metadata_json) as { createdAt: string }).createdAt <= knownAt);
         if (!row || row.status === "FORGOTTEN") continue;
         try {
-          let claim = this.#hydrateClaim(row, true); this.#validateEvidence(claim);
+          let claim = this.#hydrateClaim(row, true); this.#memoryEvidence(claim.evidence, claim.privacy);
           const changes = this.#rows("SELECT * FROM lifecycle_change WHERE kind='claim' AND entity_id=? AND version=? AND at<=? ORDER BY cursor,id", claim.id, claim.version, knownAt);
           const { supersededBy: _later, ...base } = claim;
           const last = changes.at(-1);
@@ -1545,8 +1546,9 @@ export class SyntheticCognitionStoreV2 {
       const row = version === undefined ? rows[0] : this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", id, version);
       if (!row) fail("unavailable");
       let value: MemoryClaimV2 | undefined;
-      if (available(row)) { try { value = this.#hydrateClaim(row, true); this.#validateEvidence(value); }
-        catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; } }
+      let unavailableReason: MemoryExplanationV1["unavailableReason"] = available(row) ? undefined : "content-unavailable";
+      if (available(row)) { try { const hydrated = this.#hydrateClaim(row, true); this.#memoryEvidence(hydrated.evidence, hydrated.privacy); value = hydrated; }
+        catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; unavailableReason = "source-unavailable"; } }
       const evidence = new Map((value?.evidence ?? []).map(ref => [ref.source.id, ref]));
       // Refuting commands are protected evidence, not amendments to immutable claim evidence.
       for (const commandRow of this.#rows("SELECT * FROM memory_command_v1 WHERE scope_key=? AND operation_kind='memory.dispute' AND result_json IS NOT NULL", scopeKeyV2(scope))) {
@@ -1570,7 +1572,7 @@ export class SyntheticCognitionStoreV2 {
       });
       return { id, scope, currentVersion: number(aggregate.current_version), versions: rows.map(item => ({ version: number(item.version), revision: number(item.revision),
         status: item.status as MemoryClaimV2["status"], createdAt: (parse(item.metadata_json) as { createdAt: string }).createdAt, updatedAt: text(item.updated_at), available: available(item) })),
-        ...(value ? { value } : {}), sources, affected: this.#rows("SELECT target_kind,target_id,target_version FROM dependency_edge WHERE source_kind='claim' AND source_id=? AND source_version=?", id, number(row.version))
+        ...(value ? { value } : {}), ...(unavailableReason ? { unavailableReason } : {}), sources, affected: this.#rows("SELECT target_kind,target_id,target_version FROM dependency_edge WHERE source_kind='claim' AND source_id=? AND source_version=?", id, number(row.version))
           .map(edge => ({ kind: text(edge.target_kind), id: text(edge.target_id), version: number(edge.target_version) })), commitCursor: this.#memoryWatermark(scope) };
     });
   }

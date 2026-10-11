@@ -12,7 +12,7 @@ canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `fea
 
 已接通显式输入、remember/search/correct/dispute/forget/explain 及配对 API：core 资格与接受、固定前向 schema4、命令/证据/版本/回执事务、双时间历史、请求内 FTS5、遗忘续接。新增 7 项正常开发验证通过（含真实 schema3→4、控制提交后回执中断续接），首批 6 项资格/检索已通过。ADR0020 已独立设计审查；最终完整 check、当前 HEAD 独立 R3、当前 PR 来源、Ready/live 和保护合入仍待完成。Z04/Z06/Z13 产品验收保持 not_run，真实入口不启用，受限旧安全实验不运行。
 
-初始 [Draft PR119](https://github.com/ntygod/zhiwei-next/pull/119) 的 `codex/` 前缀被原 PR 合同拒绝，已关闭且未合入；同一 #118 代码保留，改用原允许的 `feat/` primary 继续交付。
+唯一开放 primary 为 [PR120](https://github.com/ntygod/zhiwei-next/pull/120)，已发布实现提交 `bc687d67e2c377c4a702874ecb1cbdddb0ff04c6`。初始 [Draft PR119](https://github.com/ntygod/zhiwei-next/pull/119) 的 `codex/` 前缀被原 PR 合同拒绝，已关闭且未合入；同一 #118 代码和设计审查保留，原分支回收。
 
 所有者安排 Gemini 负责最终前端设计；当前专注能力和稳定 API，#98 原型继续暂停。以下 #116 内容为保留的开发期快照，不是当前 WIP 或合入后阻塞。
 

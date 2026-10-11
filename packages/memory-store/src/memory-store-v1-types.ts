@@ -47,6 +47,7 @@ export interface MemoryExplanationV1 {
   readonly id: string; readonly scope: ScopeV2; readonly currentVersion: number;
   readonly versions: readonly MemoryVersionInfoV1[];
   readonly value?: MemoryClaimV2;
+  readonly unavailableReason?: "content-unavailable" | "source-unavailable";
   readonly sources: readonly Readonly<{ observation: ObservationV2; excerpt?: string }>[];
   readonly affected: readonly Readonly<{ kind: string; id: string; version: number }>[];
   readonly commitCursor: number;

@@ -73,6 +73,12 @@ test("Scope, current privacy, source availability and dual time qualify material
   assert.equal(f.search().material.length, 1);
   assert.equal(f.store.memories.search(otherContext, { schemaVersion: 1, scope: otherScope, query: "虚构灯塔", kinds: ["fact"], limit: 10 }).material.length, 0);
   assert.throws(() => f.store.memories.explain(otherContext, otherScope, saved.id), { code: "unavailable" });
+  const blocked = f.remember("SYNTHETIC_ONLY：虚构卫星使用绿色报告。"), blockedClaim = f.search("虚构卫星").material[0]!.claim;
+  const blockedSource = f.store.listObservations(scope).find(event => event.id === blockedClaim.evidence[0]!.source.id)!;
+  f.store.applyControlIntent({ kind: "SOURCE_SUPPRESS", operationId: randomUUID(), at: T0, authorization: "synthetic-user-request", scope,
+    bindingId: blockedSource.source.streamId, resourceId: "synthetic-input-source" });
+  assert.equal(f.search("虚构卫星").material.length, 0); assert.equal(f.store.memories.explain(context, scope, blocked.id).value, undefined);
+  assert.equal(f.store.memories.explain(context, scope, blocked.id).unavailableReason, "source-unavailable");
   const original = f.search().material[0]!.claim;
   f.store.applyControlIntent({ kind: "PRIVACY_RESTRICT", operationId: randomUUID(), at: T0, authorization: "synthetic-user-request",
     privacy: "local-only", targets: [{ kind: "observation", scope, id: original.evidence[0]!.source.id }] });

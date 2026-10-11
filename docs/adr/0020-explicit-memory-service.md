@@ -3,7 +3,7 @@
 - 状态：Accepted
 - 有限设计审查：[PR119 独立设计记录](https://github.com/ntygod/zhiwei-next/pull/119#issuecomment-6105607704)绑定原提案 SHA256 `43ecbbed7b1eac7bf68998b299fd1b6470d32480a7e53494ee6501d2e5f88c82`；仅接受此合成设计，不批准当前或未来实现 HEAD。
 - 日期：2026-10-11
-- 工作项：[#118](https://github.com/ntygod/zhiwei-next/issues/118)，P1-05 / [PR119](https://github.com/ntygod/zhiwei-next/pull/119)
+- 工作项：[#118](https://github.com/ntygod/zhiwei-next/issues/118)，P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120)
 - 被取代关系：细化 ADR0017/0018 的记忆接口与检索实现；保留原领域、隐私、控制日志、Runtime 和验收边界。
 
 ## 背景
