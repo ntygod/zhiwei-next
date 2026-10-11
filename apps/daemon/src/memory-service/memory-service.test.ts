@@ -9,6 +9,8 @@ import type { LocalApiMemorySearchV1 } from "../../../../packages/protocol/src/i
 import { openSyntheticCognitionStoreV2, type MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "./memory-rules.ts";
 import { createSyntheticTaskSessionHarness } from "../task-service/synthetic-harness.ts";
+import { createMemoryCandidate, acceptMemoryCandidate } from "../../../../packages/cognition-core/src/index.ts";
+import { canonicalJsonV1 } from "../../../../packages/protocol/src/index.ts";
 
 const context = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a" };
 const scope: ScopeV2 = { kind: "workspace", workspaceId: context.workspaceId };
@@ -107,6 +109,42 @@ test("A committed forget whose receipt was interrupted resumes the same control 
   const result = f.store.memories.execute(context, command); assert.equal(result.claimVersion, claim.version);
   assert.equal(f.store.memories.explain(context, scope, saved.id).versions[0]!.status, "FORGOTTEN");
   assert.deepEqual(f.store.memories.execute(context, command), { ...result, replay: true });
+});
+
+test("A prepared forget interrupted before journal blocks reads and completes before the reopened store is exposed", t => {
+  const f = fixture(t), saved = f.remember(), claim = f.search().material[0]!.claim;
+  const command = update(claim, { kind: "memory.forget", ...target(claim), mode: "logical" });
+  f.store.applyControlIntent = () => { throw new Error("Synthetic interruption before journal."); };
+  assert.throws(() => f.store.memories.execute(context, command));
+  assert.throws(() => f.search(), { code: "recovery_required" });
+  f.time(T1); f.reopen(); assert.equal(f.search().material.length, 0);
+  assert.equal(f.store.memories.explain(context, scope, saved.id).versions[0]!.status, "FORGOTTEN");
+  const replay = f.store.memories.execute(context, command); assert.equal(replay.replay, true); assert.equal(replay.receipt.commandId, command.commandId);
+});
+
+test("Existing P1-02 public acceptance records support dispute and forget without new acceptance dependencies", t => {
+  const f = fixture(t), inputId = randomUUID();
+  const evidence = f.store.memories.capture(context, { schemaVersion: 1, commandId: inputId, idempotencyKey: inputId, workspaceId: context.workspaceId, scope, privacy: "local-only", text }).evidence;
+  const pending = createMemoryCandidate({ schemaVersion: 2, id: "synthetic-existing-candidate", revision: 1, scope, privacy: "local-only", kind: "fact", statement: text,
+    sourceTrust: "user-direct", epistemic: "asserted", confidence: 1, evidence: [evidence], extractor: { kind: "extractor", id: "synthetic-existing", revision: 1 },
+    status: "PENDING", validFrom: T0, expiresAt: T2, createdAt: T0, updatedAt: T0 });
+  const stage = (body: string, purpose: "claim" | "cognition") => {
+    const ref = { contentId: randomUUID(), contentVersion: 1 };
+    f.store.stageContent({ ref, reservationId: randomUUID(), fence: f.store.currentFence(scope), privacy: "local-only", purpose,
+      retentionUntil: "2026-11-11T00:00:00.000Z", bytes: new TextEncoder().encode(body) }); return ref;
+  };
+  const pendingContent = stage(canonicalJsonV1(pending), "cognition");
+  f.store.commitCognitiveRecord("candidate", { record: pending, expectedRevision: 0, content: pendingContent, fence: f.store.currentFence(scope), eventId: randomUUID() });
+  const accepted = acceptMemoryCandidate(pending, { expectedRevision: 1, nextRevision: 2, now: T0 }, "synthetic-existing-claim", {
+    kind: "user-confirmation", candidate: { kind: "candidate", id: pending.id, revision: 1 }, statement: text, checkedAt: T0, evidence });
+  const candidateContent = stage(canonicalJsonV1(accepted.candidate), "cognition"), claimContent = stage(accepted.claim.statement, "claim");
+  f.store.commitCandidateAcceptance({ candidate: accepted.candidate, candidateExpectedRevision: 1, candidateContent, claim: accepted.claim,
+    claimExpectedRevision: 0, claimContent, fence: f.store.currentFence(scope), eventId: randomUUID() });
+  assert.equal(f.search().material[0]!.claim.id, accepted.claim.id);
+  f.store.memories.execute(context, update(accepted.claim, { kind: "memory.dispute", ...target(accepted.claim), reason: "SYNTHETIC_ONLY：核对既有报告。", evidenceRefs: [] }));
+  const disputed = f.store.memories.explain(context, scope, accepted.claim.id).value!; assert.equal(disputed.status, "DISPUTED");
+  f.store.memories.execute(context, update(disputed, { kind: "memory.forget", ...target(disputed), mode: "logical" }));
+  f.reopen(); assert.equal(f.search().material.length, 0);
 });
 
 test("Paired HTTP memory routes commit real temporary storage and expose opaque scoped cursors", async t => {

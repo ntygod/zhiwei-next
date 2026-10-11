@@ -225,7 +225,8 @@ export class SyntheticCognitionStoreV2 {
           .run(options.installationId, head.controlSequence, head.checksum, head.recoveryEpoch);
       } else if (options.mode !== "open") fail("conflict");
       store.reconcileControl();
-      store.#transaction(false, () => undefined);
+      const memoryRecovery = store.#transaction(false, () => !!store.#row("SELECT 1 FROM memory_command_v1 WHERE result_json IS NULL LIMIT 1"));
+      if (memoryRecovery) store.#reconcilePreparedMemoryForgets();
       if (options.taskPersistence) store.#taskEngine.fenceRestartedOwners();
       return store;
     } catch (error) {
@@ -1490,17 +1491,42 @@ export class SyntheticCognitionStoreV2 {
     if ("receipt" in prepared) return prepared as MemoryCommitV1;
     const row = prepared as Row;
     if (payload.kind !== "memory.forget") fail("corruption");
-    this.applyControlIntent({ kind: "FORGET", operationId: text(row.operation_id), at: text(row.at), authorization: "synthetic-user-request",
-      targets: [{ kind: "claim", scope: payload.scope, id: payload.targetRef.id, version: payload.targetVersion.version }] });
-    return this.#withMemory(true, () => {
-      const latest = this.#row("SELECT revision FROM claim WHERE id=? AND scope_key=?", payload.targetRef.id, scopeKeyV2(payload.scope))!;
-      const event = this.#row("SELECT cursor FROM outbox WHERE type='content.forgotten' AND entity_id=? AND scope_key=?", text(row.operation_id), scopeKeyV2(payload.scope));
-      if (!event) fail("corruption"); const cursor = number(event.cursor);
-      const result = this.#memoryCommit(command, payload.targetRef.id, payload.targetVersion.version, number(latest.revision));
-      this.#db.prepare("UPDATE memory_command_v1 SET result_json=?,commit_cursor=? WHERE principal_id=? AND workspace_id=? AND idempotency_key=? AND result_json IS NULL")
-        .run(json(result), cursor, context.principalId, context.workspaceId, command.idempotencyKey);
-      return { ...result, commitCursor: cursor, replay: false };
-    });
+    return this.#resumeMemoryForget(row, command);
+  }
+  #resumeMemoryForget(row: Row, command: MemoryCommandV1): MemoryCommitV1 {
+    const payload = command.payload;
+    if (payload.kind !== "memory.forget") fail("corruption");
+    try {
+      this.applyControlIntent({ kind: "FORGET", operationId: text(row.operation_id), at: text(row.at), authorization: "synthetic-user-request",
+        targets: [{ kind: "claim", scope: payload.scope, id: payload.targetRef.id, version: payload.targetVersion.version }] });
+      return this.#transaction(true, () => {
+        const latest = this.#row("SELECT revision FROM claim WHERE id=? AND scope_key=?", payload.targetRef.id, scopeKeyV2(payload.scope))!;
+        const event = this.#row("SELECT cursor FROM outbox WHERE type='content.forgotten' AND entity_id=? AND scope_key=?", text(row.operation_id), scopeKeyV2(payload.scope));
+        if (!event) fail("corruption"); const cursor = number(event.cursor);
+        const result = this.#memoryCommit(command, payload.targetRef.id, payload.targetVersion.version, number(latest.revision));
+        this.#db.prepare("UPDATE memory_command_v1 SET result_json=?,commit_cursor=? WHERE principal_id=? AND workspace_id=? AND idempotency_key=? AND result_json IS NULL")
+          .run(json(result), cursor, text(row.principal_id), text(row.workspace_id), command.idempotencyKey);
+        return { ...result, commitCursor: cursor, replay: false };
+      });
+    } catch (error) { this.#gate = true; throw error; }
+  }
+  #reconcilePreparedMemoryForgets(): void {
+    try {
+      const pending = this.#transaction(false, () => this.#rows("SELECT * FROM memory_command_v1 WHERE result_json IS NULL ORDER BY at,operation_id").map(row => {
+        const scopeRow = this.#row("SELECT * FROM scope_catalog WHERE scope_key=?", text(row.scope_key))!;
+        const body = this.#content(contentRef(row), scopeFrom(scopeRow));
+        const record = JSON.parse(new TextDecoder().decode(this.#taskBodyBytes(body, true))) as { input: unknown };
+        const command = parseLocalApiCommandV1(record.input);
+        if (command.payload.kind !== "memory.forget") fail("corruption");
+        return { row, command: command as MemoryCommandV1 };
+      }));
+      // Resume before exposing an installation. No new producer evidence or IDs are generated.
+      for (const { row, command } of pending) this.#resumeMemoryForget(row, command);
+    } catch (error) {
+      this.#gate = true;
+      if (error instanceof CognitiveStoreErrorV2 && ["sqlite", "corruption"].includes(error.code)) throw error;
+      fail("recovery_required");
+    }
   }
   #searchMemories(context: MemoryContextV1, raw: LocalApiMemorySearchV1, audience: "user" | "model" = "user"): MemorySearchReadV1 {
     const query = parseLocalApiMemorySearchV1(raw);
@@ -1592,7 +1618,7 @@ export class SyntheticCognitionStoreV2 {
       const accepted = this.#row("SELECT * FROM cognitive_snapshot WHERE kind='candidate' AND id=? AND revision=2", text(snapshot.id));
       const metadata = accepted ? parseCognitiveRecordMetadataV2(parse(accepted.metadata_json)) : undefined;
       if (metadata?.kind !== "candidate" || !metadata.acceptedClaim
-        || !commands.some(row => row.result_json !== null && row.operation_kind !== "memory.input" && (() => {
+        || !commands.some(row => row.result_json !== null && ["memory.remember", "memory.correct"].includes(text(row.operation_kind)) && (() => {
           const result = parse(row.result_json) as { receipt: MemoryCommitV1["receipt"]; claimVersion: number };
           return result.receipt.aggregate.id === metadata.acceptedClaim!.claimId && result.claimVersion === metadata.acceptedClaim!.version;
         })())) continue;

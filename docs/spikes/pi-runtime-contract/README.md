@@ -196,10 +196,10 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 2e1b741b6823e0ff27db07e1f591cc31eeabeb66
-capture workflow             38049123665
-capture artifact             11668144722
-capture artifact digest      sha256:87ab6c3171e2edf81a9761b1d1c811833b128c47bf34f1dad03afff64c42fd0b
+capture head                 bc687d67e2c377c4a702874ecb1cbdddb0ff04c6
+capture workflow             38113263898
+capture artifact             11692103984
+capture artifact digest      sha256:e591cca817a02a8b351a1aff958b581a40db7cdfe711f949b817586230023fba
 external Provider prompts    0
 ```
 
@@ -275,14 +275,14 @@ Worker Instance与Runtime Session分别关联；Host Signal Request不能替代�
 ### 当前v2身份与公开来源
 
 ```text
-source head                  57fbd975ef0e0db6ccb415188697d26a263565c6
-source workflow              38049358238
+source head                  9fecea80e71eac5a5bc6fac65f5a2149096a4515
+source workflow              38113554778
 source run attempt           2
-source artifact              11669240298
-source artifact digest       sha256:de3a048b9ae7829b9d304a5799ff0419b0fd61dd83c5fd3da6b9854ba6cba29a
+source artifact              11691849981
+source artifact digest       sha256:6ce22347d78b1ac27b991e8fecd5a2e189c3ae86bd78f6e8db85e4e4a29dd4b5
 comparison run attempt       1
-comparison artifact          11669175201
-comparison artifact digest   sha256:e66d6019dd632db3b77fa93f15950a23377058df2a4dbd6bcafebd6cfd8dac31
+comparison artifact          11692761346
+comparison artifact digest   sha256:178c5585292b29ca6f7f469ed641a15053fb99dbfbdf1ccc1dab2ede6781d10c
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
