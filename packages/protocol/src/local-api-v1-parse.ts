@@ -95,6 +95,11 @@ function parsePayload(payload: Record<string, unknown>, envelope: Record<string,
     case "memory.forget":
       keys(payload, ["kind", "targetRef", "targetVersion", "scope", "mode"]);
       claimTarget(payload, envelope); memoryScope(payload, workspaceId); member(payload.mode, ["logical"]); break;
+    case "memory.dispute":
+      keys(payload, ["kind", "targetRef", "targetVersion", "scope", "reason", "evidenceRefs"]);
+      claimTarget(payload, envelope); memoryScope(payload, workspaceId); textValue(payload.reason);
+      for (const ref of list(payload.evidenceRefs, 100)) evidence(ref, workspaceId);
+      break;
     default: invalid();
   }
 }
@@ -133,5 +138,21 @@ export function parseLocalApiMemorySearchV1(input: unknown): LocalApiMemorySearc
     if (value.validAt !== undefined) timestamp(value.validAt);
     if (value.knownAt !== undefined) timestamp(value.knownAt);
     return value as unknown as LocalApiMemorySearchV1;
+  });
+}
+export function parseLocalApiMemoryInputV1(input: unknown): import("./local-api-v1-types.ts").LocalApiMemoryInputV1 {
+  return wireBoundary(input, value => {
+    keys(value, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "scope", "privacy", "text"]);
+    version(value.schemaVersion, 1); identifier(value.commandId); identifier(value.idempotencyKey); identifier(value.workspaceId);
+    memoryScope(value, value.workspaceId as string); assertPrivacyV2(value.privacy); textValue(value.text);
+    return value as unknown as import("./local-api-v1-types.ts").LocalApiMemoryInputV1;
+  });
+}
+export function parseLocalApiMemoryExplanationRequestV1(input: unknown): import("./local-api-v1-types.ts").LocalApiMemoryExplanationRequestV1 {
+  return wireBoundary(input, value => {
+    keys(value, ["schemaVersion", "workspaceId", "scope", "claimId"], ["version"]);
+    version(value.schemaVersion, 1); identifier(value.workspaceId); memoryScope(value, value.workspaceId as string); identifier(value.claimId);
+    if (value.version !== undefined) revision(value.version);
+    return value as unknown as import("./local-api-v1-types.ts").LocalApiMemoryExplanationRequestV1;
   });
 }

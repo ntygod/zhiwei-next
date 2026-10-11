@@ -4,7 +4,7 @@
   "mode": "synthetic-development",
   "taskCatalog": "docs/planning/development-plan.json",
   "acceptanceDependencyField": "depends",
-  "nextImplementation": "P1-05",
+  "nextImplementation": "P1-06",
   "tasks": [
     {
       "id": "P0-01",
@@ -106,9 +106,12 @@
       "implementation_depends": [
         "P1-04"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "implemented",
       "acceptance_status": "not_run",
-      "implementation_evidence": [],
+      "implementation_evidence": [
+        "https://github.com/ntygod/zhiwei-next/pull/120",
+        "https://github.com/ntygod/zhiwei-next/commit/bc687d67e2c377c4a702874ecb1cbdddb0ff04c6"
+      ],
       "acceptance_evidence": []
     },
     {

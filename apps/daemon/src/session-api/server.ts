@@ -4,7 +4,9 @@ import {
   CognitiveProtocolError, deserializeLocalApiCommandV1, deserializeSessionCreateCommandV1, deserializeSessionPairRequestV1,
   parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotPageV1, parseSessionTaskRecoveryV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
   type LocalApiErrorV1,
+  canonicalJsonV1, parseLocalApiReceiptV1, deserializeLocalApiMemorySearchV1, deserializeLocalApiMemoryInputV1, deserializeLocalApiMemoryExplanationRequestV1,
 } from "../../../../packages/protocol/src/index.ts";
+import type { MemoryPersistenceV1, MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
 import { assertIdentifierV2 } from "../../../../packages/domain/src/index.ts";
 import { SyntheticSessionAuthenticator, type SessionAuthentication, type SyntheticSessionFixture } from "./auth.ts";
 import { SessionCursorCodec } from "./cursor.ts";
@@ -67,6 +69,7 @@ async function readBody(request: IncomingMessage): Promise<string> {
 }
 export interface SyntheticSessionApiOptions {
   readonly application: SessionApiApplication;
+  readonly memory?: MemoryPersistenceV1;
   readonly installationId: string;
   readonly now?: () => number;
   readonly recoveryEpoch?: () => string;
@@ -191,10 +194,36 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (url.pathname === "/v1/capabilities" && request.method === "GET") {
         validateQuery(url, []); authorize(authentication, authentication.context.workspaceId);
         writeJson(response, 200, { schemaVersion: 1, protocolVersions: [1], mode: "synthetic-fixtures-only", production: "unsupported", productAcceptance: "not_run",
-          features: ["sessions", "tasks", "snapshot", "events"], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request"], unsupportedCommands: ["task.respond", "task.confirm-result"], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
+          features: ["sessions", "tasks", "snapshot", "events", ...(options.memory ? ["memory"] : [])], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", ...(options.memory ? ["memory.remember", "memory.correct", "memory.dispute", "memory.forget"] : [])], unsupportedCommands: ["task.respond", "task.confirm-result"], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
       }
       if (request.method === "POST") {
         validateQuery(url, []); const body = await readBody(request);
+        if (url.pathname.startsWith("/v1/memory/")) {
+          const memory = options.memory;
+          if (!memory) throw new SessionApiError("unsupported", "runtime_capability", 422);
+          const encodeMemory = (context: SessionApiContext, scope: unknown, commitCursor: number) => cursor.encode({ ...context, purpose: "memory", filter: canonicalJsonV1(scope) }, { commitCursor });
+          if (url.pathname === "/v1/memory/inputs") {
+            const input = deserializeLocalApiMemoryInputV1(body), context = authorize(authentication, input.workspaceId);
+            const result = memory.capture(context, input);
+            writeJson(response, 201, { schemaVersion: 1, evidence: result.evidence, replay: result.replay, asOfCursor: encodeMemory(context, input.scope, result.commitCursor) }); return;
+          }
+          if (url.pathname === "/v1/memory/commands") {
+            const command = deserializeLocalApiCommandV1(body); if (!command.payload.kind.startsWith("memory.")) invalid();
+            const context = authorize(authentication, command.workspaceId), result = memory.execute(context, command as MemoryCommandV1);
+            writeJson(response, 200, responseValue(parseLocalApiReceiptV1, { ...result.receipt, eventCursor: encodeMemory(context, (command as MemoryCommandV1).payload.scope, result.commitCursor) })); return;
+          }
+          if (url.pathname === "/v1/memory/search") {
+            const query = deserializeLocalApiMemorySearchV1(body); if (query.scope.kind === "global") invalid();
+            const context = authorize(authentication, query.scope.workspaceId), { commitCursor, ...result } = memory.search(context, query);
+            writeJson(response, 200, { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, query.scope, commitCursor) }); return;
+          }
+          if (url.pathname === "/v1/memory/explain") {
+            const input = deserializeLocalApiMemoryExplanationRequestV1(body), context = authorize(authentication, input.workspaceId);
+            const { commitCursor, ...result } = memory.explain(context, input.scope, input.claimId, input.version);
+            writeJson(response, 200, { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, input.scope, commitCursor) }); return;
+          }
+          throw new SessionApiError("not_found", "not_found", 404);
+        }
         if (url.pathname === "/v1/sessions") {
           const command = deserializeSessionCreateCommandV1(body); const context = authorize(authentication, command.workspaceId);
           const committed = app.createSession(context, command); const receipt = responseValue(parseSessionApiReceiptV1, { ...committed.value, eventCursor: encode(context, committed.commitCursor) });

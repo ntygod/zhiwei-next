@@ -1,0 +1,6 @@
+{
+  "input": { "schemaVersion": 1, "commandId": "synthetic-input-command", "idempotencyKey": "synthetic-input-key", "workspaceId": "synthetic-workspace", "scope": { "kind": "workspace", "workspaceId": "synthetic-workspace" }, "privacy": "local-only", "text": "SYNTHETIC_ONLY: the fictional lighthouse uses violet reports." },
+  "dispute": { "schemaVersion": 1, "commandId": "synthetic-dispute-command", "idempotencyKey": "synthetic-dispute-key", "workspaceId": "synthetic-workspace", "expectedRevision": 1, "payload": { "kind": "memory.dispute", "scope": { "kind": "workspace", "workspaceId": "synthetic-workspace" }, "targetRef": { "kind": "claim", "id": "synthetic-claim", "revision": 1 }, "targetVersion": { "claimId": "synthetic-claim", "version": 1 }, "reason": "SYNTHETIC_ONLY: verify the color.", "evidenceRefs": [] } },
+  "search": { "schemaVersion": 1, "scope": { "kind": "workspace", "workspaceId": "synthetic-workspace" }, "query": "lighthouse", "kinds": ["fact"], "limit": 10, "validAt": "2026-10-11T00:00:00.000Z", "knownAt": "2026-10-11T01:00:00.000Z" },
+  "explanation": { "schemaVersion": 1, "workspaceId": "synthetic-workspace", "scope": { "kind": "workspace", "workspaceId": "synthetic-workspace" }, "claimId": "synthetic-claim", "version": 1 }
+}

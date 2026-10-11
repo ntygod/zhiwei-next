@@ -196,10 +196,10 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 2e1b741b6823e0ff27db07e1f591cc31eeabeb66
-capture workflow             38049123665
-capture artifact             11668144722
-capture artifact digest      sha256:87ab6c3171e2edf81a9761b1d1c811833b128c47bf34f1dad03afff64c42fd0b
+capture head                 bc687d67e2c377c4a702874ecb1cbdddb0ff04c6
+capture workflow             38113263898
+capture artifact             11692103984
+capture artifact digest      sha256:e591cca817a02a8b351a1aff958b581a40db7cdfe711f949b817586230023fba
 external Provider prompts    0
 ```
 
@@ -275,14 +275,14 @@ Worker Instance与Runtime Session分别关联；Host Signal Request不能替代�
 ### 当前v2身份与公开来源
 
 ```text
-source head                  57fbd975ef0e0db6ccb415188697d26a263565c6
-source workflow              38049358238
+source head                  9fecea80e71eac5a5bc6fac65f5a2149096a4515
+source workflow              38113554778
 source run attempt           2
-source artifact              11669240298
-source artifact digest       sha256:de3a048b9ae7829b9d304a5799ff0419b0fd61dd83c5fd3da6b9854ba6cba29a
+source artifact              11691849981
+source artifact digest       sha256:6ce22347d78b1ac27b991e8fecd5a2e189c3ae86bd78f6e8db85e4e4a29dd4b5
 comparison run attempt       1
-comparison artifact          11669175201
-comparison artifact digest   sha256:e66d6019dd632db3b77fa93f15950a23377058df2a4dbd6bcafebd6cfd8dac31
+comparison artifact          11692761346
+comparison artifact digest   sha256:178c5585292b29ca6f7f469ed641a15053fb99dbfbdf1ccc1dab2ede6781d10c
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -628,3 +628,11 @@ P0-04 规划 #104 按现行当前 PR 来源合同在同一 Draft PR 续期。SDK
 原临时工作区随后不可访问。13:01 UTC 起仅重新读取上述相同四份原 Artifact（SDK、正常 Worker、guarded Worker attempt 1/2）、原 run/jobs 与原日志，未重新采集或重跑 Runtime；恢复 ZIP 的每一个 SHA-256 均与首次保存的原摘要一致。保留首次读取元数据与本次恢复读取时间分别记录，未把新读取日期当作捕获日期。SDK run 自身 head_sha 仍为 2e1b741b6823e0ff27db07e1f591cc31eeabeb66，API 中关联 PR 的 live head 已前进到 57fbd975ef0e0db6ccb415188697d26a263565c6，该动态关联字段如实保留。原 Worker 两 attempt 元数据及全部 Artifact 元数据与首次记录一致，固定 Node 22.23.1 原来源/ZIP/完整对象校验重新通过。新代码树的完整测试及独立审查仍需重新执行，旧工作区的成功不能认证新树。
 
 本候选精确恢复原 comparator blob fba36da923a94cd2b9ba024f020089e3ef313d90；恢复路径的正常完整 compare 已在固定 Node 22.23.1 隔离副本上对两份原 JSON 通过。两 manifest 仅续期来源，Workflow、validator、normalizer、冻结内容及接受谓词不变。canonical Workflow 源码已原生回读，与当前源码 blob 1eb89402dd499eff95b2f88e2bc60db8a78ec450 一致；此前独立 Workflow metadata API 已被 Connector 拒绝，本次未调用或换路绕过，active 字段须由最终真实 Ready/live 门验证。SDK 与 Worker 两来源均须在最终发布 HEAD 验证 ancestry。PR 保持 Draft；最终独立 R3、真实 Ready/live 门和原生 CI 尚待实际结果，Draft 跳过不算通过。本记录不声称产品验收完成，不复用 PR115 Artifact 或其特定授权，不执行受限旧安全实验。
+
+## PR120 / P1-05 当前来源续期（2026-10-11）
+
+本项 canonical #118。初始 Draft119 因原分支前缀门禁关闭未合入，代码保留并转入唯一 [PR120](https://github.com/ntygod/zhiwei-next/pull/120)；原来源归属不跨 PR 复用。正常成功 [run38113263898](https://github.com/ntygod/zhiwei-next/actions/runs/38113263898) source `bc687d67e2c377c4a702874ecb1cbdddb0ff04c6` 的 SDK job114393029793 / Artifact11692103984，原 ZIP SHA256 `e591cca817a02a8b351a1aff958b581a40db7cdfe711f949b817586230023fba`；正常 Worker job114393029731 / Artifact11692815962，原 ZIP SHA256 `ec01ae7fcb984ade457aab22c44924c357c6783535dc8cddf188da7e02c91747`。两份原 ZIP 校验并通过原严格完整对象比较，先证明正常路径。
+
+之后仅在完整比较成功日志后加入显式 recapture-only guard，用于满足既有 failure-shape 来源合同；[run38113554778](https://github.com/ntygod/zhiwei-next/actions/runs/38113554778) source `9fecea80e71eac5a5bc6fac65f5a2149096a4515` 的 comparison attempt1/job114393863494/Artifact11692761346，原 ZIP SHA256 `178c5585292b29ca6f7f469ed641a15053fb99dbfbdf1ccc1dab2ede6781d10c`；source attempt2/job114394084108/Artifact11691849981，原 ZIP SHA256 `6ce22347d78b1ac27b991e8fecd5a2e189c3ae86bd78f6e8db85e4e4a29dd4b5`。两次均完成 capture、fresh/committed validation、upload，正式完整对象相等先于 compare guard failure；如实保留 Workflow/Worker failure，不改 capture、normalizer 或接受谓词。
+
+固定 Node22.23.1 原 run/job/artifact/成对 ZIP validators 均通过；两 result.json 都为72731 bytes/SHA256 `87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa`，字节相同且与正常 Worker 原件相等。未重打包 ZIP、未换路请求此前拒绝的 Workflow metadata API；active 仍由原 Ready/live 门验证。最终候选已移除 guard并恢复精确 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。完整 check、最终 HEAD 独立 R3、Ready/live/合入以实际回读为准；Z04/Z06/Z13 产品验收仍 not_run，受限旧实验不执行。

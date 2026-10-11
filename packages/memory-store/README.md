@@ -1,17 +1,27 @@
 # 版本化认知持久化
 
-P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发入口为 `openSyntheticCognitionStoreV2`。名称有意标明当前仅合成开发；P1-04 增加默认关闭的合成 Daemon/API/Worker 组合，没有真实数据或外部模型消费者。该入口不是启用许可，布尔 `authorized/accepted` 也不能开启生产能力。
+P1-02 / [#112](https://github.com/ntygod/zhiwei-next/issues/112) 的代码开发入口为 `openSyntheticCognitionStoreV2`。名称有意标明当前仅合成开发；P1-04 提供合成 Daemon/API/Worker 组合，P1-05 / [#118](https://github.com/ntygod/zhiwei-next/issues/118) 接入显式记忆，没有真实数据或外部模型消费者。该入口不是启用许可，布尔 `authorized/accepted` 也不能开启生产能力。
 
 ## 版本与支持范围
 
 - v1 的 `0001`、公开 parser、Ledger API、Fixture 和完整性验证均不改写。独立 v2 固定列表追加 `0002`，迁移后旧 `runtime_events` 仅供只读审计；旧 v1 opener 对新 schema fail closed。没有自动扫描/转换旧正文。
 - Observation v2：独立 canonical 元数据、不可变内容引用、完整 stream identity、单调 source sequence/committed checkpoint、exact replay 和冲突、稳定 row cursor。gap 保持 incomplete，不把收件当作 Outcome。
 - Claim：正文仅受管文件；SQL 保留不可变受控元数据/版本/证据。纠正使用持久 CAS，同事务新增版本、supersede、依赖失效、epoch、生命周期记录、Outbox。旧正文保留受政策约束的历史，不原位改成新事实。
-- 同一 Claim 版本的通用 dispute/expire 状态持久入口按原 M1-4 规划留给 P1-05；当前实现纠正、FORGET、control-first 收紧与按有效时间拒绝读取，没有任意状态 override。
+- P1-05 的 `memories` 端口持久提交显式争议；原版本正文/证据保持不可变，反证为新的命令 Observation。过期按有效时间筛选，没有任意状态 override 或新增自动 expire 调度。
 - Candidate、Hypothesis、Goal：正式 domain parser 验证的独立类型、规范正文、精确最小元数据投影和 revision history；指针、依赖、epoch、Outbox 同事务。ACCEPTED Candidate 必须走 `commitCandidateAcceptance` 与 Claim 同事务提交，独立提交拒绝；生命周期 revision 不得改写 Candidate 原正文。不是任意 JSON Repository，也不实现 P2 学习晋升。
 - Episode/WorkingState：有严格 codec/非正文投影；旧通用认知入口保持 `unsupported`。P1-04 专用 Task 事务已经写读绑定真实 Task/Attempt/Observation 的 WorkingState，由 P1-06 消费；Episode 由 P1-07 的 Outcome 消费者基于 P1-04 精确 Task/Attempt/Outcome 历史接线。P1-09 只负责 Alpha 端到端验收，不承担这两项存储实现。没有任意“引用已验证”开关。Procedure/P2、权限执行/预算/租约表不提前铺空壳。
 - 独立 evidence fragment 没有正式存储解析器时返回 `unsupported`，不会因为父 Observation 存在而接纳悬空 fragmentId。
 - v1→v2 转换要求显式 mapping；`fixtures/cognitive-v2` 保留两版 Fixture。版本转换不物化正文，不认证来源或授权，不迁移真实数据。
+
+## P1-05 显式记忆
+
+`memoryPersistence` 注入应用组合的纯 reducer/资格选择、ID 与内容政策；Store 不导入 cognition-core。`memories.capture/execute/search/explain` 提供实际 Observation 输入、remember/correct/dispute/forget、精确历史、检索和解释。应用层沿用配对身份，HTTP payload 不能指定 actor、sourceTrust 或 principal。数据 route 为 POST `/v1/memory/inputs`、`commands`、`search`、`explain`；普通 Daemon 启动仍为诊断入口。
+
+固定前向 `0004_memory_service_v1.sql` 追加受保护命令回执与内容依赖；0001—0003 不变，原 v1/v2/v3 独立入口对 schema4 拒绝。内部恢复边界准确声明4，纯格式 parser保留2/3历史并拒绝未知版本。幂等键按 principal/Workspace 定位，去掉 commandId 后比较原受管请求；正文到期/撤销后不重新执行。纠正的候选/新 Claim/旧版 supersede/回执同事务，旧 revision 返回冲突。遗忘先 durable 准备，再写独立控制日志并对账，最后提交回执；启动与公开对账均在开放读取前续完准备，失败保持 recovery_required，沿原 operationId/时间继续。命令副本和本流程产生的 Candidate 正文参与失效闭包，既有正式 P1-02 接受记录不被误认成新流程依赖。
+
+检索在同一 snapshot 内选择 Scope 和版本，再检查当前隐私、正文/证据可用性与双时间，historical 标记区分过去与当前。最多返回 50 条；解释返回最新 50 个版本的元数据，指定旧版仍受当前政策限制。无正文时不返回占位 Claim。请求内 FTS5 trigram 只包含合格 Claim；少于三个 Unicode 字符的查询使用明确的 `scoped-short-query` 字面扫描。无持久索引副本、raw 对话全文索引或向量服务，不声明规模性能和中文分词产品验收。
+
+回滚先停用记忆入口/注入，保留版本、真源和最新 journal，索引无需恢复；代码通过新受审 revert PR 回退。已升级 schema4 的安装保持关闭或前向修复，不降级、不恢复已遗忘材料。这里只提供逻辑遗忘，物理清除沿既有独立流程。决策见 [ADR0020](../../docs/adr/0020-explicit-memory-service.md)，Z04/Z06/Z13 产品验收、真实启用和 Windows 验证保持 not_run。
 
 ## 事务与正文
 

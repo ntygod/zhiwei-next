@@ -38,7 +38,8 @@ export type LocalApiPayloadV1 =
   | Readonly<{ kind: "goal.pause" | "goal.resume" | "goal.abandon"; targetRef: EntityRefV2<"goal"> }>
   | (Readonly<{ kind: "memory.remember" }> & MemoryInputV1)
   | (Readonly<{ kind: "memory.correct"; targetRef: EntityRefV2<"claim">; targetVersion: ClaimVersionRefV2 }> & MemoryInputV1)
-  | Readonly<{ kind: "memory.forget"; targetRef: EntityRefV2<"claim">; targetVersion: ClaimVersionRefV2; scope: ScopeV2; mode: "logical" }>;
+  | Readonly<{ kind: "memory.forget"; targetRef: EntityRefV2<"claim">; targetVersion: ClaimVersionRefV2; scope: ScopeV2; mode: "logical" }>
+  | Readonly<{ kind: "memory.dispute"; targetRef: EntityRefV2<"claim">; targetVersion: ClaimVersionRefV2; scope: ScopeV2; reason: string; evidenceRefs: readonly EvidenceRefV2[] }>;
 
 export interface LocalApiCommandV1 {
   readonly schemaVersion: typeof localApiSchemaVersion;
@@ -58,6 +59,23 @@ export interface LocalApiMemorySearchV1 {
   readonly validAt?: string;
   readonly knownAt?: string;
   readonly limit: number;
+}
+/** Explicit input; actor and source trust are assigned by the authenticated producer. */
+export interface LocalApiMemoryInputV1 {
+  readonly schemaVersion: 1;
+  readonly commandId: string;
+  readonly idempotencyKey: string;
+  readonly workspaceId: string;
+  readonly scope: ScopeV2;
+  readonly privacy: PrivacyV2;
+  readonly text: string;
+}
+export interface LocalApiMemoryExplanationRequestV1 {
+  readonly schemaVersion: 1;
+  readonly workspaceId: string;
+  readonly scope: ScopeV2;
+  readonly claimId: string;
+  readonly version?: number;
 }
 export interface LocalApiOutcomeSummaryV1 {
   readonly ref: EntityRefV2<"outcome">;

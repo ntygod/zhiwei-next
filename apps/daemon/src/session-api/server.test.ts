@@ -108,7 +108,8 @@ test("HTTP rejects oversized fixed/chunked bodies, excessive headers, duplicate 
     const pair = await fixture.pair(); assert.equal((await fixture.call("/v1/sessions", pair.headers, "x".repeat(1_048_577))).status, 413);
     assert.equal((await fixture.call("/v1/sessions", { ...pair.headers, "content-type": "text/plain" }, "{}" )).status, 415);
     assert.equal((await fixture.call("/v1/sessions", pair.headers, JSON.stringify(sessionCommand()).replace('"schemaVersion":1', '"schemaVersion":1,"schemaVersion":1'))).status, 400);
-    assert.equal((await fixture.call("/v1/memory/search", pair.headers, {})).status, 404);
+    assert.equal((await fixture.call("/v1/unsupported", pair.headers, {})).status, 404);
+    const unavailableMemory = await fixture.call("/v1/memory/search", pair.headers, {}); assert.equal(unavailableMemory.status, 422); assert.equal((await unavailableMemory.json()).error.reason, "runtime_capability");
     assert.equal((await fixture.call(snapshotPath + `&workspaceId=${workspace}`, pair.headers)).status, 400);
     const manyHeaders = await new Promise<number>(resolve => { const request = httpRequest(fixture.base + snapshotPath, { headers: { ...pair.headers, ...Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`x-test-${index}`, "fixture"])) } }, response => { response.resume(); response.on("end", () => resolve(response.statusCode!)); }); request.end(); }); assert.equal(manyHeaders, 400);
     const chunked = await new Promise<number>((resolve, reject) => { const request = httpRequest(fixture.base + "/v1/sessions", { method: "POST", headers: { ...pair.headers, "content-type": "application/json", "transfer-encoding": "chunked" } }, response => { response.resume(); response.on("end", () => resolve(response.statusCode!)); }); request.on("error", reject); request.write("x".repeat(524288)); request.end("x".repeat(524289)); }); assert.equal(chunked, 413); assert.equal(fixture.app.sessions.length, 0);

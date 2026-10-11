@@ -3,10 +3,30 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-10
+updated: 2026-10-11
 -->
 
-## 当前工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
+## 当前工作：P1-05 可纠正记忆与检索 #118（2026-10-11）
+
+canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `feat/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
+
+已接通显式输入、remember/search/correct/dispute/forget/explain 及配对 API：core 资格与接受、固定前向 schema4、命令/证据/版本/回执事务、双时间历史、请求内 FTS5、遗忘续接。新增9项正常开发验证通过（含真实 schema3→4、journal前/后中断续接及既有 P1-02 合法候选争议/遗忘），首批6项资格/检索已通过。ADR0020 已独立设计审查；最终完整 check、当前 HEAD 独立 R3、Ready/live 和保护合入仍待完成。Z04/Z06/Z13 产品验收保持 not_run，真实入口不启用，受限旧安全实验不运行。
+
+唯一开放 primary 为 [PR120](https://github.com/ntygod/zhiwei-next/pull/120)，已发布实现提交 `bc687d67e2c377c4a702874ecb1cbdddb0ff04c6`。初始 [Draft PR119](https://github.com/ntygod/zhiwei-next/pull/119) 的 `codex/` 前缀被原 PR 合同拒绝，已关闭且未合入；同一 #118 代码和设计审查保留，原分支回收。
+
+PR120 原 SDK来源run38113263898 / headbc687d6，Worker来源run38113554778 / head9fecea8 / attempts1/2 已按原 run/job/ZIP/成对 validators 验证，两个原 result.json 字节相同、完整对象与正常成功比较相等。临时 guard已移除，正式 comparator恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90；原 Workflow/validator/内容不改。最终完整检查、实现冷审和 Ready/live/合入仍待实际完成。
+
+eb156c2 的独立 R3 为 BLOCKED：准备 durable、journal 前中断后旧记忆仍可读，以及把既有 Candidate 的争议/遗忘回执误认成新接受依赖。后续修复在开放安装前续完准备、失败关闭，并只让 remember/correct 触发新 Candidate 依赖要求；两项正常回归已通过，修复 HEAD 须重新冷审。本地完整 check 止于容器无法解析 Windows worktree Git 路径；远端 CI 另发现 SDK 来源镜像字段陈旧，已机械同步，原验证规则不改。
+
+f65b27e 复审仍 BLOCKED：公开 reconcileControl 的同一读取屏障缺口、恢复边界误报schema3、争议来源解释漏掉当前资格。后续将公开恢复与启动收敛到同一准备续接、内部journal对账避免递归；恢复边界及parser按实际schema4机械同步，保留2/3历史格式，未知5继续拒绝；争议来源沿同一完整流/抑制检查。现有9项功能场景和6项纯恢复格式检查通过；未运行capture/restore/备份实验。执行索引的下一候选同步为 P1-06，但在本 primary 保护交付前不得开启下一 WIP。
+
+上述公开恢复、schema身份、争议来源路径已实际修复；9项功能场景（含同实例公开对账）、6项纯恢复格式检查均通过，schema迁移测试同时机械核对内部恢复声明为4。最终修复 HEAD 仍须完整 CI 与新独立冷审；之前 BLOCKED 的 SHA 不作为批准。
+
+dbe7309 获独立 R3 代码批准，但原完整 CI38115469856 为1094/1095：既有 HTTP 测试仍把现已实现的 memory/search 当不存在路由。同步测试为未知路径404，并精确验证未注入记忆能力时422/runtime_capability；不改 handler、不删除断言或放松检查。新 HEAD 重新运行原 CI 和独立审查，Ready/live 与合入尚待完成。
+
+所有者安排 Gemini 负责最终前端设计；当前专注能力和稳定 API，#98 原型继续暂停。以下 #116 内容为保留的开发期快照，不是当前 WIP 或合入后阻塞。
+
+## 历史工作：P1-04 持久任务会话与事件恢复 #116（2026-10-10）
 
 canonical [#116](https://github.com/ntygod/zhiwei-next/issues/116)，唯一分支 `feat/116-persistent-task-sessions` / [PR117](https://github.com/ntygod/zhiwei-next/pull/117)，基于 protected main `da06c0cadfb75b33c4f8810f07fb39d75dde4d0a`。开工 reconciliation 无开放 PR/Incident，#44/#67 人类输入已核对；P1-03/PR115 已完整交付并关闭 #114。
 
@@ -271,14 +291,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #117；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #120；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 2e1b741b6823e0ff27db07e1f591cc31eeabeb66
-capture workflow             38049123665
-capture artifact             11668144722
-capture artifact digest      sha256:87ab6c3171e2edf81a9761b1d1c811833b128c47bf34f1dad03afff64c42fd0b
+capture head                 bc687d67e2c377c4a702874ecb1cbdddb0ff04c6
+capture workflow             38113263898
+capture artifact             11692103984
+capture artifact digest      sha256:e591cca817a02a8b351a1aff958b581a40db7cdfe711f949b817586230023fba
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
