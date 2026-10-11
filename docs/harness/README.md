@@ -163,6 +163,8 @@ Repository Hygiene 负责：
 - Pi source/runtime 契约；
 - 自动化测试。
 
+`npm run test` 保留对 `apps/**`、`packages/**` 全部 `.test.ts` 的发现和排序；Node测试文件各自在隔离进程执行，文件并发数固定为2，避免执行时长随主机默认并发数变化。任何测试失败、取消或子进程异常仍使原检查失败，测试断言及CI时限保持原值。
+
 CI先由`static-contracts`固定 Node 22.23.1，以空 HOME/npm 配置和临时 cache 执行 npm 10.9.8 的 `ci --ignore-scripts`，再执行上述静态合同并计算Probe gate。工具链文件变化追加触发原兼容矩阵；原 job/权限/证据聚合不变。内部`CI required evidence`通过`needs`聚合CI内五个动态Job，并以workflow filename endpoint、`run.path`、机器`display_title`、repo/ref/SHA和时间戳匹配三套standalone run；不比较会映射为自定义显示标题的Actions `run.name`。三套success候选ID都须连续quiet 60秒才整体通过，任一latest变化或pending都会清除对应稳定候选。Ruleset要求的唯一`check`只观察当前run attempt内evidence；仅“Re-run failed jobs”可能缺evidence，恢复需“Re-run all jobs”。
 
 Autonomous Merge的机器标题绑定来源 CI run ID、attempt和HEAD。`pulls.merge`确认成功后，同一可信 Job立即复查merged PR、来源HEAD/base及单一squash parent，再发送以`after`为重放身份的`main-provenance`事件；任何 post-merge确认或dispatch失败都会创建按`after`去重的 Main Incident。`Main Provenance Dispatch`不再从CI完成事件猜测90秒内是否会合并，而监听 Autonomous Merge完成：它以只读Actions API最多三次重取精确来源CI attempt；非成功Autonomous Merge若始终无法读回来源，就用source CI HEAD同时作为before/after登记`reconciler-source-ci-undetermined`持久Incident，成功主路径则显式失败等待重试但不重复登记。来源可读后正常忽略非PR、非success和fork；短时重试合并可见性，只有连续可信的未合并读回才no-op，API无法确定则持久登记Incident；已确认同源merge无论主路径结论如何都复验来源与parent并按相同`after`幂等补发。
