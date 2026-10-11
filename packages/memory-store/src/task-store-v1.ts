@@ -408,6 +408,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     });
   }
   recordRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1): TaskInputCommitResultV1 {
+    return this.#recordRuntimeInput(context, input);
+  }
+  /** Only the fixed Context composition calls this inside its outer transaction. */
+  recordCompiledRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1, capsule: ContentRefV2): TaskInputCommitResultV1 {
+    if (!this.#host.db.isTransaction || !this.#row("SELECT 1 FROM context_capsule_v1 WHERE content_id=? AND content_version=? AND task_id=? AND runtime_input_id IS NULL", capsule.contentId, capsule.contentVersion, input.taskId)) this.#host.fail("conflict");
+    return this.#recordRuntimeInput(context, input, capsule);
+  }
+  #recordRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1, capsule?: ContentRefV2): TaskInputCommitResultV1 {
     exact(input, ["commandId", "idempotencyKey", "taskId", "expectedRevision", "attemptId", "intentRevision", "text"]);
     for (const id of [input.commandId, input.idempotencyKey, input.taskId, input.attemptId]) assertIdentifierV2(id); assertRevisionV2(input.expectedRevision); assertRevisionV2(input.intentRevision);
     if (typeof input.text !== "string" || !input.text.trim() || Buffer.byteLength(input.text) > 1024 * 1024) this.#host.fail("validation"); this.#context(context, context.workspaceId);
@@ -427,7 +435,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       const snapshot: RuntimeInputSnapshotV1 = { schemaVersion: 1, id: this.#id("input"), taskId: task.id, attemptId: attempt.id, taskRevision: task.revision, intentRevision: task.intent.revision,
         ownerEpoch: context.ownerEpoch, ordinal, kind: "runtime_input", contractRevision: integer(session.contract_revision), text: input.text, createdAt: this.#host.now() };
       const receipt: TaskStoreReceiptV1 = { schemaVersion: 1, commandId: input.commandId, status: "committed", aggregate: { kind: "task", id: task.id, revision: task.revision }, result: receiptResult(task) };
-      const scope = taskScope(context.workspaceId, task.id), content = this.#host.writeBody(scope, { schemaVersion: 1, input: snapshot, command, receipt }, [ref(row), ref(session)], this.#writeBoundary());
+      const scope = taskScope(context.workspaceId, task.id), content = this.#host.writeBody(scope, { schemaVersion: 1, input: snapshot, command, receipt }, [ref(row), ref(session), ...(capsule ? [{ ...capsule }] : [])], this.#writeBoundary());
       this.#run("INSERT INTO task_input_v1(id,task_id,attempt_id,task_revision,intent_revision,kind,ordinal,owner_epoch,content_id,content_version,scope_key) VALUES(?,?,?,?,?,'runtime_input',?,?,?,?,?)", snapshot.id, task.id, attempt.id, task.revision, task.intent.revision, ordinal, context.ownerEpoch, content.contentId, content.contentVersion, scopeKeyV2(scope));
       const cursor = this.#outbox(this.#event(context.workspaceId, { kind: "task", id: task.id, revision: task.revision }, "task.input_committed", { attemptId: attempt.id, ordinal }), context.ownerEpoch);
       return { ...this.#receipt(context, command, receipt, cursor, content, scope), snapshot, contentRef: content };
@@ -594,6 +602,12 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       const dependencyTargets = new Set(this.#rows(`SELECT content_id,content_version FROM session_v1 UNION SELECT content_id,content_version FROM task_snapshot_v1
         UNION SELECT content_id,content_version FROM task_input_v1 UNION SELECT content_id,content_version FROM task_execution_snapshot_v1
         UNION SELECT content_id,content_version FROM task_execution_event_v1 UNION SELECT content_id,content_version FROM task_model_request_v1`).map(row => json([row.content_id, row.content_version])));
+      if (this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='context_capsule_v1'")) {
+        for (const row of this.#rows(`SELECT content_id,content_version FROM context_capsule_v1
+          UNION SELECT decision_content_id AS content_id,decision_content_version AS content_version FROM cognitive_boundary_v1 WHERE decision_content_id IS NOT NULL
+          UNION SELECT input_content_id AS content_id,input_content_version AS content_version FROM cognitive_call_v1
+          UNION SELECT received_content_id AS content_id,received_content_version AS content_version FROM cognitive_call_v1 WHERE received_content_id IS NOT NULL`)) dependencyTargets.add(json([row.content_id, row.content_version]));
+      }
       const edges = new Map<string, string[]>(), visiting = new Set<string>(), visited = new Set<string>();
       for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
         const source = json([edge.source_id, edge.source_version]), target = json([edge.target_id, edge.target_version]);
@@ -714,7 +728,9 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           const actual = this.#rows("SELECT source_id,source_version FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", string(row.content_id), integer(row.content_version))
             .map(edge => json([edge.source_id, edge.source_version])).sort();
           const previous = runtime ? snapshot : start > 0 ? this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), start)! : undefined;
-          const expected = [session, ...(previous ? [previous] : [])].map(source => json([source.content_id, source.content_version])).sort();
+          const compiled = runtime && this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='context_capsule_v1'")
+            ? this.#rows("SELECT content_id,content_version FROM context_capsule_v1 WHERE runtime_input_id=?", string(row.id)) : [];
+          const expected = [session, ...(previous ? [previous] : []), ...compiled].map(source => json([source.content_id, source.content_version])).sort();
           if (json(actual) !== json(expected)) throw new Error("input dependency role mismatch");
           const metadata = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version))!;
           if (!runtime && metadata.created_at !== snapshot.created_at) throw new Error("command content time mismatch");

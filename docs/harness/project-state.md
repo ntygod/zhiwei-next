@@ -12,6 +12,8 @@ canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `fea
 
 首批纯编译入口复用P0-04预算阶段，输出带精确版本/来源、选择理由及计数的不可变胶囊；3项正常组件检查、157严格类型roots与架构检查通过，旧compileContext与预算组件保持。此输出不证明已授权或已发送。唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)。[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)的Proposed提案字节获独立设计批准并Accepted；审查指出的WorkingState跨Session关联在计数前修复，原3项场景通过。快照持久化、有限决策和实际受控接收仍继续实现，最终HEAD另须R3。Z14/Z15产品验收not_run，真实入口保持关闭，UI由所有者安排Gemini。
 
+Context 固定前向 schema5 与持久 read-set 已接线：Task/WorkingState/配置/当前精确 Claim 和来源从同一 SQLite 视图取得，保护胶囊与原 RuntimeInput v1 原子提交，正文依赖连通既有遗忘机制。6项正常临时数据库场景通过，另3项 schema4→5/旧严格 reader/六动作协议场景通过；旧0001—0004不改。认知调用保留表已建但协调、实际发送及迟到结果入口尚未完成，不认定 P1-06 实现或产品验收完成。
+
 ## 已交付：P1-05 可纠正记忆与检索 #118（2026-10-11）
 
 canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `feat/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
