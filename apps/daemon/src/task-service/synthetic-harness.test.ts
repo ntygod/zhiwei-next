@@ -11,74 +11,12 @@ import type { LocalApiCommandV1, SessionCreateCommandV1 } from "../../../../pack
 import { createSessionDataClient, pairSyntheticSessionCli, runSessionCli } from "../../../cli/src/session-client.ts";
 import { createSyntheticWorkerTestPackage } from "../runtime/controlled-worker-test-fixture.ts";
 import { createSyntheticTaskSessionHarness, type SyntheticTaskSessionHarness } from "./synthetic-harness.ts";
-import { syntheticTaskPrompt, syntheticTaskSessionContract, syntheticCognitiveTaskSessionContract } from "./application.ts";
+import { syntheticTaskPrompt, syntheticTaskSessionContract } from "./application.ts";
 const context = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a" };
 function sessionCommand(): SessionCreateCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "session.create", contract: syntheticTaskSessionContract } }; }
 function taskCommand(sessionId: string): LocalApiCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: 0, payload: { kind: "task.create", sessionId, executionProfile: syntheticTaskSessionContract.runtimeProfile, request: syntheticTaskPrompt, constraints: [], acceptanceChecks: [{ id: "criterion-synthetic" as CriterionId, revision: 1, description: "Independently verify synthetic output", required: true, method: "deterministic-test" }] } }; }
 function change(task: Task, kind: "task.cancel" | "task.pause" | "task.retry" | "task.continue"): LocalApiCommandV1 { const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: task.revision, payload: { kind, targetRef: { kind: "task", id: task.id, revision: task.revision } } }; }
 function create(h: SyntheticTaskSessionHarness) { const session = h.application.createSession(context, sessionCommand()); const command = taskCommand(session.value.aggregate.id), receipt = h.application.executeTask(context, command); return { taskId: receipt.value.aggregate.id, sessionId: session.value.aggregate.id, command, receipt }; }
-function cognitiveFixture(h: SyntheticTaskSessionHarness) {
- const createSession = sessionCommand(), session = h.application.createSession(context, { ...createSession, payload: { ...createSession.payload, contract: syntheticCognitiveTaskSessionContract } }), source = taskCommand(session.value.aggregate.id);
- if (source.payload.kind !== "task.create") assert.fail("task fixture");
- const command = { ...source, payload: { ...source.payload, request: "SYNTHETIC_ONLY lighthouse", constraints: ["Use only synthetic attributed material."] } };
- const taskId = h.application.executeTask(context, command).value.aggregate.id;
- const scope = { kind: "workspace" as const, workspaceId: context.workspaceId }, captureId = randomUUID();
- const evidence = h.memories.capture(context, { schemaVersion: 1, commandId: captureId, idempotencyKey: captureId, workspaceId: context.workspaceId, scope, privacy: "model-allowed", text: "SYNTHETIC_ONLY lighthouse uses amber for the report." }).evidence;
- const rememberId = randomUUID(), memory = h.memories.execute(context, { schemaVersion: 1, commandId: rememberId, idempotencyKey: rememberId, workspaceId: context.workspaceId, expectedRevision: 0,
-   payload: { kind: "memory.remember", scope, privacy: "model-allowed", claimKind: "preference", statement: "SYNTHETIC_ONLY lighthouse uses amber for the report.", evidenceRefs: [evidence], validFrom: new Date().toISOString() } });
- const claim = h.memories.explain(context, scope, memory.receipt.aggregate.id).value!;
- return { taskId, claim, correct() { const id = randomUUID(); h.memories.execute(context, { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: claim.revision,
-   payload: { kind: "memory.correct", scope, targetRef: { kind: "claim", id: claim.id, revision: claim.revision }, targetVersion: { claimId: claim.id, version: claim.version }, privacy: "model-allowed", claimKind: "preference", statement: "SYNTHETIC_ONLY lighthouse uses purple for the report.", evidenceRefs: [evidence], validFrom: claim.validFrom } }); } };
-}
-test("Cognitive Task carries its committed attributed capsule through the existing Worker to the receiver", async t => {
- const peer = await createSyntheticWorkerTestPackage(), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
- t.after(async () => { await h.close(); await peer.remove(); }); const f = cognitiveFixture(h), result = await h.runCognitiveTask(context, f.taskId); await h.idle();
- assert.equal(result.boundary.callCount, 1); assert.equal(result.boundary.decisions.at(-1)!.decision.action, "execute");
- assert.equal(result.context.capsule.report.selected[0]!.ref.id, f.claim.id); assert.match(result.context.capsule.rendering.fullText, /amber/);
- const evidence = h.evidence(context, f.taskId), task = h.application.getTask(context, f.taskId).value;
- assert.equal(evidence.execution!.spec.prompt, result.context.runtimeInput.snapshot.text); assert.deepEqual(evidence.execution!.spec.requestSnapshotRef, result.context.runtimeInput.contentRef);
- assert.equal(evidence.modelRequests.length, 1); assert.ok(JSON.stringify(evidence.modelRequests[0]!.context).includes("amber"));
- assert.equal(task.state, "VERIFYING"); assert.equal(task.attempts.at(-1)!.outcomes.length, 0); assert.equal(evidence.execution!.closed, true);
- await h.restart(); assert.equal(h.evidence(context, f.taskId).modelRequests.length, 1);
-});
-test("a cognitive Session with the default sample request executes through its capsule instead of the legacy queue", async t => {
- const peer = await createSyntheticWorkerTestPackage(), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
- t.after(async () => { await h.close(); await peer.remove(); }); const command = sessionCommand();
- const session = h.application.createSession(context, { ...command, payload: { ...command.payload, contract: syntheticCognitiveTaskSessionContract } });
- const taskId = h.application.executeTask(context, taskCommand(session.value.aggregate.id)).value.aggregate.id; await h.idle();
- assert.equal(h.evidence(context, taskId).execution, undefined); assert.equal(h.evidence(context, taskId).runtimeInputs.length, 0);
- await assert.rejects(h.runTask(context, taskId), { code: "unsupported" }); await assert.rejects(h.idle(), { code: "unsupported" });
- const result = await h.runCognitiveTask(context, taskId); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.state, "VERIFYING");
- const evidence = h.evidence(context, taskId); assert.equal(evidence.runtimeInputs.length, 1); assert.equal(evidence.execution!.spec.prompt, result.context.capsule.rendering.fullText);
- assert.equal(evidence.modelRequests.length, 1);
-});
-test("Cognitive Worker rejects correction before send and after its last received request", async t => {
- for (const stage of ["prompt", "final"] as const) {
-  const peer = await createSyntheticWorkerTestPackage(stage === "prompt" ? { pausePrompt: true } : { pauseFinal: true });
-  const h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
-  t.after(async () => { await h.close(); await peer.remove(); }); const f = cognitiveFixture(h), run = h.runCognitiveTask(context, f.taskId); void run.catch(() => undefined);
-  if (stage === "prompt") await peer.waitForPrompt(); else await peer.waitForFinal();
-  f.correct(); if (stage === "prompt") await peer.releasePrompt(); else await peer.releaseFinal();
-  await assert.rejects(run); await assert.rejects(h.idle());
-  const task = h.application.getTask(context, f.taskId).value, evidence = h.evidence(context, f.taskId);
-  assert.notEqual(task.state, "COMPLETED"); assert.ok(task.attempts.at(-1)!.outcomes.every(outcome => outcome.status === "unverifiable"));
-  assert.equal(evidence.modelRequests.length, stage === "prompt" ? 0 : 1); assert.equal(evidence.execution!.closed, true);
- }
-});
-test("a persisted cognitive question accepts its exact real response after owner fencing and opens a new boundary", async t => {
- const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close()); const f = cognitiveFixture(h);
- const planned = await h.coordinateTask(context, f.taskId, "clarify"), question = planned.boundary.decisions.at(-1)!.decision;
- if (question.action !== "clarify") assert.fail("clarify fixture");
- const waiting = h.application.getTask(context, f.taskId).value, oldOwner = h.application.getSession(context, waiting.sessionId).value.ownerEpoch;
- await h.restart(); assert.ok(h.application.getSession(context, waiting.sessionId).value.ownerEpoch > oldOwner);
- assert.equal(h.application.getTask(context, f.taskId).value.state, "WAITING_INPUT");
- const id = randomUUID(); h.application.executeTask(context, { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: waiting.revision,
-   payload: { kind: "task.respond", targetRef: { kind: "task", id: f.taskId, revision: waiting.revision }, pendingQuestionId: question.question.id, response: "SYNTHETIC_ONLY: use plain text." } });
- const ready = h.application.getTask(context, f.taskId).value; assert.equal(ready.state, "READY"); assert.notEqual(ready.attempts.at(-1)!.id, waiting.attempts.at(-1)!.id); assert.equal(ready.attempts[0]!.state, "CANCELLED");
- const next = await h.coordinateTask(context, f.taskId); assert.notEqual(next.boundary.id, planned.boundary.id); assert.equal(next.boundary.callCount, 1);
- assert.ok(next.context.capsule.rendering.fullText.includes("use plain text")); await h.restart(); assert.equal(h.application.getTask(context, f.taskId).value.state, "READY");
-});
-
 test("Committed history/idempotency survives restart and continuation creates a new attempt", async t => {
  const h = await createSyntheticTaskSessionHarness(); t.after(() => h.close());
  const { taskId, sessionId, command, receipt } = create(h), original = h.application.getTask(context, taskId).value;

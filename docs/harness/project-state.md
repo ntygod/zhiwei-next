@@ -20,6 +20,8 @@ canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `fea
 
 PR122 原来源已续期：正常 SDK/Worker run38145094526 / head5602bbc先通过原完整比较；Worker run38146677440 / headc53fc44 的两个原 attempt 各自完成capture、fresh/committed验证、upload，只在完整对象相等后因显式recapture guard失败。第一份保存后仅重跑精确Worker job，两份原ZIP及72731字节result.json按原validators验证、字节相同且等于正常原件；当前移除guard并精确恢复原comparator blobfba36da923a94cd2b9ba024f020089e3ef313d90。首次全Workflow重跑导致旧Artifact不可用的run38145815098不作来源。当前完整CI、最终R3和Ready/live/合入仍待结果。
 
+`6443369` 获独立 R3 代码批准，但原 CI38147683003 的新增 Worker 场景等待屏障失败，整轮随后触及原10分钟上限取消，未计作完整成功。将四个新增场景归入现有认知测试文件，与既有长时生命周期文件并行；先完成认知规划再等待执行屏障。全部场景、断言和CI时限保留，四项正常场景在Node22.23.1通过；最终新HEAD仍需原完整CI、新独立R3与Ready/live。
+
 ## 已交付：P1-05 可纠正记忆与检索 #118（2026-10-11）
 
 canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `feat/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
