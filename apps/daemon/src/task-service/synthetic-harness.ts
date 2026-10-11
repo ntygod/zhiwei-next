@@ -126,7 +126,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       if (kind === "task.cancel" || kind === "task.pause") { void stop(taskId, "cancelled").catch(error => { lastFailure = error; }); return; }
       if (runtime && ["task.create", "task.retry", "task.continue", "task.revise-request"].includes(kind)) {
         const task = current(context, taskId);
-        if (task.intent.request === syntheticTaskPrompt && task.intent.constraints.length === 0) void runTask(context, taskId).catch(() => undefined);
+        if (application.getSession(context, task.sessionId).value.contract.compilerProfile.id === "fixed-synthetic-input"
+          && task.intent.request === syntheticTaskPrompt && task.intent.constraints.length === 0) void runTask(context, taskId).catch(() => undefined);
       }
     },
   });
@@ -154,6 +155,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     if (closed || restarting || shutdownDrained || replacement !== "ready") return;
     if (!runtime) throw new SessionApiError("unsupported", "runtime_capability", 422);
     const task = current(context, taskId); if (task.state !== "READY") return;
+    if (!compiled && application.getSession(context, task.sessionId).value.contract.compilerProfile.id !== "fixed-synthetic-input") throw new SessionApiError("unsupported", "runtime_capability", 422);
     if (!compiled && (task.intent.request !== syntheticTaskPrompt || task.intent.constraints.length)) throw new SessionApiError("unsupported", "runtime_capability", 422);
     if (live.size || unallocated.size) throw new SessionApiError("unavailable", "dependency_down", 503);
     const owner = application.contextForTask(context, task), attempt = task.attempts.at(-1)!, inputId = `runtime-input-${randomUUID()}`;

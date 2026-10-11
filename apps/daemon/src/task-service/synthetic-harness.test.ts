@@ -41,6 +41,17 @@ test("Cognitive Task carries its committed attributed capsule through the existi
  assert.equal(task.state, "VERIFYING"); assert.equal(task.attempts.at(-1)!.outcomes.length, 0); assert.equal(evidence.execution!.closed, true);
  await h.restart(); assert.equal(h.evidence(context, f.taskId).modelRequests.length, 1);
 });
+test("a cognitive Session with the default sample request executes through its capsule instead of the legacy queue", async t => {
+ const peer = await createSyntheticWorkerTestPackage(), h = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+ t.after(async () => { await h.close(); await peer.remove(); }); const command = sessionCommand();
+ const session = h.application.createSession(context, { ...command, payload: { ...command.payload, contract: syntheticCognitiveTaskSessionContract } });
+ const taskId = h.application.executeTask(context, taskCommand(session.value.aggregate.id)).value.aggregate.id; await h.idle();
+ assert.equal(h.evidence(context, taskId).execution, undefined); assert.equal(h.evidence(context, taskId).runtimeInputs.length, 0);
+ await assert.rejects(h.runTask(context, taskId), { code: "unsupported" }); await assert.rejects(h.idle(), { code: "unsupported" });
+ const result = await h.runCognitiveTask(context, taskId); await h.idle(); assert.equal(h.application.getTask(context, taskId).value.state, "VERIFYING");
+ const evidence = h.evidence(context, taskId); assert.equal(evidence.runtimeInputs.length, 1); assert.equal(evidence.execution!.spec.prompt, result.context.capsule.rendering.fullText);
+ assert.equal(evidence.modelRequests.length, 1);
+});
 test("Cognitive Worker rejects correction before send and after its last received request", async t => {
  for (const stage of ["prompt", "final"] as const) {
   const peer = await createSyntheticWorkerTestPackage(stage === "prompt" ? { pausePrompt: true } : { pauseFinal: true });

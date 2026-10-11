@@ -50,6 +50,13 @@ function change(claim: MemoryClaimV2, payload: MemoryCommandV1["payload"]): Memo
   const id = randomUUID(); return { schemaVersion: 1, commandId: id, idempotencyKey: id, workspaceId: context.workspaceId, expectedRevision: claim.revision, payload };
 }
 function target(claim: MemoryClaimV2) { return { scope: claim.scope, targetRef: { kind: "claim" as const, id: claim.id, revision: claim.revision }, targetVersion: { claimId: claim.id, version: claim.version } }; }
+test("the cognitive compiler profile rejects raw Runtime input without a committed capsule", t => {
+  const f = fixture(t), task = f.store.tasks.getTask(context.workspaceId, f.taskId).value!, id = randomUUID();
+  assert.throws(() => f.store.tasks.recordRuntimeInput(context, { commandId: id, idempotencyKey: id, taskId: f.taskId, expectedRevision: task.revision,
+    attemptId: task.attempts.at(-1)!.id, intentRevision: task.intent.revision, text: "SYNTHETIC_ONLY: raw input" }), { code: "unsupported" });
+  assert.equal(f.store.tasks.listRuntimeInputs(context.workspaceId, f.taskId, task.attempts.at(-1)!.id).value.length, 0);
+  assert.equal(f.prepare().runtimeInput.snapshot.kind, "runtime_input");
+});
 test("Runtime memory tools return only current selected scoped material and actual requests retain it", async t => {
   const f = fixture(t, syntheticContextBoundaryV1, "controlled-read-memory-draft-v1", true), memory = f.remember(), hidden = f.remember("SYNTHETIC_ONLY：灯塔 private-tool-data", "local-only");
   const initial = f.prepare(), port = await model(f, initial, "execute"); t.after(() => port.close());

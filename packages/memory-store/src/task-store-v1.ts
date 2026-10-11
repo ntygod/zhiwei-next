@@ -462,6 +462,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     return this.#host.transaction(true, () => {
       const row = this.#taskRow(context.workspaceId, input.taskId); if (!row) this.#host.fail("unavailable");
       const session = this.#row("SELECT * FROM session_v1 WHERE id=? AND workspace_id=?", string(row.session_id), context.workspaceId)!; this.#owner(context, session); if (row.owner_epoch !== context.ownerEpoch) this.#host.fail("revision_conflict");
+      if (this.#session(session)!.contract.compilerProfile.id === "cognitive-context-v1" && !capsule) this.#host.fail("unsupported");
       const replay = this.#replayReceipt(context, command);
       if (replay) { const prior = this.#row("SELECT * FROM task_receipt_v1 WHERE principal_id=? AND command_id=?", context.principalId, replay.receipt.commandId)!;
         return { ...replay, snapshot: this.#body(prior, taskScope(context.workspaceId, input.taskId))!.input as unknown as RuntimeInputSnapshotV1, contentRef: ref(prior) }; }

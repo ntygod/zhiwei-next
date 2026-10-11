@@ -43,6 +43,8 @@ Store 增加固定 schema5 与 Context 端口，Domain/Protocol 增加明确版�
 
 固定 Session compiler profile 为 cognitive-context-v1；原 fixed-synthetic-input profile 继续用于既有无长期记忆执行。决定模型只接受同一 Broker 的 scripted receiver，未证明的真实 structuredDecision 返回 unsupported。clarify/wait 首版都绑定一个 user-input 问题/条件：内部 task.runtime/cognitive-wait 只消费 Store 已提交的决定，不伪造用户 Observation；task.respond 保存真实输入，精确问题匹配后建立下一 revision，task.continue 不能替代它。不提供任意订阅、期限调度或自动模型轮询。
 
+选择 cognitive-context-v1 后，裸 RuntimeInput 或没有关联胶囊的执行明确拒绝；即使请求文字与原固定样例相同，也不会进入旧固定输入队列。此 profile 必须消费已提交编译输入并完成当前发送/结果复验。
+
 问题等待期间若 owner 被 fencing，真实回复沿既有重新授权的确认停止/新 attempt 路径推进；旧问题与调用数不改写，新 WorkingState 保留真实回复。没有原 checkpoint 或实际输入时，不能以同 attempt 或 ownerEpoch 变化静默恢复/重置认知调用。
 
 执行仍由既有 Worker 完成。胶囊对应的 READY→RUNNING 只在 exact task.runtime/start、同 attempt/intent/owner 和原 READY binding 依赖证明成立时承接；其余 Task/WorkingState/配置/材料/epoch 变化都拒绝。实际请求与原胶囊的关联、完整请求计数和最终事件复验在现有同步事务/接收屏障中完成。首个 Runtime memory.search/inspect 只读该胶囊已选、当前仍合格材料，固定受控工具复用此端口；新增检索在协调边界完成，因此无需在执行中另建来源或模型循环。Unicode scalar 计数和协议 peer 都是合成开发证据，不能代表真实 Provider tokenizer 或官方 Pi 完整组合验收。

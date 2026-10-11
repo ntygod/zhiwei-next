@@ -196,7 +196,12 @@ export class ContextStoreEngineV1 implements ContextPersistenceV1 {
   }
   /** Existing Task execution fences call this synchronously for dispatch, receive and final commit. */
   validateRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, request?: Readonly<{ context: JsonValue; maxTokens: number }>): void {
-    const row = this.#runtimeCapsule(spec); if (!row) return;
+    const row = this.#runtimeCapsule(spec);
+    if (!row) {
+      const session = this.#host.tasks.getSession(context.workspaceId, spec.sessionId).value;
+      if (session?.contract.compilerProfile.id === "cognitive-context-v1") this.#host.fail("conflict");
+      return;
+    }
     const body = this.#runtimeCurrent(context, row, spec, binding);
     if (request) this.#runtimeRequestBudget(body.capsule, spec.prompt, request);
   }
