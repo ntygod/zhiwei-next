@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-export async function createSyntheticWorkerTestPackage(options: Readonly<{pauseHandshake?:boolean;pausePrompt?:boolean}> = {}) {
+export async function createSyntheticWorkerTestPackage(options: Readonly<{pauseHandshake?:boolean;pausePrompt?:boolean;pauseFinal?:boolean}> = {}) {
   const root = await mkdtemp(join(tmpdir(), "zhiwei-supervisor-ordinary-test-"));
   await mkdir(join(root, "dist"));
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.1", type: "module", bin: { pi: "dist/cli.js" } }));
@@ -45,7 +45,7 @@ async function handle(r){
    send({type:'turn_start'});let final;
    for await(const event of provider.streamSimple(model,context,{})){
     if(event.type==='start')send({type:'message_start',message:event.partial});
-    else if(event.type==='done'){final=event.message;send({type:'message_end',message:final});}
+    else if(event.type==='done'){final=event.message;if(${JSON.stringify(options.pauseFinal===true)}&&!expectedTool)await barrier('final');send({type:'message_end',message:final});}
     else if(event.type==='error')throw new Error('Synthetic extension round failed');
    }
    if(!final)throw new Error('Missing synthetic terminal');context.messages.push(final);
@@ -78,5 +78,5 @@ process.stdin.on('data',chunk=>{
 process.stdin.on('end',()=>{void pending.then(()=>hooks.get('session_shutdown')({type:'session_shutdown',reason:'quit'},ctx));});
 `);
   const wait = async (name:string) => { const deadline=Date.now()+10000; while(true) { try { await access(join(root,name)); return; } catch { if(Date.now()>deadline) throw new Error("Synthetic barrier not reached."); await delay(5); } } };
-  return {root,remove:()=>rm(root,{recursive:true,force:true}),waitForHandshake:()=>wait("handshake-started"),waitForPrompt:()=>wait("prompt-started"),releaseHandshake:()=>writeFile(join(root,"handshake-release"),"synthetic"),releasePrompt:()=>writeFile(join(root,"prompt-release"),"synthetic")};
+  return {root,remove:()=>rm(root,{recursive:true,force:true}),waitForHandshake:()=>wait("handshake-started"),waitForPrompt:()=>wait("prompt-started"),waitForFinal:()=>wait("final-started"),releaseHandshake:()=>writeFile(join(root,"handshake-release"),"synthetic"),releasePrompt:()=>writeFile(join(root,"prompt-release"),"synthetic"),releaseFinal:()=>writeFile(join(root,"final-release"),"synthetic")};
 }

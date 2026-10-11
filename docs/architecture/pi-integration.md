@@ -193,14 +193,14 @@ Provider/Session/pending count 和 late-running mutation 均必须被拒绝。�
 ```text
 manifest                     rpc-worker-lifecycle-manifest-v2.json
 format                       gzip-plus-readable-case-replacement
-source head                  9fecea80e71eac5a5bc6fac65f5a2149096a4515
-source workflow              38113554778
+source head                  c53fc44148ab9d8942e4f1e4d382de6a2b0b96d7
+source workflow              38146677440
 source run attempt           2
-source artifact              11691849981
-source artifact digest       sha256:6ce22347d78b1ac27b991e8fecd5a2e189c3ae86bd78f6e8db85e4e4a29dd4b5
+source artifact              11705252888
+source artifact digest       sha256:ec4727cb5f5ac66c967fe28cfda30b5c96b7989ed5e0e17ea93ba61f82d321d8
 comparison run attempt       1
-comparison artifact          11692761346
-comparison artifact digest   sha256:178c5585292b29ca6f7f469ed641a15053fb99dbfbdf1ccc1dab2ede6781d10c
+comparison artifact          11704717642
+comparison artifact digest   sha256:2b9643791773ed9c9554277cabcf9ea16f9c44b501279864dac16355d642262d
 artifact result bytes        72731
 artifact result sha256       87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa
 canonical JSON bytes         36265
@@ -209,7 +209,7 @@ outer fingerprint            b4715e2b896258fddec81e2f25f4c28056d24a8562547f46d63
 capture fingerprint          511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0
 ```
 
-PR #120 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。正常成功 run38113263898 的原完整比较先于这两次记录通过；最终候选恢复正式 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。Ready live provenance继续验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality；来源记录不代表 P1 产品验收。
+PR #122 Draft中的两个受控recapture attempts均完成capture、Fresh validation、committed Fixture validation和upload；在正式完整对象相等后，recapture-only guard让compare步骤显式失败，因此Workflow/Worker Job整体保持failure。正常成功 run38145094526 的原完整比较先于这两次记录通过；最终候选恢复正式 comparator blob `fba36da923a94cd2b9ba024f020089e3ef313d90`。先保存第一份原 Artifact，再仅重跑精确 Worker job；两份原件与正常 Worker 字节相同。Ready live provenance继续验证当前PR归属、source ancestry、两个Artifact字节一致性和committed-object equality；来源记录不代表 P1 产品验收。
 
 ## `NormalizedRuntimeEvent v1` 映射边界
 

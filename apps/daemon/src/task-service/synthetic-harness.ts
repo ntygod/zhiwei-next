@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs, { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSyntheticRecoveryCoordinatorV2, openSyntheticRecoveryCoordinatorV2, type SyntheticRecoveryCoordinatorV2, type TaskPersistenceBoundaryV1, type TaskRuntimeCommandV1, type TaskExecutionDetailsV1, type TaskModelRequestSnapshotV1, type RuntimeInputSnapshotV1 } from "../../../../packages/memory-store/src/index.ts";
+import { createSyntheticRecoveryCoordinatorV2, openSyntheticRecoveryCoordinatorV2, type SyntheticRecoveryCoordinatorV2, type TaskPersistenceBoundaryV1, type TaskRuntimeCommandV1, type TaskExecutionDetailsV1, type TaskModelRequestSnapshotV1, type RuntimeInputSnapshotV1, type ContextSnapshotV1 } from "../../../../packages/memory-store/src/index.ts";
 import { canonicalJsonV1, type RuntimeProcessCloseEvidenceV1 } from "../../../../packages/protocol/src/index.ts";
 import { isTerminalTaskState, type Task } from "../../../../packages/domain/src/index.ts";
 import { createSyntheticSessionApi, type SyntheticSessionApi } from "../session-api/server.ts";
@@ -13,12 +13,18 @@ import { reducePersistentTask } from "./task-reducer.ts";
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "../memory-service/memory-rules.ts";
 import { createPersistentMemoryApplication } from "../memory-service/application.ts";
 import type { MemoryPersistenceV1 } from "../../../../packages/memory-store/src/index.ts";
+import { syntheticContextBoundaryV1 } from "./synthetic-context-boundary.ts";
+import { coordinateCognitiveBoundaryV1, type CognitiveCoordinationResultV1 } from "./cognitive-coordinator.ts";
+import { createSyntheticTaskDecisionModelV1 } from "./synthetic-decision-model.ts";
+import type { SyntheticDecisionFixtureV1 } from "../infrastructure/controlled-broker.ts";
 export interface SyntheticTaskSessionHarness {
   readonly mode: "synthetic-fixtures-only"; readonly production: "unsupported";
   readonly application: PersistentSessionApplication; readonly api: SyntheticSessionApi;
   readonly memories: MemoryPersistenceV1;
   evidence(context: SessionApiContext, taskId: string): Readonly<{ execution?: TaskExecutionDetailsV1; runtimeInputs: readonly RuntimeInputSnapshotV1[]; modelRequests: readonly TaskModelRequestSnapshotV1[] }>;
   runTask(context: SessionApiContext, taskId: string): Promise<void>;
+  coordinateTask(context: SessionApiContext, taskId: string, fixture?: SyntheticDecisionFixtureV1): Promise<CognitiveCoordinationResultV1>;
+  runCognitiveTask(context: SessionApiContext, taskId: string): Promise<CognitiveCoordinationResultV1>;
   idle(): Promise<void>; restart(): Promise<void>; interruptControlPlane(): Promise<void>; reconcileRetainedWorkers(): Promise<void>; close(): Promise<void>;
 }
 export interface SyntheticTaskSessionHarnessOptions { readonly runtime?: Readonly<{ packageDirectory: string; nodeExecutable: string }> }
@@ -56,7 +62,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     runtimeSourceIdentity: { bindingImplementation: "pi", adapter: "pi", implementation: "@earendil-works/pi-coding-agent", version: "0.84.1" },
     contentPolicy: { privacy: "model-allowed", retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reducePersistentTask });
   const recoveryOptions = () => ({ recoveryRoot, controlRoot, installationId, clock: { now: () => new Date().toISOString() }, taskPersistence: boundary(),
-    memoryPersistence: { contentPolicy: { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory } });
+    memoryPersistence: { contentPolicy: { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory }, contextPersistence: syntheticContextBoundaryV1 });
   try {
     coordinator = createSyntheticRecoveryCoordinatorV2({ ...recoveryOptions(), generationId: randomUUID() });
     coordinator.store.registerScope({ kind: "global" });
@@ -120,7 +126,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       if (kind === "task.cancel" || kind === "task.pause") { void stop(taskId, "cancelled").catch(error => { lastFailure = error; }); return; }
       if (runtime && ["task.create", "task.retry", "task.continue", "task.revise-request"].includes(kind)) {
         const task = current(context, taskId);
-        if (task.intent.request === syntheticTaskPrompt && task.intent.constraints.length === 0) void runTask(context, taskId).catch(() => undefined);
+        if (application.getSession(context, task.sessionId).value.contract.compilerProfile.id === "fixed-synthetic-input"
+          && task.intent.request === syntheticTaskPrompt && task.intent.constraints.length === 0) void runTask(context, taskId).catch(() => undefined);
       }
     },
   });
@@ -144,19 +151,20 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
   const closeUnallocated = async () => {
     for (const supervisor of [...unallocated]) { await supervisor.close(); unallocated.delete(supervisor); }
   };
-  const executeTask = async (context: SessionApiContext, taskId: string) => {
+  const executeTask = async (context: SessionApiContext, taskId: string, compiled?: ContextSnapshotV1) => {
     if (closed || restarting || shutdownDrained || replacement !== "ready") return;
     if (!runtime) throw new SessionApiError("unsupported", "runtime_capability", 422);
     const task = current(context, taskId); if (task.state !== "READY") return;
-    if (task.intent.request !== syntheticTaskPrompt || task.intent.constraints.length) throw new SessionApiError("unsupported", "runtime_capability", 422);
+    if (!compiled && application.getSession(context, task.sessionId).value.contract.compilerProfile.id !== "fixed-synthetic-input") throw new SessionApiError("unsupported", "runtime_capability", 422);
+    if (!compiled && (task.intent.request !== syntheticTaskPrompt || task.intent.constraints.length)) throw new SessionApiError("unsupported", "runtime_capability", 422);
     if (live.size || unallocated.size) throw new SessionApiError("unavailable", "dependency_down", 503);
     const owner = application.contextForTask(context, task), attempt = task.attempts.at(-1)!, inputId = `runtime-input-${randomUUID()}`;
-    const input = store().tasks.recordRuntimeInput(owner, { commandId: inputId, idempotencyKey: inputId, taskId, expectedRevision: task.revision, attemptId: attempt.id, intentRevision: task.intent.revision, text: syntheticTaskPrompt });
+    const input = compiled?.runtimeInput ?? store().tasks.recordRuntimeInput(owner, { commandId: inputId, idempotencyKey: inputId, taskId, expectedRevision: task.revision, attemptId: attempt.id, intentRevision: task.intent.revision, text: syntheticTaskPrompt });
     application.committed();
     const global = store().currentFence({ kind: "global" }), workspace = store().currentFence({ kind: "workspace", workspaceId: context.workspaceId });
     let supervisor: SyntheticWorkerSupervisor | undefined, active: LiveWorker | undefined;
     try {
-      supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
+      supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", ...(compiled ? { compiledInput: compiled } : {}), taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
         fence: { installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: attempt.id }, sourceTask: { taskId, attemptId: attempt.id, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: owner.ownerEpoch, cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60_000).toISOString() } },
         beforeSyntheticModelReceive(record) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().executions.recordModelRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); application.committed(); },
       });
@@ -211,6 +219,23 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     const admittedContext = Object.freeze({ principalId: context.principalId, workspaceId: context.workspaceId });
     const operation = serial.then(() => executeTask(admittedContext, taskId)); serial = operation.catch(error => { lastFailure = error; }); return operation;
   };
+  const coordinateTask = async (context: SessionApiContext, taskId: string, fixture?: SyntheticDecisionFixtureV1): Promise<CognitiveCoordinationResultV1> => {
+    const task = current(context, taskId), owner = application.contextForTask(context, task);
+    const initial = store().contexts.prepare(owner, { id: randomUUID(), taskId, expectedRevision: task.revision, query: task.intent.request.slice(0, 256), requiredClaims: [] });
+    const model = await createSyntheticTaskDecisionModelV1({ store, context: owner, initial, ...(fixture ? { fixture } : {}) });
+    try { const result = await coordinateCognitiveBoundaryV1({ store, context: owner, initial, model, ids: { next: randomUUID } }); application.committed(); return result; }
+    finally { await model.close(); }
+  };
+  const runCognitiveTask = (context: SessionApiContext, taskId: string): Promise<CognitiveCoordinationResultV1> => {
+    if (closed || restarting || shutdownDrained || replacement !== "ready" || !runtime) return Promise.reject(new SessionApiError("unsupported", "runtime_capability", 422));
+    const admittedContext = Object.freeze({ principalId: context.principalId, workspaceId: context.workspaceId });
+    const operation = serial.then(async () => {
+      const result = await coordinateTask(admittedContext, taskId);
+      if (result.boundary.decisions.at(-1)?.decision.action === "execute") await executeTask(admittedContext, taskId, result.context);
+      return result;
+    });
+    serial = operation.then(() => undefined, error => { lastFailure = error; }); return operation;
+  };
   const reconcileRetained = async () => {
     const recovered: [string, LiveWorker][] = [];
     for (const [taskId, active] of [...live]) {
@@ -230,7 +255,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     if (recovered.length) { await serial; for (const [taskId, active] of recovered) releaseClosedCustody(taskId, active); }
   };
   return {
-    mode: "synthetic-fixtures-only", production: "unsupported", application, memories, get api() { return api; }, runTask,
+    mode: "synthetic-fixtures-only", production: "unsupported", application, memories, get api() { return api; }, runTask, coordinateTask, runCognitiveTask,
     evidence(context, taskId) { const task = current(context, taskId), attemptId = task.attempts.at(-1)!.id, execution = store().executions.readExecutionDetails(context.workspaceId, taskId); return { ...(execution ? { execution } : {}), runtimeInputs: store().tasks.listRuntimeInputs(context.workspaceId, taskId, attemptId).value, modelRequests: store().executions.listModelRequests(context.workspaceId, taskId, attemptId) }; },
     async idle() { await serial; if (lastFailure) { const error = lastFailure; lastFailure = undefined; throw error; } },
     async interruptControlPlane() {

@@ -5,7 +5,7 @@ import {
   assertIdentifierV2, assertIsoTimestampV2, assertScopeV2, assertPrivacyV2,
   assertRevisionV2, assertContentRefV2, assertMemoryClaimV2, assertMemoryCandidateV2, sameScopeV2, scopeKeyV2,
   isScopeWithinV2,
-  type ScopeV2, type PrivacyV2, type ContentRefV2, type MemoryClaimV2, type MemoryCandidateV2, type EvidenceRefV2,
+  type ScopeV2, type PrivacyV2, type ContentRefV2, type MemoryClaimV2, type MemoryCandidateV2, type EvidenceRefV2, type Task, type WorkingStateV2, type ClaimVersionRefV2,
 } from "../../domain/src/index.ts";
 import {
   canonicalJsonV1, parseObservationV2, serializeObservationV2,
@@ -13,7 +13,7 @@ import {
   type ObservationV2, type LocalApiCommandV1, type LocalApiMemoryInputV1, type LocalApiMemorySearchV1,
 } from "../../protocol/src/index.ts";
 import {
-  configureCognitiveDatabaseV2, applyMemoryMigrationsV1, verifyMemoryDatabaseV1,
+  configureCognitiveDatabaseV2, applyDecisionMigrationsV1, verifyDecisionDatabaseV1,
 } from "./cognitive-schema-v2.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 import { ContentFilesV2, type ContentFileDescriptorV2 } from "./content-files-v2.ts";
@@ -33,6 +33,9 @@ import type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1 } from "./task-s
 import type { TaskExecutionPersistenceV1 } from "./task-execution-v1-types.ts";
 import type { MemoryPersistenceBoundaryV1, MemoryPersistenceV1, MemoryContextV1, MemoryCommandV1, MemoryCommitV1, MemorySearchReadV1, MemoryExplanationV1, MemoryMaterialV1 } from "./memory-store-v1-types.ts";
 import { rankMemoryTextsV1 } from "./memory-fts-v1.ts";
+import { ContextStoreEngineV1 } from "./context-store-v1.ts";
+import type { ContextPersistenceBoundaryV1, ContextPersistenceV1 } from "./context-store-v1-types.ts";
+import type { TaskStoreContextV1 } from "./task-store-v1-types.ts";
 
 /** Default-disabled synthetic composition; no real data or external model boundary. */
 export interface SyntheticCognitionStoreOptionsV2 {
@@ -43,6 +46,7 @@ export interface SyntheticCognitionStoreOptionsV2 {
   readonly clock: { now(): string };
   readonly taskPersistence?: TaskPersistenceBoundaryV1;
   readonly memoryPersistence?: MemoryPersistenceBoundaryV1;
+  readonly contextPersistence?: ContextPersistenceBoundaryV1;
 }
 export interface CognitionFenceV2 {
   readonly installationId: string;
@@ -52,7 +56,7 @@ export interface CognitionFenceV2 {
   readonly recoveryEpoch: number;
 }
 export type CognitiveStoreErrorCodeV2 = "validation" | "closed" | "conflict" | "sequence"
-  | "unavailable" | "unsupported" | "revision_conflict" | "corruption" | "recovery_required" | "sqlite" | "io";
+  | "unavailable" | "unsupported" | "budget_exceeded" | "revision_conflict" | "corruption" | "recovery_required" | "sqlite" | "io";
 export class CognitiveStoreErrorV2 extends Error {
   readonly code: CognitiveStoreErrorCodeV2;
   constructor(code: CognitiveStoreErrorCodeV2) {
@@ -146,6 +150,7 @@ export class SyntheticCognitionStoreV2 {
   readonly #taskEngine: TaskStoreEngineV1;
   readonly #executionEngine: TaskExecutionStoreEngineV1;
   readonly #memoryBoundary: MemoryPersistenceBoundaryV1 | undefined;
+  readonly #contextEngine: ContextStoreEngineV1;
 
   private constructor(options: SyntheticCognitionStoreOptionsV2, db: DatabaseSync,
     pragmas: ReturnType<typeof configureCognitiveDatabaseV2>, files: ContentFilesV2,
@@ -167,6 +172,12 @@ export class SyntheticCognitionStoreV2 {
       writeBody: (scope, body, dependencies, boundary) => this.#writeTaskBody(scope, body, dependencies, boundary),
       recordCommandEvidence: (scope, command, dependencies, boundary) => this.#recordTaskCommand(scope, command, dependencies, boundary),
       executionForReduction: (workspaceId, taskId) => this.#executionEngine.currentForReduction(workspaceId, taskId),
+      validateCognitiveBoundary: (context, boundaryId) => {
+        const boundary = this.#row("SELECT capsule_id FROM cognitive_boundary_v1 WHERE id=? AND workspace_id=?", boundaryId, context.workspaceId);
+        if (!boundary) fail("unavailable"); this.#contextEngine.assertCurrent(context, text(boundary.capsule_id));
+      },
+      validateRuntimeContext: (context, spec, binding, request) => this.#contextEngine.validateRuntimeContext(context, spec, binding, request),
+      linkRuntimeContext: (context, spec, binding, requestId) => this.#contextEngine.linkRuntimeContext(context, spec, binding, requestId),
       onExecutionSettled: (context, envelope) => {
         const execution = this.#row("SELECT task_id FROM task_execution_v1 WHERE binding_id=? AND workspace_id=?", envelope.bindingId, context.workspaceId);
         if (!execution) fail("unavailable");
@@ -186,6 +197,31 @@ export class SyntheticCognitionStoreV2 {
     const memory = options.memoryPersistence;
     this.#memoryBoundary = memory ? Object.freeze({ contentPolicy: Object.freeze(structuredClone(memory.contentPolicy)),
       ids: Object.freeze({ next: memory.ids.next.bind(memory.ids) }), reduce: memory.reduce, qualifies: memory.qualifies }) : undefined;
+    const context = options.contextPersistence;
+    const contextBoundary = context ? Object.freeze({ budget: Object.freeze(structuredClone(context.budget)), counter: Object.freeze(structuredClone(context.counter)),
+      compile: context.compile.bind(context), countActualRequest: context.countActualRequest.bind(context) }) : undefined;
+    this.#contextEngine = new ContextStoreEngineV1({ ...host, tasks: this.#taskEngine, currentFence: scope => this.#currentFence(scope),
+      materials: (context, task, query, required) => this.#contextMaterials(context, task, query, required),
+      validateMaterial: material => {
+        plainDataRecord(material, ["claim", "content", "sources"]); assertMemoryClaimV2(material.claim);
+        const row = this.#row("SELECT * FROM claim_version WHERE claim_id=? AND version=?", material.claim.id, material.claim.version);
+        if (!row || json(contentRef(row)) !== json(material.content)) fail("corruption");
+        const original = this.#hydrateClaim(row, false);
+        if (json(immutableClaimMetadata(original)) !== json(immutableClaimMetadata(material.claim)) || original.statement !== material.claim.statement || material.claim.status !== "ACTIVE"
+          || material.claim.revision < number(row.initial_revision) || material.claim.revision > number(row.revision)) fail("corruption");
+        const sources = material.claim.evidence.map(evidence => {
+          const source = this.#row("SELECT event_json FROM observation_v2 WHERE id=?", evidence.source.id); if (!source) fail("corruption");
+          const event = parseObservationV2(parse(source.event_json)); if (event.content.availability !== "available" || event.revision !== evidence.source.revision) fail("corruption"); return event.content.ref;
+        });
+        if (json(sources) !== json(material.sources)) fail("corruption");
+      },
+      evidenceContents: working => {
+        const scope = working.scope; if (scope.kind === "global") fail("unavailable");
+        if (working.evidence.some(source => source.privacy !== "model-allowed" || source.scope.kind === "global"
+          || source.scope.workspaceId !== scope.workspaceId || source.scope.kind === "task" && source.scope.taskId !== working.task.id)) fail("unavailable");
+        return this.#memoryEvidence(working.evidence, "model-allowed");
+      },
+    }, boundary, contextBoundary);
   }
 
   static open(options: SyntheticCognitionStoreOptionsV2): SyntheticCognitionStoreV2 {
@@ -216,7 +252,7 @@ export class SyntheticCognitionStoreV2 {
       const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
       const hasState = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='store_state'").get()
         && db.prepare("SELECT 1 FROM store_state WHERE singleton=1").get();
-      applyMemoryMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
+      applyDecisionMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
       const state = db.prepare("SELECT * FROM store_state WHERE singleton=1").get();
       if (!state) {
         if (options.mode === "open") fail("corruption");
@@ -243,6 +279,7 @@ export class SyntheticCognitionStoreV2 {
 
   get tasks(): TaskPersistenceStoreV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#taskEngine; }
   get executions(): TaskExecutionPersistenceV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#executionEngine; }
+  get contexts(): ContextPersistenceV1 { if (!this.#options.contextPersistence || !this.#options.taskPersistence || !this.#memoryBoundary) fail("unsupported"); return this.#contextEngine; }
   get memories(): MemoryPersistenceV1 {
     if (!this.#memoryBoundary) fail("unsupported");
     return { capture: (context, input) => this.#captureMemory(context, input), execute: (context, command) => this.#executeMemory(context, command),
@@ -282,7 +319,7 @@ export class SyntheticCognitionStoreV2 {
       if (!reconciling) this.#checkControl();
       this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
       this.#db.exec(write ? "BEGIN IMMEDIATE" : "BEGIN");
-      verifyMemoryDatabaseV1(this.#db, this.#pragmas);
+      verifyDecisionDatabaseV1(this.#db, this.#pragmas);
       this.#validateRows();
       if (!reconciling) this.#checkControl();
       const result = body();
@@ -1113,7 +1150,7 @@ export class SyntheticCognitionStoreV2 {
 
   #recoveryState(): CognitiveRecoveryStateV2 {
     const state = this.#state();
-    return { installationId: text(state.installation_id), schemaVersion: 4,
+    return { installationId: text(state.installation_id), schemaVersion: 6,
       controlSequence: number(state.applied_control_sequence), controlChecksum: text(state.applied_control_checksum),
       recoveryEpoch: number(state.recovery_epoch) };
   }
@@ -1334,6 +1371,7 @@ export class SyntheticCognitionStoreV2 {
       }
       this.#taskEngine.validateRows(); this.#executionEngine.validateRows();
       this.#validateMemoryRows();
+      this.#contextEngine.validateRows();
       if (this.#db.prepare("PRAGMA foreign_key_check").all().length) fail("corruption");
     } catch (error) {
       if (error instanceof CognitiveStoreErrorV2 && error.code === "sqlite") throw error;
@@ -1530,6 +1568,35 @@ export class SyntheticCognitionStoreV2 {
       if (error instanceof CognitiveStoreErrorV2 && ["sqlite", "corruption"].includes(error.code)) throw error;
       fail("recovery_required");
     }
+  }
+  #contextMaterials(context: TaskStoreContextV1, task: Task, queryText: string, required: readonly ClaimVersionRefV2[]) {
+    if (!this.#memoryBoundary || !this.#db.isTransaction || !this.#taskComposing) fail("unsupported");
+    const scope: ScopeV2 = { kind: "workspace", workspaceId: context.workspaceId };
+    this.#memoryScope(context, scope);
+    const inTask = (candidate: ScopeV2) => candidate.kind !== "global" && candidate.workspaceId === task.workspaceId
+      && (candidate.kind !== "task" || candidate.taskId === task.id) && (candidate.kind !== "session" || candidate.sessionId === task.sessionId);
+    const query = parseLocalApiMemorySearchV1({ schemaVersion: 1, query: queryText, scope, kinds: ["fact", "preference", "constraint", "decision"], limit: 50 });
+    const qualified: { claim: MemoryClaimV2; content: ContentRefV2; sources: readonly ContentRefV2[] }[] = [];
+    const scopes = this.#rows("SELECT * FROM scope_catalog").filter(row => inTask(scopeFrom(row)));
+    for (const scoped of scopes) for (const row of this.#rows("SELECT v.* FROM claim c JOIN claim_version v ON v.claim_id=c.id AND v.version=c.current_version WHERE c.scope_key=? AND v.status='ACTIVE' ORDER BY c.id", text(scoped.scope_key))) {
+      const metadata = parse(row.metadata_json) as Omit<MemoryClaimV2, "statement">;
+      // Eligibility is applied before body hydration, ranking and the compiler's counter.
+      if (metadata.privacy !== "model-allowed" || metadata.evidence.some(source => source.privacy !== "model-allowed" || !inTask(source.scope))) continue;
+      try {
+        const content = this.#content(contentRef(row), metadata.scope);
+        if (content.privacy !== "model-allowed") continue;
+        const claim = this.#hydrateClaim(row, true), sources = this.#memoryEvidence(claim.evidence, "model-allowed");
+        if (this.#memoryBoundary.qualifies(claim, query, "model", this.#now())) qualified.push({ claim, content: contentRef(row), sources });
+      } catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; }
+    }
+    const ranking = rankMemoryTextsV1(qualified.map(item => item.claim), query.query, query.limit);
+    const selected = new Set(ranking.rows.map(item => json([item.id, item.version])));
+    for (const wanted of required) {
+      assertIdentifierV2(wanted.claimId); assertRevisionV2(wanted.version);
+      if (!qualified.some(item => item.claim.id === wanted.claimId && item.claim.version === wanted.version)) fail("unavailable");
+      selected.add(json([wanted.claimId, wanted.version]));
+    }
+    return qualified.filter(item => selected.has(json([item.claim.id, item.claim.version])));
   }
   #searchMemories(context: MemoryContextV1, raw: LocalApiMemorySearchV1, audience: "user" | "model" = "user"): MemorySearchReadV1 {
     const query = parseLocalApiMemorySearchV1(raw);

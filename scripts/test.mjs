@@ -29,7 +29,7 @@ if (tests.length === 0) {
 
 const result = spawnSync(
   process.execPath,
-  ["--experimental-strip-types", "--test", ...tests],
+  ["--experimental-strip-types", "--test", "--test-concurrency=2", ...tests],
   { stdio: "inherit" },
 );
 

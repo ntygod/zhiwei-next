@@ -195,6 +195,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       if (!inputBody.input || typeof inputBody.input !== "object") throw new Error("Invalid input"); });
     const actual = (inputBody as { input: { text: string; contractRevision: number } }).input;
     if (actual.text !== spec.prompt || actual.contractRevision !== fence.contractRevision) this.#host.fail("conflict");
+    this.#host.validateRuntimeContext(context, spec, binding);
   }
   #writeBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ContentRefV2 {
     // The canonical codec rejects aliases. Dependency coordinates and body references are independent values.
@@ -379,13 +380,14 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
     });
     return this.#host.transaction(true, () => {
       const owned = this.#owned(context, input.taskId, input.bindingId), db = this.#host.db;
+      this.#checkFence(context, owned.current, owned.body.spec, owned.body.binding);
+      this.#host.validateRuntimeContext(context, owned.body.spec, owned.body.binding, { context: projected, maxTokens: input.maxTokens });
       const old = db.prepare("SELECT * FROM task_model_request_v1 WHERE binding_id=? AND request_id=?").get(input.bindingId, input.requestId) as Row | undefined;
       if (old) {
         const stored = this.#modelBody(old, owned.current.scope, true)!;
         if (stored.maxTokens !== input.maxTokens || json(stored.context) !== json(projected)) this.#host.fail("conflict");
         return { replay: true, ordinal: stored.ordinal, contentRef: ref(old) };
       }
-      this.#checkFence(context, owned.current, owned.body.spec, owned.body.binding);
       if (owned.body.binding.state !== "BUSY" || !owned.body.dispatched || owned.body.closed || owned.current.snapshot.state !== "RUNNING") this.#host.fail("conflict");
       if (this.#host.content(ref(owned.snapshot), owned.current.scope, true).privacy !== "model-allowed") this.#host.fail("unavailable");
       const count = db.prepare("SELECT count(*) AS count FROM task_model_request_v1 WHERE binding_id=?").get(input.bindingId) as Row;
@@ -400,6 +402,7 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
         scope_key,content_id,content_version,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(input.bindingId, input.requestId, input.taskId, snapshot.attemptId, snapshot.taskRevision, snapshot.intentRevision, context.ownerEpoch,
           this.#host.recoveryEpoch(), ordinal, input.maxTokens, scopeKeyV2(owned.current.scope), content.contentId, content.contentVersion, now);
+      this.#host.linkRuntimeContext(context, owned.body.spec, owned.body.binding, input.requestId);
       return { replay: false, ordinal, contentRef: content };
     });
   }

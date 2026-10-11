@@ -4,6 +4,7 @@ import { CognitiveStoreErrorV2, type SyntheticCognitionStoreV2, type TaskStoreCo
 import { SessionApiError, type SessionApiApplication, type SessionApiContext } from "../session-api/service.ts";
 export const syntheticTaskPrompt = "Summarize the fixed synthetic sample.";
 export const syntheticTaskSessionContract: SessionContractV1 = parseSessionContractV1({ schemaVersion: 1, runtimeProfile: { id: "zhiwei-controlled-synthetic-v1", revision: 1 }, modelProfile: { id: "synthetic-v1", revision: 1 }, toolProfile: { id: "none", revision: 1 }, policyProfile: { id: "synthetic-no-external-effects", revision: 1 }, dataProfile: { id: "synthetic-temporary-content", revision: 1 }, compilerProfile: { id: "fixed-synthetic-input", revision: 1 }, interactionKind: "interactive" });
+export const syntheticCognitiveTaskSessionContract: SessionContractV1 = parseSessionContractV1({ ...syntheticTaskSessionContract, compilerProfile: { id: "cognitive-context-v1", revision: 1 } });
 const pairs = new Map([["synthetic-principal-a", "synthetic-workspace-a"], ["synthetic-principal-b", "synthetic-workspace-b"]]);
 export interface PersistentSessionApplication extends SessionApiApplication { committed(): void; contextForTask(context: SessionApiContext, task: Task): TaskStoreContextV1 }
 function mapped<T>(operation: () => T): T {
@@ -46,14 +47,14 @@ export function createPersistentSessionApplication(options: Readonly<{ store: ()
     createSession(context, raw) { return mapped(() => {
       check(context); const command = parseSessionCreateCommandV1(raw);
       if (command.workspaceId !== context.workspaceId) throw new SessionApiError("not_found", "not_found", 404);
-      if (canonicalJsonV1(command.payload.contract) !== canonicalJsonV1(syntheticTaskSessionContract)) throw new SessionApiError("unsupported", "runtime_capability", 422);
+      if (![syntheticTaskSessionContract, syntheticCognitiveTaskSessionContract].some(contract => canonicalJsonV1(command.payload.contract) === canonicalJsonV1(contract))) throw new SessionApiError("unsupported", "runtime_capability", 422);
       const result = options.store().tasks.createSession({ ...context, daemonInstanceId: options.daemonInstanceId(), ownerEpoch: 1 }, command);
       if (!result.replay) committed(); return { value: result.receipt, commitCursor: result.commitCursor };
     }); },
     executeTask(context, raw) { return mapped(() => {
       check(context); const command = parseLocalApiCommandV1(raw);
       if (command.workspaceId !== context.workspaceId) throw new SessionApiError("not_found", "not_found", 404);
-      if (!command.payload.kind.startsWith("task.") || command.payload.kind === "task.respond" || command.payload.kind === "task.confirm-result") throw new SessionApiError("unsupported", "runtime_capability", 422);
+      if (!command.payload.kind.startsWith("task.") || command.payload.kind === "task.confirm-result") throw new SessionApiError("unsupported", "runtime_capability", 422);
       let owner: TaskStoreContextV1;
       if (command.payload.kind === "task.create") {
         const session = options.store().tasks.getSession(context.workspaceId, command.payload.sessionId).value;

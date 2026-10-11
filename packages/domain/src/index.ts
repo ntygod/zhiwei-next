@@ -126,3 +126,5 @@ export {
   assertEvidenceForScopeV2, assertMemoryCandidateV2, assertMemoryClaimV2, assertHypothesisV2,
   assertGoalV2, assertEpisodeV2, assertWorkingStateV2, assertProcedureV2,
 } from "./validation-v2.ts";
+export type { ContextClaimRefV1, ContextBudgetV1, ContextSelectionReasonV1, ContextMaterialSelectionV1, ContextCompilationReportV1, CognitiveContextCapsuleV1 } from "./context-v1.ts";
+export type { CognitiveDecisionV1, CognitiveDecisionInputV1 } from "./decision-v1.ts";

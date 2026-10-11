@@ -191,7 +191,7 @@ test("all ProductEvent variants reject orphan aggregates in a real isolated in-m
       applyTaskMigrationsV1(db, { clock: { now: () => T0 }, expectedPragmas: pragmas });
       const unused = (): never => { throw new Error("Unexpected content or execution access"); };
       const host: TaskStoreHostV1 = { db, now: () => T0, recoveryEpoch: () => 0, recoveryEpochs: () => [], registerScope: unused, content: unused, writeBody: unused,
-        recordCommandEvidence: unused, executionForReduction: unused, onExecutionSettled: unused,
+        recordCommandEvidence: unused, executionForReduction: unused, validateCognitiveBoundary: unused, validateRuntimeContext: unused, linkRuntimeContext: unused, onExecutionSettled: unused,
         fail: category => { throw new CognitiveStoreErrorV2(category); }, transaction: (_write, body) => {
           db.exec("BEGIN"); try { engine.validateRows(); execution.validateRows(); const result = body(); db.exec("COMMIT"); return result; }
           catch (error) { if (db.isTransaction) db.exec("ROLLBACK"); throw error; }

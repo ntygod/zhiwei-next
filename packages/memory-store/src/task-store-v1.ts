@@ -2,11 +2,12 @@
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 import { assertIdentifierV2, assertRevisionV2, assertPrivacyV2, assertIsoTimestampV2, assertWorkingStateV2,
   scopeKeyV2, isTerminalTaskState, sameTaskIntent,
-  type ContentRefV2, type ScopeV2, type PrivacyV2, type EvidenceRefV2, type Task, type TaskState, type WorkingStateV2 } from "../../domain/src/index.ts";
+  type ContentRefV2, type ScopeV2, type PrivacyV2, type EvidenceRefV2, type Task, type TaskState, type WorkingStateV2, type CognitiveDecisionV1 } from "../../domain/src/index.ts";
 import { canonicalJsonV1, parseSessionTaskV1, parseSessionCreateCommandV1, parseSessionV1, parseLocalApiCommandV1,
-  parseLocalApiReceiptV1, parseSessionApiReceiptV1, parseProductEventV1, parseObservationV2, parseNormalizedRuntimeEnvelopeV1,
+  parseLocalApiReceiptV1, parseSessionApiReceiptV1, parseProductEventV1, parseObservationV2, parseNormalizedRuntimeEnvelopeV1, parseCognitiveDecisionV1,
   type LocalApiCommandV1, type LocalApiResultV1, type ProductEventV1, type SessionCreateCommandV1, type SessionV1,
   type TaskSummaryV1, type NormalizedRuntimeEnvelopeV1 } from "../../protocol/src/index.ts";
+import type { ExecutionSpecV1, RuntimeBindingV1, JsonValue } from "../../protocol/src/index.ts";
 import type { CognitiveStoreErrorCodeV2 } from "./cognitive-store-v2.ts";
 import type { TaskExecutionReadV1 } from "./task-execution-v1-types.ts";
 import type { TaskPersistenceBoundaryV1, TaskPersistenceStoreV1, TaskStoreContextV1, TaskStoreCommandV1, TaskRuntimeCommandV1,
@@ -23,6 +24,9 @@ export interface TaskStoreHostV1 {
   writeBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): ContentRefV2;
   recordCommandEvidence(scope: ScopeV2, command: LocalApiCommandV1, dependencies: readonly ContentRefV2[], boundary: TaskPersistenceBoundaryV1): { content: ContentRefV2; evidence: EvidenceRefV2 };
   executionForReduction(workspaceId: string, taskId: string): TaskExecutionReadV1 | undefined;
+  validateCognitiveBoundary(context: TaskStoreContextV1, boundaryId: string): void;
+  validateRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, request?: Readonly<{ context: JsonValue; maxTokens: number }>): void;
+  linkRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, requestId: string): void;
   onExecutionSettled(context: TaskStoreContextV1, envelope: NormalizedRuntimeEnvelopeV1): void;
   fail(code: CognitiveStoreErrorCodeV2): never;
 }
@@ -190,17 +194,23 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       if (command.payload.kind === "task.runtime" && !["interrupted", "confirm-stop", "confirm-pause"].includes(command.payload.event) && currentRow?.owner_epoch !== context.ownerEpoch) this.#host.fail("revision_conflict");
       if ((currentRow ? integer(currentRow.revision) : 0) !== command.expectedRevision) this.#host.fail("revision_conflict");
       const current = currentRow ? this.#task(currentRow)! : undefined, session = this.#session(sessionRow)!;
+      if (command.payload.kind === "task.continue" && current?.state === "WAITING_INPUT") this.#host.fail("conflict");
       const id = taskId ?? this.#id("task"), scope = taskScope(context.workspaceId, id), now = this.#host.now(); this.#host.registerScope(scope);
       if (command.payload.kind === "task.create" && json(command.payload.executionProfile) !== json(session.contract.runtimeProfile)) this.#host.fail("conflict");
       const activeExecution = current ? this.#host.executionForReduction(context.workspaceId, current.id) : undefined;
+      const priorWorking = currentRow ? this.#body(currentRow, scope)!.workingState as WorkingStateV2 : undefined;
+      const cognitive = currentRow && (command.payload.kind === "task.respond" || command.payload.kind === "task.runtime" && command.payload.event === "cognitive-wait")
+        ? this.#pendingDecision(context, currentRow, command) : undefined;
+      if (cognitive && activeExecution && !activeExecution.closed) this.#host.fail("conflict");
       if (command.payload.kind !== "task.runtime" && activeExecution && activeExecution.ownerEpoch < context.ownerEpoch && !activeExecution.closed) this.#host.fail("recovery_required");
       const accepted = command.payload.kind === "task.runtime" ? undefined : this.#host.recordCommandEvidence(scope, command as LocalApiCommandV1, [ref(sessionRow), ...(currentRow ? [ref(currentRow)] : [])], this.#writeBoundary());
       const evidence = accepted ? [accepted.evidence] : currentRow ? (this.#body(currentRow, scope)!.workingState as WorkingStateV2).evidence : [];
-      const runtimeDependencies = command.payload.kind === "task.runtime" ? this.#runtimeEvidence(context, command as TaskRuntimeCommandV1, current!, activeExecution) : [];
+      const runtimeDependencies = cognitive ? [ref(cognitive.row)] : command.payload.kind === "task.runtime" ? this.#runtimeEvidence(context, command as TaskRuntimeCommandV1, current!, activeExecution) : [];
       const attemptId = this.#id("attempt"), outcomeId = this.#id("outcome");
       const reduced = this.#writeBoundary().reduce(current ? structuredClone(current) : undefined, structuredClone(command), { now, session: structuredClone(session), taskId: id,
         attemptId, nextRevision: command.expectedRevision + 1, outcomeId, requiresReauthorization: currentRow?.owner_epoch !== context.ownerEpoch,
-        evidence: structuredClone(evidence), privacy: evidence.some(item => item.privacy === "local-only") ? "local-only" : this.#writeBoundary().contentPolicy.privacy, ...(activeExecution ? { activeExecution } : {}) });
+        evidence: structuredClone(evidence), privacy: evidence.some(item => item.privacy === "local-only") ? "local-only" : this.#writeBoundary().contentPolicy.privacy,
+        ...(priorWorking ? { workingState: structuredClone(priorWorking) } : {}), ...(cognitive ? { cognitiveDecision: structuredClone(cognitive.decision) } : {}), ...(activeExecution ? { activeExecution } : {}) });
       exact(reduced, ["versions"], ["workingStates"]);
       if (!Array.isArray(reduced.versions) || !reduced.versions.length || reduced.versions.length > 16) this.#host.fail("validation");
       if (reduced.workingStates !== undefined && (!Array.isArray(reduced.workingStates) || reduced.workingStates.length !== reduced.versions.length)) this.#host.fail("validation");
@@ -227,18 +237,23 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const cursor = this.#outbox(this.#event(context.workspaceId, { kind: "session", id: sessionId, revision }, "session.owner_fenced", { ownerEpoch: context.ownerEpoch }), context.ownerEpoch);
         this.#recordSessionRevision(sessionId, "reauthorized", this.#host.recoveryEpoch(), cursor);
       }
-      let previous = current, previousContent = currentRow ? ref(currentRow) : ref(sessionRow), finalContent: ContentRefV2 | undefined, cursor = 0;
+      let previous = current, previousWorking = priorWorking, previousContent = currentRow ? ref(currentRow) : ref(sessionRow), finalContent: ContentRefV2 | undefined, cursor = 0;
       for (const [index, next] of versions.entries()) {
         assertTaskHistoryExtensionV1(previous, next);
         if (next.id !== id || next.workspaceId !== context.workspaceId || next.sessionId !== sessionId || next.updatedAt !== now) this.#host.fail("validation");
-        const working = reduced.workingStates === undefined ? this.#working(next, evidence) : this.#validateWorking(reduced.workingStates[index], next);
+        const working = reduced.workingStates === undefined ? this.#working(next, evidence, previousWorking) : this.#validateWorking(reduced.workingStates[index], next);
+        if (cognitive) {
+          const pending = cognitive.decision.action === "clarify" ? cognitive.decision.question : cognitive.decision.action === "wait" ? { id: cognitive.decision.condition.id, prompt: cognitive.decision.condition.description } : this.#host.fail("corruption");
+          if (command.payload.kind === "task.runtime" && (json(working.pendingInput) !== json([pending.id]) || !working.unknown.includes(pending.prompt) || !working.nextSteps.includes(pending.prompt))
+            || command.payload.kind === "task.respond" && (command.payload.pendingQuestionId !== pending.id || working.pendingInput.length || !working.known.includes(command.payload.response))) this.#host.fail("validation");
+        }
         const workingDependencies = working.evidence.map(item => { const row = this.#row("SELECT event_json FROM observation_v2 WHERE id=?", item.source.id); if (!row) this.#host.fail("unavailable");
           const event = parseObservationV2(parseStored(string(row.event_json))); if (event.content.availability !== "available") this.#host.fail("unavailable"); return event.content.ref; });
         const content = this.#host.writeBody(scope, { schemaVersion: 1, task: next, workingState: working, command: structuredClone(command), receipt: structuredClone(receipt) },
           [previousContent, ...(accepted ? [accepted.content] : []), ...runtimeDependencies, ...workingDependencies], this.#writeBoundary());
         this.#persistVersion(previous, next, content, context.ownerEpoch);
         cursor = this.#outbox(this.#event(context.workspaceId, { kind: "task", id, revision: next.revision }, previous ? "task.state_changed" : "task.created", { state: next.state, intentRevision: next.intent.revision }), context.ownerEpoch);
-        previous = next; previousContent = content; finalContent = content;
+        previous = next; previousWorking = working; previousContent = content; finalContent = content;
       }
       const attempt = final.attempts.at(-1)!, ordinal = integer(this.#row("SELECT coalesce(max(ordinal),0)+1 AS ordinal FROM task_input_v1 WHERE attempt_id=?", attempt.id)!.ordinal);
       this.#run("INSERT INTO task_input_v1(id,task_id,attempt_id,task_revision,intent_revision,kind,ordinal,owner_epoch,content_id,content_version,scope_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -246,6 +261,24 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         (accepted?.content ?? finalContent!).contentId, (accepted?.content ?? finalContent!).contentVersion, scopeKeyV2(scope));
       return this.#receipt(context, command, receipt, cursor, finalContent!, scope);
     });
+  }
+  #pendingDecision(context: TaskStoreContextV1, taskRow: Row, command: TaskStoreCommandV1): { row: Row; decision: CognitiveDecisionV1 } {
+    const waiting = command.payload.kind === "task.runtime" && command.payload.event === "cognitive-wait";
+    const prior = this.#body(taskRow, taskScope(context.workspaceId, string(taskRow.task_id)))!.command as TaskRuntimeCommandV1;
+    const boundaryId = waiting ? (command as TaskRuntimeCommandV1).payload.boundaryId
+      : prior?.payload?.kind === "task.runtime" && prior.payload.event === "cognitive-wait" ? prior.payload.boundaryId : undefined;
+    if (!boundaryId || taskRow.state !== (waiting ? "READY" : "WAITING_INPUT")) this.#host.fail("conflict");
+    const boundary = this.#row("SELECT * FROM cognitive_boundary_v1 WHERE id=? AND workspace_id=? AND task_id=?", boundaryId, context.workspaceId, string(taskRow.task_id));
+    if (!boundary || boundary.status !== "decided" || boundary.attempt_id !== taskRow.attempt_id || boundary.intent_revision !== taskRow.intent_revision
+      || boundary.owner_epoch !== taskRow.owner_epoch || integer(boundary.owner_epoch) > context.ownerEpoch || waiting && boundary.owner_epoch !== context.ownerEpoch
+      || boundary.task_revision !== integer(taskRow.revision) - (waiting ? 0 : 1)) this.#host.fail("revision_conflict");
+    const row = this.#row("SELECT * FROM cognitive_decision_v1 WHERE boundary_id=? ORDER BY revision DESC LIMIT 1", boundaryId);
+    if (!row || !["clarify", "wait"].includes(string(row.action)) || json(ref(row)) !== json({ contentId: boundary.decision_content_id, contentVersion: boundary.decision_content_version })) this.#host.fail("conflict");
+    if (waiting) this.#host.validateCognitiveBoundary(context, boundaryId);
+    const decision = parseCognitiveDecisionV1(this.#body(row, taskScope(context.workspaceId, string(taskRow.task_id)))!.decision);
+    const pending = decision.action === "clarify" ? decision.question.id : decision.action === "wait" ? decision.condition.id : this.#host.fail("corruption");
+    if (command.payload.kind === "task.respond" && command.payload.pendingQuestionId !== pending) this.#host.fail("revision_conflict");
+    return { row, decision };
   }
   #runtimeEvidence(context: TaskStoreContextV1, command: TaskRuntimeCommandV1, task: Task, active: TaskExecutionReadV1 | undefined): ContentRefV2[] {
     if (command.payload.event === "prepare") return [];
@@ -282,10 +315,10 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         || outcome.criteriaResults.some(result => result.status !== "unknown" || result.reason !== "incomplete" || result.evidence.length)) this.#host.fail("unsupported");
     }
     try { this.#commandMetadata(payload.kind, prior ? metadata(prior) : undefined, versions.map(metadata)); } catch { this.#host.fail("validation"); }
-    const expected: Partial<Record<typeof payload.kind, readonly TaskState[]>> = { "task.create": ["READY"], "task.cancel": ["CANCELLING", "CANCELLED"], "task.pause": ["RUNNING"], "task.retry": ["READY"], "task.continue": ["READY"], "task.revise-request": ["READY"] };
+    const expected: Partial<Record<typeof payload.kind, readonly TaskState[]>> = { "task.create": ["READY"], "task.cancel": ["CANCELLING", "CANCELLED"], "task.pause": ["RUNNING"], "task.retry": ["READY"], "task.continue": ["READY"], "task.revise-request": ["READY"], "task.respond": ["READY"] };
     if (expected[payload.kind] && !expected[payload.kind]!.includes(final.state)) this.#host.fail("validation");
     if (payload.kind === "task.runtime") {
-      const state = ({ prepare: "READY", start: "RUNNING", settled: "VERIFYING", "confirm-stop": "CANCELLED", "confirm-pause": "PAUSED", interrupted: "UNVERIFIABLE", "effects-unknown": "NEEDS_RECONCILIATION" } as const)[payload.event];
+      const state = ({ prepare: "READY", start: "RUNNING", settled: "VERIFYING", "confirm-stop": "CANCELLED", "confirm-pause": "PAUSED", interrupted: "UNVERIFIABLE", "effects-unknown": "NEEDS_RECONCILIATION", "cognitive-wait": "WAITING_INPUT" } as const)[payload.event];
       if (final.state !== state) this.#host.fail("validation");
     }
   }
@@ -297,7 +330,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       "task.pause": ["RUNNING"], "task.retry": ["CREATED,READY"],
       "task.continue": ["READY", "CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
       "task.revise-request": ["CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
-      "task.runtime": ["READY", "RUNNING", "VERIFYING", "CANCELLED", "PAUSED", "UNVERIFIABLE", "VERIFYING,UNVERIFIABLE"],
+      "task.respond": ["READY", "CANCELLING,CANCELLED,CREATED,READY"],
+      "task.runtime": ["READY", "RUNNING", "VERIFYING", "CANCELLED", "PAUSED", "UNVERIFIABLE", "VERIFYING,UNVERIFIABLE", "WAITING_INPUT"],
     };
     if (!sequences[kind]?.includes(states)) throw new Error("command state span mismatch");
     let previous = prior;
@@ -309,10 +343,10 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       } else if (row.attempt_id !== previous.attempt_id) {
         if (!isTerminalTaskState(previous.state as TaskState) || row.state !== "CREATED"
           || row.intent_revision !== integer(previous.intent_revision) + (kind === "task.revise-request" ? 1 : 0)
-          || !["task.retry", "task.continue", "task.revise-request"].includes(kind)) throw new Error("new attempt metadata mismatch");
+          || !["task.retry", "task.continue", "task.revise-request", "task.respond"].includes(kind)) throw new Error("new attempt metadata mismatch");
       } else {
         const transitions: Readonly<Partial<Record<TaskState, readonly TaskState[]>>> = {
-          CREATED: ["READY"], READY: ["RUNNING", "CANCELLING"], RUNNING: ["RUNNING", "VERIFYING", "PAUSED", "CANCELLING"],
+          CREATED: ["READY"], READY: ["RUNNING", "CANCELLING", "WAITING_INPUT"], RUNNING: ["RUNNING", "VERIFYING", "PAUSED", "CANCELLING"],
           VERIFYING: ["UNVERIFIABLE", "CANCELLING"], WAITING_INPUT: ["READY", "CANCELLING"], WAITING_APPROVAL: ["READY", "CANCELLING"],
           PAUSED: ["CANCELLING"], CANCELLING: ["CANCELLED"], NEEDS_RECONCILIATION: ["CANCELLING"],
         };
@@ -323,14 +357,17 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     if (kind === "task.create" && (prior || final.intent_revision !== 1 || versions.some(row => row.attempt_id !== final.attempt_id))) throw new Error("create attempt metadata mismatch");
     if (["task.retry", "task.revise-request"].includes(kind) && (!prior || final.attempt_id === prior.attempt_id)) throw new Error("missing command attempt");
     if (kind === "task.pause" && prior?.state !== "RUNNING") throw new Error("pause metadata mismatch");
+    if (kind === "task.respond" && prior?.state !== "WAITING_INPUT") throw new Error("response metadata mismatch");
   }
   #command(input: TaskStoreCommandV1): TaskStoreCommandV1 {
     const raw = JSON.parse(json(input)) as TaskStoreCommandV1;
     if (raw?.payload?.kind !== "task.runtime") { const value = parseLocalApiCommandV1(raw); if (!value.payload.kind.startsWith("task.")) this.#host.fail("unsupported"); return value; }
     exact(raw, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]); if (raw.schemaVersion !== 1) this.#host.fail("validation");
     for (const value of [raw.commandId, raw.idempotencyKey, raw.workspaceId]) assertIdentifierV2(value); assertRevisionV2(raw.expectedRevision);
-    exact(raw.payload, ["kind", "taskId", "event"], ["completeness", "evidenceRefs"]); assertIdentifierV2(raw.payload.taskId);
-    if (!["prepare", "start", "settled", "confirm-stop", "confirm-pause", "interrupted", "effects-unknown"].includes(raw.payload.event)) this.#host.fail("validation");
+    exact(raw.payload, ["kind", "taskId", "event"], ["completeness", "evidenceRefs", "boundaryId"]); assertIdentifierV2(raw.payload.taskId);
+    if (!["prepare", "start", "settled", "confirm-stop", "confirm-pause", "interrupted", "effects-unknown", "cognitive-wait"].includes(raw.payload.event)) this.#host.fail("validation");
+    if (raw.payload.event === "cognitive-wait") { assertIdentifierV2(raw.payload.boundaryId); if (raw.payload.completeness !== undefined || raw.payload.evidenceRefs !== undefined) this.#host.fail("validation"); }
+    else if (raw.payload.boundaryId !== undefined) this.#host.fail("validation");
     if (raw.payload.completeness !== undefined && !["complete", "incomplete"].includes(raw.payload.completeness)) this.#host.fail("validation");
     if (raw.payload.evidenceRefs !== undefined) {
       if (!Array.isArray(raw.payload.evidenceRefs) || raw.payload.evidenceRefs.length > 100) this.#host.fail("validation");
@@ -354,12 +391,13 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     }
     return value;
   }
-  #working(task: Task, evidence: readonly EvidenceRefV2[]): WorkingStateV2 {
+  #working(task: Task, evidence: readonly EvidenceRefV2[], previous?: WorkingStateV2): WorkingStateV2 {
     const attempt = task.attempts.at(-1)!;
     const value: WorkingStateV2 = { schemaVersion: 2, id: task.id, revision: task.revision, scope: taskScope(task.workspaceId, task.id),
       privacy: evidence.some(item => item.privacy === "local-only") ? "local-only" : this.#writeBoundary().contentPolicy.privacy, sourceTrust: "verified-tool", createdAt: task.createdAt, updatedAt: task.updatedAt,
       task: { kind: "task", id: task.id, revision: task.revision }, taskAttempt: { taskId: task.id, attemptId: attempt.id, intentRevision: task.intent.revision },
-      intentRevision: task.intent.revision, currentStep: task.state, known: [], unknown: [], pendingInput: [], nextSteps: [], evidence: structuredClone(evidence) };
+      intentRevision: task.intent.revision, currentStep: task.state,
+      ...(previous?.taskAttempt.attemptId === attempt.id ? { known: previous.known, unknown: previous.unknown, pendingInput: previous.pendingInput, nextSteps: previous.nextSteps } : { known: [], unknown: [], pendingInput: [], nextSteps: [] }), evidence: structuredClone(evidence) };
     assertWorkingStateV2(value); return value;
   }
   #persistVersion(prior: Task | undefined, task: Task, content: ContentRefV2, ownerEpoch: number): void {
@@ -408,6 +446,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     });
   }
   recordRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1): TaskInputCommitResultV1 {
+    return this.#recordRuntimeInput(context, input);
+  }
+  /** Only the fixed Context composition calls this inside its outer transaction. */
+  recordCompiledRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1, capsule: ContentRefV2): TaskInputCommitResultV1 {
+    if (!this.#host.db.isTransaction || !this.#row("SELECT 1 FROM context_capsule_v1 WHERE content_id=? AND content_version=? AND task_id=? AND runtime_input_id IS NULL", capsule.contentId, capsule.contentVersion, input.taskId)) this.#host.fail("conflict");
+    return this.#recordRuntimeInput(context, input, capsule);
+  }
+  #recordRuntimeInput(context: TaskStoreContextV1, input: TaskInputCommitV1, capsule?: ContentRefV2): TaskInputCommitResultV1 {
     exact(input, ["commandId", "idempotencyKey", "taskId", "expectedRevision", "attemptId", "intentRevision", "text"]);
     for (const id of [input.commandId, input.idempotencyKey, input.taskId, input.attemptId]) assertIdentifierV2(id); assertRevisionV2(input.expectedRevision); assertRevisionV2(input.intentRevision);
     if (typeof input.text !== "string" || !input.text.trim() || Buffer.byteLength(input.text) > 1024 * 1024) this.#host.fail("validation"); this.#context(context, context.workspaceId);
@@ -416,6 +462,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     return this.#host.transaction(true, () => {
       const row = this.#taskRow(context.workspaceId, input.taskId); if (!row) this.#host.fail("unavailable");
       const session = this.#row("SELECT * FROM session_v1 WHERE id=? AND workspace_id=?", string(row.session_id), context.workspaceId)!; this.#owner(context, session); if (row.owner_epoch !== context.ownerEpoch) this.#host.fail("revision_conflict");
+      if (this.#session(session)!.contract.compilerProfile.id === "cognitive-context-v1" && !capsule) this.#host.fail("unsupported");
       const replay = this.#replayReceipt(context, command);
       if (replay) { const prior = this.#row("SELECT * FROM task_receipt_v1 WHERE principal_id=? AND command_id=?", context.principalId, replay.receipt.commandId)!;
         return { ...replay, snapshot: this.#body(prior, taskScope(context.workspaceId, input.taskId))!.input as unknown as RuntimeInputSnapshotV1, contentRef: ref(prior) }; }
@@ -427,7 +474,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       const snapshot: RuntimeInputSnapshotV1 = { schemaVersion: 1, id: this.#id("input"), taskId: task.id, attemptId: attempt.id, taskRevision: task.revision, intentRevision: task.intent.revision,
         ownerEpoch: context.ownerEpoch, ordinal, kind: "runtime_input", contractRevision: integer(session.contract_revision), text: input.text, createdAt: this.#host.now() };
       const receipt: TaskStoreReceiptV1 = { schemaVersion: 1, commandId: input.commandId, status: "committed", aggregate: { kind: "task", id: task.id, revision: task.revision }, result: receiptResult(task) };
-      const scope = taskScope(context.workspaceId, task.id), content = this.#host.writeBody(scope, { schemaVersion: 1, input: snapshot, command, receipt }, [ref(row), ref(session)], this.#writeBoundary());
+      const scope = taskScope(context.workspaceId, task.id), content = this.#host.writeBody(scope, { schemaVersion: 1, input: snapshot, command, receipt }, [ref(row), ref(session), ...(capsule ? [{ ...capsule }] : [])], this.#writeBoundary());
       this.#run("INSERT INTO task_input_v1(id,task_id,attempt_id,task_revision,intent_revision,kind,ordinal,owner_epoch,content_id,content_version,scope_key) VALUES(?,?,?,?,?,'runtime_input',?,?,?,?,?)", snapshot.id, task.id, attempt.id, task.revision, task.intent.revision, ordinal, context.ownerEpoch, content.contentId, content.contentVersion, scopeKeyV2(scope));
       const cursor = this.#outbox(this.#event(context.workspaceId, { kind: "task", id: task.id, revision: task.revision }, "task.input_committed", { attemptId: attempt.id, ordinal }), context.ownerEpoch);
       return { ...this.#receipt(context, command, receipt, cursor, content, scope), snapshot, contentRef: content };
@@ -594,6 +641,15 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       const dependencyTargets = new Set(this.#rows(`SELECT content_id,content_version FROM session_v1 UNION SELECT content_id,content_version FROM task_snapshot_v1
         UNION SELECT content_id,content_version FROM task_input_v1 UNION SELECT content_id,content_version FROM task_execution_snapshot_v1
         UNION SELECT content_id,content_version FROM task_execution_event_v1 UNION SELECT content_id,content_version FROM task_model_request_v1`).map(row => json([row.content_id, row.content_version])));
+      if (this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='context_capsule_v1'")) {
+        for (const row of this.#rows(`SELECT content_id,content_version FROM context_capsule_v1
+          UNION SELECT decision_content_id AS content_id,decision_content_version AS content_version FROM cognitive_boundary_v1 WHERE decision_content_id IS NOT NULL
+          UNION SELECT input_content_id AS content_id,input_content_version AS content_version FROM cognitive_call_v1
+          UNION SELECT received_content_id AS content_id,received_content_version AS content_version FROM cognitive_call_v1 WHERE received_content_id IS NOT NULL`)) dependencyTargets.add(json([row.content_id, row.content_version]));
+      }
+      if (this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='cognitive_decision_v1'")) {
+        for (const row of this.#rows("SELECT content_id,content_version FROM cognitive_decision_v1")) dependencyTargets.add(json([row.content_id, row.content_version]));
+      }
       const edges = new Map<string, string[]>(), visiting = new Set<string>(), visited = new Set<string>();
       for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
         const source = json([edge.source_id, edge.source_version]), target = json([edge.target_id, edge.target_version]);
@@ -617,7 +673,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const task = this.#row("SELECT * FROM task_v1 WHERE id=?", string(receipt.entity_id));
         const end = integer(receipt.revision), start = commandEnds.get(string(receipt.entity_id)) ?? 0;
         const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(receipt.entity_id), end);
-        if (!task || !snapshot || !["task.create", "task.cancel", "task.pause", "task.continue", "task.retry", "task.revise-request", "task.runtime"].includes(string(receipt.command_kind))
+        if (!task || !snapshot || !["task.create", "task.cancel", "task.pause", "task.continue", "task.retry", "task.revise-request", "task.respond", "task.runtime"].includes(string(receipt.command_kind))
           || task.workspace_id !== receipt.workspace_id || task.scope_key !== receipt.scope_key || json(ref(receipt)) !== json(ref(snapshot))
           || end <= start || end - start > 16 || (start === 0) !== (receipt.command_kind === "task.create")) throw new Error("command receipt projection mismatch");
         const scope = taskScope(string(task.workspace_id), string(task.id)), finalBody = this.#body(snapshot, scope, false);
@@ -636,6 +692,24 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         // Required execution roles are known from the retained command span even when
         // its private evidenceRefs have been removed. All versions share the same proof.
         const internal = receipt.command_kind === "task.runtime";
+        if (internal && snapshot.state === "WAITING_INPUT") {
+          const proposals = this.#rows(`SELECT d.*,b.task_revision,b.attempt_id,b.intent_revision,b.owner_epoch,b.task_id,b.workspace_id
+            FROM cognitive_decision_v1 d JOIN cognitive_boundary_v1 b ON b.id=d.boundary_id
+            JOIN task_content_dependency_v1 edge ON edge.source_id=d.content_id AND edge.source_version=d.content_version
+            WHERE edge.target_id=? AND edge.target_version=? AND b.status='decided'
+              AND b.decision_content_id=d.content_id AND b.decision_content_version=d.content_version`, string(snapshot.content_id), integer(snapshot.content_version));
+          if (!previous || proposals.length !== 1 || !["clarify", "wait"].includes(string(proposals[0]!.action))
+            || proposals[0]!.task_revision !== previous.revision || proposals[0]!.task_id !== task.id || proposals[0]!.workspace_id !== task.workspace_id
+            || proposals[0]!.attempt_id !== previous.attempt_id || proposals[0]!.intent_revision !== previous.intent_revision || proposals[0]!.owner_epoch !== snapshot.owner_epoch) throw new Error("pending decision proof missing");
+          const proposal = proposals[0]!, proposalBody = this.#body(proposal, scope, false);
+          if (proposalBody && finalBody) {
+            const decision = parseCognitiveDecisionV1(proposalBody.decision);
+            const pending = decision.action === "clarify" ? decision.question : decision.action === "wait" ? { id: decision.condition.id, prompt: decision.condition.description } : undefined;
+            const command = this.#command(finalBody.command as TaskStoreCommandV1), working = finalBody.workingState as WorkingStateV2;
+            if (!pending || command.payload.kind !== "task.runtime" || command.payload.event !== "cognitive-wait" || command.payload.boundaryId !== proposal.boundary_id
+              || json(working.pendingInput) !== json([pending.id]) || !working.unknown.includes(pending.prompt) || !working.nextSteps.includes(pending.prompt)) throw new Error("pending decision body mismatch");
+          }
+        }
         const starts = internal && snapshot.state === "RUNNING";
         const closes = internal && ["CANCELLED", "PAUSED", "UNVERIFIABLE"].includes(string(snapshot.state));
         const replaces = previous && range.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempt_id !== previous.attempt_id);
@@ -714,7 +788,9 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           const actual = this.#rows("SELECT source_id,source_version FROM task_content_dependency_v1 WHERE target_id=? AND target_version=?", string(row.content_id), integer(row.content_version))
             .map(edge => json([edge.source_id, edge.source_version])).sort();
           const previous = runtime ? snapshot : start > 0 ? this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), start)! : undefined;
-          const expected = [session, ...(previous ? [previous] : [])].map(source => json([source.content_id, source.content_version])).sort();
+          const compiled = runtime && this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='context_capsule_v1'")
+            ? this.#rows("SELECT content_id,content_version FROM context_capsule_v1 WHERE runtime_input_id=?", string(row.id)) : [];
+          const expected = [session, ...(previous ? [previous] : []), ...compiled].map(source => json([source.content_id, source.content_version])).sort();
           if (json(actual) !== json(expected)) throw new Error("input dependency role mismatch");
           const metadata = this.#row("SELECT created_at FROM content_object WHERE content_id=? AND content_version=?", string(row.content_id), integer(row.content_version))!;
           if (!runtime && metadata.created_at !== snapshot.created_at) throw new Error("command content time mismatch");
@@ -748,7 +824,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           }
           if (internal) {
             const runtimeCommand = command as TaskRuntimeCommandV1;
-            if (runtimeCommand.payload.event !== "prepare" && !runtimeCommand.payload.evidenceRefs?.length) throw new Error("internal evidence missing");
+            if (!["prepare", "cognitive-wait"].includes(runtimeCommand.payload.event) && !runtimeCommand.payload.evidenceRefs?.length) throw new Error("internal evidence missing");
             for (const evidence of runtimeCommand.payload.evidenceRefs ?? []) {
               const binding = this.#row("SELECT * FROM task_execution_snapshot_v1 WHERE binding_id=? AND revision=? AND task_id=? AND attempt_id=?", evidence.id, evidence.revision, string(row.task_id), string(row.attempt_id));
               const event = evidence.revision === 1 ? this.#row("SELECT * FROM task_execution_event_v1 WHERE event_id=? AND task_id=? AND attempt_id=?", evidence.id, string(row.task_id), string(row.attempt_id)) : undefined;
@@ -827,7 +903,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
                 JOIN task_snapshot_v1 s ON s.task_id=t.id AND s.revision=r.revision
                 JOIN task_attempt_v1 a ON a.id=s.attempt_id
                 WHERE r.entity_kind='task' AND r.workspace_id=? AND t.session_id=? AND r.commit_cursor>?
-                  AND r.command_kind IN ('task.create','task.retry','task.continue','task.revise-request')
+                  AND r.command_kind IN ('task.create','task.retry','task.continue','task.revise-request','task.respond')
                   AND s.owner_epoch=? AND s.created_at=? AND a.created_at=? ORDER BY r.commit_cursor LIMIT 1`,
                 event.workspaceId, event.aggregate.id, integer(row.cursor), integer(row.owner_epoch), event.occurredAt, event.occurredAt);
               if (!receipt) throw new Error("outbox reauthorization missing command");

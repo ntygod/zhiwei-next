@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   parseExecutionSpecV1, snapshotJsonValue,
+  parseCognitiveDecisionInputV1, cognitiveDecisionRequestContextV1, canonicalJsonV1,
   type ExecutionSpecV1, type JsonValue,
 } from "../../../../packages/protocol/src/index.ts";
 
@@ -17,6 +18,8 @@ export const controlledSyntheticToolNames = Object.freeze([
   "zhiwei_file_read", "zhiwei_memory_read", "zhiwei_draft_write",
 ] as const);
 export type ControlledSyntheticToolName = typeof controlledSyntheticToolNames[number];
+export type SyntheticDecisionFixtureV1 = "execute" | "respond" | "clarify" | "wait" | "stop" | "retrieve-execute" | "repeated-retrieve" | "no-progress" | "bad-json-repair" | "bad-json" | "invalid-reference";
+const DECISION_FIXTURES: readonly SyntheticDecisionFixtureV1[] = ["execute", "respond", "clarify", "wait", "stop", "retrieve-execute", "repeated-retrieve", "no-progress", "bad-json-repair", "bad-json", "invalid-reference"];
 export type ControlledBrokerErrorCode = "invalid_request" | "unsupported" | "closed" | "expired"
   | "budget_exceeded" | "duplicate_request" | "resource_unavailable" | "io_unavailable";
 export class ControlledBrokerError extends Error {
@@ -274,7 +277,27 @@ export function parseSyntheticBrokerSpec(input: unknown): ExecutionSpecV1 {
 }
 
 /** Fixed scripted receiver, not an Agent loop, network provider, user-supplied callback or Agent SDK. */
-function syntheticReplyFixture(index: number, scenario: "text" | "tools"): ControlledModelResult {
+function syntheticReplyFixture(index: number, scenario: "text" | "tools" | "decision", fixture: SyntheticDecisionFixtureV1, actual: JsonValue): ControlledModelResult {
+  if (scenario === "decision") {
+    const projected = actual as { messages: { content: { text: string }[] }[] };
+    let input: ReturnType<typeof parseCognitiveDecisionInputV1>;
+    try { input = parseCognitiveDecisionInputV1(JSON.parse(projected.messages[0]!.content[0]!.text)); }
+    catch { return reject(); }
+    if (canonicalJsonV1(actual) !== canonicalJsonV1(cognitiveDecisionRequestContextV1(input))) reject();
+    const first = input.ordinal === 1;
+    if (fixture === "bad-json" || fixture === "bad-json-repair" && first) return freeze({ kind: "model.result", text: "{synthetic-invalid-json" });
+    const claimRefs = fixture === "invalid-reference" ? [{ kind: "claim", id: "synthetic-nonexistent", revision: 1, version: 1 }] : input.claimRefs;
+    const basis = { schemaVersion: 1, summary: "SYNTHETIC_ONLY：依据当前任务和获准材料选择下一步。", claimRefs };
+    let proposal: unknown;
+    if ((fixture === "retrieve-execute" || fixture === "repeated-retrieve") && (first || fixture === "repeated-retrieve")) proposal = { ...basis, action: "retrieve", query: "辅助报告" };
+    else if (fixture === "no-progress") proposal = { ...basis, action: "retrieve", query: "灯塔" };
+    else if (fixture === "respond") proposal = { ...basis, action: "respond", text: "SYNTHETIC_ONLY：已整理材料，结果等待核对。" };
+    else if (fixture === "clarify") proposal = { ...basis, action: "clarify", question: { id: "synthetic-report-color", prompt: "SYNTHETIC_ONLY：报告需要采用哪种颜色？" } };
+    else if (fixture === "wait") proposal = { ...basis, action: "wait", condition: { kind: "user-input", id: "synthetic-report-signal", description: "SYNTHETIC_ONLY：等待已提交的报告输入。" } };
+    else if (fixture === "stop") proposal = { ...basis, action: "stop", reason: "declined" };
+    else proposal = { ...basis, action: "execute", plan: "SYNTHETIC_ONLY：交由既有受控 Runtime 整理虚构材料。" };
+    return freeze({ kind: "model.result", text: canonicalJsonV1(proposal) });
+  }
   if (scenario === "tools") {
     const calls: readonly ControlledModelToolCall[] = [
       { id: "synthetic-file-call", name: "zhiwei_file_read", arguments: { resourceId: "fixture-file" } },
@@ -288,14 +311,19 @@ function syntheticReplyFixture(index: number, scenario: "text" | "tools"): Contr
 
 export async function createSyntheticControlledBroker(
   input: ExecutionSpecV1,
-  options: Readonly<{ scenario?: "text" | "tools"; now?: () => number; beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void }> = {},
+  options: Readonly<{ scenario?: "text" | "tools" | "decision"; decisionFixture?: SyntheticDecisionFixtureV1; now?: () => number; beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void; memoryReader?: Readonly<{ read(): string }> }> = {},
 ): Promise<SyntheticControlledBroker> {
   const spec = parseSyntheticBrokerSpec(input);
-  if (Object.keys(options).some(key => key !== "scenario" && key !== "now" && key !== "beforeSyntheticModelReceive")) reject();
+  if (Object.keys(options).some(key => !["scenario", "decisionFixture", "now", "beforeSyntheticModelReceive", "memoryReader"].includes(key))) reject();
   const scenario = options.scenario ?? "text";
-  if (scenario !== "text" && scenario !== "tools") reject("unsupported");
+  if (scenario !== "text" && scenario !== "tools" && scenario !== "decision") reject("unsupported");
+  const decisionFixture = options.decisionFixture ?? "execute";
+  if (!DECISION_FIXTURES.includes(decisionFixture) || options.decisionFixture !== undefined && scenario !== "decision") reject("unsupported");
+  if (scenario === "decision" && spec.toolProfile !== "none") reject("unsupported");
   if (options.now !== undefined && typeof options.now !== "function") reject();
   if (options.beforeSyntheticModelReceive !== undefined && typeof options.beforeSyntheticModelReceive !== "function") reject();
+  if (options.memoryReader !== undefined && (scenario !== "tools" || typeof options.memoryReader.read !== "function")) reject();
+  const memoryReader = options.memoryReader;
   const beforeSyntheticModelReceive = options.beforeSyntheticModelReceive;
   const now = options.now ?? Date.now;
   const startedAt = now();
@@ -359,7 +387,7 @@ export async function createSyntheticControlledBroker(
         if (requests.length >= spec.bounds.maxModelRequests || reservedTokens + request.maxTokens > spec.bounds.maxTokens) reject("budget_exceeded");
         const requestContext = request.context as Record<string, JsonValue>;
         if (spec.toolProfile === "none" && Array.isArray(requestContext.tools) && requestContext.tools.length) reject("unsupported");
-        const reply = syntheticReplyFixture(received.length, scenario);
+        const reply = syntheticReplyFixture(received.length, scenario, decisionFixture, request.context);
         const declaredTools = Array.isArray(requestContext.tools)
           ? requestContext.tools.map(item => (item as Record<string, JsonValue>).name) : [];
         if (reply.toolCalls?.some(call => !declaredTools.includes(call.name))) reject("unsupported");
@@ -381,7 +409,7 @@ export async function createSyntheticControlledBroker(
       toolCalls += 1;
       if (request.kind === "memory.read") {
         if (request.resourceId !== "fixture-memory") reject("resource_unavailable");
-        const result = { kind: "tool.result" as const, text: MEMORY_TEXT };
+        const result = { kind: "tool.result" as const, text: memoryReader ? text(memoryReader.read(), MAX_OUTPUT_BYTES, true) : MEMORY_TEXT };
         outputBudget(Buffer.byteLength(JSON.stringify(result)));
         return freeze({ requestId: request.requestId, ok: true, result });
       }

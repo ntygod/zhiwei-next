@@ -1,5 +1,5 @@
 import { ids, isTerminalTaskState, type Task, type TaskId, type TaskAttemptId, type OutcomeId } from "../../../../packages/domain/src/index.ts";
-import { createTask, transitionTask, retryTask, reviseTaskIntent, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
+import { createTask, transitionTask, retryTask, reviseTaskIntent, waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
 import type { TaskStoreCommandV1, TaskReductionContextV1, TaskReductionV1 } from "../../../../packages/memory-store/src/index.ts";
 /** Only the Store's locked current Task is reduced; no caller history or external I/O. */
 export function reducePersistentTask(current: Task | undefined, command: TaskStoreCommandV1, context: TaskReductionContextV1): TaskReductionV1 {
@@ -22,6 +22,11 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
   }
   if (command.payload.kind === "task.runtime") {
     switch (command.payload.event) {
+      case "cognitive-wait": {
+        if (!context.cognitiveDecision || !context.workingState) throw new Error("Committed decision required.");
+        const result = waitForCognitiveInputV1(task, context.workingState, context.cognitiveDecision, change());
+        return { versions: [result.task], workingStates: [result.workingState] };
+      }
       case "prepare": apply({ kind: "prepare" }); break;
       case "start": apply({ kind: "start", preparation: receipt() }); break;
       case "settled": apply({ kind: "settled", receipt: receipt(), completeness: command.payload.completeness ?? "incomplete" }); break;
@@ -41,6 +46,7 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
     case "task.cancel": apply({ kind: "cancel" }); if (!context.activeExecution || context.activeExecution.closed) apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); break;
     case "task.pause": apply({ kind: "request-pause" }); break;
     case "task.continue":
+      if (task.state === "WAITING_INPUT") throw new Error("Actual user response required.");
       if (task.state === "PAUSED" || (task.state === "READY" && (context.requiresReauthorization || context.activeExecution?.closed))) { stopped(); apply({ kind: "cancel" }); apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); }
       if (!isTerminalTaskState(task.state)) { apply({ kind: "continue" }); break; }
       task = retryTask(task, change(), context.attemptId as TaskAttemptId).task; versions.push(task); apply({ kind: "prepare" }); break;
@@ -51,7 +57,13 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
       task = reviseTaskIntent(task, change(), { revision: input.intentRevision + 1, request: input.request, constraints: input.constraints, criteria: input.acceptanceChecks }, context.attemptId as TaskAttemptId).task;
       versions.push(task); apply({ kind: "prepare" }); break;
     }
-    case "task.respond": case "task.confirm-result": throw new Error("Exact trusted consumer unsupported.");
+    case "task.respond": {
+      if (!context.cognitiveDecision || !context.workingState) throw new Error("Pending decision required.");
+      if (context.requiresReauthorization) return restartTaskWithCognitiveInputV1(task, context.workingState, context.cognitiveDecision, command.payload.pendingQuestionId, command.payload.response, context.evidence, change(), context.attemptId as TaskAttemptId, stopped());
+      const result = respondToCognitiveInputV1(task, context.workingState, context.cognitiveDecision, command.payload.pendingQuestionId, command.payload.response, context.evidence, change());
+      return { versions: [result.task], workingStates: [result.workingState] };
+    }
+    case "task.confirm-result": throw new Error("Exact trusted consumer unsupported.");
     default: throw new Error("Unsupported task command.");
   }
   return { versions };

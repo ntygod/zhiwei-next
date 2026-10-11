@@ -6,7 +6,27 @@ status: active
 updated: 2026-10-11
 -->
 
-## 当前工作：P1-05 可纠正记忆与检索 #118（2026-10-11）
+## 当前工作：P1-06 认知协调与受预算上下文 #121（2026-10-11）
+
+canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
+
+唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)。[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)及其前向中间决定补充均获独立设计批准；实现接通资格/预算胶囊、同视图 read-set 与 RuntimeInput、同一边界最多两次的持久调用预约、不可变六动作决定，以及既有受控 Worker/接收端。澄清/等待进入 WAITING_INPUT 并保留问题、未知项和依据；只有匹配问题的实际 task.respond 才恢复 READY、新 revision 与新认知边界。respond/stop 与 Runtime settled 都不形成成功 Outcome。
+
+固定 schema5 后追加 schema6，不改已应用0001—0005；旧严格入口保留，恢复声明报告物理6、未知7拒绝。实际执行请求关联胶囊，完整请求重新计数，发送和最终事件提交同步复验 read-set、精确来源与绑定；仅带精确 READY→RUNNING 准备证明的同 attempt 启动可承接胶囊。现有正常场景已证明预算失败、隐藏材料不入计数/发送、检索/修复上限、纠正/遗忘拒收、持久等待、实际 Worker 注入与最后请求后纠正；记忆工具复用同一检查并将结果保留在实际请求中。最终完整 check、当前 HEAD 独立 R3、PR122 原 Runtime 来源及 Ready/live/保护合入仍待完成。
+
+首个消费者仍为自有临时合成安装：固定 cognitive-context-v1 编译 profile、synthetic Unicode scalar counter、脚本接收端；Runtime memory.search/inspect 限于当前胶囊已选材料，新增检索在协调边界完成。真实 structuredDecision、任意等待订阅、官方 Pi+新扩展完整组合及 Z14/Z15 产品验收保持 unsupported/not_run；真实入口关闭，UI由所有者安排Gemini。旧安全/备份实验不运行。
+
+重启后的实际问题回复遵循现有 owner fencing 的确认停止/新 attempt 路径，旧问题和调用数保留；正常集成与3项纯状态场景通过。选择认知编译 profile 后裸 RuntimeInput 明确拒绝，同样的固定样例请求也不会进入旧队列；两项正常场景通过。170 strict roots通过。容器原完整check止于无法解析Windows Git worktree路径的main provenance，最终采用同HEAD原生CI，不修环境或跳检查。
+
+PR122 原来源已续期：正常 SDK/Worker run38145094526 / head5602bbc先通过原完整比较；Worker run38146677440 / headc53fc44 的两个原 attempt 各自完成capture、fresh/committed验证、upload，只在完整对象相等后因显式recapture guard失败。第一份保存后仅重跑精确Worker job，两份原ZIP及72731字节result.json按原validators验证、字节相同且等于正常原件；当前移除guard并精确恢复原comparator blobfba36da923a94cd2b9ba024f020089e3ef313d90。首次全Workflow重跑导致旧Artifact不可用的run38145815098不作来源。当前完整CI、最终R3和Ready/live/合入仍待结果。
+
+`6443369` 获独立 R3 代码批准，但原 CI38147683003 的新增 Worker 场景等待屏障失败，整轮随后触及原10分钟上限取消，未计作完整成功。将四个新增场景归入现有认知测试文件，与既有长时生命周期文件并行；先完成认知规划再等待执行屏障。全部场景、断言和CI时限保留，四项正常场景在Node22.23.1通过；最终新HEAD仍需原完整CI、新独立R3与Ready/live。
+
+`3d79862` 的独立 R3 批准后，原 CI38148934694 仍因最后结果屏障超时并触及时限取消。两核环境复现启动耗时被计入消息屏障；测试现在先等待真实持久 BUSY 调度，再分别同步 prompt/final，失败清理先释放屏障。互不共享安装和接收端的20个认知场景采用最多2项并发，原10秒屏障、全部断言、原测试脚本和CI时限保留；相关3项 Worker 场景在Node22.23.1/两核并发下通过。新HEAD仍须原完整CI和新独立R3。
+
+`9dbb64d` 独立 R3 批准，原 CI38150637660 中20项认知场景全部通过，屏障失败消失；全量检查仍在既有生命周期文件后触及10分钟时限，未计完整成功。仅将测试文件调度固定为2个Node隔离进程并发，完整发现列表、排序、断言、失败退出及原工作流/时限不变；不新增或豁免质量条件。当前候选仍须旧规则的全量检查、新HEAD独立R3和Ready/live。
+
+## 已交付：P1-05 可纠正记忆与检索 #118（2026-10-11）
 
 canonical [#118](https://github.com/ntygod/zhiwei-next/issues/118)，分支 `feat/118-memory-service`，基于 protected main `163d658c632ae8887a032a3a787c81300126cc35`。P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 已经最终独立 R3、1080 项完整检查、Ready/live 和保护合入，合入树与受审 d51a4369 精确一致；#116 已关闭，原工作分支已回收。开工回读无开放 PR/Incident，远端仅 main，P1-05 已搜索去重。
 
@@ -295,10 +315,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 bc687d67e2c377c4a702874ecb1cbdddb0ff04c6
-capture workflow             38113263898
-capture artifact             11692103984
-capture artifact digest      sha256:e591cca817a02a8b351a1aff958b581a40db7cdfe711f949b817586230023fba
+capture head                 5602bbc0c9b6792b9c42365a8584a7135f1a1a65
+capture workflow             38145094526
+capture artifact             11704029254
+capture artifact digest      sha256:c1190bc290dd093138999cb9452feb8c898610c4e89fcda7cb0372be77596af5
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

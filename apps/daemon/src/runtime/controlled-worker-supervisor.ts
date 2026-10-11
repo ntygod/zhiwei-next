@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { ids } from "../../../../packages/domain/src/index.ts";
 import {
-  parseExecutionSpecV1, parseNormalizedRuntimeEnvelopeV1, parseRuntimeBindingV1, snapshotJsonValue,
+  parseExecutionSpecV1, parseNormalizedRuntimeEnvelopeV1, parseRuntimeBindingV1, snapshotJsonValue, parseCognitiveContextCapsuleV1,
   parseRuntimeCapabilityProfileV1, parseRuntimeCommandAcceptanceV1,
   parseRuntimeProcessCloseEvidenceV1, parseRuntimeStopAcknowledgementV1,
   type ExecutionSpecV1, type RuntimeBindingV1, type RuntimeCapabilityProfileV1,
   type RuntimePort, type RuntimeWorkerStateV1,
 } from "../../../../packages/protocol/src/index.ts";
+import type { ContextSnapshotV1 } from "../../../../packages/memory-store/src/index.ts";
 import { createControlledPiWorkerClient, type ControlledPiWorkerClient } from "../../../../packages/pi-adapter/src/index.ts";
 import {
   createSyntheticControlledBroker, type SyntheticBrokerSnapshot, type SyntheticModelRequestRecord,
@@ -64,6 +65,9 @@ export interface SyntheticWorkerSupervisorOptions {
   readonly scenario?: "text" | "tools";
   /** No prompt, capability, credential, path or model destination override. */
   readonly taskIdentity?: SyntheticTaskRuntimeIdentity;
+  /** Store-committed synthetic input; an identity and current Store send guard are also required. */
+  readonly compiledInput?: ContextSnapshotV1;
+  readonly memoryReader?: Readonly<{ read(): string }>;
   readonly beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void;
 }
 
@@ -74,7 +78,7 @@ export interface SyntheticWorkerSupervisorOptions {
 export async function createSyntheticControlledWorkerSupervisor(input: SyntheticWorkerSupervisorOptions): Promise<SyntheticWorkerSupervisor> {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_request");
   const descriptors = Object.getOwnPropertyDescriptors(input);
-  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity", "beforeSyntheticModelReceive"].includes(key)
+  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity", "compiledInput", "memoryReader", "beforeSyntheticModelReceive"].includes(key)
     || !descriptors[key] || !("value" in descriptors[key]) || !descriptors[key].enumerable)) fail("invalid_request");
   if (input.beforeSyntheticModelReceive !== undefined && typeof input.beforeSyntheticModelReceive !== "function") fail("invalid_request");
   const scenario = input.scenario ?? "text";
@@ -86,6 +90,19 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
       || Object.keys(copied).sort().join() !== ["executionUnitId", "workspaceId", "sessionId", "requestSnapshotRef", "fence"].sort().join()) fail("invalid_request");
     taskIdentity = copied as unknown as SyntheticTaskRuntimeIdentity;
   }
+  let compiledInput: ContextSnapshotV1 | undefined;
+  if (input.compiledInput !== undefined) {
+    if (!taskIdentity || !input.beforeSyntheticModelReceive) fail("invalid_request");
+    compiledInput = JSON.parse(JSON.stringify(snapshotJsonValue(input.compiledInput))) as ContextSnapshotV1;
+    const capsule = parseCognitiveContextCapsuleV1(compiledInput.capsule), saved = compiledInput.runtimeInput.snapshot;
+    if (saved.schemaVersion !== 1 || saved.kind !== "runtime_input" || saved.text !== capsule.rendering.fullText || saved.taskId !== capsule.taskId || saved.taskRevision !== capsule.taskRevision
+      || saved.attemptId !== capsule.attemptId || saved.intentRevision !== capsule.intentRevision || saved.ownerEpoch !== taskIdentity.fence.leaseEpoch
+      || taskIdentity.workspaceId !== capsule.workspaceId || taskIdentity.sessionId !== capsule.sessionId || taskIdentity.fence.sourceTask?.taskId !== capsule.taskId
+      || taskIdentity.fence.sourceTask.attemptId !== capsule.attemptId || taskIdentity.fence.sourceTask.intentRevision !== capsule.intentRevision
+      || taskIdentity.requestSnapshotRef.contentId !== compiledInput.runtimeInput.contentRef.contentId || taskIdentity.requestSnapshotRef.contentVersion !== compiledInput.runtimeInput.contentRef.contentVersion
+      || capsule.modelProfile.id !== "synthetic-v1" || capsule.modelProfile.revision !== 1) fail("invalid_request");
+  }
+  if (input.memoryReader !== undefined && (!compiledInput || scenario !== "tools" || typeof input.memoryReader.read !== "function")) fail("invalid_request");
   const packageDirectory = input.packageDirectory;
   const nodeExecutable = input.nodeExecutable;
   if (process.platform !== "linux") fail("unsupported");
@@ -95,7 +112,7 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
   const bindingId = `synthetic-binding-${key}`;
   const spec = parseExecutionSpecV1({
     schemaVersion: 1, executionUnitId: `synthetic-execution-${key}`, workspaceId: `synthetic-workspace-${key}`, sessionId: `synthetic-session-${key}`,
-    prompt: scenario === "tools" ? "Use the fixed synthetic tools to prepare the sample draft, then summarize the synthetic result." : "Summarize the fixed synthetic sample.",
+    prompt: compiledInput?.runtimeInput.snapshot.text ?? (scenario === "tools" ? "Use the fixed synthetic tools to prepare the sample draft, then summarize the synthetic result." : "Summarize the fixed synthetic sample."),
     requestSnapshotRef: { contentId: `synthetic-input-${key}`, contentVersion: 1 },
     fence: {
       installationId: `synthetic-installation-${key}`, recoveryEpoch: `synthetic-recovery-${key}`,
@@ -116,7 +133,7 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
   try {
     await mkdir(join(root, "workspace"), { mode: 0o700 });
     await mkdir(join(root, "state"), { mode: 0o700 });
-    broker = await createSyntheticControlledBroker(spec, { scenario, ...(input.beforeSyntheticModelReceive ? { beforeSyntheticModelReceive: input.beforeSyntheticModelReceive } : {}) });
+    broker = await createSyntheticControlledBroker(spec, { scenario, ...(input.beforeSyntheticModelReceive ? { beforeSyntheticModelReceive: input.beforeSyntheticModelReceive } : {}), ...(input.memoryReader ? { memoryReader: input.memoryReader } : {}) });
   } catch {
     await rm(root, { recursive: true, force: true });
     throw new SyntheticSupervisorError("invalid_request");
