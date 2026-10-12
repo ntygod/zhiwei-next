@@ -35,6 +35,7 @@ export interface WorkbenchOptions {
 type ParsedWrite = Readonly<{ receipt?: SessionApiReceiptV1; evidence?: WorkbenchView["evidence"]; plan?: WorkbenchView["plan"]; result?: WorkbenchView["result"] }>;
 interface PendingWrite { readonly authGeneration: number; readonly workspaceId: string; readonly path: string; readonly body: string; readonly operation: string; readonly commandId: string;
   readonly parse: (input: unknown) => ParsedWrite; readonly targetId?: string; readonly lease: boolean }
+interface ReadTicket { readonly facet: "snapshot" | "task" | "session" | "memory" | "explanation" | "result" | "resultHistory"; readonly sequence: number }
 /** Bounded event transport tracking, without selecting any domain transition or Outcome. */
 class EventTracker {
   readonly #seen = new Map<string, string>(); readonly #revisions = new Map<string, number>();
@@ -58,6 +59,7 @@ export class BrowserWorkbench {
   #view: WorkbenchView; #authentication: Readonly<{ csrf: string; expires: number }> | undefined;
   #authGeneration = 0; #readGeneration = 0; #readNotAfter = Infinity; #cancelExpiry: (() => void) | undefined;
   readonly #reads = new Set<AbortController>(); #pairing: AbortController | undefined; #writing: AbortController | undefined;
+  readonly #selections = new Map<ReadTicket["facet"], number>();
   readonly #listeners = new Set<(view: WorkbenchView) => void>(); #notificationQueued = false;
   #pending: PendingWrite | undefined; #eventCursor: string | undefined; #tracker: EventTracker | undefined; #stream: AbortController | undefined;
   constructor(options: WorkbenchOptions) {
@@ -80,6 +82,16 @@ export class BrowserWorkbench {
     if (this.#notificationQueued) return; this.#notificationQueued = true;
     queueMicrotask(() => { this.#notificationQueued = false; for (const listener of this.#listeners) listener(this.view); });
   }
+  #beginRead(facet: ReadTicket["facet"]): ReadTicket {
+    this.#identity();
+    const sequence = (this.#selections.get(facet) ?? 0) + 1;
+    if (!Number.isSafeInteger(sequence)) throw new WorkbenchError("read_limit"); this.#selections.set(facet, sequence);
+    this.#view = { ...this.#view, [facet]: undefined, status: "loading" }; this.#notify(); return { facet, sequence };
+  }
+  #selected(ticket: ReadTicket): boolean { return this.#selections.get(ticket.facet) === ticket.sequence; }
+  #publishRead(read: Readonly<{ generation: number; deadline: number }>, ticket: ReadTicket): void {
+    this.#live(read.generation, this.#authGeneration, read.deadline); if (!this.#selected(ticket)) throw new WorkbenchError("cancelled");
+  }
   #checkTime(): void {
     if (this.#authentication && this.#authentication.expires <= this.#now()) this.#loseIdentity("expired_session");
     else if (this.#readNotAfter <= this.#now()) this.#invalidate("degraded", "expired_read");
@@ -87,6 +99,7 @@ export class BrowserWorkbench {
   #identity(): Readonly<{ csrf: string; expires: number }> { this.#checkTime(); if (!this.#authentication) throw new WorkbenchError("permission"); return this.#authentication; }
   #invalidate(status: WorkbenchView["status"], code: string, connection = this.#view.connection): void {
     this.#readGeneration++; for (const read of this.#reads) read.abort(); this.#reads.clear(); this.#stream = undefined;
+    this.#selections.clear();
     this.#cancelExpiry?.(); this.#cancelExpiry = undefined; this.#readNotAfter = Infinity; this.#eventCursor = undefined; this.#tracker = undefined;
     this.#view = { workspaceId: this.#view.workspaceId, connection, status, code, ...(this.#view.capabilities ? { capabilities: this.#view.capabilities } : {}),
       ...(this.#view.lastConfirmed ? { lastConfirmed: this.#view.lastConfirmed } : {}), write: this.#view.write }; this.#notify();
@@ -131,6 +144,7 @@ export class BrowserWorkbench {
   }
   async pair(bootstrapCode: string): Promise<void> {
     if (this.#view.connection === "closed") throw new WorkbenchError("closed");
+    if (this.#pairing) throw new WorkbenchError("pair_in_progress");
     this.#options.clearFragment(); this.#loseIdentity("pairing");
     const generation = this.#authGeneration, controller = new AbortController(); this.#pairing = controller;
     this.#view = { ...this.#view, connection: "pairing", status: "loading" }; this.#notify();
@@ -142,7 +156,10 @@ export class BrowserWorkbench {
       await checkResponse(response); const value = parseBrowserPairResponseV1(await responseJson(response));
       if (generation !== this.#authGeneration || controller.signal.aborted) throw new WorkbenchError("cancelled");
       const expires = Date.parse(value.expiresAt); if (expires <= this.#now()) throw new WorkbenchError("permission");
-      this.#authentication = { csrf: value.csrfToken, expires }; this.#view = { ...this.#view, connection: "connected", status: "empty" }; this.#retainLease(expires); this.#notify();
+      this.#authentication = { csrf: value.csrfToken, expires }; this.#retainLease(expires);
+      // A parsed pair body alone does not prove that this browser stored the Cookie or owns the selected Workspace.
+      await this.capabilities(); await this.refresh();
+      if (generation !== this.#authGeneration || controller.signal.aborted) throw new WorkbenchError("cancelled");
     } catch (error) { if (generation === this.#authGeneration) this.#loseIdentity(error instanceof WorkbenchError ? error.code : "daemon_unavailable"); throw new WorkbenchError(error instanceof WorkbenchError ? error.code : "daemon_unavailable"); }
     finally { cancel(); if (this.#pairing === controller) this.#pairing = undefined; }
   }
@@ -151,15 +168,19 @@ export class BrowserWorkbench {
     parseWorkbenchIdentifierV1(workspaceId); if (workspaceId === this.#view.workspaceId) return;
     this.#loseIdentity("workspace_changed"); this.#view = { ...this.#view, workspaceId }; this.#notify();
   }
-  async #query<T>(path: string, parse: (input: unknown) => T, body?: unknown, lease = true, timeoutMs = this.#timeout): Promise<Readonly<{ value: T; deadline: number; generation: number }>> {
+  async #query<T>(path: string, parse: (input: unknown) => T, body?: unknown, lease = true, timeoutMs = this.#timeout, ticket?: ReadTicket): Promise<Readonly<{ value: T; deadline: number; generation: number }>> {
     const identity = this.#identity(), generation = this.#readGeneration, authGeneration = this.#authGeneration, controller = new AbortController(); this.#reads.add(controller);
     const cancel = this.#schedule(() => controller.abort(), timeoutMs);
+    let received = false;
     try {
       const response = await this.#fetch(path, { method: body === undefined ? "GET" : "POST", mode: "same-origin", credentials: "same-origin", cache: "no-store", redirect: "manual", signal: controller.signal,
         headers: body === undefined ? {} : { "content-type": "application/json", "x-zhiwei-csrf": identity.csrf }, ...(body === undefined ? {} : { body: canonicalJsonV1(body) }) });
+      received = true;
       await checkResponse(response); const deadline = lease ? this.#lease(response) : identity.expires, value = parse(await responseJson(response));
-      this.#live(generation, authGeneration, deadline); if (controller.signal.aborted) throw new WorkbenchError("cancelled"); return { value, deadline, generation };
-    } catch (error) { return this.#failure(error, generation); }
+      if (controller.signal.aborted || ticket && !this.#selected(ticket)) throw new WorkbenchError("cancelled");
+      this.#live(generation, authGeneration, deadline); return { value, deadline, generation };
+    } catch (error) { if (ticket && !this.#selected(ticket)) throw new WorkbenchError("cancelled");
+      return this.#failure(error instanceof WorkbenchError ? error : new WorkbenchError(received ? "invalid_response" : "daemon_unavailable"), generation); }
     finally { cancel(); this.#reads.delete(controller); controller.abort(); }
   }
   async capabilities(): Promise<void> {
@@ -168,13 +189,13 @@ export class BrowserWorkbench {
   }
   async refresh(): Promise<void> {
     this.#identity(); const generation = this.#readGeneration, authGeneration = this.#authGeneration, workspaceId = this.#view.workspaceId, started = this.#now();
-    this.#view = { ...this.#view, status: "loading" }; this.#notify();
+    const ticket = this.#beginRead("snapshot");
     const sessions: SessionSnapshotV1["sessions"][number][] = [], tasks: TaskSummaryV1[] = [], seen = new Set<string>();
     let cursor: string | undefined, asOfCursor = "", size = 0, deadline = Infinity;
     try {
       do {
         if (this.#now() - started >= this.#timeout) throw new WorkbenchError("snapshot_required");
-        const read = await this.#query(`/v1/snapshot?${new URLSearchParams({ workspaceId, ...(cursor ? { cursor } : {}) })}`, parseSessionSnapshotPageV1, undefined, true, this.#timeout - (this.#now() - started));
+        const read = await this.#query(`/v1/snapshot?${new URLSearchParams({ workspaceId, ...(cursor ? { cursor } : {}) })}`, parseSessionSnapshotPageV1, undefined, true, this.#timeout - (this.#now() - started), ticket);
         if (read.value.workspaceId !== workspaceId || read.generation !== generation) throw new WorkbenchError("invalid_response");
         deadline = Math.min(deadline, read.deadline); size += bytes(JSON.stringify(read.value));
         if (size > sessionSnapshotAssemblyBytesV1 || this.#now() - started >= this.#timeout) throw new WorkbenchError("snapshot_required");
@@ -182,52 +203,55 @@ export class BrowserWorkbench {
         if (cursor !== undefined) { parseWorkbenchCursorV1(cursor); if (seen.has(cursor)) throw new WorkbenchError("invalid_response"); seen.add(cursor); }
       } while (cursor !== undefined);
       const snapshot = parseSessionSnapshotV1({ schemaVersion: 1, workspaceId, sessions, tasks, asOfCursor }); this.#live(generation, authGeneration, deadline);
+      if (!this.#selected(ticket)) throw new WorkbenchError("cancelled");
       this.#retainLease(deadline); this.#eventCursor = asOfCursor; this.#tracker = new EventTracker(snapshot);
       this.#view = { ...this.#view, snapshot, status: snapshot.tasks.length || snapshot.sessions.length ? "normal" : "empty", connection: "connected",
         lastConfirmed: { at: new Date(this.#now()).toISOString(), tasks: snapshot.tasks } }; this.#notify();
-    } catch (error) { this.#failure(error, generation); }
+    } catch (error) { if (generation === this.#readGeneration && !this.#selected(ticket)) throw new WorkbenchError("cancelled"); this.#failure(error, generation); }
   }
   async task(id: string): Promise<void> {
-    parseWorkbenchIdentifierV1(id); const read = await this.#query(`/v1/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`, parseWorkbenchTaskReadV1);
-    this.#live(read.generation, this.#authGeneration, read.deadline);
+    parseWorkbenchIdentifierV1(id); const ticket = this.#beginRead("task"), read = await this.#query(`/v1/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`, parseWorkbenchTaskReadV1, undefined, true, this.#timeout, ticket);
+    this.#publishRead(read, ticket);
     if (read.value.value.workspaceId !== this.#view.workspaceId || read.value.value.id !== id) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
     this.#retainLease(read.deadline); this.#view = { ...this.#view, task: read.value, status: "normal" }; this.#notify();
   }
   async session(id: string): Promise<void> {
-    parseWorkbenchIdentifierV1(id); const read = await this.#query(`/v1/sessions/${encodeURIComponent(id)}?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`, parseWorkbenchSessionReadV1);
-    this.#live(read.generation, this.#authGeneration, read.deadline);
+    parseWorkbenchIdentifierV1(id); const ticket = this.#beginRead("session"), read = await this.#query(`/v1/sessions/${encodeURIComponent(id)}?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`, parseWorkbenchSessionReadV1, undefined, true, this.#timeout, ticket);
+    this.#publishRead(read, ticket);
     if (read.value.value.workspaceId !== this.#view.workspaceId || read.value.value.id !== id) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
     this.#retainLease(read.deadline); this.#view = { ...this.#view, session: read.value, status: "normal" }; this.#notify();
   }
   async search(input: unknown): Promise<void> {
     const query = parseLocalApiMemorySearchV1(input); if (query.scope.kind === "global" || query.scope.workspaceId !== this.#view.workspaceId) throw new WorkbenchError("invalid_configuration");
-    const read = await this.#query("/v1/memory/search", parseWorkbenchMemorySearchResponseV1, query);
-    this.#live(read.generation, this.#authGeneration, read.deadline);
+    const ticket = this.#beginRead("memory"), read = await this.#query("/v1/memory/search", parseWorkbenchMemorySearchResponseV1, query, true, this.#timeout, ticket);
+    this.#publishRead(read, ticket);
     if (canonicalJsonV1(read.value.fence.scope) !== canonicalJsonV1(query.scope)) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
     this.#retainLease(read.deadline); this.#view = { ...this.#view, memory: read.value, status: read.value.material.length ? "normal" : "empty" }; this.#notify();
   }
   async explain(input: unknown): Promise<void> {
     const query = parseLocalApiMemoryExplanationRequestV1(input); if (query.workspaceId !== this.#view.workspaceId) throw new WorkbenchError("invalid_configuration");
-    const read = await this.#query("/v1/memory/explain", parseWorkbenchMemoryExplanationResponseV1, query);
-    this.#live(read.generation, this.#authGeneration, read.deadline);
+    const ticket = this.#beginRead("explanation"), read = await this.#query("/v1/memory/explain", parseWorkbenchMemoryExplanationResponseV1, query, true, this.#timeout, ticket);
+    this.#publishRead(read, ticket);
     if (read.value.id !== query.claimId || canonicalJsonV1(read.value.scope) !== canonicalJsonV1(query.scope) || query.version !== undefined && read.value.value !== undefined && read.value.value.version !== query.version) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
     this.#retainLease(read.deadline); this.#view = { ...this.#view, explanation: read.value, status: read.value.value ? "normal" : "degraded" }; this.#notify();
   }
   async result(id: string, history = false): Promise<void> {
     parseWorkbenchIdentifierV1(id);
     const path = `/v1/tasks/${encodeURIComponent(id)}/${history ? "result-history" : "result"}?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`;
-    if (history) { const read = await this.#query(path, parseWorkbenchResultHistoryV1);
-      this.#live(read.generation, this.#authGeneration, read.deadline);
+    const ticket = this.#beginRead(history ? "resultHistory" : "result");
+    if (history) { const read = await this.#query(path, parseWorkbenchResultHistoryV1, undefined, true, this.#timeout, ticket);
+      this.#publishRead(read, ticket);
       if (read.value.value.some(item => item.task.id !== id || item.task.workspaceId !== this.#view.workspaceId)) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
       this.#retainLease(read.deadline); this.#view = { ...this.#view, resultHistory: read.value, status: read.value.value.length ? "normal" : "empty" }; this.#notify(); }
-    else { const read = await this.#query(path, parseWorkbenchResultReadV1);
-      this.#live(read.generation, this.#authGeneration, read.deadline);
+    else { const read = await this.#query(path, parseWorkbenchResultReadV1, undefined, true, this.#timeout, ticket);
+      this.#publishRead(read, ticket);
       if (read.value.value.task.id !== id || read.value.value.task.workspaceId !== this.#view.workspaceId) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
       this.#retainLease(read.deadline); this.#view = { ...this.#view, result: read.value, status: "normal" }; this.#notify(); }
   }
   async #write(pending: PendingWrite): Promise<WorkbenchWriteState> {
     if (this.#writing) throw new WorkbenchError("write_in_progress"); const identity = this.#identity();
     if (pending.authGeneration !== this.#authGeneration || pending.workspaceId !== this.#view.workspaceId) throw new WorkbenchError("permission");
+    const retryingUnknown = this.#pending === pending && this.#view.write.status === "unknown";
     this.#pending = pending; this.#view = { ...this.#view, write: { status: "sending", operation: pending.operation, commandId: pending.commandId } }; this.#notify();
     const readGeneration = this.#readGeneration;
     const controller = new AbortController(), cancel = this.#schedule(() => controller.abort(), this.#timeout); this.#writing = controller; let sent = false;
@@ -250,7 +274,8 @@ export class BrowserWorkbench {
       if (pending.authGeneration !== this.#authGeneration) throw new WorkbenchError("permission");
       const code = error instanceof WorkbenchError ? error.code : "commit_unknown";
       if (code === "permission") { this.#loseIdentity(code); throw new WorkbenchError(code); }
-      const rejected = ["validation", "not_found", "revision_conflict", "idempotency_conflict", "unsupported", "budget_exceeded", "snapshot_required"].includes(code);
+      // Rejecting this replay cannot establish that the earlier, unobserved attempt never committed.
+      const rejected = !retryingUnknown && ["validation", "not_found", "revision_conflict", "idempotency_conflict", "unsupported", "budget_exceeded", "snapshot_required"].includes(code);
       if (rejected || !sent) this.#pending = undefined;
       this.#invalidate("degraded", code, rejected ? this.#view.connection : "disconnected");
       this.#view = { ...this.#view, write: { status: rejected || !sent ? "rejected" : "unknown", operation: pending.operation, commandId: pending.commandId, code,

@@ -428,7 +428,13 @@ export class SyntheticCognitionStoreV2 {
             deadline(metadata.validFrom); if (metadata.validUntil !== undefined) deadline(metadata.validUntil);
             let qualified = false;
             if (row.status !== "FORGOTTEN") {
-              try { const claim = this.#hydrateClaim(row, true); this.#memoryEvidence(claim.evidence, claim.privacy); qualified = true; }
+              try {
+                const claim = this.#hydrateClaim(row, true), evidence = this.#memoryEvidence(claim.evidence, claim.privacy);
+                // Resolve only the necessary sources declared by this already-scoped, validated Claim.
+                // A parent/global source's own deadline remains necessary even outside its child scope.
+                for (const ref of evidence) deadline(text(this.#row("SELECT retention_until FROM content_object WHERE content_id=? AND content_version=?", ref.contentId, ref.contentVersion)!.retention_until));
+                qualified = true;
+              }
               catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; }
             }
             claims.push([key, row.claim_id, row.version, row.revision, row.status, qualified,

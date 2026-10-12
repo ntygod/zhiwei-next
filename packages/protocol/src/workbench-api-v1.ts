@@ -89,17 +89,18 @@ export interface WorkbenchMemoryExplanationResponseV1 {
 export function parseWorkbenchMemoryExplanationResponseV1(input: unknown): WorkbenchMemoryExplanationResponseV1 {
   return wireBoundary(input, value => {
     keys(value, ["schemaVersion", "id", "scope", "currentVersion", "versions", "sources", "affected", "asOfCursor"], ["value", "unavailableReason"]);
-    version(value.schemaVersion, 1); identifier(value.id); assertScopeV2(value.scope); revision(value.currentVersion); parseWorkbenchCursorV1(value.asOfCursor);
+    version(value.schemaVersion, 1); identifier(value.id); assertScopeV2(value.scope); const currentVersion = revision(value.currentVersion); parseWorkbenchCursorV1(value.asOfCursor);
     const scope = value.scope;
     const versions = list(value.versions, 50, 1).map(item => { const row = object(item); keys(row, ["version", "revision", "status", "createdAt", "updatedAt", "available"]);
       revision(row.version); revision(row.revision); member(row.status, statuses); if (timestamp(row.updatedAt) < timestamp(row.createdAt) || typeof row.available !== "boolean") invalid(); return row; });
     unique(versions.map(row => String(row.version))); if (versions[0]!.version !== value.currentVersion) invalid();
     if (value.value !== undefined) { assertMemoryClaimV2(value.value);
+      const selected = versions.find(row => row.version === (value.value as MemoryClaimV2).version);
       if (value.unavailableReason !== undefined || value.value.id !== value.id || !sameScopeV2(value.value.scope, value.scope)
-        || !versions.some(row => row.version === (value.value as MemoryClaimV2).version && row.available === true)) invalid(); }
+        || value.value.version > currentVersion || selected !== undefined && (selected.available !== true || selected.revision !== value.value.revision || selected.status !== value.value.status)) invalid(); }
     else member(value.unavailableReason, ["content-unavailable", "source-unavailable"]);
     const sources = list(value.sources, 100).map(item => { const row = object(item); keys(row, ["observation"], ["excerpt"]); const observation = parseObservationV2(row.observation);
-      if (!isScopeWithinV2(observation.scope, scope) || (row.excerpt !== undefined && observation.content.availability !== "available")) invalid();
+      if (!isScopeWithinV2(scope, observation.scope) || (row.excerpt !== undefined && observation.content.availability !== "available")) invalid();
       if (row.excerpt !== undefined) textValue(row.excerpt, 1024); return observation.id; }); unique(sources);
     for (const item of list(value.affected)) { const row = object(item); keys(row, ["kind", "id", "version"]); identifier(row.kind); identifier(row.id); revision(row.version); }
     return value as unknown as WorkbenchMemoryExplanationResponseV1;

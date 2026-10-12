@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openSyntheticCognitionStoreV2, type MemoryCommandV1 } from "../../../packages/memory-store/src/index.ts";
-import { parseSessionApiErrorV1, parseWorkbenchMemorySearchResponseV1, parseWorkbenchCapabilitiesV1, parseBrowserPairResponseV1 } from "../../../packages/protocol/src/index.ts";
+import { parseSessionApiErrorV1, parseWorkbenchMemorySearchResponseV1, parseWorkbenchMemoryExplanationResponseV1, parseWorkbenchCapabilitiesV1, parseBrowserPairResponseV1 } from "../../../packages/protocol/src/index.ts";
 import { createSyntheticSessionApi } from "../../daemon/src/session-api/server.ts";
 import { createPersistentSessionApplication, syntheticTaskSessionContract, syntheticCognitiveTaskSessionContract, syntheticTaskPrompt } from "../../daemon/src/task-service/application.ts";
 import { reducePersistentTask } from "../../daemon/src/task-service/task-reducer.ts";
@@ -23,17 +23,17 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 
 /** Node transport adapter for HTTP/SQLite tests; this does not prove real browser Cookie behavior. */
 function cookiePort(origin: string) {
-  let cookie = ""; const sent: { path: string; body?: string }[] = [];
+  let cookie = "", storeCookie = true; const sent: { path: string; body?: string }[] = [];
   let hook: ((path: string, response: Response) => Promise<Response>) | undefined;
   const port: typeof fetch = async (input, init) => {
     const path = String(input); assert.ok(path.startsWith("/v1/")); assert.equal(init?.credentials, "same-origin"); assert.equal(init?.mode, "same-origin");
     assert.equal(init?.cache, "no-store"); assert.equal(init?.redirect, "manual");
     const headers = new Headers(init?.headers); headers.set("origin", origin); headers.set("sec-fetch-site", "same-origin"); if (cookie) headers.set("cookie", cookie);
     sent.push({ path, ...(typeof init?.body === "string" ? { body: init.body } : {}) });
-    const response = await fetch(origin + path, { ...init, headers }); const next = response.headers.get("set-cookie"); if (next) cookie = next.split(";")[0]!;
+    const response = await fetch(origin + path, { ...init, headers }); const next = response.headers.get("set-cookie"); if (next && storeCookie) cookie = next.split(";")[0]!;
     return hook ? hook(path, response) : response;
   };
-  return { port, sent, get cookie() { return cookie; }, hook(value?: typeof hook) { hook = value; } };
+  return { port, sent, get cookie() { return cookie; }, storage(enabled: boolean) { storeCookie = enabled; }, hook(value?: typeof hook) { hook = value; } };
 }
 async function fixture(t: TestContext, retentionMs = 86_400_000) {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-web-api-")), dataRoot = join(root, "data"), controlRoot = join(root, "control"); mkdirSync(dataRoot);
@@ -81,12 +81,24 @@ test("Actual HTTP/SQLite pairing, session/task commands and memory correction re
   await f.client.explain({ schemaVersion: 1, workspaceId: context.workspaceId, scope, claimId: original.id });
   assert.equal(f.client.view.explanation!.currentVersion, 2); assert.equal(f.client.view.explanation!.versions[1]!.status, "SUPERSEDED");
   assert.match(f.client.view.explanation!.value!.statement, /琥珀色/); assert.equal(f.client.view.explanation!.value!.supersedes!.version, 1);
+  const explanation = f.client.view.explanation!, historical = { ...explanation.value!, status: "SUPERSEDED", revision: explanation.value!.revision + 1, supersededBy: { claimId: original.id, version: 3 } };
+  const versionWindow = { ...explanation, currentVersion: 52, value: historical, versions: Array.from({ length: 50 }, (_, index) => ({ version: 52 - index, revision: (52 - index) * 2,
+    status: index === 0 ? "ACTIVE" : "SUPERSEDED", createdAt: historical.createdAt, updatedAt: historical.updatedAt, available: true })) };
+  assert.equal(parseWorkbenchMemoryExplanationResponseV1(versionWindow).value!.version, 2); // An explicitly requested older version need not be in the latest-50 window.
+  const taskScope = { kind: "task", workspaceId: context.workspaceId, taskId };
+  const scoped = await f.client.command({ ...envelope(), expectedRevision: 0, payload: { kind: "memory.remember", scope: taskScope, privacy: original.privacy, claimKind: original.kind,
+    statement: "SYNTHETIC_ONLY：任务灯塔使用紫色报告。", evidenceRefs: [original.evidence[0]!], validFrom: original.validFrom } });
+  assert.equal(scoped.status, "confirmed"); await f.client.explain({ schemaVersion: 1, workspaceId: context.workspaceId, scope: taskScope, claimId: scoped.receipt!.aggregate.id });
+  assert.ok(f.client.view.explanation!.sources.some(source => source.observation.scope.kind === "workspace"));
   assert.equal(JSON.stringify(f.client.view).includes("csrfToken"), false);
 });
 test("Browser repair consumes only its new ticket; failed repair preserves old session and ticket", async t => {
   const f = await fixture(t); await f.pair(); const oldCookie = f.port.cookie, code = f.api.issuePairingCode("browser", "b"), nonce = "n".repeat(43);
   const raw = (body: unknown, extra: Record<string, string> = {}) => fetch(f.origin + "/v1/browser-pair", { method: "POST", headers: { origin: f.origin, cookie: oldCookie, "content-type": "application/json", ...extra }, body: JSON.stringify(body) });
+  const fresh = await raw({ schemaVersion: 1, bootstrapCode: f.api.issuePairingCode("browser"), clientNonce: nonce, clientKind: "browser" }, { cookie: "other_application_cookie=SYNTHETIC_ONLY" });
+  assert.equal(fresh.status, 200); // Unrelated cookies do not become identity or block a valid new ticket.
   assert.equal((await raw({ schemaVersion: 1, bootstrapCode: code, clientNonce: nonce, clientKind: "cli" })).status, 400);
+  assert.equal((await raw({ schemaVersion: 1, bootstrapCode: code, clientNonce: nonce, clientKind: "browser" }, { cookie: `${oldCookie}; ${oldCookie}` })).status, 400);
   await f.client.capabilities(); const reads = f.qualificationReads;
   const repaired = await raw({ schemaVersion: 1, bootstrapCode: code, clientNonce: nonce, clientKind: "browser" }); assert.equal(repaired.status, 200);
   const body = parseBrowserPairResponseV1(await repaired.json()); assert.equal("credential" in body, false);
@@ -97,6 +109,15 @@ test("Browser repair consumes only its new ticket; failed repair preserves old s
   assert.equal((await raw({ schemaVersion: 1, bootstrapCode: code, clientNonce: nonce, clientKind: "browser" })).status, 401);
   const originalPair = await fetch(f.origin + "/v1/pair", { method: "POST", headers: { origin: f.origin, cookie: newCookie, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, bootstrapCode: f.api.issuePairingCode("browser"), clientNonce: nonce, clientKind: "browser" }) }); assert.equal(originalPair.status, 400);
+});
+test("Pairing requires an authenticated Cookie read for the selected Workspace before showing connected", async t => {
+  const f = await fixture(t); f.port.storage(false);
+  await assert.rejects(f.pair(), (error: unknown) => error instanceof WorkbenchError && error.code === "permission");
+  assert.equal(f.client.view.connection, "permission"); assert.equal(f.client.view.snapshot, undefined);
+  f.port.storage(true); await f.pair(); assert.equal(f.client.view.connection, "connected"); assert.equal(f.client.view.snapshot!.workspaceId, context.workspaceId);
+  f.client.selectWorkspace("synthetic-workspace-b");
+  await assert.rejects(f.client.pair(f.api.issuePairingCode("browser", "a")), (error: unknown) => error instanceof WorkbenchError && error.code === "not_found");
+  assert.equal(f.client.view.connection, "permission"); assert.equal(f.client.view.snapshot, undefined);
 });
 test("Lost committed response remains unknown; explicit retry sends identical bytes and is revoked by new pairing", async t => {
   const f = await fixture(t); await f.pair(); const command = { ...envelope(), expectedRevision: 0, payload: { kind: "session.create", contract: syntheticTaskSessionContract } };
@@ -148,6 +169,14 @@ test("Semantic validity deadline and same-scope expired/late queries revoke publ
   f.time(start + 500); assert.equal(f.client.view.memory, undefined); release.resolve(); await failed; assert.equal(f.client.view.memory, undefined);
   f.port.hook(); await f.client.search(query()); assert.equal(f.client.view.memory!.material.length, 0); assert.equal(f.client.view.connection, "connected");
 });
+test("A newer query selection in the same Workspace wins over an already received older response", async t => {
+  const f = await fixture(t); await f.pair(); await f.remember(); const held = deferred<void>(), release = deferred<void>(); let first = true;
+  f.port.hook(async (path, response) => { if (path === "/v1/memory/search" && first) { first = false; const body = await response.arrayBuffer(); held.resolve(); await release.promise;
+    return new Response(body, { status: response.status, headers: response.headers }); } return response; });
+  const older = f.client.search(query()); const cancelled = assert.rejects(older, (error: unknown) => error instanceof WorkbenchError && error.code === "cancelled"); await held.promise;
+  await f.client.search({ ...query(), query: "不存在" }); assert.equal(f.client.view.memory!.material.length, 0); release.resolve(); await cancelled;
+  assert.equal(f.client.view.memory!.material.length, 0); assert.equal(f.client.view.status, "empty");
+});
 test("Unknown fields, missing leases, corrupt success and wrong-scope responses fail before state publication", async t => {
   const f = await fixture(t); await f.pair(); await f.remember(); const valid = f.client.view.memory!;
   assert.throws(() => parseWorkbenchMemorySearchResponseV1({ ...valid, secret: "SYNTHETIC_ONLY" }));
@@ -167,6 +196,13 @@ test("A late successful write cannot republish a revoked body; same-identity exa
   assert.equal((await writing).status, "unknown"); assert.equal(f.client.view.evidence, undefined);
   assert.equal((await f.client.retryUnknown()).status, "received"); assert.equal(f.client.view.evidence!.replay, true);
   const sent = f.port.sent.filter(row => row.path === "/v1/memory/inputs"); assert.equal(sent[0]!.body, sent[1]!.body);
+});
+test("Rejecting an exact retry after source expiry does not misreport an earlier unobserved commit as failure", async t => {
+  const f = await fixture(t, 500); await f.pair(); let dropped = false;
+  f.port.hook(async (path, response) => { if (path === "/v1/memory/inputs" && !dropped) { dropped = true; await response.arrayBuffer(); throw new TypeError("Synthetic lost commit response"); } return response; });
+  assert.equal((await f.client.capture({ ...envelope(), scope, privacy: "model-allowed", text })).status, "unknown");
+  f.time(start + 500); const replay = await f.client.retryUnknown(); assert.equal(replay.status, "unknown"); assert.equal(replay.code, "not_found"); assert.equal(f.client.view.evidence, undefined);
+  const sends = f.port.sent.filter(row => row.path === "/v1/memory/inputs"); assert.equal(sends[0]!.body, sends[1]!.body);
 });
 test("Other-Workspace commits do not alter the authorized qualification and memory capability requires a real reader", async t => {
   const f = await fixture(t); await f.pair(); await f.remember(); const before = f.store.withReadQualification(context, () => undefined).qualification;

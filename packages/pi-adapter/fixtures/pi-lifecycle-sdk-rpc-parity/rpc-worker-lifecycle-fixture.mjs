@@ -194,7 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    throw new Error("P1-08 #125 current-primary paired provenance capture guard: complete frozen equality passed; remove before final verification.");
     return;
   }
   if (outputIndex >= 0) {

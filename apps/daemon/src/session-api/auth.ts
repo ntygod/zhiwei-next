@@ -45,8 +45,8 @@ export class SyntheticSessionAuthenticator {
     if ((ticket.kind === "browser" && origin !== expectedOrigin) || (ticket.kind === "cli" && origin !== undefined)) throw new SessionApiError("forbidden", "origin_mismatch", 403);
     // A Cookie is only a revocation hint; the new ticket exclusively determines identity.
     const previous = previousCookie?.split(";").map(value => value.trim()).filter(value => value.startsWith("zhiwei_data_session="));
-    if (previous && (previous.length !== 1 || !/^zhiwei_data_session=data_browser_[A-Za-z0-9_-]{43}$/.test(previous[0]!))) throw new SessionApiError("validation", "invalid_shape", 400);
-    const previousKey = previous ? hash(previous[0]!.slice("zhiwei_data_session=".length)) : undefined;
+    if (previous && (previous.length > 1 || previous.length === 1 && !/^zhiwei_data_session=data_browser_[A-Za-z0-9_-]{43}$/.test(previous[0]!))) throw new SessionApiError("validation", "invalid_shape", 400);
+    const previousKey = previous?.length === 1 ? hash(previous[0]!.slice("zhiwei_data_session=".length)) : undefined;
     const replace = previousKey !== undefined && this.#credentials.get(previousKey)?.kind === "browser";
     if (this.#credentials.size - (replace ? 1 : 0) >= 32) throw new SessionApiError("budget_exceeded", "rate_limit", 429);
     const credential = `data_${ticket.kind}_${randomBytes(32).toString("base64url")}`; const csrf = randomBytes(32).toString("base64url");
