@@ -84,6 +84,11 @@ export class WorkbenchController {
     } catch { this.#update({ notice: "当前无法重新同步，请检查服务或重新配对。" }); }
   }
   #scope() { return { kind: "workspace" as const, workspaceId: this.#required().view.workspaceId }; }
+  #memoryTarget() {
+    const claim = this.#required().view.explanation?.value;
+    return claim && { id: claim.id, revision: claim.revision, version: claim.version, scope: claim.scope, privacy: claim.privacy,
+      kind: claim.kind, validFrom: claim.validFrom, ...(claim.validUntil === undefined ? {} : { validUntil: claim.validUntil }) };
+  }
   #search(query: string) { return { schemaVersion: 1, scope: this.#scope(), query, kinds: ["fact", "preference", "constraint", "decision"], limit: 50 }; }
   #suspendReads(): void { this.#streamGeneration++; this.#recoveryCancel?.(); this.#required().disconnect(); }
   async go(page: WorkbenchPage, id?: string): Promise<void> {
@@ -138,25 +143,27 @@ export class WorkbenchController {
   }); }
   async search(query: string): Promise<void> { if (!query.trim()) return; this.#memoryQuery = query.trim(); await this.#perform(async () => { await this.#required().search(this.#search(this.#memoryQuery)); }); }
   async memoryDetail(id: string, modal?: WorkbenchPresentation["modal"]): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(); await client.explain({ schemaVersion: 1, workspaceId: client.view.workspaceId, scope: this.#scope(), claimId: id }); this.#update({ memoryId: id, modal });
+    const client = this.#required(); await client.explain({ schemaVersion: 1, workspaceId: client.view.workspaceId, scope: this.#scope(), claimId: id });
+    const readable = client.view.explanation?.value !== undefined;
+    this.#update({ memoryId: id, modal: readable ? modal : undefined, notice: modal && !readable ? "这条记忆的正文当前不可读，请查看来源与版本状态。" : undefined });
   }); }
   newMemory(): void { this.#update({ modal: "memory-add", memoryId: undefined }); }
   closeModal(): void { this.#update({ modal: undefined }); }
   async saveMemory(statement: string): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(), existing = client.view.explanation?.value, editing = this.#presentation.modal === "memory-edit";
+    const client = this.#required(), existing = this.#memoryTarget(), editing = this.#presentation.modal === "memory-edit";
     if (editing && !existing) return;
     this.#suspendReads();
     const captured = await client.capture({ ...this.#envelope(), scope: this.#scope(), privacy: editing ? existing!.privacy : "local-only", text: statement });
     if (captured.status !== "received" || !client.view.evidence) return; const evidence = client.view.evidence.evidence;
     const command: LocalApiCommandV1 = editing ? { ...this.#envelope(), expectedRevision: existing!.revision, payload: { kind: "memory.correct", scope: existing!.scope,
       targetRef: { kind: "claim", id: existing!.id, revision: existing!.revision }, targetVersion: { claimId: existing!.id, version: existing!.version }, privacy: existing!.privacy, claimKind: existing!.kind,
-      statement, evidenceRefs: [evidence], validFrom: existing!.validFrom } } : { ...this.#envelope(), expectedRevision: 0, payload: { kind: "memory.remember", scope: this.#scope(), privacy: "local-only", claimKind: "fact", statement, evidenceRefs: [evidence], validFrom: new Date((this.#options.now ?? Date.now)()).toISOString() } };
+      statement, evidenceRefs: [evidence], validFrom: existing!.validFrom, ...(existing!.validUntil === undefined ? {} : { validUntil: existing!.validUntil }) } } : { ...this.#envelope(), expectedRevision: 0, payload: { kind: "memory.remember", scope: this.#scope(), privacy: "local-only", claimKind: "fact", statement, evidenceRefs: [evidence], validFrom: new Date((this.#options.now ?? Date.now)()).toISOString() } };
     const saved = await client.command(command); if (saved.status === "confirmed") {
       this.#update({ modal: undefined, memoryId: undefined }); await client.refresh(); await client.context(); await client.search(this.#search(statement.slice(0, 256))); this.#watch();
     }
   }); }
   async forget(): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(), claim = client.view.explanation?.value; if (!claim) return;
+    const client = this.#required(), claim = this.#memoryTarget(); if (!claim) return;
     this.#suspendReads();
     const command: LocalApiCommandV1 = { ...this.#envelope(), expectedRevision: claim.revision, payload: { kind: "memory.forget", scope: claim.scope, mode: "logical", targetRef: { kind: "claim", id: claim.id, revision: claim.revision }, targetVersion: { claimId: claim.id, version: claim.version } } };
     const result = await client.command(command);

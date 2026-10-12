@@ -8,6 +8,8 @@
 
 实现b4d16e4独立审查BLOCKED，已修复忙碌导航错任务及重新同步丢结果两项；5项UI/固定Worker与strict195/构建通过。b4d16e4原CI38278488409在原10分钟时限取消，不算完整成功。当前修复候选必须重新完整CI、新上下文审查和Ready/live；用户原型、原Runtime/治理门及数据历史不变。
 
+0e011cf获新的独立代码批准，但CI38280353696两次完整attempt仍在原时限取消。后续保留纠正前有效期、只保留CUD元数据、不对遗忘/不可读记忆打开空编辑层；6项UI与strict195/标准构建通过，新HEAD另审。性能尝试无显著收益已撤回，不改工作流、时限、原反例/断言或验证覆盖；最终完整绿色/Ready/live仍待实际证明。
+
 以下保留前项API的提交前交接：[#125](https://github.com/ntygod/zhiwei-next/issues/125) / `feat/125-workbench-api`，P1-08 API切片。其基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` 已交付 P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124)，完整1152项原检查、精确 HEAD R3、Ready/live、保护合入与 main 来源/分支审计成功，#123 已关闭；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)覆盖上一提交的待验证快照。
 
 ## 本项任务

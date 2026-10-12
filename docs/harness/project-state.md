@@ -20,6 +20,8 @@ R3；原完整检查、当前primary来源、精确HEAD独立R3、Ready/live、�
 
 `b4d16e4`的[独立R3](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6128672778)为BLOCKED：忙碌时导航选择可变为B而详情仍是A；重新同步未恢复后端仍存在的Outcome/history。修复将选择与读纳入同一busy门，呈现和操作前核对所选ID，任务恢复重读获准结果与历史、不重复verification。实际A/B延迟选择/仅停止B及固定Worker结果重连已通过，5项UI场景、strict195与生产构建通过。旧3fcc6c5首轮完整TAP1172/1172后被新HEAD取消，不计完整CI成功；b4d16e4原CI38278488409在原10分钟时限取消，未有完整成功。修复HEAD另需新的完整CI与新上下文R3，不改时限/门禁或移用旧批准。
 
+`0e011cf`获[新的独立R3代码批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6128895015)，但原CI38280353696的两次完整attempt仍在原10分钟时限取消，未有完整绿色。作者随后核对现有纠正请求发现遗漏validUntil：界面只改正文时新版本会移除原有效期；现原样传回有效期，CUD只保留必要目标元数据，已遗忘/不可读正文不打开空编辑层。6项UI/Worker场景、strict195与标准生产构建通过，新HEAD另审。编译CPU采样与两个独立程序并行尝试未明显减少实际耗时，已撤回；原串行反例、全部断言、工具链/工作流/时限保留，不以修改质量门获取通过。
+
 前项API [PR126](https://github.com/ntygod/zhiwei-next/pull/126)已完整交付：[最终证据](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6122087005)和[#125关闭记录](https://github.com/ntygod/zhiwei-next/issues/125#issuecomment-6122104767)确认1168项原完整检查、当前HEAD独立R3、Ready/live、原自动squash/main来源/分支审计与本地同步成功，受审tree与合入734f4e6一致。下方保留提交前历史。
 
 ## 已交付 P1-08 API：提交前历史（2026-10-12）

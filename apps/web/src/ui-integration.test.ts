@@ -54,6 +54,7 @@ test("Actual context/task/correction versions render in DOM; dialogs keep focus 
   assert.match(container.textContent!, /<img src=x/); assert.equal(container.querySelector("script, img"), null); // React text sinks, not a claim of browser CSP execution testing.
   await act(async () => { await controller.memoryDetail(second.id, "memory-edit"); controller.client!.disconnect(); }); assert.equal(container.querySelector('[role="dialog"]'), null); assert.equal(container.textContent!.includes("琥珀色"), false);
   await act(async () => { await controller.recover(); await controller.search("灯塔"); await controller.memoryDetail(second.id, "forget"); await controller.forget(); }); assert.equal(controller.view!.write.status, "confirmed"); assert.equal(harness.memories.explain(context, second.scope, second.id).value, undefined);
+  await act(async () => { await controller.memoryDetail(second.id, "memory-edit"); }); assert.equal(controller.presentation.modal, undefined); assert.equal(container.querySelector('[role="dialog"]'), null); assert.match(container.textContent!, /正文当前不可读/);
   await act(async () => { controller.client!.selectWorkspace("synthetic-workspace-b"); }); assert.equal(controller.view!.connection, "permission"); assert.match(container.textContent!, /进入开发样例/); assert.equal(container.querySelector('[role="dialog"]'), null);
 });
 test("Lost input acknowledgement stays unknown and only the explicit original bytes are retried", async t => {
@@ -92,4 +93,17 @@ test("A delayed task read keeps the selected identity; the next selection and st
   assert.equal(controller.view!.task!.value.id, controller.presentation.taskId);
   port.hook(); await controller.go("task", second); assert.equal(controller.view!.task!.value.id, second); await controller.taskCommand("task.cancel");
   assert.equal(harness.application.getTask(context, second).value.state, "CANCELLED"); assert.equal(harness.application.getTask(context, first).value.state, "READY");
+});
+
+test("Editing a statement retains its existing validity boundary and superseded version", async t => {
+  const harness = await createSyntheticTaskSessionHarness({ webAssets: assets }); t.after(() => harness.close()); const scope = { kind: "workspace" as const, workspaceId: context.workspaceId };
+  const now = new Date().toISOString(), validUntil = new Date(Date.now() + 60_000).toISOString(), inputId = randomUUID(), commandId = randomUUID();
+  const evidence = harness.memories.capture(context, { schemaVersion: 1, commandId: inputId, idempotencyKey: inputId, workspaceId: context.workspaceId, scope, privacy: "local-only", text: "SYNTHETIC_ONLY：虚构灯塔的期限内报告是紫色。" }).evidence;
+  const saved = harness.memories.execute(context, { schemaVersion: 1, commandId, idempotencyKey: commandId, workspaceId: context.workspaceId, expectedRevision: 0,
+    payload: { kind: "memory.remember", scope, privacy: "local-only", claimKind: "fact", statement: "SYNTHETIC_ONLY：虚构灯塔的期限内报告是紫色。", evidenceRefs: [evidence], validFrom: now, validUntil } });
+  const origin = await harness.api.listen(), port = cookiePort(origin), controller = new WorkbenchController({ origin, fetch: port.port, id: randomUUID, nonce: () => "n".repeat(43), clearFragment() {} }); t.after(() => controller.close());
+  await controller.connect(); await controller.go("memory"); await controller.memoryDetail(saved.receipt.aggregate.id, "memory-edit"); await controller.saveMemory("SYNTHETIC_ONLY：虚构灯塔的期限内报告是琥珀色。");
+  assert.equal(controller.view!.write.status, "confirmed"); const explanation = harness.memories.explain(context, scope, saved.receipt.aggregate.id);
+  assert.equal(explanation.value!.validUntil, validUntil); assert.equal(explanation.value!.validFrom, now); assert.equal(explanation.value!.version, 2);
+  assert.equal(explanation.versions.some(version => version.version === 1 && version.status === "SUPERSEDED"), true);
 });
