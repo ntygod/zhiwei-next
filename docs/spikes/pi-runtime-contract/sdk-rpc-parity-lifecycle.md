@@ -325,7 +325,7 @@ artifact id      11723831889
 artifact digest  sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38197375872` 属于当前 PR #124，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源尚待按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38197375872` 属于当前 PR #124，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。Worker 成对来源为同一 PR 的 run38198285079 / head3087846、原 attempts1/2，两个原ZIP/result.json已通过原 validators；不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

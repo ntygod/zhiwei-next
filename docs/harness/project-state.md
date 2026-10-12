@@ -18,6 +18,8 @@ Node22.23.1/npm10.9.8 下7项真实临时 SQLite/API/迁移场景及2项真实�
 
 首个实现 `b35abd1` 的 native CI38197375910 完整跑完1149项，1148通过、唯一失败为既有认知测试物理版本仍期待6；实际固定迁移已到7，版本断言已机械同步，WAL/完整性/旧严格拒绝/全部场景与时限保留。固定读者为每次真实产物观察分配新 snapshot 引用，文件变化形成新结果、原内容和终态不改写；正常场景通过。PR124 正常 SDK/Worker run38197375872 的两个原ZIP按原验证器完整比较成功；SDK已续期，Worker成对来源和最终门禁仍待完成。
 
+PR124 成对 Worker 原来源已完成：run38198285079 / head3087846 的原 jobs114645762635/114646126243，各自 capture/fresh/committed/upload 成功，仅在完整对象相等后显式 recapture guard 失败。第一份原ZIP保存后只重跑精确 Worker job，两个原ZIP的唯一 result.json 均72731字节、SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa、字节相同且与正常原件/完整 committed v2 对象一致；原 run/job/Artifact validators 全通过。正式 comparator 已恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90，所有门禁不改。最终完整 CI、新 HEAD R3 与 Ready/live/保护交付仍须实际完成。
+
 ## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
@@ -323,7 +325,7 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #124；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源仍待按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #124；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified

@@ -194,7 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    throw new Error("PR124 recapture-only guard after complete object equality");
     return;
   }
   if (outputIndex >= 0) {
