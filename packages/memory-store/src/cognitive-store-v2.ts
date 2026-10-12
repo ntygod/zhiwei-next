@@ -58,6 +58,12 @@ export interface CognitionFenceV2 {
   readonly policyEpoch: number;
   readonly recoveryEpoch: number;
 }
+/** Internal read qualification, never a credential, content digest or client permission. */
+export interface CognitiveReadQualificationV2 {
+  readonly fences: readonly CognitionFenceV2[];
+  readonly qualificationKey: string;
+  readonly notAfter?: string;
+}
 export type CognitiveStoreErrorCodeV2 = "validation" | "closed" | "conflict" | "sequence"
   | "unavailable" | "unsupported" | "budget_exceeded" | "revision_conflict" | "corruption" | "recovery_required" | "sqlite" | "io";
 export class CognitiveStoreErrorV2 extends Error {
@@ -392,6 +398,54 @@ export class SyntheticCognitionStoreV2 {
     };
   }
   currentFence(scope: ScopeV2): CognitionFenceV2 { return this.#transaction(false, () => this.#currentFence(scope)); }
+  /** The composition must authorize context before entering this read snapshot. Nested formal
+   * reads share its validated rows, clock and transaction; no body survives this call in a cache. */
+  withReadQualification<T>(context: MemoryContextV1, read: () => T): Readonly<{ value: T; qualification: CognitiveReadQualificationV2 }> {
+    assertIdentifierV2(context.principalId); assertIdentifierV2(context.workspaceId);
+    return this.#transaction(false, () => {
+      const prior = this.#taskComposing; this.#taskComposing = true;
+      try {
+        const scope: ScopeV2 = { kind: "workspace", workspaceId: context.workspaceId };
+        this.#scope(scope); this.#notForgotten(scope);
+        // Filter in SQL before consulting any content, evidence or descendant metadata.
+        const scopes = this.#rows("SELECT * FROM scope_catalog WHERE json_extract(scope_json,'$.workspaceId')=? ORDER BY scope_key", context.workspaceId);
+        const now = this.#now(), changes: string[] = [], bodies: unknown[] = [], claims: unknown[] = [], sources: unknown[] = [];
+        const deadline = (at: string) => { assertIsoTimestampV2(at); if (at > now) changes.push(at); };
+        for (const scoped of scopes) {
+          const actualScope = scopeFrom(scoped), key = text(scoped.scope_key);
+          if (!isScopeWithinV2(actualScope, scope)) fail("corruption");
+          for (const row of this.#rows("SELECT * FROM content_object WHERE scope_key=? ORDER BY content_id,content_version", key)) {
+            let available = row.state === "available" && text(row.retention_until) > now;
+            if (available) {
+              try { this.#notForgotten(actualScope, { kind: "content", id: text(row.content_id), version: number(row.content_version) }); }
+              catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; available = false; }
+            }
+            if (row.state === "available") deadline(text(row.retention_until));
+            bodies.push([key, row.content_id, row.content_version, row.state, available]);
+          }
+          for (const row of this.#rows("SELECT * FROM claim_version WHERE scope_key=? ORDER BY claim_id,version", key)) {
+            const metadata = parse(row.metadata_json) as { validFrom: string; validUntil?: string };
+            deadline(metadata.validFrom); if (metadata.validUntil !== undefined) deadline(metadata.validUntil);
+            let qualified = false;
+            if (row.status !== "FORGOTTEN") {
+              try { const claim = this.#hydrateClaim(row, true); this.#memoryEvidence(claim.evidence, claim.privacy); qualified = true; }
+              catch (error) { if (!(error instanceof CognitiveStoreErrorV2) || error.code !== "unavailable") throw error; }
+            }
+            claims.push([key, row.claim_id, row.version, row.revision, row.status, qualified,
+              metadata.validFrom <= now && (metadata.validUntil === undefined || metadata.validUntil > now)]);
+          }
+          for (const row of this.#rows("SELECT o.id,o.availability,s.state FROM observation_v2 o JOIN source_stream s ON s.stream_id=o.stream_id WHERE o.scope_key=? ORDER BY o.id", key))
+            sources.push([key, row.id, row.availability, row.state]);
+          for (const row of this.#rows("SELECT binding_id,resource_id,control_sequence FROM source_suppression WHERE scope_key=? ORDER BY binding_id,resource_id", key))
+            sources.push([key, row.binding_id, row.resource_id, row.control_sequence]);
+        }
+        const value = read();
+        const fences = [this.#currentFence({ kind: "global" }), ...scopes.map(row => this.#currentFence(scopeFrom(row)))];
+        const notAfter = changes.sort()[0];
+        return { value, qualification: { fences, qualificationKey: json({ fences, bodies, claims, sources }), ...(notAfter === undefined ? {} : { notAfter }) } };
+      } finally { this.#taskComposing = prior; }
+    });
+  }
   #notForgotten(scope: ScopeV2, entity?: Readonly<{ kind: "content" | "claim" | "observation"; id: string; version: number }>): void {
     for (const record of this.#journal.read().records) if (record.intent.kind === "FORGET") for (const target of record.intent.targets) {
       if (target.kind === "scope" && isScopeWithinV2(scope, target.scope)) fail("unavailable");

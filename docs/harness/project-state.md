@@ -16,9 +16,9 @@ P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124) 已完成1152项
 
 R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原 Runtime 来源、Ready/live/保护合入及 main 回读保持。P1-08 整体 implementation_status 仍 in_progress、Z18 acceptance_status=not_run，未有 UI/实际浏览器验收；普通真实入口关闭。回退新客户端代码走受审 revert PR，不改变数据/控制 journal；不开展受限旧实验、真实账户/个人数据、外发/部署、P1-09 或 P2。
 
-[ADR0023](../adr/0023-browser-workbench-api-interactions.md) 为 Proposed：独立 browser-pair 修复旧 HttpOnly Cookie 阻止重新配对的问题，原 pair 合同保留；记忆 SSE 组合通过实际作用域 fence 失效已加载正文，不伪造新事件。待独立 R3 设计审查，不宣称已实施。Node22.23.1/npm10.9.8 的原完整 check 已尝试，6项工具链检查、strict183、架构、AGENTS、work-items通过，止于容器无法读取 Windows worktree Git 历史的 main provenance；不跳门或修环境，完整成功采用当前 HEAD native CI。
+[ADR0023](../adr/0023-browser-workbench-api-interactions.md) 已获[独立 R3 设计批准](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119267927)，绑定 `aa997c4`，仅为设计批准。无布局浏览器客户端、同源 Cookie/CSRF 与独立重新配对、任务/记忆/结果操作、有限状态/订阅和精确未知写重试已接线。Store 在同一读取 snapshot 过滤范围，读取实际正文/必要来源资格及最早变化期限；有限时间头与 SSE 独立 timer 覆盖无写入自然到期，独立读代次阻止旧响应/旧流恢复正文。缺真实读者的 memory 组合明确 unsupported，普通启动保持关闭。
 
-`15e5f0f` 的[独立 R3 设计审查](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119050213)为 BLOCKED：持久水位不能覆盖无写入的正文/来源自然到期，失效后同范围的迟到读仍可能恢复正文。Proposed 设计已补充 Store 同 snapshot 的真实资格/最早变化期限、浏览器正文响应的有限时间头、SSE/客户端独立到期边界，以及与身份/写重试分开的读取代次。修订设计另需当前 HEAD 独立批准，不沿用旧结论；尚未编写实现或启用入口。
+`15e5f0f` 的[旧设计审查](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119050213)为 BLOCKED；自然到期与迟到读两项在修订设计批准后实施。Node22.23.1/npm10.9.8 下 strict188、实际 DOM/no-Node 编译闭包、原 API 11项、9项新增 HTTP/SQLite 交互边界与实际受控 Worker 的结果/反馈场景已分别通过。原完整 check 已尝试，止于容器无法读取 Windows worktree Git 历史的 main provenance；不跳门或修环境，最终采用当前 HEAD native CI。输入/plan 正常回应只标 received，匹配 committed receipt 才 confirmed；实际 Task/Outcome 拒绝和历史终态均保留。当前 primary 正常 SDK/Worker run38213988697 的原 ZIP 与完整冻结对象通过，成对来源、最终完整 CI/R3/Ready/main 仍待完成。局部 Node 传输不冒充浏览器 Cookie/Z18 验收。
 
 ## 已交付 P1-07：提交前历史（2026-10-12）
 

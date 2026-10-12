@@ -38,19 +38,27 @@ export class SyntheticSessionAuthenticator {
     const code = randomBytes(32).toString("base64url");
     this.#tickets.set(hash(code), { kind, context: syntheticSessionIdentities[fixture], expires: this.#now() + 300_000 }); return code;
   }
-  pair(request: SessionPairRequestV1, origin: string | undefined, expectedOrigin: string): Readonly<{ body: SessionPairResponseV1; cookie?: string }> {
+  pair(request: SessionPairRequestV1, origin: string | undefined, expectedOrigin: string, previousCookie?: string): Readonly<{ body: SessionPairResponseV1; cookie?: string }> {
     this.#prune(); if (this.#closed) deny();
     const key = hash(request.bootstrapCode); const ticket = this.#tickets.get(key);
     if (!ticket || ticket.kind !== request.clientKind) deny();
     if ((ticket.kind === "browser" && origin !== expectedOrigin) || (ticket.kind === "cli" && origin !== undefined)) throw new SessionApiError("forbidden", "origin_mismatch", 403);
-    if (this.#credentials.size >= 32) throw new SessionApiError("budget_exceeded", "rate_limit", 429);
+    // A Cookie is only a revocation hint; the new ticket exclusively determines identity.
+    const previous = previousCookie?.split(";").map(value => value.trim()).filter(value => value.startsWith("zhiwei_data_session="));
+    if (previous && (previous.length !== 1 || !/^zhiwei_data_session=data_browser_[A-Za-z0-9_-]{43}$/.test(previous[0]!))) throw new SessionApiError("validation", "invalid_shape", 400);
+    const previousKey = previous ? hash(previous[0]!.slice("zhiwei_data_session=".length)) : undefined;
+    const replace = previousKey !== undefined && this.#credentials.get(previousKey)?.kind === "browser";
+    if (this.#credentials.size - (replace ? 1 : 0) >= 32) throw new SessionApiError("budget_exceeded", "rate_limit", 429);
     const credential = `data_${ticket.kind}_${randomBytes(32).toString("base64url")}`; const csrf = randomBytes(32).toString("base64url");
     const expires = this.#now() + this.#ttl; const credentialKey = hash(credential);
-    this.#tickets.delete(key); // One-use consumption is synchronous with issuing the credential.
-    this.#credentials.set(credentialKey, { ...ticket, expires, csrf, key: credentialKey });
+    if (!Number.isSafeInteger(expires) || !Number.isFinite(Date.parse(new Date(expires).toISOString())) || this.#credentials.has(credentialKey)) throw new SessionApiError("unavailable", "dependency_down", 503);
     const common = { schemaVersion: 1 as const, clientKind: ticket.kind, expiresAt: new Date(expires).toISOString() };
-    return ticket.kind === "cli" ? { body: { ...common, credential } }
+    const result = ticket.kind === "cli" ? { body: { ...common, credential } }
       : { body: { ...common, csrfToken: csrf }, cookie: `zhiwei_data_session=${credential}; HttpOnly; SameSite=Strict; Path=/v1/; Max-Age=${Math.max(1, Math.floor(this.#ttl / 1000))}` };
+    // All validation, capacity and credential preparation precede this synchronous publication.
+    this.#tickets.delete(key); this.#credentials.set(credentialKey, { ...ticket, expires, csrf, key: credentialKey });
+    if (replace) this.#credentials.delete(previousKey!);
+    return result;
   }
   authenticate(request: IncomingMessage, expectedOrigin: string): SessionAuthentication {
     this.#prune(); if (this.#closed) deny();
@@ -85,6 +93,9 @@ export class SyntheticSessionAuthenticator {
   current(authentication: SessionAuthentication): boolean {
     this.#prune(); const credential = this.#credentials.get(authentication.key);
     return !this.#closed && credential !== undefined && credential.context.principalId === authentication.context.principalId;
+  }
+  expiresAt(authentication: SessionAuthentication): number {
+    if (!this.current(authentication)) deny(); return this.#credentials.get(authentication.key)!.expires;
   }
   revoke(fixture: SyntheticSessionFixture): void {
     if (!Object.hasOwn(syntheticSessionIdentities, fixture)) deny();

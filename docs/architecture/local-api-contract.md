@@ -4,6 +4,10 @@
 
 ## 1. 协议分层
 
+P1-08 的 API/交互切片提供无布局浏览器消费者和独立 `POST /v1/browser-pair`。配对仍消费 `SessionPairRequestV1`，该入口只接受 browser，旧 Cookie 只作为撤销提示；原 `POST /v1/pair` 的 Cookie 拒绝合同不变。既有 JSON DTO、ProductEvent v1、Runtime 协议与 Schema 不变，新增的严格响应 parser 复用当前 wire 表示。详见 [ADR0023](../adr/0023-browser-workbench-api-interactions.md) 与 [客户端接线](../../apps/web/README.md)。
+
+受保护的正文和完整快照响应、事件流增加 `X-Zhiwei-Read-Not-After` UTC 时间头，限制显示期限，不提供权限。具有 memory capability 的组合必须使用实际 Store 的同一授权范围 snapshot 读取正文/必要来源资格和下一变化期限；没有该读者时拒绝组合。资格变化与无写入的自然到期使用既有 `stream.error/snapshot_required` 结束流，客户端重新取获准快照；不新增或伪造记忆 ProductEvent。普通启动仍不启用，P1-08 页面/Z18 验收不由合成传输测试代替。
+
 Web/CLI/Electron/MCP 都调用同一命令与查询服务。HTTP/SSE 是首个传输；桌面 preload 只能转发白名单 DTO，不能暴露任意 HTTP、路径、SQL 或进程调用。P5 的 MCP tool 是同一服务的受限映射，不建立第二套记忆行为。
 
 请求按顺序经过：头部/体积限制→通道认证→Origin/CSRF（浏览器）→DTO/parser→主体/资源范围→command幂等与revision→领域规则→事务→安全响应。验证完成前不读取资源正文，不调用模型或工具。

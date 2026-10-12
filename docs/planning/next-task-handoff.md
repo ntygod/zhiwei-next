@@ -10,6 +10,8 @@
 
 客户端只展示后端已确认版本；断线显示最后确认状态，权限失效停止消费并清除不再获准的正文，迟到响应不得污染新范围。未知命令提交不得伪成失败或成功，不能自动重复写；SSE 只触发获准重读，不凭进度制造终态。没有页面/实际浏览器证明时，P1-08 整体仍 in_progress，Z18 仍 not_run。
 
+当前实现入口见 [apps/web 接线](../../apps/web/README.md)；[ADR0023](../adr/0023-browser-workbench-api-interactions.md) 的修订设计已独立 R3 批准，最终实现另审。实际临时 HTTP/SQLite 验证了重新配对、任务命令、记忆新版本、自然到期和迟到读；受控 Worker 结果/反馈也已通过。正式完整 CI、当前 primary 成对来源、最终精确 HEAD 审查与合入证明仍待实际完成，以 project-state 和 primary PR 为准。
+
 最终完整 `npm run check` 使用原 Node22.23.1/npm10.9.8；当前 HEAD 独立 R3、当前 primary 原 Runtime 来源、Ready/live、保护合入和 main 来源回读仍须实际完成。不能把局部检查或历史 HEAD 批准写成当前实现交付。
 
 ## 保持边界

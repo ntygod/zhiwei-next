@@ -135,9 +135,11 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       }
     },
   });
-  const memories = createPersistentMemoryApplication({ store, authorize: application.authorize });
+  const memories = createPersistentMemoryApplication({ store, authorize: application.authorize, afterCommit: application.committed });
   const resultReader = createSyntheticOutcomeReaderV1(), outcomes = createOutcomeServiceV1({ store, application, reader: resultReader, ids: { next: randomUUID }, now: () => new Date().toISOString() });
-  const apiOptions = () => ({ application, memory: memories, outcomes, installationId, recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
+  const apiOptions = () => ({ application, memory: memories, outcomes, installationId,
+    readFence: <T>(context: SessionApiContext, read: () => T) => store().withReadQualification(context, read),
+    recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
   let api = createSyntheticSessionApi(apiOptions()), apiNeedsReplacement = false;
   const closeApi = async () => { await api.close(); apiNeedsReplacement = true; };
   const publishApi = () => { if (apiNeedsReplacement) { api = createSyntheticSessionApi(apiOptions()); apiNeedsReplacement = false; } };
