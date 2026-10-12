@@ -6,7 +6,19 @@ status: active
 updated: 2026-10-12
 -->
 
-## 当前工作：P1-07 结果验证、Episode 与使用记录 #123（2026-10-12）
+## 当前工作：P1-08 API 与交互接线 #125（2026-10-12）
+
+canonical [#125](https://github.com/ntygod/zhiwei-next/issues/125)，唯一分支 `feat/125-workbench-api`，基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` / tree `dcde54ffe7bbf73cf09548cbf8317cfdc70c0983`。开工无开放 PR/Incident、远端仅 main、developmentPause=false；已搜索 P1-08/工作台 API 无重复 execution，#44/#67 人类输入与 #98 暂停状态保留。
+
+P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124) 已完成1152项原完整检查、精确 HEAD 独立 R3、Ready/live、原受保护 squash 与 main 来源/分支审计；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)和 [#123 关闭记录](https://github.com/ntygod/zhiwei-next/issues/123#issuecomment-6118414931)补齐下方提交前历史，本地 main 已同步且干净。
+
+所有者本轮明确「尚未完成，先推进 API 和交互接线」，UI 布局继续交由 Gemini。本切片提供同源受保护的浏览器客户端与确定性交互状态，复用已交付 Session/Memory/Outcome、Cookie/CSRF、revision/幂等、分页快照和 SSE；只补齐实际消费者所需的响应校验/接线，不复制后端业务规则或真源。任务开始/继续、记忆查看/纠错、结果反馈及断线恢复须在自有临时合成资源中形成闭环。
+
+R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原 Runtime 来源、Ready/live/保护合入及 main 回读保持。P1-08 整体 implementation_status 仍 in_progress、Z18 acceptance_status=not_run，未有 UI/实际浏览器验收；普通真实入口关闭。回退新客户端代码走受审 revert PR，不改变数据/控制 journal；不开展受限旧实验、真实账户/个人数据、外发/部署、P1-09 或 P2。
+
+[ADR0023](../adr/0023-browser-workbench-api-interactions.md) 为 Proposed：独立 browser-pair 修复旧 HttpOnly Cookie 阻止重新配对的问题，原 pair 合同保留；记忆 SSE 组合通过实际作用域 fence 失效已加载正文，不伪造新事件。待独立 R3 设计审查，不宣称已实施。Node22.23.1/npm10.9.8 的原完整 check 已尝试，6项工具链检查、strict183、架构、AGENTS、work-items通过，止于容器无法读取 Windows worktree Git 历史的 main provenance；不跳门或修环境，完整成功采用当前 HEAD native CI。
+
+## 已交付 P1-07：提交前历史（2026-10-12）
 
 canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。
 
