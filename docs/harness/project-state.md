@@ -6,7 +6,27 @@ status: active
 updated: 2026-10-12
 -->
 
-## 当前工作：P1-07 结果验证、Episode 与使用记录 #123（2026-10-12）
+## 当前工作：P1-08 API 与交互接线 #125（2026-10-12）
+
+canonical [#125](https://github.com/ntygod/zhiwei-next/issues/125)，唯一分支 `feat/125-workbench-api`，基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` / tree `dcde54ffe7bbf73cf09548cbf8317cfdc70c0983`。开工无开放 PR/Incident、远端仅 main、developmentPause=false；已搜索 P1-08/工作台 API 无重复 execution，#44/#67 人类输入与 #98 暂停状态保留。
+
+P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124) 已完成1152项原完整检查、精确 HEAD 独立 R3、Ready/live、原受保护 squash 与 main 来源/分支审计；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)和 [#123 关闭记录](https://github.com/ntygod/zhiwei-next/issues/123#issuecomment-6118414931)补齐下方提交前历史，本地 main 已同步且干净。
+
+所有者本轮明确「尚未完成，先推进 API 和交互接线」，UI 布局继续交由 Gemini。本切片提供同源受保护的浏览器客户端与确定性交互状态，复用已交付 Session/Memory/Outcome、Cookie/CSRF、revision/幂等、分页快照和 SSE；只补齐实际消费者所需的响应校验/接线，不复制后端业务规则或真源。任务开始/继续、记忆查看/纠错、结果反馈及断线恢复须在自有临时合成资源中形成闭环。
+
+R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原 Runtime 来源、Ready/live/保护合入及 main 回读保持。P1-08 整体 implementation_status 仍 in_progress、Z18 acceptance_status=not_run，未有 UI/实际浏览器验收；普通真实入口关闭。回退新客户端代码走受审 revert PR，不改变数据/控制 journal；不开展受限旧实验、真实账户/个人数据、外发/部署、P1-09 或 P2。
+
+[ADR0023](../adr/0023-browser-workbench-api-interactions.md) 已获[独立 R3 设计批准](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119267927)，绑定 `aa997c4`，仅为设计批准。无布局浏览器客户端、同源 Cookie/CSRF 与独立重新配对、任务/记忆/结果操作、有限状态/订阅和精确未知写重试已接线。Store 在同一读取 snapshot 过滤范围，读取实际正文/必要来源资格及最早变化期限；有限时间头与 SSE 独立 timer 覆盖无写入自然到期，独立读代次阻止旧响应/旧流恢复正文。缺真实读者的 memory 组合明确 unsupported，普通启动保持关闭。
+
+`15e5f0f` 的[旧设计审查](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119050213)为 BLOCKED；自然到期与迟到读两项在修订设计批准后实施。Node22.23.1/npm10.9.8 下 strict188、实际 DOM/no-Node 编译闭包、原 API 11项与新增浏览器模块场景已有局部通过，最终全量另证。配对须实际 Cookie 能力/已选 Workspace 快照获准；输入/plan 正常回应只标 received，匹配 committed receipt 才 confirmed；实际 Task/Outcome 拒绝和历史终态保留。同范围最新查询选择也有独立发布保护；任务记忆合法引用父 Workspace 证据，更早显式版本不必在最新50条列表中。原完整 check 已尝试，止于容器无法读取 Windows worktree Git 历史的 main provenance；不跳门或修环境，最终采用当前 HEAD native CI。首次重试收到拒绝不能证明原未知命令未提交，仍保持 unknown；无关 Cookie 不形成身份/阻挡有效 ticket。局部 Node 传输不冒充浏览器 Cookie/Z18 验收。
+
+当前 primary 正常 SDK/Worker run38213988697 原 ZIP 与完整冻结对象通过；成对 Worker run38218233236 / head1984a92 的原 jobs114707968853/114709289598、attempts1/2 的 capture/fresh/committed/upload均成功，仅在完整对象相等后的有名 guard 失败。两份原 ZIP 的唯一72731字节 result.json 字节相同、SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa，并与完整冻结对象/正常原件一致；原 run/job/artifact/content validators通过。最终 comparator 恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90。首次候选1984a92的 CI 在原 Harness 检查发现两个既有 SDK 身份文档未机械同步，已按真实源更新字段，未放宽检查；最终完整 CI/R3/Ready/main 仍待实际完成。
+
+`9f3bf38` 的[最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6120696074)为 BLOCKED：首次 capture 已提交后，响应资格复验仍可410，客户端误标 rejected并丢失核对资格。修复将该返回保留 unknown；真实 HTTP/SQLite 在两次资格读取之间推进时间，确认一次实际提交/持久Observation、unknown/canRetry=true与同字节重试。该 HEAD 的原 CI38222977900在既有10分钟时限取消，未完成全套测试；原门、时限与旧场景不改。新候选仍需完整 CI 和新的独立 R3，不沿用旧批准或局部32/32检查。
+
+`543798a` 获[全新独立 R3 实现批准](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6120972683)，独立52/52相关测试通过，但原 CI38225261487 实际全跑1167项、1166通过，唯一失败为既有 CLI 任务流因新资格标识变化收到 snapshot_required。浏览器记忆失效合同现在按真实配对凭据种类限定浏览器流，原 CLI 的逐帧身份/Scope/cursor和事件正文校验保留；浏览器纠正/自然到期仍必须清除正文并结束旧流。新增同一实际 HTTP/SQLite 组合同时验证两种消费者，既有失败测试不修改。新 HEAD 仍须原完整检查与新的独立 R3，旧批准不代替。
+
+## 已交付 P1-07：提交前历史（2026-10-12）
 
 canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。
 
@@ -339,10 +359,10 @@ public-free-ruleset
 
 ```text
 source state                 verified
-capture head                 b35abd16cabde4a9c745c10a6d43e67596bb9ed9
-capture workflow             38197375872
-capture artifact             11723831889
-capture artifact digest      sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
+capture head                 aa997c471251f24ab6f0124a93f070b4daefa10a
+capture workflow             38213988697
+capture artifact             11730676012
+capture artifact digest      sha256:eb9565f08d4bec0f6f418397e239d7a109950b59bc14887e475e67fe4fa31fcc
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

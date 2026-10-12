@@ -83,7 +83,7 @@ export type {
 
 // Synthetic development only; real-data and external-model consumers remain disabled.
 export { SyntheticCognitionStoreV2, CognitiveStoreErrorV2, openSyntheticCognitionStoreV2 } from "./cognitive-store-v2.ts";
-export type { SyntheticCognitionStoreOptionsV2, CognitionFenceV2, CognitiveStoreErrorCodeV2,
+export type { SyntheticCognitionStoreOptionsV2, CognitionFenceV2, CognitiveReadQualificationV2, CognitiveStoreErrorCodeV2,
   StageCognitiveContentV2, CognitiveCommitReceiptV2, CognitiveOutboxEventV2 } from "./cognitive-store-v2.ts";
 export { convertRuntimeV1ToObservationV2 } from "./cognitive-codec-v2.ts";
 export type { CognitiveRecordKindV2, CognitiveRecordByKindV2 } from "./cognitive-codec-v2.ts";

@@ -7,7 +7,8 @@ import {
   canonicalJsonV1, parseLocalApiReceiptV1, deserializeLocalApiMemorySearchV1, deserializeLocalApiMemoryInputV1, deserializeLocalApiMemoryExplanationRequestV1,
   deserializeOutcomePlanCommandV1, deserializeOutcomeVerifyCommandV1, deserializeOutcomeFeedbackCommandV1, parseOutcomeVerificationPlanV1, parseTaskResultBundleV1,
 } from "../../../../packages/protocol/src/index.ts";
-import type { MemoryPersistenceV1, MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
+import type { MemoryPersistenceV1, MemoryCommandV1, CognitiveReadQualificationV2 } from "../../../../packages/memory-store/src/index.ts";
+import { CognitiveStoreErrorV2 } from "../../../../packages/memory-store/src/index.ts";
 import { assertIdentifierV2 } from "../../../../packages/domain/src/index.ts";
 import { SyntheticSessionAuthenticator, type SessionAuthentication, type SyntheticSessionFixture } from "./auth.ts";
 import { SessionCursorCodec } from "./cursor.ts";
@@ -26,6 +27,9 @@ function invalid(): never { throw new SessionApiError("validation", "invalid_sha
 function safeError(error: unknown): Readonly<{ status: number; body: LocalApiErrorV1 }> {
   const value = error instanceof SessionApiError ? error
     : error instanceof CognitiveProtocolError ? new SessionApiError(error.code, error.reason, error.code === "unsupported" ? 422 : error.reason === "too_large" ? 413 : 400)
+    : error instanceof CognitiveStoreErrorV2 && error.code === "corruption" ? new SessionApiError("corruption", "integrity_failed", 500)
+    : error instanceof CognitiveStoreErrorV2 && error.code === "recovery_required" ? new SessionApiError("unavailable", "recovery_required", 503)
+    : error instanceof CognitiveStoreErrorV2 && error.code === "unavailable" ? new SessionApiError("not_found", "not_found", 404)
     : new SessionApiError("unavailable", "dependency_down", 503);
   const messages: Record<string, string> = {
     validation: "The request is invalid.", unauthenticated: "Pair this client again.", forbidden: "The request is not authorized.",
@@ -35,8 +39,8 @@ function safeError(error: unknown): Readonly<{ status: number; body: LocalApiErr
   };
   return { status: value.status, body: { schemaVersion: 1, error: { code: value.code, reason: value.reason, safeMessage: messages[value.code]!, retryable: value.reason === "dependency_down" || value.reason === "rate_limit", diagnosticId: `diagnostic-${randomUUID()}` } } };
 }
-function writeJson(response: ServerResponse, status: number, body: unknown, cookie?: string): void {
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "connection": "close", ...(cookie === undefined ? {} : { "set-cookie": cookie }) });
+function writeJson(response: ServerResponse, status: number, body: unknown, cookie?: string, headers: Readonly<Record<string, string>> = {}): void {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "connection": "close", ...headers, ...(cookie === undefined ? {} : { "set-cookie": cookie }) });
   response.end(JSON.stringify(body));
 }
 function readIdentifier(value: string | null): string {
@@ -73,6 +77,7 @@ export interface SyntheticSessionApiOptions {
   readonly application: SessionApiApplication;
   readonly memory?: MemoryPersistenceV1;
   readonly outcomes?: OutcomeServiceV1;
+  readonly readFence?: <T>(context: SessionApiContext, read: () => T) => Readonly<{ value: T; qualification: CognitiveReadQualificationV2 }>;
   readonly installationId: string;
   readonly now?: () => number;
   readonly recoveryEpoch?: () => string;
@@ -95,6 +100,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   const app = options.application; const now = options.now ?? Date.now;
   const drainTimeoutMs = options.drainTimeoutMs ?? 2000;
   if (!options.installationId || !Number.isInteger(drainTimeoutMs) || drainTimeoutMs < 1 || drainTimeoutMs > 5000) invalid();
+  if (options.memory && !options.readFence) throw new SessionApiError("unsupported", "runtime_capability", 422);
   const auth = new SyntheticSessionAuthenticator(now, options.sessionTtlMs);
   const cursor = new SessionCursorCodec({ installationId: options.installationId, recoveryEpoch: options.recoveryEpoch ?? (() => "synthetic-recovery-1"), projectionGeneration: options.projectionGeneration ?? (() => 1), now });
   const streams = new Set<ServerResponse>(); const wakeStreams = new Set<() => void>(); let origin = ""; let state: "idle" | "starting" | "listening" | "closed" = "idle";
@@ -110,6 +116,21 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   };
   const eventsBinding = (context: SessionApiContext) => ({ ...context, purpose: "events" as const });
   const encode = (context: SessionApiContext, commitCursor: number) => cursor.encode(eventsBinding(context), { commitCursor });
+  const qualifiedRead = <T>(context: SessionApiContext, read: () => T) => options.readFence ? options.readFence(context, read)
+    : { value: read(), qualification: { fences: [], qualificationKey: "task-only" } as CognitiveReadQualificationV2 };
+  const readDeadline = (authentication: SessionAuthentication, qualification: CognitiveReadQualificationV2): number => {
+    const deadline = Math.min(auth.expiresAt(authentication), qualification.notAfter === undefined ? Infinity : Date.parse(qualification.notAfter));
+    if (!Number.isFinite(deadline) || deadline <= now()) throw new SessionApiError("unavailable", "snapshot_required", 410);
+    return deadline;
+  };
+  const qualifiedJson = <T>(authentication: SessionAuthentication, context: SessionApiContext, response: ServerResponse, status: number, read: () => T): void => {
+    authorize(authentication, context.workspaceId);
+    const result = qualifiedRead(context, read), current = qualifiedRead(context, () => undefined).qualification;
+    if (current.qualificationKey !== result.qualification.qualificationKey) throw new SessionApiError("unavailable", "snapshot_required", 410);
+    authorize(authentication, context.workspaceId);
+    const deadline = Math.min(readDeadline(authentication, result.qualification), readDeadline(authentication, current));
+    writeJson(response, status, result.value, undefined, { "x-zhiwei-read-not-after": new Date(deadline).toISOString() });
+  };
   const checkReplay = (page: SessionApiReplay, after: number, context: SessionApiContext): void => {
     if (page.gap) throw new SessionApiError("unavailable", "event_gap", 410);
     if (!Number.isSafeInteger(page.highWatermark) || page.highWatermark < after || page.events.length > 32 || (page.hasMore && page.events.length === 0)) throw new SessionApiError("corruption", "integrity_failed", 500);
@@ -122,19 +143,22 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   };
   const openEvents = (request: IncomingMessage, response: ServerResponse, authentication: SessionAuthentication, context: SessionApiContext, initial: number) => {
     if (streams.size >= 32) throw new SessionApiError("budget_exceeded", "rate_limit", 429);
+    const browser = auth.clientKind(authentication) === "browser";
     let after = initial; let closed = false; let scheduled: ReturnType<typeof setTimeout> | undefined; let drainTimer: ReturnType<typeof setTimeout> | undefined;
-    let waitingDrain = false; let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let waitingDrain = false; let heartbeat: ReturnType<typeof setInterval> | undefined; let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+    let qualification: CognitiveReadQualificationV2; let initialDeadline: number;
     let unsubscribe: (() => void) | undefined;
     const notify = () => { if (!closed && !waitingDrain && !scheduled) scheduled = setTimeout(pump, 0); };
     // Subscribe first, then read the durable watermark: no commit can fall between snapshot and notification.
     unsubscribe = app.subscribe(notify); wakeStreams.add(notify);
     // Validate first page before writing the SSE status; expired/gap cursors get a proper HTTP error.
     let firstPage: SessionApiReplay | undefined;
-    try { authorize(authentication, context.workspaceId); firstPage = app.replay(context, { afterCommitCursor: after, limit: 32 }); checkReplay(firstPage, after, context); }
+    try { authorize(authentication, context.workspaceId); const read = qualifiedRead(context, () => app.replay(context, { afterCommitCursor: after, limit: 32 }));
+      qualification = read.qualification; firstPage = read.value; initialDeadline = readDeadline(authentication, qualification); checkReplay(firstPage, after, context); }
     catch (error) { unsubscribe(); wakeStreams.delete(notify); clearTimeout(scheduled); throw error; }
-    response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "connection": "close" });
+    response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "connection": "close", "x-zhiwei-read-not-after": new Date(initialDeadline).toISOString() });
     response.flushHeaders(); streams.add(response); request.socket.setTimeout(0);
-    const cleanup = () => { if (closed) return; closed = true; clearTimeout(scheduled); clearTimeout(drainTimer); clearInterval(heartbeat); unsubscribe?.(); wakeStreams.delete(notify); streams.delete(response); response.removeListener("drain", drained); };
+    const cleanup = () => { if (closed) return; closed = true; clearTimeout(scheduled); clearTimeout(drainTimer); clearTimeout(expiryTimer); clearInterval(heartbeat); unsubscribe?.(); wakeStreams.delete(notify); streams.delete(response); response.removeListener("drain", drained); };
     const finish = (error: unknown) => {
       if (closed) return;
       const safe = safeError(error); const blocked = waitingDrain; cleanup();
@@ -142,6 +166,15 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       else response.end(`event: stream.error\ndata: ${JSON.stringify(safe.body)}\n\n`);
     };
     const schedule = notify;
+    const checkQualification = () => {
+      authorize(authentication, context.workspaceId);
+      // Browser streams invalidate the loaded memory view; CLI keeps its original task-event contract.
+      if (!browser) return;
+      const current = qualifiedRead(context, () => undefined).qualification;
+      if (current.qualificationKey !== qualification.qualificationKey || readDeadline(authentication, qualification) <= now())
+        throw new SessionApiError("unavailable", "snapshot_required", 410);
+      readDeadline(authentication, current);
+    };
     const drained = () => { if (closed) return; waitingDrain = false; clearTimeout(drainTimer); schedule(); };
     response.on("close", cleanup); response.once("error", cleanup);
     const write = (frame: string): boolean => {
@@ -154,10 +187,10 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       scheduled = undefined;
       if (closed || waitingDrain) return;
       try {
-        authorize(authentication, context.workspaceId);
+        checkQualification();
         const page = firstPage ?? app.replay(context, { afterCommitCursor: after, limit: 32 }); firstPage = undefined; checkReplay(page, after, context);
         for (const row of page.events) {
-          authorize(authentication, context.workspaceId); // Required even within the same replay batch.
+          checkQualification(); // Required even within the same replay batch.
           const event = responseValue(parseProductEventV1, row.event);
           const token = encode(context, row.commitCursor);
           const writable = write(`id: ${token}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -170,8 +203,9 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
     }
     heartbeat = setInterval(() => {
       if (closed || waitingDrain) return;
-      try { authorize(authentication, context.workspaceId); write(": heartbeat\n\n"); } catch (error) { finish(error); }
+      try { checkQualification(); write(": heartbeat\n\n"); } catch (error) { finish(error); }
     }, 15_000);
+    if (browser) expiryTimer = setTimeout(() => finish(new SessionApiError("unavailable", "snapshot_required", 410)), Math.max(1, initialDeadline - now()));
     pump();
   };
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -193,6 +227,15 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         if (incomingOrigin !== undefined && incomingOrigin !== origin) throw new SessionApiError("forbidden", "origin_mismatch", 403);
         const pair = auth.pair(deserializeSessionPairRequestV1(await readBody(request)), incomingOrigin, origin); writeJson(response, 200, pair.body, pair.cookie); return;
       }
+      if (url.pathname === "/v1/browser-pair" && request.method === "POST") {
+        validateQuery(url, []);
+        if (request.headersDistinct.authorization || request.headersDistinct.origin?.length !== 1 || (request.headersDistinct.cookie?.length ?? 0) > 1) invalid();
+        if (request.headers.origin !== origin || (request.headersDistinct["sec-fetch-site"] !== undefined
+          && (request.headersDistinct["sec-fetch-site"].length !== 1 || request.headers["sec-fetch-site"] !== "same-origin"))) throw new SessionApiError("forbidden", "origin_mismatch", 403);
+        const input = deserializeSessionPairRequestV1(await readBody(request)); if (input.clientKind !== "browser") invalid();
+        const pair = auth.pair(input, request.headers.origin, origin, request.headers.cookie);
+        writeJson(response, 200, pair.body, pair.cookie); for (const wake of wakeStreams) wake(); return;
+      }
       const authentication = auth.authenticate(request, origin);
       if (url.pathname === "/v1/capabilities" && request.method === "GET") {
         validateQuery(url, []); authorize(authentication, authentication.context.workspaceId);
@@ -209,12 +252,12 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
           const context = authorize(authentication, command.workspaceId); if (command.taskId !== id) invalid();
           if (operation === "verification-plan") {
             const result = options.outcomes.bindPlan(context, command as ReturnType<typeof deserializeOutcomePlanCommandV1>);
-            writeJson(response, 201, { schemaVersion: 1, plan: responseValue(parseOutcomeVerificationPlanV1, result.plan), replay: result.replay }); return;
+            qualifiedJson(authentication, context, response, 201, () => ({ schemaVersion: 1, plan: responseValue(parseOutcomeVerificationPlanV1, result.plan), replay: result.replay })); return;
           }
           const result = operation === "verification" ? options.outcomes.verify(context, command as ReturnType<typeof deserializeOutcomeVerifyCommandV1>)
             : options.outcomes.feedback(context, command as ReturnType<typeof deserializeOutcomeFeedbackCommandV1>);
-          writeJson(response, 200, { schemaVersion: 1, value: responseValue(parseTaskResultBundleV1, result.bundle),
-            receipt: responseValue(parseSessionApiReceiptV1, { ...result.receipt, eventCursor: encode(context, result.commitCursor) }), replay: result.replay }); return;
+          qualifiedJson(authentication, context, response, 200, () => ({ schemaVersion: 1, value: responseValue(parseTaskResultBundleV1, result.bundle),
+            receipt: responseValue(parseSessionApiReceiptV1, { ...result.receipt, eventCursor: encode(context, result.commitCursor) }), replay: result.replay })); return;
         }
         if (url.pathname.startsWith("/v1/memory/")) {
           const memory = options.memory;
@@ -223,7 +266,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
           if (url.pathname === "/v1/memory/inputs") {
             const input = deserializeLocalApiMemoryInputV1(body), context = authorize(authentication, input.workspaceId);
             const result = memory.capture(context, input);
-            writeJson(response, 201, { schemaVersion: 1, evidence: result.evidence, replay: result.replay, asOfCursor: encodeMemory(context, input.scope, result.commitCursor) }); return;
+            qualifiedJson(authentication, context, response, 201, () => ({ schemaVersion: 1, evidence: result.evidence, replay: result.replay, asOfCursor: encodeMemory(context, input.scope, result.commitCursor) })); return;
           }
           if (url.pathname === "/v1/memory/commands") {
             const command = deserializeLocalApiCommandV1(body); if (!command.payload.kind.startsWith("memory.")) invalid();
@@ -232,13 +275,14 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
           }
           if (url.pathname === "/v1/memory/search") {
             const query = deserializeLocalApiMemorySearchV1(body); if (query.scope.kind === "global") invalid();
-            const context = authorize(authentication, query.scope.workspaceId), { commitCursor, ...result } = memory.search(context, query);
-            writeJson(response, 200, { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, query.scope, commitCursor) }); return;
+            const context = authorize(authentication, query.scope.workspaceId);
+            qualifiedJson(authentication, context, response, 200, () => { const { commitCursor, ...result } = memory.search(context, query);
+              return { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, query.scope, commitCursor) }; }); return;
           }
           if (url.pathname === "/v1/memory/explain") {
             const input = deserializeLocalApiMemoryExplanationRequestV1(body), context = authorize(authentication, input.workspaceId);
-            const { commitCursor, ...result } = memory.explain(context, input.scope, input.claimId, input.version);
-            writeJson(response, 200, { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, input.scope, commitCursor) }); return;
+            qualifiedJson(authentication, context, response, 200, () => { const { commitCursor, ...result } = memory.explain(context, input.scope, input.claimId, input.version);
+              return { schemaVersion: 1, ...result, asOfCursor: encodeMemory(context, input.scope, commitCursor) }; }); return;
           }
           throw new SessionApiError("not_found", "not_found", 404);
         }
@@ -264,9 +308,8 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         validateQuery(url, ["workspaceId"]); const context = authorize(authentication, readIdentifier(url.searchParams.get("workspaceId")));
         if (!options.outcomes) throw new SessionApiError("unsupported", "runtime_capability", 422);
         const id = readIdentifier(resultRead[1]!);
-        const value = resultRead[2] === "result" ? responseValue(parseTaskResultBundleV1, options.outcomes.read(context, id))
-          : options.outcomes.history(context, id).map(item => responseValue(parseTaskResultBundleV1, item));
-        writeJson(response, 200, { schemaVersion: 1, value }); return;
+        qualifiedJson(authentication, context, response, 200, () => ({ schemaVersion: 1, value: resultRead[2] === "result" ? responseValue(parseTaskResultBundleV1, options.outcomes!.read(context, id))
+          : options.outcomes!.history(context, id).map(item => responseValue(parseTaskResultBundleV1, item)) })); return;
       }
       const resource = /^\/v1\/(sessions|tasks)\/([^/]+)$/.exec(url.pathname);
       if (!["/v1/tasks", "/v1/snapshot", "/v1/events"].includes(url.pathname) && !resource) throw new SessionApiError("not_found", "not_found", 404);
@@ -275,7 +318,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (url.pathname === "/v1/snapshot") {
         const binding = { ...context, purpose: "snapshot" as const };
         const token = url.searchParams.get("cursor"); const position = token === null ? undefined : cursor.decode(binding, token);
-        const result = app.snapshot(context);
+        const qualified = qualifiedRead(context, () => app.snapshot(context)), result = qualified.value;
         // Each page comes from a consistent read; only an unchanged watermark can extend the view.
         if (position && position.commitCursor !== result.commitCursor) throw new SessionApiError("unavailable", "snapshot_required", 410);
         const offsetText = position?.after ?? "0";
@@ -286,8 +329,10 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         const tasks = result.tasks.slice(Math.max(0, offset - result.sessions.length), Math.max(0, offset - result.sessions.length) + 50 - sessions.length);
         const next = offset + sessions.length + tasks.length;
         // Session has bounded profile refs, Task only summaries; the page parser also enforces byte/node budgets.
+        if (qualifiedRead(context, () => undefined).qualification.qualificationKey !== qualified.qualification.qualificationKey) throw new SessionApiError("unavailable", "snapshot_required", 410);
         writeJson(response, 200, responseValue(parseSessionSnapshotPageV1, { schemaVersion: 1, workspaceId: context.workspaceId, sessions, tasks,
-          asOfCursor: encode(context, result.commitCursor), ...(next < total ? { nextCursor: cursor.encode(binding, { commitCursor: result.commitCursor, after: String(next) }) } : {}) })); return;
+          asOfCursor: encode(context, result.commitCursor), ...(next < total ? { nextCursor: cursor.encode(binding, { commitCursor: result.commitCursor, after: String(next) }) } : {}) }), undefined,
+          { "x-zhiwei-read-not-after": new Date(readDeadline(authentication, qualified.qualification)).toISOString() }); return;
       }
       if (url.pathname === "/v1/events") {
         if ((request.headersDistinct["last-event-id"]?.length ?? 0) > 1) invalid();
@@ -298,12 +343,13 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         const position = cursor.decode(eventsBinding(context), token); openEvents(request, response, authentication, context, position.commitCursor); return;
       }
       if (resource) {
-        const id = readIdentifier(resource[2]!); const result = resource[1] === "sessions" ? app.getSession(context, id) : app.getTask(context, id);
+        const id = readIdentifier(resource[2]!); qualifiedJson(authentication, context, response, 200, () => {
+        const result = resource[1] === "sessions" ? app.getSession(context, id) : app.getTask(context, id);
         const value = resource[1] === "sessions" ? responseValue(parseSessionV1, result.value) : responseValue(parseSessionTaskV1, result.value);
         if (value.workspaceId !== context.workspaceId) throw new SessionApiError("corruption", "integrity_failed", 500);
         const recovery = "recovery" in result && result.recovery !== undefined ? responseValue(parseSessionTaskRecoveryV1, result.recovery) : undefined;
         if (recovery && resource[1] !== "tasks") throw new SessionApiError("corruption", "integrity_failed", 500);
-        writeJson(response, 200, { schemaVersion: 1, value, asOfCursor: encode(context, result.commitCursor), ...(recovery === undefined ? {} : { recovery }) }); return;
+        return { schemaVersion: 1, value, asOfCursor: encode(context, result.commitCursor), ...(recovery === undefined ? {} : { recovery }) }; }); return;
       }
       const stateFilter = url.searchParams.has("state") ? parseSessionTaskStateV1(url.searchParams.get("state")) : undefined;
       const limitText = url.searchParams.get("limit") ?? "50"; if (!/^(?:[1-9]|[1-4][0-9]|50)$/.test(limitText)) invalid();

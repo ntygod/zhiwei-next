@@ -2,7 +2,7 @@ import { CognitiveStoreErrorV2, type MemoryPersistenceV1, type SyntheticCognitio
 import { SessionApiError, type SessionApiContext } from "../session-api/service.ts";
 
 /** Pairing membership is composition-owned; requests cannot select their principal. */
-export function createPersistentMemoryApplication(options: Readonly<{ store(): SyntheticCognitionStoreV2; authorize(context: SessionApiContext): boolean }>): MemoryPersistenceV1 {
+export function createPersistentMemoryApplication(options: Readonly<{ store(): SyntheticCognitionStoreV2; authorize(context: SessionApiContext): boolean; afterCommit?(): void }>): MemoryPersistenceV1 {
   const invoke = <T>(context: SessionApiContext, action: (memory: MemoryPersistenceV1) => T): T => {
     if (!options.authorize(context)) throw new SessionApiError("not_found", "not_found", 404);
     try { return action(options.store().memories); }
@@ -22,8 +22,8 @@ export function createPersistentMemoryApplication(options: Readonly<{ store(): S
       throw new SessionApiError("unavailable", "dependency_down", 503);
     }
   };
-  return { capture: (context, input) => invoke(context, memory => memory.capture(context, input)),
-    execute: (context, command) => invoke(context, memory => memory.execute(context, command)),
+  return { capture: (context, input) => invoke(context, memory => { const result = memory.capture(context, input); if (!result.replay) options.afterCommit?.(); return result; }),
+    execute: (context, command) => invoke(context, memory => { const result = memory.execute(context, command); if (!result.replay) options.afterCommit?.(); return result; }),
     search: (context, query, audience) => invoke(context, memory => memory.search(context, query, audience)),
     explain: (context, scope, id, version) => invoke(context, memory => memory.explain(context, scope, id, version)) };
 }
