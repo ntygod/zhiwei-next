@@ -14,7 +14,7 @@ export interface SyntheticOutcomeReaderV1 extends OutcomeVerificationReaderV1 {
 }
 /** Owns only fresh fixture files. Resource IDs never become caller paths or commands. */
 export function createSyntheticOutcomeReaderV1(): SyntheticOutcomeReaderV1 {
-  const root = mkdtempSync(join(tmpdir(), "zhiwei-result-reader-")), samples = new Map<string, { path: string; artifactId: string }>();
+  const root = mkdtempSync(join(tmpdir(), "zhiwei-result-reader-")), samples = new Map<string, { path: string }>();
   let closed = false;
   const key = (workspaceId: string, taskId: string, attemptId: string) => canonicalJsonV1([workspaceId, taskId, attemptId]);
   return {
@@ -22,7 +22,7 @@ export function createSyntheticOutcomeReaderV1(): SyntheticOutcomeReaderV1 {
     register(workspaceId, taskId, attemptId) {
       if (closed) throw new Error("Reader unavailable."); const binding = key(workspaceId, taskId, attemptId); if (samples.has(binding)) return;
       const directory = join(root, randomUUID()); mkdirSync(directory, { mode: 0o700 }); const path = join(directory, "sample.json");
-      writeFileSync(path, '{"count":8}', { flag: "wx", mode: 0o600 }); samples.set(binding, { path, artifactId: randomUUID() });
+      writeFileSync(path, '{"count":8}', { flag: "wx", mode: 0o600 }); samples.set(binding, { path });
     },
     setSample(workspaceId, taskId, attemptId, text) {
       const sample = samples.get(key(workspaceId, taskId, attemptId)); if (closed || !sample) throw new Error("Reader unavailable."); writeFileSync(sample.path, text, { flag: "w" });
@@ -51,7 +51,7 @@ export function createSyntheticOutcomeReaderV1(): SyntheticOutcomeReaderV1 {
       if (check.kind === "artifact") {
         const fd = openSync(sample.path, constants.O_RDONLY | constants.O_NOFOLLOW); try {
           const stat = fstatSync(fd); if (!stat.isFile() || stat.nlink !== 1 || stat.size > 65_536) throw new Error("Invalid owned artifact.");
-          return { kind: "artifact", resourceId: check.resourceId, artifact: { kind: "artifact", id: sample.artifactId, version: 1 }, text: new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(fd)) };
+          return { kind: "artifact", resourceId: check.resourceId, artifact: { kind: "artifact", id: randomUUID(), version: 1 }, text: new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(fd)) };
         } finally { closeSync(fd); }
       }
       const run = spawnSync(process.execPath, ["-e", 'const fs=require("node:fs");const fd=fs.openSync(process.argv[1],fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{const s=fs.fstatSync(fd);if(!s.isFile()||s.nlink!==1||s.size>65536)process.exit(2);const v=JSON.parse(fs.readFileSync(fd,"utf8"));process.exit(v.count===8?0:1)}catch{process.exit(2)}finally{fs.closeSync(fd)}', sample.path],

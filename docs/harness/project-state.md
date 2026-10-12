@@ -16,6 +16,8 @@ P1-06 / [PR122](https://github.com/ntygod/zhiwei-next/pull/122) 已完成1125项
 
 Node22.23.1/npm10.9.8 下7项真实临时 SQLite/API/迁移场景及2项真实受控 Worker 场景通过；多记忆只证明一次采用，最后请求后纠正/遗忘且没有后续工具时拒收迟到 final，T06 预约后纠正拒绝提交，完成后纠正/遗忘阻止当前回读。strict183 roots通过。容器原完整 check 通过工具链、typecheck、架构、AGENTS 和 work-items，止于无法读取 Windows worktree Git 历史的 main provenance；不修环境或跳门，最终采用同 HEAD native CI。完整 CI、精确 HEAD 独立 R3、PR124 原 Runtime 来源及 Ready/live/受保护合入仍待结果，局部证明不冒充完整交付。普通真实入口关闭，Z16/Z17 产品验收 not_run，P2 学习与 UI 不提前。
 
+首个实现 `b35abd1` 的 native CI38197375910 完整跑完1149项，1148通过、唯一失败为既有认知测试物理版本仍期待6；实际固定迁移已到7，版本断言已机械同步，WAL/完整性/旧严格拒绝/全部场景与时限保留。固定读者为每次真实产物观察分配新 snapshot 引用，文件变化形成新结果、原内容和终态不改写；正常场景通过。PR124 正常 SDK/Worker run38197375872 的两个原ZIP按原验证器完整比较成功；SDK已续期，Worker成对来源和最终门禁仍待完成。
+
 ## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
@@ -321,14 +323,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #120；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #124；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源仍待按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 5602bbc0c9b6792b9c42365a8584a7135f1a1a65
-capture workflow             38145094526
-capture artifact             11704029254
-capture artifact digest      sha256:c1190bc290dd093138999cb9452feb8c898610c4e89fcda7cb0372be77596af5
+capture head                 b35abd16cabde4a9c745c10a6d43e67596bb9ed9
+capture workflow             38197375872
+capture artifact             11723831889
+capture artifact digest      sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

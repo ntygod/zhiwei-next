@@ -319,13 +319,13 @@ capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9db
 
 ```text
 state            verified
-capture head     5602bbc0c9b6792b9c42365a8584a7135f1a1a65
-workflow run     38145094526
-artifact id      11704029254
-artifact digest  sha256:c1190bc290dd093138999cb9452feb8c898610c4e89fcda7cb0372be77596af5
+capture head     b35abd16cabde4a9c745c10a6d43e67596bb9ed9
+workflow run     38197375872
+artifact id      11723831889
+artifact digest  sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38145094526` 属于当前 PR #122，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源已按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38197375872` 属于当前 PR #124，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；最终候选仍须实际核验来源 HEAD ancestry、当前 PR 归属与 Workflow/Artifact 身份。当前 Worker 双 attempt 来源尚待按原合同续期，不能用 Draft 跳过的 Ready gate 声称完整 provenance 通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 

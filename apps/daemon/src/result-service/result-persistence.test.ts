@@ -92,6 +92,15 @@ test("the fixed daemon reader checks actual owned file content and executes its 
     assert.equal(result.bundle.observations[0]!.payload.kind, "artifact"); const snapshot = f.store.outcomes.prepare(context, command).snapshot;
     const observed = f.reader.read(snapshot, { criterionId: "unused-test", criterionRevision: 1, kind: "deterministic-test", resourceId: "sample-test" });
     assert.equal(observed.kind, "deterministic-test"); if (observed.kind === "deterministic-test") assert.equal(observed.exitCode, count === 8 ? 0 : 1);
+    if (count === 8) {
+      f.reader.setSample(context.workspaceId, f.taskId, plan.taskAttempt.attemptId, '{"count":7}');
+      const revised = f.service.verify(context, { ...command, commandId: "changed-file", idempotencyKey: "changed-file", expectedRevision: result.bundle.task.revision });
+      assert.equal(revised.bundle.outcome.status, "failed"); assert.equal(revised.bundle.task.state, "COMPLETED");
+      const first = result.bundle.observations[0]!.payload, next = revised.bundle.observations[0]!.payload;
+      assert.equal(first.kind, "artifact"); assert.equal(next.kind, "artifact");
+      if (first.kind === "artifact" && next.kind === "artifact") { assert.notEqual(first.artifact.id, next.artifact.id); assert.equal(first.text, '{"count":8}'); assert.equal(next.text, '{"count":7}'); }
+      assert.equal(f.service.history(context, f.taskId)[0]!.outcome.status, "completed");
+    }
   }
 });
 test("a paired confirmation and later negative feedback append versions without overwriting the first terminal state", t => {
