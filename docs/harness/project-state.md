@@ -28,6 +28,8 @@ PR124 成对 Worker 原来源已完成：run38198285079 / head3087846 的原 job
 
 `baddca5` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117549562)，但原 CI38201766593 仍在10分钟上限取消，文件位置调整未解决耗时。一个正常 Worker 场景的 CPU 采样定位到反复解析相同 Schema SQL 与序列化固定期望 manifest；仅缓存这两种纯计算，实际 Schema 对象、列/索引、PRAGMA、迁移、行、integrity/外键及资格校验仍逐次执行。该场景通过，Schema 校验采样约1.58s→1.00s；缓存预热后实际新增索引仍拒绝，事务回滚后原 Schema 仍通过，8项正常迁移/连接检查通过。新实现 HEAD 仍需原完整检查、新的独立 R3 和 Ready/live；不延长时限或改变质量门。
 
+`a8731be` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117754416)，原 CI38203281145 推进到后段但仍在10分钟上限取消，未有完整 TAP 成功记录。进一步仅在单个事务内复用已逐次验证 envelope 的 record 序列化字节：键绑定实际文件摘要与格式，最多128条/1MiB，返回副本，在事务结束或异常时释放；实际文件/hash、完整 canonical envelope、当前依赖与全部 row 检查照旧执行，跨事务不留正文缓存。11项正常 SQLite/API/Worker 场景和既有 Worker 接收场景通过，strict183通过；新HEAD另需完整原检查与新的独立R3，旧批准不移用。
+
 ## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。

@@ -150,6 +150,8 @@ export class SyntheticCognitionStoreV2 {
   #bundleFence: CognitionFenceV2 | undefined;
   #transactionNow: string | undefined;
   #taskComposing = false;
+  #recordBodyBytes: Map<string, Uint8Array> | undefined;
+  #recordBodyByteCount = 0;
   readonly #taskEngine: TaskStoreEngineV1;
   readonly #executionEngine: TaskExecutionStoreEngineV1;
   readonly #memoryBoundary: MemoryPersistenceBoundaryV1 | undefined;
@@ -336,6 +338,9 @@ export class SyntheticCognitionStoreV2 {
     // Only the fixed acceptance bundle below can compose these commands. It owns
     // the outer transaction and validates the shared initial fence exactly once.
     if ((this.#bundleFence || this.#taskComposing) && this.#db.isTransaction) return body();
+    // Reuse only record serialization within this one transaction. File integrity,
+    // canonical envelopes, live dependencies and every row check still run.
+    this.#recordBodyBytes = new Map(); this.#recordBodyByteCount = 0;
     try {
       if (!reconciling) this.#checkControl();
       this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
@@ -354,8 +359,11 @@ export class SyntheticCognitionStoreV2 {
       if (code === "ERR_SQLITE_ERROR" || code === "sqlite") fail("sqlite");
       if (["corruption", "recovery_required"].includes(code ?? "")) fail(code as "corruption" | "recovery_required");
       if (code === "io") fail("io");
-      fail("validation");
-    } finally { this.#transactionNow = undefined; }
+      return fail("validation");
+    } finally {
+      this.#recordBodyBytes?.clear(); this.#recordBodyBytes = undefined; this.#recordBodyByteCount = 0;
+      this.#transactionNow = undefined;
+    }
   }
 
   registerScope(scope: ScopeV2): CognitionFenceV2 {
@@ -406,7 +414,8 @@ export class SyntheticCognitionStoreV2 {
     return row;
   }
   #taskBodyBytes(row: Row, memory = false): Uint8Array {
-    const value = parse(new TextDecoder("utf-8", { fatal: true }).decode(this.#files.read(this.#descriptor(row))));
+    const descriptor = this.#descriptor(row);
+    const value = parse(new TextDecoder("utf-8", { fatal: true }).decode(this.#files.read(descriptor)));
     plainDataRecord(value, ["format", "dependencies", "record"]);
     const envelope = value as { format: string; dependencies: ContentRefV2[]; record: unknown };
     if (envelope.format !== (memory ? "memory-managed-content-v1" : "task-managed-content-v1") || !Array.isArray(envelope.dependencies)) fail("corruption");
@@ -415,7 +424,14 @@ export class SyntheticCognitionStoreV2 {
     const table = memory ? "memory_content_dependency_v1" : "task_content_dependency_v1";
     const expected = this.#rows(`SELECT source_id AS content_id,source_version AS content_version FROM ${table} WHERE target_id=? AND target_version=?`, text(row.content_id), number(row.content_version)).map(contentRef);
     if (json(order(envelope.dependencies)) !== json(order(expected))) fail("corruption");
-    return new TextEncoder().encode(json(envelope.record));
+    const key = `${memory ? "memory" : "task"}:${descriptor.digest}`, cached = this.#recordBodyBytes?.get(key);
+    if (cached) return cached.slice();
+    const bytes = new TextEncoder().encode(json(envelope.record));
+    if (this.#recordBodyBytes && this.#recordBodyBytes.size < 128 && this.#recordBodyByteCount + bytes.byteLength <= 1_048_576) {
+      this.#recordBodyBytes.set(key, bytes); this.#recordBodyByteCount += bytes.byteLength;
+      return bytes.slice();
+    }
+    return bytes;
   }
   #writeTaskBody(scope: ScopeV2, body: unknown, dependencies: readonly ContentRefV2[], boundary: Readonly<{ ids: { next(kind: "content" | "reservation"): string }; contentPolicy: TaskPersistenceBoundaryV1["contentPolicy"] }>, memory = false): ContentRefV2 {
     if (!this.#taskComposing || !this.#db.isTransaction) fail("corruption");
