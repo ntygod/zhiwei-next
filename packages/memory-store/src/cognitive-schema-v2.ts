@@ -517,9 +517,18 @@ function requireIntegrity(database: DatabaseSync): readonly string[] {
   return result;
 }
 
+// Only a deterministic SQL transformation is cached. Live objects, columns and
+// indexes are still captured from SQLite on every verification.
+const normalizedSchemaSql = new Map<string | null, string>();
+
 function normalizeSchemaSql(sql: string | null): string {
+  const cached = normalizedSchemaSql.get(sql);
+  if (cached !== undefined) return cached;
   try {
-    return normalizeSqlSchemaSignature(sql);
+    const normalized = normalizeSqlSchemaSignature(sql);
+    if (normalizedSchemaSql.size >= 256) normalizedSchemaSql.clear();
+    normalizedSchemaSql.set(sql, normalized);
+    return normalized;
   } catch (error) {
     throw new ObservationLedgerCorruptionError(
       "Observation Ledger Schema SQL could not be tokenized.",
@@ -633,6 +642,10 @@ function captureSchemaManifest(
   };
 }
 
+// Expected manifests belong to the fixed module-owned migration prefixes.
+// Actual manifests and database validation results are never cached.
+const expectedSchemaJson = new WeakMap<ObservationLedgerSchemaManifest, string>();
+
 function requireSchemaManifest(
   database: DatabaseSync,
   expected: ObservationLedgerSchemaManifest,
@@ -641,7 +654,8 @@ function requireSchemaManifest(
     database,
     expected.tables.map((table) => table.name),
   );
-  const expectedJson = JSON.stringify(expected);
+  const expectedJson = expectedSchemaJson.get(expected) ?? JSON.stringify(expected);
+  expectedSchemaJson.set(expected, expectedJson);
   const actualJson = JSON.stringify(actual);
   if (actualJson !== expectedJson) {
     throw new ObservationLedgerCorruptionError(

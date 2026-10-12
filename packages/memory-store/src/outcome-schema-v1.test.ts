@@ -19,5 +19,11 @@ test("schema7 migrates a real WAL database forward, retains the exact schema6 hi
     const expectedPragmas = configureCognitiveDatabaseV2(reopened, { filePath, busyTimeoutMs: 5000 }); reopened.exec("BEGIN");
     assert.equal(verifyOutcomeDatabaseV1(reopened, expectedPragmas).migrations.length, 7); reopened.exec("ROLLBACK");
     assert.equal(reopened.prepare("PRAGMA user_version").get()!.user_version, 7);
+    // Warming fixed signature caches must not hide a changed live schema.
+    reopened.exec("BEGIN");
+    reopened.exec("CREATE INDEX outcome_warm_schema_check ON outcome_plan_v1(workspace_id)");
+    assert.throws(() => verifyOutcomeDatabaseV1(reopened, expectedPragmas), /schema manifest has drifted/);
+    reopened.exec("ROLLBACK");
+    reopened.exec("BEGIN"); assert.equal(verifyOutcomeDatabaseV1(reopened, expectedPragmas).migrations.length, 7); reopened.exec("ROLLBACK");
   } finally { reopened.close(); }
 });
