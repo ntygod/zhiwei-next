@@ -18,6 +18,8 @@ R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原
 
 [ADR0023](../adr/0023-browser-workbench-api-interactions.md) 为 Proposed：独立 browser-pair 修复旧 HttpOnly Cookie 阻止重新配对的问题，原 pair 合同保留；记忆 SSE 组合通过实际作用域 fence 失效已加载正文，不伪造新事件。待独立 R3 设计审查，不宣称已实施。Node22.23.1/npm10.9.8 的原完整 check 已尝试，6项工具链检查、strict183、架构、AGENTS、work-items通过，止于容器无法读取 Windows worktree Git 历史的 main provenance；不跳门或修环境，完整成功采用当前 HEAD native CI。
 
+`15e5f0f` 的[独立 R3 设计审查](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6119050213)为 BLOCKED：持久水位不能覆盖无写入的正文/来源自然到期，失效后同范围的迟到读仍可能恢复正文。Proposed 设计已补充 Store 同 snapshot 的真实资格/最早变化期限、浏览器正文响应的有限时间头、SSE/客户端独立到期边界，以及与身份/写重试分开的读取代次。修订设计另需当前 HEAD 独立批准，不沿用旧结论；尚未编写实现或启用入口。
+
 ## 已交付 P1-07：提交前历史（2026-10-12）
 
 canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。
