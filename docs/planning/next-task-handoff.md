@@ -6,6 +6,8 @@
 
 保持原完整检查/当前primary来源/独立R3/Ready/live/保护合入，不改治理门。用户原型和未跟踪文件不动，不重试旧受限实验/被拒浏览器；真实入口关闭，P1-08in_progress/Z18not_run，当前共享切片不提前P1-09/P2。
 
+实现b4d16e4独立审查BLOCKED，已修复忙碌导航错任务及重新同步丢结果两项；5项UI/固定Worker与strict195/构建通过。b4d16e4原CI38278488409在原10分钟时限取消，不算完整成功。当前修复候选必须重新完整CI、新上下文审查和Ready/live；用户原型、原Runtime/治理门及数据历史不变。
+
 以下保留前项API的提交前交接：[#125](https://github.com/ntygod/zhiwei-next/issues/125) / `feat/125-workbench-api`，P1-08 API切片。其基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` 已交付 P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124)，完整1152项原检查、精确 HEAD R3、Ready/live、保护合入与 main 来源/分支审计成功，#123 已关闭；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)覆盖上一提交的待验证快照。
 
 ## 本项任务

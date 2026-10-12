@@ -75,4 +75,21 @@ test("UI-created plan starts the owned Worker and verification/feedback retain a
   const first = controller.view!.result!.value; assert.equal(first.outcome.status, "unverifiable"); const criterion = first.task.intent.criteria[0]!;
   await controller.feedback(criterion.id, criterion.revision, "accepted"); assert.equal(controller.view!.result!.value.outcome.status, "completed");
   assert.equal(controller.view!.resultHistory!.value.length, 2); assert.equal(controller.view!.result!.value.task.state, "UNVERIFIABLE");
+  const before = port.sent.filter(row => row.path.endsWith("/verification")).length;
+  await controller.recover(); assert.equal(controller.view!.result!.value.outcome.status, "completed"); assert.equal(controller.view!.resultHistory!.value.length, 2);
+  assert.equal(port.sent.filter(row => row.path.endsWith("/verification")).length, before);
+});
+
+test("A delayed task read keeps the selected identity; the next selection and stop affect only the displayed task", async t => {
+  const harness = await createSyntheticTaskSessionHarness({ webAssets: assets }); t.after(() => harness.close()); const origin = await harness.api.listen(), port = cookiePort(origin);
+  const controller = new WorkbenchController({ origin, fetch: port.port, id: randomUUID, nonce: () => "n".repeat(43), clearFragment() {} }); t.after(() => controller.close()); await controller.connect();
+  await controller.createTask("SYNTHETIC_ONLY：虚构任务 A", "确认A结果"); const first = controller.presentation.taskId!;
+  await controller.createTask("SYNTHETIC_ONLY：虚构任务 B", "确认B结果"); const second = controller.presentation.taskId!;
+  let start!: () => void, release!: () => void; const started = new Promise<void>(resolve => { start = resolve; }), held = new Promise<void>(resolve => { release = resolve; }); t.after(() => release());
+  port.hook(async (path, response) => { if (path.startsWith(`/v1/tasks/${first}?`)) { start(); await held; } return response; });
+  const reading = controller.go("task", first); await started; await controller.go("task", second);
+  assert.equal(controller.presentation.taskId, first); release(); await reading;
+  assert.equal(controller.view!.task!.value.id, controller.presentation.taskId);
+  port.hook(); await controller.go("task", second); assert.equal(controller.view!.task!.value.id, second); await controller.taskCommand("task.cancel");
+  assert.equal(harness.application.getTask(context, second).value.state, "CANCELLED"); assert.equal(harness.application.getTask(context, first).value.state, "READY");
 });

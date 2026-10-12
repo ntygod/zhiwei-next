@@ -18,6 +18,8 @@ PR128正常原SDK/Worker run38270798325 / design91502c7的两个原ZIP已核对�
 
 R3；原完整检查、当前primary来源、精确HEAD独立R3、Ready/live、保护合入/main回读保持。真实入口关闭，仅自有新虚构临时安装和固定模型/I/O；旧受限实验/被拒浏览器不重试，不接真实账户/个人数据或外发/部署，不借共享接入推进P1-09/P2。P1-08仍in_progress、Z18not_run；产品/实际平台未验证项保持明确。回滚为新受审代码revert，数据/最新控制journal/纠正与历史不回退。
 
+`b4d16e4`的[独立R3](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6128672778)为BLOCKED：忙碌时导航选择可变为B而详情仍是A；重新同步未恢复后端仍存在的Outcome/history。修复将选择与读纳入同一busy门，呈现和操作前核对所选ID，任务恢复重读获准结果与历史、不重复verification。实际A/B延迟选择/仅停止B及固定Worker结果重连已通过，5项UI场景、strict195与生产构建通过。旧3fcc6c5首轮完整TAP1172/1172后被新HEAD取消，不计完整CI成功；b4d16e4原CI38278488409在原10分钟时限取消，未有完整成功。修复HEAD另需新的完整CI与新上下文R3，不改时限/门禁或移用旧批准。
+
 前项API [PR126](https://github.com/ntygod/zhiwei-next/pull/126)已完整交付：[最终证据](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6122087005)和[#125关闭记录](https://github.com/ntygod/zhiwei-next/issues/125#issuecomment-6122104767)确认1168项原完整检查、当前HEAD独立R3、Ready/live、原自动squash/main来源/分支审计与本地同步成功，受审tree与合入734f4e6一致。下方保留提交前历史。
 
 ## 已交付 P1-08 API：提交前历史（2026-10-12）

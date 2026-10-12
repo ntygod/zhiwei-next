@@ -74,7 +74,10 @@ export class WorkbenchController {
     try {
       await client.recover(); await client.context();
       const selection = this.#presentation;
-      if (selection.taskId) await client.task(selection.taskId);
+      if (selection.taskId) {
+        await client.task(selection.taskId);
+        if (client.view.task?.value.attempts.at(-1)?.outcomes.length) { await client.result(selection.taskId); await client.result(selection.taskId, true); }
+      }
       if (selection.memoryId) await client.explain({ schemaVersion: 1, workspaceId: client.view.workspaceId, scope: this.#scope(), claimId: selection.memoryId });
       if (selection.page === "memory" && this.#memoryQuery) await client.search(this.#search(this.#memoryQuery));
       this.#watch();
@@ -84,11 +87,11 @@ export class WorkbenchController {
   #search(query: string) { return { schemaVersion: 1, scope: this.#scope(), query, kinds: ["fact", "preference", "constraint", "decision"], limit: 50 }; }
   #suspendReads(): void { this.#streamGeneration++; this.#recoveryCancel?.(); this.#required().disconnect(); }
   async go(page: WorkbenchPage, id?: string): Promise<void> {
-    this.#update({ page, taskId: page === "task" ? id : undefined, memoryId: undefined, modal: undefined, notice: undefined });
-    if (!this.#client) return;
     await this.#perform(async () => {
+      this.#update({ page, taskId: page === "task" ? id : undefined, memoryId: undefined, modal: undefined, notice: undefined });
+      if (!this.#client) return;
       this.#suspendReads(); await this.#required().refresh(); await this.#required().context();
-      if (page === "task" && id) { await this.#required().task(id); if (this.#required().view.task!.value.attempts.at(-1)!.outcomes.length) await this.#required().result(id); }
+      if (page === "task" && id) { await this.#required().task(id); if (this.#required().view.task!.value.attempts.at(-1)!.outcomes.length) { await this.#required().result(id); await this.#required().result(id, true); } }
       if (page === "memory" && this.#memoryQuery) await this.#required().search(this.#search(this.#memoryQuery));
       this.#watch();
     });
@@ -106,7 +109,7 @@ export class WorkbenchController {
     await client.refresh(); await client.context(); await client.task(id); this.#watch();
   }); }
   async taskCommand(kind: "task.pause" | "task.cancel" | "task.continue"): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(), task = client.view.task?.value; if (!task) return;
+    const client = this.#required(), task = client.view.task?.value; if (!task || this.#presentation.page !== "task" || task.id !== this.#presentation.taskId) return;
     this.#suspendReads();
     const result = await client.command({ ...this.#envelope(), expectedRevision: task.revision, payload: { kind, targetRef: { kind: "task", id: task.id, revision: task.revision } } });
     if (result.status === "confirmed") {
@@ -121,13 +124,13 @@ export class WorkbenchController {
     }
   }); }
   async verify(): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(), task = client.view.task?.value; if (!task) return;
+    const client = this.#required(), task = client.view.task?.value; if (!task || this.#presentation.page !== "task" || task.id !== this.#presentation.taskId) return;
     this.#suspendReads();
     const verified = await client.verify({ ...this.#envelope(), taskId: task.id, expectedRevision: task.revision });
     if (verified.status === "confirmed") { await client.refresh(); await client.context(); await client.task(task.id); await client.result(task.id); await client.result(task.id, true); this.#watch(); }
   }); }
   async feedback(criterionId: string, criterionRevision: number, decision: "accepted" | "rejected"): Promise<void> { await this.#perform(async () => {
-    const client = this.#required(), bundle = client.view.result?.value; if (!bundle) return;
+    const client = this.#required(), bundle = client.view.result?.value; if (!bundle || this.#presentation.page !== "task" || bundle.task.id !== this.#presentation.taskId) return;
     this.#suspendReads();
     const feedback = await client.feedback({ ...this.#envelope(), taskId: bundle.task.id, expectedRevision: bundle.task.revision, attemptId: bundle.task.attempts.at(-1)!.id, intentRevision: bundle.task.intent.revision,
       outcomeId: bundle.outcome.id, outcomeRevision: bundle.outcome.revision, criterionId, criterionRevision, decision });
