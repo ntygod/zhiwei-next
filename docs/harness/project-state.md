@@ -22,6 +22,8 @@ R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原
 
 当前 primary 正常 SDK/Worker run38213988697 原 ZIP 与完整冻结对象通过；成对 Worker run38218233236 / head1984a92 的原 jobs114707968853/114709289598、attempts1/2 的 capture/fresh/committed/upload均成功，仅在完整对象相等后的有名 guard 失败。两份原 ZIP 的唯一72731字节 result.json 字节相同、SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa，并与完整冻结对象/正常原件一致；原 run/job/artifact/content validators通过。最终 comparator 恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90。首次候选1984a92的 CI 在原 Harness 检查发现两个既有 SDK 身份文档未机械同步，已按真实源更新字段，未放宽检查；最终完整 CI/R3/Ready/main 仍待实际完成。
 
+`9f3bf38` 的[最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6120696074)为 BLOCKED：首次 capture 已提交后，响应资格复验仍可410，客户端误标 rejected并丢失核对资格。修复将该返回保留 unknown；真实 HTTP/SQLite 在两次资格读取之间推进时间，确认一次实际提交/持久Observation、unknown/canRetry=true与同字节重试。该 HEAD 的原 CI38222977900在既有10分钟时限取消，未完成全套测试；原门、时限与旧场景不改。新候选仍需完整 CI 和新的独立 R3，不沿用旧批准或局部32/32检查。
+
 ## 已交付 P1-07：提交前历史（2026-10-12）
 
 canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。

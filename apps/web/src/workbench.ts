@@ -275,7 +275,7 @@ export class BrowserWorkbench {
       const code = error instanceof WorkbenchError ? error.code : "commit_unknown";
       if (code === "permission") { this.#loseIdentity(code); throw new WorkbenchError(code); }
       // Rejecting this replay cannot establish that the earlier, unobserved attempt never committed.
-      const rejected = !retryingUnknown && ["validation", "not_found", "revision_conflict", "idempotency_conflict", "unsupported", "budget_exceeded", "snapshot_required"].includes(code);
+      const rejected = !retryingUnknown && ["validation", "not_found", "revision_conflict", "idempotency_conflict", "unsupported", "budget_exceeded"].includes(code);
       if (rejected || !sent) this.#pending = undefined;
       this.#invalidate("degraded", code, rejected ? this.#view.connection : "disconnected");
       this.#view = { ...this.#view, write: { status: rejected || !sent ? "rejected" : "unknown", operation: pending.operation, commandId: pending.commandId, code,

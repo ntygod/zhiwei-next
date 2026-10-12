@@ -45,8 +45,9 @@ async function fixture(t: TestContext, retentionMs = 86_400_000) {
   const application = createPersistentSessionApplication({ store: () => store, daemonInstanceId: () => "synthetic-web-daemon" });
   const memory = createPersistentMemoryApplication({ store: () => store, authorize: application.authorize, afterCommit: application.committed });
   let qualificationReads = 0;
+  let afterQualificationRead: (() => void) | undefined;
   const api = createSyntheticSessionApi({ application, memory, installationId: "synthetic-web-installation", now: () => now,
-    readFence: (owner, read) => { qualificationReads++; return store.withReadQualification(owner, read); } });
+    readFence: (owner, read) => { qualificationReads++; const result = store.withReadQualification(owner, read); afterQualificationRead?.(); return result; } });
   const origin = await api.listen(), port = cookiePort(origin); let cleared = 0;
   const client = new BrowserWorkbench({ origin, workspaceId: context.workspaceId, nonce: () => "n".repeat(43), clearFragment: () => { cleared++; }, fetch: port.port, now: () => now, timeoutMs: 10_000 });
   t.after(async () => { client.close(); await api.close(); try { store.close(); } finally { rmSync(root, { recursive: true, force: true }); } });
@@ -57,7 +58,7 @@ async function fixture(t: TestContext, retentionMs = 86_400_000) {
       evidenceRefs: [evidence], validFrom: new Date(now).toISOString(), ...(validUntil ? { validUntil } : {}) } };
     assert.equal((await client.command(command)).status, "confirmed"); await client.search(query()); return client.view.memory!.material[0]!.claim;
   };
-  return { api, origin, port, client, store, application, memory, pair, remember, get now() { return now; }, time(value: number) { now = value; }, get cleared() { return cleared; }, get qualificationReads() { return qualificationReads; } };
+  return { api, origin, port, client, store, application, memory, pair, remember, get now() { return now; }, time(value: number) { now = value; }, get cleared() { return cleared; }, get qualificationReads() { return qualificationReads; }, afterRead(callback?: () => void) { afterQualificationRead = callback; } };
 }
 test("Actual HTTP/SQLite pairing, session/task commands and memory correction retain exact backend versions", async t => {
   const f = await fixture(t); await f.pair(); assert.ok(f.cleared > 0); await f.client.capabilities(); assert.ok(f.client.view.capabilities!.features.includes("memory"));
@@ -203,6 +204,14 @@ test("Rejecting an exact retry after source expiry does not misreport an earlier
   assert.equal((await f.client.capture({ ...envelope(), scope, privacy: "model-allowed", text })).status, "unknown");
   f.time(start + 500); const replay = await f.client.retryUnknown(); assert.equal(replay.status, "unknown"); assert.equal(replay.code, "not_found"); assert.equal(f.client.view.evidence, undefined);
   const sends = f.port.sent.filter(row => row.path === "/v1/memory/inputs"); assert.equal(sends[0]!.body, sends[1]!.body);
+});
+test("A post-commit qualification failure keeps the first write unknown and retains its exact retry", async t => {
+  const f = await fixture(t, 500); await f.pair(); let committed = 0, reads = 0; const unsubscribe = f.application.subscribe(() => { committed++; });
+  f.afterRead(() => { if (++reads === 1) f.time(start + 500); });
+  const result = await f.client.capture({ ...envelope(), scope, privacy: "model-allowed", text });
+  assert.equal(committed, 1); assert.equal(f.store.listObservations(scope).length, 1); assert.equal(result.status, "unknown"); assert.equal(result.code, "snapshot_required"); assert.equal(result.canRetry, true);
+  f.afterRead(); const replay = await f.client.retryUnknown(); assert.equal(replay.status, "unknown"); assert.equal(replay.code, "not_found");
+  const sends = f.port.sent.filter(row => row.path === "/v1/memory/inputs"); assert.equal(sends[0]!.body, sends[1]!.body); unsubscribe();
 });
 test("Other-Workspace commits do not alter the authorized qualification and memory capability requires a real reader", async t => {
   const f = await fixture(t); await f.pair(); await f.remember(); const before = f.store.withReadQualification(context, () => undefined).qualification;
