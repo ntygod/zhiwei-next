@@ -1,6 +1,12 @@
 # 下一开发上下文交接
 
-当前唯一实现是 [#125](https://github.com/ntygod/zhiwei-next/issues/125) / `feat/125-workbench-api`：P1-08 的 API 与交互接线切片。基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` 已交付 P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124)，完整1152项原检查、精确 HEAD R3、Ready/live、保护合入与 main 来源/分支审计成功，#123 已关闭；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)覆盖上一提交的待验证快照。
+当前新execution为[#127](https://github.com/ntygod/zhiwei-next/issues/127) / `feat/127-workbench-ui`：所有者提供`banxing-agent-ui-v0.2`，要求接入PC/安卓客户端。先接网页或安装壳均需要的共享界面，最新app.js/style.css/Token为知微黑曜/冷瓷；screens仍有旧伴行图片。共享UI复用BrowserWorkbench和正式DTO，不采用原型LocalStorage/task-contract或模拟设备/审批为业务真源。可安装PC/APK目标已向所有者提问，平台交付不能从手机viewport推定。
+
+新基线protected main734f4e698a3887e518545a8351829af06c137c02 / tree6540dd53d25033cf9ee9d4febd3f4f7e75803a20；#125/PR126已交付1168完整测试、当前HEAD独立R3、Ready/live、保护合入/main及分支审计，#125已关闭，[最终交付](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6122087005)覆盖下面提交前历史。#127方案见[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)，当前Proposed，设计批准后实施、最终HEAD另审。
+
+保持原完整检查/当前primary来源/独立R3/Ready/live/保护合入，不改治理门。用户原型和未跟踪文件不动，不重试旧受限实验/被拒浏览器；真实入口关闭，P1-08in_progress/Z18not_run，当前共享切片不提前P1-09/P2。
+
+以下保留前项API的提交前交接：[#125](https://github.com/ntygod/zhiwei-next/issues/125) / `feat/125-workbench-api`，P1-08 API切片。其基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` 已交付 P1-07 / [PR124](https://github.com/ntygod/zhiwei-next/pull/124)，完整1152项原检查、精确 HEAD R3、Ready/live、保护合入与 main 来源/分支审计成功，#123 已关闭；[最终交付](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6118425312)覆盖上一提交的待验证快照。
 
 ## 本项任务
 

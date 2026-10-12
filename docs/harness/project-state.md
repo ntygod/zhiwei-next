@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-12
 -->
 
-## 当前工作：P1-08 API 与交互接线 #125（2026-10-12）
+## 当前工作：P1-08 双端共享界面接入 #127（2026-10-12）
+
+所有者提供`banxing-agent-ui-v0.2`并直接要求接入PC/安卓客户端。canonical [#127](https://github.com/ntygod/zhiwei-next/issues/127)，唯一分支`feat/127-workbench-ui`，基线protected main734f4e698a3887e518545a8351829af06c137c02 / tree6540dd53d25033cf9ee9d4febd3f4f7e75803a20。开工无开放PR/Incident、远端仅main、developmentPause=false，相关搜索只有已闭合API切片和不同范围#98原型；#44/#67原文与#98状态保持。根目录原型及其他未跟踪用户文件保留原样，使用已有干净owned worktree。
+
+先接入网页/可安装壳均需要的共享界面：保留当前源码的黑曜/冷瓷、电脑侧栏与手机底栏，复用BrowserWorkbench/正式DTO，替换LocalStorage演示真源、固定进度和假业务成功。可安装PC/APK目标已提问，未答复前不声称手机布局就是安卓交付。[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)为Proposed，静态资源/界面上下文/新合成样例入口须独立R3设计批准后实施，最终实现另审。
+
+R3；原完整检查、当前primary来源、精确HEAD独立R3、Ready/live、保护合入/main回读保持。真实入口关闭，仅自有新虚构临时安装和固定模型/I/O；旧受限实验/被拒浏览器不重试，不接真实账户/个人数据或外发/部署，不借共享接入推进P1-09/P2。P1-08仍in_progress、Z18not_run；产品/实际平台未验证项保持明确。回滚为新受审代码revert，数据/最新控制journal/纠正与历史不回退。
+
+前项API [PR126](https://github.com/ntygod/zhiwei-next/pull/126)已完整交付：[最终证据](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6122087005)和[#125关闭记录](https://github.com/ntygod/zhiwei-next/issues/125#issuecomment-6122104767)确认1168项原完整检查、当前HEAD独立R3、Ready/live、原自动squash/main来源/分支审计与本地同步成功，受审tree与合入734f4e6一致。下方保留提交前历史。
+
+## 已交付 P1-08 API：提交前历史（2026-10-12）
 
 canonical [#125](https://github.com/ntygod/zhiwei-next/issues/125)，唯一分支 `feat/125-workbench-api`，基线 protected main `e84273dbb0417cd3a091330e6291f97d1c6cc62b` / tree `dcde54ffe7bbf73cf09548cbf8317cfdc70c0983`。开工无开放 PR/Incident、远端仅 main、developmentPause=false；已搜索 P1-08/工作台 API 无重复 execution，#44/#67 人类输入与 #98 暂停状态保留。
 
