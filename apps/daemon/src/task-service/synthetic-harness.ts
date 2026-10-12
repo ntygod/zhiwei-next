@@ -167,12 +167,12 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     const input = compiled?.runtimeInput ?? store().tasks.recordRuntimeInput(owner, { commandId: inputId, idempotencyKey: inputId, taskId, expectedRevision: task.revision, attemptId: attempt.id, intentRevision: task.intent.revision, text: syntheticTaskPrompt });
     application.committed();
     const global = store().currentFence({ kind: "global" }), workspace = store().currentFence({ kind: "workspace", workspaceId: context.workspaceId });
-    let supervisor: SyntheticWorkerSupervisor | undefined, active: LiveWorker | undefined;
+    let supervisor: SyntheticWorkerSupervisor | undefined, active: LiveWorker | undefined, observeOutcomeRequests = false;
     try {
       supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", ...(compiled ? { compiledInput: compiled } : {}), taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
         fence: { installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: attempt.id }, sourceTask: { taskId, attemptId: attempt.id, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: owner.ownerEpoch, cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60_000).toISOString() } },
         beforeSyntheticModelReceive(record) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().executions.recordModelRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); application.committed(); },
-        afterSyntheticModelReceive(record, reply) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().outcomes.observeRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId,
+        afterSyntheticModelReceive(record, reply) { if (!observeOutcomeRequests) return; if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().outcomes.observeRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId,
           toolCalls: (reply.toolCalls ?? []).map(call => ({ callId: call.id, toolName: call.name, argumentsJson: canonicalJsonV1(call.arguments) })) }); },
       });
       unallocated.add(supervisor);
@@ -187,6 +187,9 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       const readyTask = current(context, taskId);
       if (closed || restarting || readyTask.state !== "READY" || readyTask.revision !== task.revision) { await stop(taskId, "shutdown"); return; }
       runtimeCommand(context, taskId, "start", binding.bindingId);
+      // Plans are immutable and can only bind while READY. After this transition,
+      // unplanned legacy tasks cannot acquire T06 and need no result-receiver writes.
+      observeOutcomeRequests = store().outcomes.readPlan(context.workspaceId, taskId) !== undefined;
       const collecting = (async () => {
         for await (const envelope of supervisor!.runtime.events(binding.bindingId)) {
           if (live.get(taskId)?.stopping || live.get(taskId)?.suspended) break;

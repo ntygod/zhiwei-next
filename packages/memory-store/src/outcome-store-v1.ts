@@ -113,6 +113,7 @@ export class OutcomeStoreEngineV1 implements OutcomePersistenceV1 {
     if (operation === "feedback") return { execution }; // A new subjective user observation is not a Runtime reply or permission to send.
     const fence = execution.spec.fence, global = this.#host.currentFence({ kind: "global" }), workspace = this.#host.currentFence({ kind: "workspace", workspaceId: context.workspaceId });
     if (execution.ownerEpoch !== context.ownerEpoch || fence.installationId !== global.installationId || fence.recoveryEpoch !== String(global.recoveryEpoch)
+      || fence.notAfter <= this.#host.now()
       || !fence.sourceTask || fence.sourceTask.taskId !== task.id || fence.sourceTask.intentRevision !== task.intent.revision
       || fence.cognition.global !== global.cognitionEpoch || fence.cognition.workspace !== workspace.cognitionEpoch
       || fence.policy.global !== global.policyEpoch || fence.policy.workspace !== workspace.policyEpoch) this.#host.fail("revision_conflict");
@@ -166,7 +167,8 @@ export class OutcomeStoreEngineV1 implements OutcomePersistenceV1 {
       if (origin.execution) { const current = this.#row("SELECT s.* FROM task_execution_v1 e JOIN task_execution_snapshot_v1 s ON s.binding_id=e.binding_id AND s.revision=e.current_revision WHERE e.binding_id=?", origin.execution.bindingId)!; dependencies.push(ref(current), origin.execution.spec.requestSnapshotRef); }
       const scopes: ScopeV2[] = [{ kind: "global" }, { kind: "workspace", workspaceId: task.workspaceId }, scope(task.workspaceId, task.id), { kind: "session", workspaceId: task.workspaceId, sessionId: task.sessionId }, ...materials.flatMap(item => [item.claim.scope, ...item.claim.evidence.map(evidence => evidence.scope)])];
       const fences = [...new Map(scopes.map(item => [scopeKeyV2(item), item])).values()].map(item => this.#host.currentFence(item));
-      const preparedAt = this.#host.now(), notAfter = new Date(Math.min(Date.parse(preparedAt) + this.#configured().verificationTtlMs, Date.parse(this.#taskBoundary!.contentPolicy.retentionUntil))).toISOString();
+      const preparedAt = this.#host.now(), notAfter = new Date(Math.min(Date.parse(preparedAt) + this.#configured().verificationTtlMs,
+        Date.parse(this.#taskBoundary!.contentPolicy.retentionUntil), operation === "verify" && origin.execution ? Date.parse(origin.execution.spec.fence.notAfter) : Number.POSITIVE_INFINITY)).toISOString();
       if (notAfter <= preparedAt) this.#host.fail("unavailable");
       const snapshot: OutcomeVerificationSnapshotV1 = clone({ schemaVersion: 1, id: this.#id("verification"), operation, command, owner: context, task, plan, fences,
         dependencies: [...new Map(dependencies.map(item => [json(item), item])).values()], ...origin, ...(previous ? { previous } : {}), modelRequests, runtimeEvents, materials, preparedAt, notAfter });
@@ -217,6 +219,14 @@ export class OutcomeStoreEngineV1 implements OutcomePersistenceV1 {
       const snapshot = this.#snapshot(row)!; if (snapshot.owner.principalId !== context.principalId) this.#host.fail("conflict");
       const replay = this.#committed(row, context); if (replay) return replay;
       this.#guard(context, row, snapshot);
+      let carryPrevious = false;
+      if (snapshot.operation === "feedback" && snapshot.previous) {
+        const previous = this.#row("SELECT * FROM task_result_v1 WHERE workspace_id=? AND task_id=? AND attempt_id=? AND task_revision=?", context.workspaceId, snapshot.task.id,
+          snapshot.plan.taskAttempt.attemptId, snapshot.previous.task.revision);
+        if (!previous || json(this.#result(previous)) !== json(snapshot.previous)) this.#host.fail("corruption");
+        const previousVerification = this.#row("SELECT * FROM outcome_verification_v1 WHERE id=?", text(previous.verification_id))!;
+        carryPrevious = this.#availableSources(this.#snapshot(previousVerification)!);
+      }
       let input: ReturnType<OutcomeStoreHostV1["recordResultInput"]> | undefined;
       if (snapshot.operation === "feedback") input = this.#host.recordResultInput({ id: this.#id("observation"), scope: scope(context.workspaceId, snapshot.task.id), taskAttempt: snapshot.plan.taskAttempt,
         observedAt: this.#host.now(), source: "feedback", body: clone({ schemaVersion: 1, command: snapshot.command, principalId: context.principalId }), dependencies: [ref(row)] });
@@ -228,7 +238,7 @@ export class OutcomeStoreEngineV1 implements OutcomePersistenceV1 {
           if (criterion.id === feedback.criterionId) observation = { schemaVersion: 1, id: this.#id("observation"), workspaceId: context.workspaceId, taskId: snapshot.task.id,
             attemptId: snapshot.plan.taskAttempt.attemptId, intentRevision: snapshot.plan.taskAttempt.intentRevision, criterionId: criterion.id, criterionRevision: criterion.revision,
             observedAt: this.#host.now(), notAfter: snapshot.notAfter, payload: { kind: "user-confirmation", decision: feedback.decision, principalId: context.principalId, input: { id: input!.evidence.source.id, revision: 1 } } };
-          else observation = snapshot.previous?.observations.find(item => item.criterionId === criterion.id && item.notAfter > this.#host.now());
+          else observation = carryPrevious ? snapshot.previous?.observations.find(item => item.criterionId === criterion.id && item.notAfter > this.#host.now()) : undefined;
         }
         if (!observation) observation = { schemaVersion: 1, id: this.#id("observation"), workspaceId: context.workspaceId, taskId: snapshot.task.id, attemptId: snapshot.plan.taskAttempt.attemptId,
           intentRevision: snapshot.plan.taskAttempt.intentRevision, criterionId: criterion.id, criterionRevision: criterion.revision, observedAt: this.#host.now(), notAfter: snapshot.notAfter,

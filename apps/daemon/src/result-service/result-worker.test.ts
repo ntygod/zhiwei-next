@@ -9,7 +9,8 @@ import { openSyntheticCognitionStoreV2, type SyntheticCognitionStoreV2, type Tas
 import { canonicalJsonV1, parseLocalApiCommandV1 } from "../../../../packages/protocol/src/index.ts";
 import type { MemoryClaimV2 } from "../../../../packages/domain/src/index.ts";
 import { reducePersistentTask } from "../task-service/task-reducer.ts";
-import { createPersistentSessionApplication, syntheticCognitiveTaskSessionContract } from "../task-service/application.ts";
+import { createPersistentSessionApplication, syntheticCognitiveTaskSessionContract, syntheticTaskPrompt } from "../task-service/application.ts";
+import { createSyntheticTaskSessionHarness } from "../task-service/synthetic-harness.ts";
 import { syntheticContextBoundaryV1 } from "../task-service/synthetic-context-boundary.ts";
 import { coordinateCognitiveBoundaryV1 } from "../task-service/cognitive-coordinator.ts";
 import { createSyntheticTaskDecisionModelV1 } from "../task-service/synthetic-decision-model.ts";
@@ -22,7 +23,7 @@ import { createOutcomeServiceV1 } from "./service.ts";
 const context: TaskStoreContextV1 = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a", daemonInstanceId: "synthetic-result-worker-daemon", ownerEpoch: 1 };
 const scope = { kind: "workspace" as const, workspaceId: context.workspaceId }, now = () => new Date().toISOString();
 const draftArguments = { name: "synthetic-draft.txt", text: "Synthetic draft: the sample project uses a blue notebook." };
-function fixture(t: TestContext) {
+function fixture(t: TestContext, subjective = false) {
   const root = mkdtempSync(join(tmpdir(), "zhiwei-result-worker-")), dataRoot = join(root, "data"), controlRoot = join(root, "control"); mkdirSync(dataRoot);
   const policy = { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() };
   const options = { dataRoot, controlRoot, installationId: "synthetic-result-worker-installation", clock: { now },
@@ -37,7 +38,8 @@ function fixture(t: TestContext) {
     payload: { kind: "session.create", contract: { ...syntheticCognitiveTaskSessionContract, toolProfile: { id: "controlled-read-memory-draft-v1", revision: 1 } } } }).receipt.aggregate.id;
   const taskId = application.executeTask(context, parseLocalApiCommandV1({ schemaVersion: 1, commandId: randomUUID(), idempotencyKey: randomUUID(), workspaceId: context.workspaceId, expectedRevision: 0,
     payload: { kind: "task.create", sessionId, executionProfile: syntheticCognitiveTaskSessionContract.runtimeProfile, request: "SYNTHETIC_ONLY sample report", constraints: [], acceptanceChecks: [
-      { id: "sample", revision: 1, description: "Sample count is eight", required: true, method: "artifact" }, { id: "draft", revision: 1, description: "Exact synthetic draft action", required: true, method: "tool-receipt" } ] } })).value.aggregate.id;
+      { id: "sample", revision: 1, description: "Sample count is eight", required: true, method: "artifact" }, { id: "draft", revision: 1, description: "Exact synthetic draft action", required: true, method: "tool-receipt" },
+      ...(subjective ? [{ id: "subjective", revision: 1, description: "User accepts the sample", required: true, method: "user-confirmation" as const }] : []) ] } })).value.aggregate.id;
   const remember = (statement: string, claimKind: "constraint" | "preference") => {
     const input = randomUUID(), evidence = store.memories.capture(context, { schemaVersion: 1, commandId: input, idempotencyKey: input, workspaceId: context.workspaceId, scope, privacy: "model-allowed", text: statement }).evidence;
     const command = randomUUID(), result = store.memories.execute(context, { schemaVersion: 1, commandId: command, idempotencyKey: command, workspaceId: context.workspaceId, expectedRevision: 0,
@@ -47,7 +49,8 @@ function fixture(t: TestContext) {
   const adopted = remember('SYNTHETIC_ONLY: parameter name = "synthetic-draft.txt"', "constraint"), other = remember("SYNTHETIC_ONLY: sample preference uses purple", "preference");
   service.bindPlan(context, { schemaVersion: 1, commandId: "plan", idempotencyKey: "plan", workspaceId: context.workspaceId, taskId, expectedRevision: application.getTask(context, taskId).value.revision,
     checks: [{ criterionId: "sample", criterionRevision: 1, kind: "artifact", resourceId: "sample", format: "json-equals", expectedText: '{"count":8}' },
-      { criterionId: "draft", criterionRevision: 1, kind: "tool-receipt", toolName: "zhiwei_draft_write", argumentsJson: canonicalJsonV1(draftArguments) }],
+      { criterionId: "draft", criterionRevision: 1, kind: "tool-receipt", toolName: "zhiwei_draft_write", argumentsJson: canonicalJsonV1(draftArguments) },
+      ...(subjective ? [{ criterionId: "subjective", criterionRevision: 1, kind: "user-confirmation" as const }] : [])],
     adoptionChecks: [{ material: { kind: "claim", id: adopted.id, revision: adopted.revision, version: adopted.version }, toolName: "zhiwei_draft_write", parameter: "name", expectedJson: '"synthetic-draft.txt"', profile: "synthetic-parameter-v1" }] });
   const prepare = () => store.contexts.prepare(context, { id: randomUUID(), taskId, expectedRevision: application.getTask(context, taskId).value.revision, query: "sample",
     requiredClaims: [adopted, other].map(claim => ({ claimId: claim.id, version: claim.version })) });
@@ -115,4 +118,34 @@ test("correction or logical forgetting after the final request blocks a late fin
     const close = await worker.supervisor.runtime.dispose(worker.supervisor.snapshot().binding.bindingId);
     assert.ok(close.closeObserved && close.stdoutEof && close.stderrEof);
   }
+});
+test("a new subjective confirmation cannot reuse objective passes from a corrected execution source", async t => {
+  const f = fixture(t, true), worker = await run(t, f); await worker.settle();
+  const first = f.service.verify(context, verifyCommand(f)); assert.equal(first.bundle.outcome.status, "partial");
+  correct(f, f.adopted); assert.throws(() => f.service.read(context, f.taskId), { code: "not_found" });
+  const current = f.service.feedback(context, { schemaVersion: 1, commandId: "accept-after-correction", idempotencyKey: "accept-after-correction", workspaceId: context.workspaceId,
+    taskId: f.taskId, expectedRevision: first.bundle.task.revision, attemptId: first.bundle.outcome.attemptId, intentRevision: 1,
+    outcomeId: first.bundle.outcome.id, outcomeRevision: first.bundle.outcome.revision, criterionId: "subjective", criterionRevision: 1, decision: "accepted" });
+  assert.equal(current.bundle.outcome.status, "partial"); assert.equal(current.bundle.task.state, "PARTIAL");
+  assert.deepEqual(current.bundle.outcome.criteriaResults.map(result => result.status), ["unknown", "unknown", "pass"]);
+  assert.equal(f.service.history(context, f.taskId)[0]!.outcome.status, "partial");
+});
+test("the owned daemon harness observes a bound result plan through its actual receiving hook", async t => {
+  const peer = await createSyntheticWorkerTestPackage(), harness = await createSyntheticTaskSessionHarness({ runtime: { packageDirectory: peer.root, nodeExecutable: process.execPath } });
+  t.after(async () => { await harness.close(); await peer.remove(); });
+  const input = randomUUID(), statement = `SYNTHETIC_ONLY: ${syntheticTaskPrompt} Use purple.`, evidence = harness.memories.capture(context,
+    { schemaVersion: 1, commandId: input, idempotencyKey: input, workspaceId: context.workspaceId, scope, privacy: "model-allowed", text: statement }).evidence;
+  harness.memories.execute(context, { schemaVersion: 1, commandId: "harness-memory", idempotencyKey: "harness-memory", workspaceId: context.workspaceId, expectedRevision: 0,
+    payload: { kind: "memory.remember", scope, privacy: "model-allowed", claimKind: "preference", statement, evidenceRefs: [evidence], validFrom: now() } });
+  const sessionId = harness.application.createSession(context, { schemaVersion: 1, commandId: "harness-session", idempotencyKey: "harness-session", workspaceId: context.workspaceId, expectedRevision: 0,
+    payload: { kind: "session.create", contract: syntheticCognitiveTaskSessionContract } }).value.aggregate.id;
+  const taskId = harness.application.executeTask(context, parseLocalApiCommandV1({ schemaVersion: 1, commandId: "harness-task", idempotencyKey: "harness-task", workspaceId: context.workspaceId, expectedRevision: 0,
+    payload: { kind: "task.create", sessionId, executionProfile: syntheticCognitiveTaskSessionContract.runtimeProfile, request: syntheticTaskPrompt, constraints: [],
+      acceptanceChecks: [{ id: "sample", revision: 1, description: "Sample count is eight", required: true, method: "artifact" }] } })).value.aggregate.id;
+  harness.outcomes.bindPlan(context, { schemaVersion: 1, commandId: "harness-plan", idempotencyKey: "harness-plan", workspaceId: context.workspaceId, taskId,
+    expectedRevision: harness.application.getTask(context, taskId).value.revision, checks: [{ criterionId: "sample", criterionRevision: 1, kind: "artifact", resourceId: "sample", format: "json-equals", expectedText: '{"count":8}' }], adoptionChecks: [] });
+  await harness.runCognitiveTask(context, taskId); const task = harness.application.getTask(context, taskId).value; assert.equal(task.state, "VERIFYING");
+  const result = harness.outcomes.verify(context, { schemaVersion: 1, commandId: "harness-verify", idempotencyKey: "harness-verify", workspaceId: context.workspaceId, taskId, expectedRevision: task.revision });
+  assert.equal(result.bundle.outcome.status, "completed"); assert.equal(result.bundle.memoryUses.length, 1); assert.equal(result.bundle.memoryUses[0]!.exposure, "sent");
+  assert.equal(result.bundle.memoryUses[0]!.adoption.status, "unknown"); assert.equal(result.bundle.memoryUses[0]!.benefit.status, "unknown");
 });

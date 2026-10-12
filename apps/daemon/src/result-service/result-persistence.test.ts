@@ -107,6 +107,8 @@ test("a paired confirmation and later negative feedback append versions without 
   const f = serviceFixture(t, true); f.settle(); const task = f.store.tasks.getTask(context.workspaceId, f.taskId).value!;
   const unknown = f.service.verify(context, { schemaVersion: 1, commandId: "unknown", idempotencyKey: "unknown", workspaceId: context.workspaceId, taskId: f.taskId, expectedRevision: task.revision });
   assert.equal(unknown.bundle.outcome.status, "unverifiable");
+  f.setTime("2026-10-12T00:02:00.000Z"); // Recorded history and a fresh user observation do not renew Runtime permission.
+  assert.equal(f.service.history(context, f.taskId)[0]!.outcome.status, "unverifiable");
   const confirm = parseLocalApiCommandV1({ schemaVersion: 1, commandId: "confirm", idempotencyKey: "confirm", workspaceId: context.workspaceId, expectedRevision: unknown.bundle.task.revision,
     payload: { kind: "task.confirm-result", targetRef: { kind: "task", id: f.taskId, revision: unknown.bundle.task.revision }, attemptId: task.attempts.at(-1)!.id, intentRevision: 1,
       criterionId: "artifact", criterionRevision: 1, evidenceRefs: [{ id: unknown.bundle.observations[0]!.id, revision: 1 }] } });
@@ -131,6 +133,20 @@ test("stale verification rolls back all T06 rows and never publishes a partial r
   assert.throws(() => f.store.outcomes.commit(context, prepared.snapshot.id, []), { code: "revision_conflict" });
   assert.equal(f.store.tasks.getTask(context.workspaceId, f.taskId).value!.revision, task.revision); assert.equal(f.store.outcomes.read(context.workspaceId, f.taskId), undefined);
   const db = new DatabaseSync(join(f.dataRoot, "product.sqlite")); try { for (const table of ["task_result_v1", "outcome_observation_v1"]) assert.equal(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n, 0); } finally { db.close(); }
+});
+test("the original execution deadline bounds verification and cannot be refreshed by a later reservation", t => {
+  const expired = serviceFixture(t); expired.settle(); expired.setTime("2026-10-12T00:02:00.000Z");
+  const command = { schemaVersion: 1 as const, commandId: "old-execution", idempotencyKey: "old-execution", workspaceId: context.workspaceId, taskId: expired.taskId,
+    expectedRevision: expired.store.tasks.getTask(context.workspaceId, expired.taskId).value!.revision };
+  assert.throws(() => expired.service.verify(context, command), { code: "revision_conflict" }); assert.equal(expired.store.outcomes.read(context.workspaceId, expired.taskId), undefined);
+  const crossing = serviceFixture(t); crossing.settle(); crossing.setTime("2026-10-12T00:00:59.000Z");
+  const task = crossing.store.tasks.getTask(context.workspaceId, crossing.taskId).value!, prepared = crossing.store.outcomes.prepare(context, { ...command, taskId: task.id, expectedRevision: task.revision });
+  assert.equal(prepared.snapshot.notAfter, "2026-10-12T00:01:00.000Z");
+  const check = prepared.snapshot.plan.checks[0]!, observation = { schemaVersion: 1 as const, id: "before-expiry", workspaceId: context.workspaceId, taskId: task.id,
+    attemptId: task.attempts.at(-1)!.id, intentRevision: 1, criterionId: check.criterionId, criterionRevision: check.criterionRevision,
+    observedAt: prepared.snapshot.preparedAt, notAfter: prepared.snapshot.notAfter, payload: crossing.reader.read(prepared.snapshot, check) };
+  crossing.setTime(prepared.snapshot.notAfter); assert.throws(() => crossing.store.outcomes.commit(context, prepared.snapshot.id, [observation]), { code: "revision_conflict" });
+  assert.equal(crossing.store.tasks.getTask(context.workspaceId, crossing.taskId).value!.revision, task.revision); assert.equal(crossing.store.outcomes.read(context.workspaceId, crossing.taskId), undefined);
 });
 test("result HTTP routes keep pairing, workspace filtering and exact confirmation/feedback boundaries", async t => {
   const f = serviceFixture(t, true), api = createSyntheticSessionApi({ application: f.application, outcomes: f.service, installationId: "synthetic-result-api" }); t.after(() => api.close());

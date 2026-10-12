@@ -95,7 +95,7 @@ PolicyGrant 状态为 ACTIVE/REVOKED/EXPIRED/INACTIVE；恢复旧备份统一产
 
 Outcome 为 completed/partial/failed/cancelled/unverifiable；每个 criterion 分别 pass/fail/unknown/not-applicable 并解释。人类确认与工具成功均是有界证据，不能扩写为未检查项通过。新证据产生新 Outcome revision。
 
-P1-07 的合成消费者使用不可变 `OutcomeVerificationPlanV1` 绑定首次派发前的 Task revision、attempt/intent 和原 criterion。固定读者生成 `CriterionObservationV1`，纯归约决定结果；缺证据或只有模型判断仍为 unknown。T06 保存 `TaskResultBundleV1`：当前 Outcome、精确 Episode v2、观察与逐请求 `MemoryUseV1`。首次验证终结 VERIFYING；后续结果追加新版本，原 Task/attempt 终态和历史判定保留。查询当前结果须再次满足来源、作用域和正文资格，历史可读不等于当前可用。具体提交决定见 [ADR0022](../adr/0022-outcome-episode-memory-use.md)。
+P1-07 的合成消费者使用不可变 `OutcomeVerificationPlanV1` 绑定首次派发前的 Task revision、attempt/intent 和原 criterion。固定读者生成 `CriterionObservationV1`，纯归约决定结果；缺证据或只有模型判断仍为 unknown。新验证的准备、I/O 期限与提交同时受原 execution 许可期限约束，不能重新给予旧输出许可。T06 保存 `TaskResultBundleV1`：当前 Outcome、精确 Episode v2、观察与逐请求 `MemoryUseV1`。首次验证终结 VERIFYING；后续结果追加新版本，原 Task/attempt 终态和历史判定保留。新的用户反馈是独立观察，其他 criterion 仅复用来源仍有效且未过期的旧观察；来源纠正后旧客观 pass 为 unknown，不能借确认变成 completed。查询当前结果须再次满足来源、作用域和正文资格，历史可读不等于当前可用。具体提交决定见 [ADR0022](../adr/0022-outcome-episode-memory-use.md)。
 
 Exposure 只有实际接收观测才能为 sent；只有接收前登记时为 uncertain。采用证明还要匹配同一请求实际返回的 tool call、已完成动作和预声明参数，不能给同请求的所有记忆记功。首个 profile 仅支持固定 `synthetic-parameter-v1` 约束，收益为 unknown，后续学习标记为 not-scheduled。
 

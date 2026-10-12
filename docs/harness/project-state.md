@@ -20,6 +20,10 @@ Node22.23.1/npm10.9.8 下7项真实临时 SQLite/API/迁移场景及2项真实�
 
 PR124 成对 Worker 原来源已完成：run38198285079 / head3087846 的原 jobs114645762635/114646126243，各自 capture/fresh/committed/upload 成功，仅在完整对象相等后显式 recapture guard 失败。第一份原ZIP保存后只重跑精确 Worker job，两个原ZIP的唯一 result.json 均72731字节、SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa、字节相同且与正常原件/完整 committed v2 对象一致；原 run/job/Artifact validators 全通过。正式 comparator 已恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90，所有门禁不改。最终完整 CI、新 HEAD R3 与 Ready/live/保护交付仍须实际完成。
 
+`eb3461e` 的[独立 R3](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117141500) 为 BLOCKED：原执行期限过后仍能重新预约并提交 completed。修复使自动验证准备/提交检查原期限，预约和观察有效期取原期限与自身 TTL/保留期的最早值。正常过期及预约后跨期限回归通过；记录历史和新的用户确认保留独立语义。另一个正常来源纠正场景复现旧客观 pass 被新确认带入 completed，现对复用前一个结果重新核对原 read-set，不再有效的旧观察为 unknown，该回归已通过。
+
+同 HEAD CI38198738657 在原10分钟上限取消，没有完整成功记录。接收观测现在仅在已绑定结果计划的 Task 上接线：是否有不可变计划在 READY→RUNNING 后确定，无计划的旧任务仍保留原准备请求记录，不产生无消费者的 T06 接收正文。计划任务的实际接收/sent 与无计划任务仍只到 VERIFYING 的两项正常场景通过。工作流、时限、测试发现、全部断言和质量门不改；最终新 HEAD 仍须完整 CI 与新的独立 R3。
+
 ## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
