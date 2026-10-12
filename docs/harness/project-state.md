@@ -24,6 +24,8 @@ PR124 成对 Worker 原来源已完成：run38198285079 / head3087846 的原 job
 
 同 HEAD CI38198738657 在原10分钟上限取消，没有完整成功记录。接收观测现在仅在已绑定结果计划的 Task 上接线：是否有不可变计划在 READY→RUNNING 后确定，无计划的旧任务仍保留原准备请求记录，不产生无消费者的 T06 接收正文。计划任务的实际接收/sent 与无计划任务仍只到 VERIFYING 的两项正常场景通过。工作流、时限、测试发现、全部断言和质量门不改；最终新 HEAD 仍须完整 CI 与新的独立 R3。
 
+`0011886` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117419874)，独立27项新检查、原来源/回滚检查全部通过，但原 CI38200550726 再次在10分钟上限取消。日志显示长时既有 Task 生命周期文件尚在执行；将本次新增4项 Worker/结果场景移动到同一应用的 `task-service/task-result.test.ts`，使原2个测试进程先启动既有长文件，并与新增场景并行。全部测试、数据、断言、发现与排序规则、进程隔离、原时限保留；只修正移动后的相对导入。新HEAD另需完整检查和新的独立R3，不移用旧批准。
+
 ## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。

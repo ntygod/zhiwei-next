@@ -17,9 +17,9 @@ import { createSyntheticTaskDecisionModelV1 } from "../task-service/synthetic-de
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "../memory-service/memory-rules.ts";
 import { createSyntheticWorkerTestPackage } from "../runtime/controlled-worker-test-fixture.ts";
 import { createSyntheticControlledWorkerSupervisor, type SyntheticWorkerSupervisor } from "../runtime/controlled-worker-supervisor.ts";
-import { syntheticOutcomeBoundaryV1 } from "./synthetic-boundary.ts";
-import { createSyntheticOutcomeReaderV1 } from "./synthetic-reader.ts";
-import { createOutcomeServiceV1 } from "./service.ts";
+import { syntheticOutcomeBoundaryV1 } from "../result-service/synthetic-boundary.ts";
+import { createSyntheticOutcomeReaderV1 } from "../result-service/synthetic-reader.ts";
+import { createOutcomeServiceV1 } from "../result-service/service.ts";
 const context: TaskStoreContextV1 = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a", daemonInstanceId: "synthetic-result-worker-daemon", ownerEpoch: 1 };
 const scope = { kind: "workspace" as const, workspaceId: context.workspaceId }, now = () => new Date().toISOString();
 const draftArguments = { name: "synthetic-draft.txt", text: "Synthetic draft: the sample project uses a blue notebook." };
