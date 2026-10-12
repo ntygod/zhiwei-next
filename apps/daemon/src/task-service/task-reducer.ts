@@ -1,5 +1,5 @@
 import { ids, isTerminalTaskState, type Task, type TaskId, type TaskAttemptId, type OutcomeId } from "../../../../packages/domain/src/index.ts";
-import { createTask, transitionTask, retryTask, reviseTaskIntent, waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
+import { createTask, transitionTask, retryTask, reviseTaskIntent, appendTaskOutcome, evaluateCriterionObservationsV1, waitForCognitiveInputV1, respondToCognitiveInputV1, restartTaskWithCognitiveInputV1, type TaskAction, type TaskChange, type AttemptReceipt } from "../../../../packages/cognition-core/src/index.ts";
 import type { TaskStoreCommandV1, TaskReductionContextV1, TaskReductionV1 } from "../../../../packages/memory-store/src/index.ts";
 /** Only the Store's locked current Task is reduced; no caller history or external I/O. */
 export function reducePersistentTask(current: Task | undefined, command: TaskStoreCommandV1, context: TaskReductionContextV1): TaskReductionV1 {
@@ -41,6 +41,12 @@ export function reducePersistentTask(current: Task | undefined, command: TaskSto
       default: throw new Error("Unsupported runtime command.");
     }
     return { versions };
+  }
+  if (command.payload.kind === "task.verify") {
+    if (!context.verification) throw new Error("Exact stored verification observations required.");
+    const prior = task.attempts.at(-1)!;
+    const results = evaluateCriterionObservationsV1(prior, context.verification.plan, context.verification.observations, context.now);
+    return { versions: [appendTaskOutcome(task, change(), { outcomeId: context.outcomeId as OutcomeId, outcomeRevision: (prior.outcomes.at(-1)?.revision ?? 0) + 1, results }).task] };
   }
   switch (command.payload.kind) {
     case "task.cancel": apply({ kind: "cancel" }); if (!context.activeExecution || context.activeExecution.closed) apply({ kind: "confirm-stop", receipt: stopped(), unresolvedActions: [] }); break;

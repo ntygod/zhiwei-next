@@ -6,9 +6,9 @@
 
 先读根和目标路径 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-07 合同](implementation-plan.md#p1-07--交付结果验证episode-与使用记录)。Outcome、Episode、MemoryUse 及结果复验以领域模型、认知流水线、Runtime 与持久化事实源为准。
 
-[ADR0022](../adr/0022-outcome-episode-memory-use.md) 仍 Proposed，先由独立上下文审查有限设计再实现。目标为执行前的标准绑定、获准真实观测、核心纯归约及 Task/Outcome/Episode/使用/Outbox 原子提交。工具成功和 Runtime settled 不自动完成目标；后续用户否定追加同 Outcome ID 新 revision，原终态/判定不改写。Exposure 只记录实际请求，接收前只能 uncertain；采用自报与可验证步骤分开，没有对照的收益仍 unknown。
+[Draft PR124](https://github.com/ntygod/zhiwei-next/pull/124) 为唯一 primary；[ADR0022](../adr/0022-outcome-episode-memory-use.md) 已由[独立上下文批准有限设计](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6116074002)，实现另需当前 HEAD R3。目标为执行前的标准绑定、获准真实观测、核心纯归约及 Task/Outcome/Episode/使用/Outbox 原子提交。工具成功和 Runtime settled 不自动完成目标；后续用户否定追加同 Outcome ID 新 revision，原终态/判定不改写。Exposure 只记录实际请求，接收前只能 uncertain；采用自报与可验证步骤分开，没有对照的收益仍 unknown。
 
-新增固定前向 schema7 或版本化 DTO 时保留已应用0001—0006、旧严格入口和所有已有合同；正文进入现有受管内容/依赖。验证前后一致读取与提交屏障同样覆盖最后请求后纠正/遗忘且再无工具的 final。正常开发验证只补本次必要场景，真实存储用自有临时数据库，不做无改动重复矩阵。
+已接通固定前向 schema7、正式结果 DTO、固定验证读者和配对确认/否定消费者，保留已应用0001—0006、旧严格入口和所有已有合同；正文进入现有受管内容/依赖。7项临时 SQLite/API/迁移和2项真实受控 Worker 正常场景已通过，包括最后请求后纠正/遗忘且再无工具、I/O 预约后纠正与完成后遗忘。收益保持 unknown，学习 not-scheduled。完整发布门尚待当前 HEAD 证据，不能从局部成功推导真实入口启用。
 
 最终完整 `npm run check` 使用原 Node22.23.1/npm10.9.8；当前 HEAD 独立 R3、当前 primary 原 Runtime 来源、Ready/live、保护合入和 main 来源回读仍须实际完成。不能把局部检查或历史 HEAD 批准写成当前实现交付。
 

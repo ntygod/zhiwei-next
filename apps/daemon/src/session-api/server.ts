@@ -5,12 +5,14 @@ import {
   parseProductEventV1, parseSessionApiReceiptV1, parseSessionSnapshotPageV1, parseSessionTaskRecoveryV1, parseSessionTaskStateV1, parseSessionTaskV1, parseSessionV1, parseTaskSummaryV1,
   type LocalApiErrorV1,
   canonicalJsonV1, parseLocalApiReceiptV1, deserializeLocalApiMemorySearchV1, deserializeLocalApiMemoryInputV1, deserializeLocalApiMemoryExplanationRequestV1,
+  deserializeOutcomePlanCommandV1, deserializeOutcomeVerifyCommandV1, deserializeOutcomeFeedbackCommandV1, parseOutcomeVerificationPlanV1, parseTaskResultBundleV1,
 } from "../../../../packages/protocol/src/index.ts";
 import type { MemoryPersistenceV1, MemoryCommandV1 } from "../../../../packages/memory-store/src/index.ts";
 import { assertIdentifierV2 } from "../../../../packages/domain/src/index.ts";
 import { SyntheticSessionAuthenticator, type SessionAuthentication, type SyntheticSessionFixture } from "./auth.ts";
 import { SessionCursorCodec } from "./cursor.ts";
 import { SessionApiError, type SessionApiApplication, type SessionApiContext, type SessionApiReplay } from "./service.ts";
+import type { OutcomeServiceV1 } from "../result-service/service.ts";
 export type { SessionApiApplication, SessionApiContext, SessionApiCommitted, SessionApiDurableReceipt, SessionApiSnapshot, SessionApiReplay, SessionApiTaskRead } from "./service.ts";
 export { SessionApiError } from "./service.ts";
 export { syntheticSessionIdentities } from "./auth.ts";
@@ -70,6 +72,7 @@ async function readBody(request: IncomingMessage): Promise<string> {
 export interface SyntheticSessionApiOptions {
   readonly application: SessionApiApplication;
   readonly memory?: MemoryPersistenceV1;
+  readonly outcomes?: OutcomeServiceV1;
   readonly installationId: string;
   readonly now?: () => number;
   readonly recoveryEpoch?: () => string;
@@ -194,10 +197,25 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (url.pathname === "/v1/capabilities" && request.method === "GET") {
         validateQuery(url, []); authorize(authentication, authentication.context.workspaceId);
         writeJson(response, 200, { schemaVersion: 1, protocolVersions: [1], mode: "synthetic-fixtures-only", production: "unsupported", productAcceptance: "not_run",
-          features: ["sessions", "tasks", "snapshot", "events", ...(options.memory ? ["memory"] : [])], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", ...(options.memory ? ["memory.remember", "memory.correct", "memory.dispute", "memory.forget"] : [])], unsupportedCommands: ["task.respond", "task.confirm-result"], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
+          features: ["sessions", "tasks", "snapshot", "events", ...(options.memory ? ["memory"] : []), ...(options.outcomes ? ["task-results"] : [])], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", ...(options.memory ? ["memory.remember", "memory.correct", "memory.dispute", "memory.forget"] : []), ...(options.outcomes ? ["task.confirm-result", "result.plan", "result.verify", "result.feedback"] : [])], unsupportedCommands: ["task.respond", ...(options.outcomes ? [] : ["task.confirm-result"])], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
       }
       if (request.method === "POST") {
         validateQuery(url, []); const body = await readBody(request);
+        const resultRoute = /^\/v1\/tasks\/([^/]+)\/(verification-plan|verification|feedback)$/.exec(url.pathname);
+        if (resultRoute) {
+          if (!options.outcomes) throw new SessionApiError("unsupported", "runtime_capability", 422);
+          const id = readIdentifier(resultRoute[1]!), operation = resultRoute[2]!, command = operation === "verification-plan" ? deserializeOutcomePlanCommandV1(body)
+            : operation === "verification" ? deserializeOutcomeVerifyCommandV1(body) : deserializeOutcomeFeedbackCommandV1(body);
+          const context = authorize(authentication, command.workspaceId); if (command.taskId !== id) invalid();
+          if (operation === "verification-plan") {
+            const result = options.outcomes.bindPlan(context, command as ReturnType<typeof deserializeOutcomePlanCommandV1>);
+            writeJson(response, 201, { schemaVersion: 1, plan: responseValue(parseOutcomeVerificationPlanV1, result.plan), replay: result.replay }); return;
+          }
+          const result = operation === "verification" ? options.outcomes.verify(context, command as ReturnType<typeof deserializeOutcomeVerifyCommandV1>)
+            : options.outcomes.feedback(context, command as ReturnType<typeof deserializeOutcomeFeedbackCommandV1>);
+          writeJson(response, 200, { schemaVersion: 1, value: responseValue(parseTaskResultBundleV1, result.bundle),
+            receipt: responseValue(parseSessionApiReceiptV1, { ...result.receipt, eventCursor: encode(context, result.commitCursor) }), replay: result.replay }); return;
+        }
         if (url.pathname.startsWith("/v1/memory/")) {
           const memory = options.memory;
           if (!memory) throw new SessionApiError("unsupported", "runtime_capability", 422);
@@ -235,10 +253,20 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
         const command = deserializeLocalApiCommandV1(body);
         if (!command.payload.kind.startsWith("task.") || (url.pathname === "/v1/tasks") !== (command.payload.kind === "task.create")) invalid();
         if (target && (!("targetRef" in command.payload) || command.payload.targetRef.id !== readIdentifier(target[1]!))) invalid();
-        const context = authorize(authentication, command.workspaceId); const committed = app.executeTask(context, command);
+        const context = authorize(authentication, command.workspaceId);
+        const committed = command.payload.kind === "task.confirm-result" && options.outcomes ? (() => { const result = options.outcomes.confirm(context, command); return { value: result.receipt, commitCursor: result.commitCursor }; })() : app.executeTask(context, command);
         const receipt = responseValue(parseSessionApiReceiptV1, { ...committed.value, eventCursor: encode(context, committed.commitCursor) });
         if (receipt.aggregate.kind !== "task") throw new SessionApiError("corruption", "integrity_failed", 500);
         writeJson(response, command.payload.kind === "task.create" ? 201 : 200, receipt); return;
+      }
+      const resultRead = /^\/v1\/tasks\/([^/]+)\/(result|result-history)$/.exec(url.pathname);
+      if (resultRead) {
+        validateQuery(url, ["workspaceId"]); const context = authorize(authentication, readIdentifier(url.searchParams.get("workspaceId")));
+        if (!options.outcomes) throw new SessionApiError("unsupported", "runtime_capability", 422);
+        const id = readIdentifier(resultRead[1]!);
+        const value = resultRead[2] === "result" ? responseValue(parseTaskResultBundleV1, options.outcomes.read(context, id))
+          : options.outcomes.history(context, id).map(item => responseValue(parseTaskResultBundleV1, item));
+        writeJson(response, 200, { schemaVersion: 1, value }); return;
       }
       const resource = /^\/v1\/(sessions|tasks)\/([^/]+)$/.exec(url.pathname);
       if (!["/v1/tasks", "/v1/snapshot", "/v1/events"].includes(url.pathname) && !resource) throw new SessionApiError("not_found", "not_found", 404);

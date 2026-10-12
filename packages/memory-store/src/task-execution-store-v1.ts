@@ -522,6 +522,14 @@ export class TaskExecutionStoreEngineV1 implements TaskExecutionPersistenceV1 {
       return rows.map(row => ({ ...this.#modelBody(row, taskScope(workspaceId, taskId), true)!, contentRef: ref(row) }));
     });
   }
+  listEvents(workspaceId: string, taskId: string, attemptId: string) {
+    this.#parse("validation", () => { assertIdentifierV2(workspaceId); assertIdentifierV2(taskId); assertIdentifierV2(attemptId); });
+    return this.#host.transaction(false, () => {
+      const rows = this.#host.db.prepare(`SELECT r.* FROM task_execution_event_v1 r JOIN task_execution_v1 e ON e.binding_id=r.binding_id
+        WHERE e.workspace_id=? AND r.task_id=? AND r.attempt_id=? ORDER BY r.row_id`).all(workspaceId, taskId, attemptId) as Row[];
+      return rows.map(row => ({ envelope: parseNormalizedRuntimeEnvelopeV1(this.#bodyValue(row, taskScope(workspaceId, taskId), true)), contentRef: ref(row) }));
+    });
+  }
   /** Called by the owning store inside its verified read/write snapshot, including before migration commits. */
   validateRows(): void {
     if (!this.#host.db.isTransaction) return this.#host.fail("corruption");

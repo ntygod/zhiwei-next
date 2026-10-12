@@ -1,9 +1,11 @@
 # ADR 0022：结果验证、经历与记忆使用记录的提交
 
-- 状态：Proposed
+- 状态：Accepted（仅设计；实现及真实启用另需当前 HEAD 证据）
 - 日期：2026-10-12
 - 工作项：#123 / P1-07
 - 被取代关系：细化 ADR0017 的 Outcome/使用记录、ADR0021 的结果屏障；不取代既有 Task、Runtime、内容生命周期或旧严格 Schema 入口。
+
+独立审查：[PR124 设计记录](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6116074002)批准 Proposed 提案提交 `e706596858673e77815cd429b4d0f0ebfc244ef0`、文本 SHA256 `de7bd245aaeef58471c89a989fb984dd81c52f9c1a9db3997202b6779c8c38ae`。记录只接受有限设计，不批准实现 HEAD、真实能力或合并。
 
 ## 背景
 

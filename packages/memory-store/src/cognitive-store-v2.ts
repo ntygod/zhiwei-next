@@ -13,7 +13,7 @@ import {
   type ObservationV2, type LocalApiCommandV1, type LocalApiMemoryInputV1, type LocalApiMemorySearchV1,
 } from "../../protocol/src/index.ts";
 import {
-  configureCognitiveDatabaseV2, applyDecisionMigrationsV1, verifyDecisionDatabaseV1,
+  configureCognitiveDatabaseV2, applyOutcomeMigrationsV1, verifyOutcomeDatabaseV1,
 } from "./cognitive-schema-v2.ts";
 import { cognitiveRecoveryPortV2, type CognitiveRecoveryPortV2, type CognitiveRecoveryStateV2 } from "./cognitive-recovery-port-v2.ts";
 import { ContentFilesV2, type ContentFileDescriptorV2 } from "./content-files-v2.ts";
@@ -35,6 +35,8 @@ import type { MemoryPersistenceBoundaryV1, MemoryPersistenceV1, MemoryContextV1,
 import { rankMemoryTextsV1 } from "./memory-fts-v1.ts";
 import { ContextStoreEngineV1 } from "./context-store-v1.ts";
 import type { ContextPersistenceBoundaryV1, ContextPersistenceV1 } from "./context-store-v1-types.ts";
+import { OutcomeStoreEngineV1 } from "./outcome-store-v1.ts";
+import type { OutcomePersistenceBoundaryV1, OutcomePersistenceV1, ResultInputObservationV1 } from "./outcome-store-v1-types.ts";
 import type { TaskStoreContextV1 } from "./task-store-v1-types.ts";
 
 /** Default-disabled synthetic composition; no real data or external model boundary. */
@@ -47,6 +49,7 @@ export interface SyntheticCognitionStoreOptionsV2 {
   readonly taskPersistence?: TaskPersistenceBoundaryV1;
   readonly memoryPersistence?: MemoryPersistenceBoundaryV1;
   readonly contextPersistence?: ContextPersistenceBoundaryV1;
+  readonly outcomePersistence?: OutcomePersistenceBoundaryV1;
 }
 export interface CognitionFenceV2 {
   readonly installationId: string;
@@ -151,6 +154,7 @@ export class SyntheticCognitionStoreV2 {
   readonly #executionEngine: TaskExecutionStoreEngineV1;
   readonly #memoryBoundary: MemoryPersistenceBoundaryV1 | undefined;
   readonly #contextEngine: ContextStoreEngineV1;
+  readonly #outcomeEngine: OutcomeStoreEngineV1;
 
   private constructor(options: SyntheticCognitionStoreOptionsV2, db: DatabaseSync,
     pragmas: ReturnType<typeof configureCognitiveDatabaseV2>, files: ContentFilesV2,
@@ -178,6 +182,7 @@ export class SyntheticCognitionStoreV2 {
       },
       validateRuntimeContext: (context, spec, binding, request) => this.#contextEngine.validateRuntimeContext(context, spec, binding, request),
       linkRuntimeContext: (context, spec, binding, requestId) => this.#contextEngine.linkRuntimeContext(context, spec, binding, requestId),
+      verificationForReduction: (context, taskId, id) => this.#outcomeEngine.resolution(context, taskId, id),
       onExecutionSettled: (context, envelope) => {
         const execution = this.#row("SELECT task_id FROM task_execution_v1 WHERE binding_id=? AND workspace_id=?", envelope.bindingId, context.workspaceId);
         if (!execution) fail("unavailable");
@@ -222,6 +227,21 @@ export class SyntheticCognitionStoreV2 {
         return this.#memoryEvidence(working.evidence, "model-allowed");
       },
     }, boundary, contextBoundary);
+    const outcome = options.outcomePersistence;
+    const outcomeBoundary: OutcomePersistenceBoundaryV1 | undefined = outcome ? Object.freeze({ verifier: Object.freeze(structuredClone(outcome.verifier)), verificationTtlMs: outcome.verificationTtlMs,
+      ids: Object.freeze({ next: outcome.ids.next.bind(outcome.ids) }), evaluate: outcome.evaluate.bind(outcome), buildEpisode: outcome.buildEpisode.bind(outcome), adoption: outcome.adoption.bind(outcome) }) : undefined;
+    this.#outcomeEngine = new OutcomeStoreEngineV1({ ...host, tasks: this.#taskEngine, executions: this.#executionEngine, contexts: this.#contextEngine,
+      currentFence: value => this.#currentFence(value), materials: (context, task, query, required) => this.#contextMaterials(context, task, query, required),
+      recordResultInput: input => this.#recordResultInput(input, boundary ?? fail("unsupported")),
+      dependencyAvailable: (ref, scope) => {
+        const row = this.#content(ref, scope, ["available", "staged", "revoked", "purged"], false);
+        if (row.state !== "available" || text(row.retention_until) <= this.#now()) return false;
+        this.#notForgotten(scope, { kind: "content", id: ref.contentId, version: ref.contentVersion });
+        // Evidence text and memory-managed bodies retain their own formats. Availability
+        // checks their actual file integrity without interpreting them as a Task envelope.
+        this.#files.read(this.#descriptor(row)); return true;
+      },
+    }, boundary, outcomeBoundary);
   }
 
   static open(options: SyntheticCognitionStoreOptionsV2): SyntheticCognitionStoreV2 {
@@ -252,7 +272,7 @@ export class SyntheticCognitionStoreV2 {
       const store = new SyntheticCognitionStoreV2({ ...options, dataRoot, controlRoot }, db, pragmas, files, journal, locks);
       const hasState = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='store_state'").get()
         && db.prepare("SELECT 1 FROM store_state WHERE singleton=1").get();
-      applyDecisionMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
+      applyOutcomeMigrationsV1(db, { clock: options.clock, expectedPragmas: pragmas, ...(hasState ? { validateProductRows: () => store.#validateRows() } : {}) });
       const state = db.prepare("SELECT * FROM store_state WHERE singleton=1").get();
       if (!state) {
         if (options.mode === "open") fail("corruption");
@@ -280,6 +300,7 @@ export class SyntheticCognitionStoreV2 {
   get tasks(): TaskPersistenceStoreV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#taskEngine; }
   get executions(): TaskExecutionPersistenceV1 { if (!this.#options.taskPersistence) fail("unsupported"); return this.#executionEngine; }
   get contexts(): ContextPersistenceV1 { if (!this.#options.contextPersistence || !this.#options.taskPersistence || !this.#memoryBoundary) fail("unsupported"); return this.#contextEngine; }
+  get outcomes(): OutcomePersistenceV1 { if (!this.#options.outcomePersistence || !this.#options.taskPersistence) fail("unsupported"); return this.#outcomeEngine; }
   get memories(): MemoryPersistenceV1 {
     if (!this.#memoryBoundary) fail("unsupported");
     return { capture: (context, input) => this.#captureMemory(context, input), execute: (context, command) => this.#executeMemory(context, command),
@@ -319,7 +340,7 @@ export class SyntheticCognitionStoreV2 {
       if (!reconciling) this.#checkControl();
       this.#transactionNow = this.#options.clock.now(); assertIsoTimestampV2(this.#transactionNow);
       this.#db.exec(write ? "BEGIN IMMEDIATE" : "BEGIN");
-      verifyDecisionDatabaseV1(this.#db, this.#pragmas);
+      verifyOutcomeDatabaseV1(this.#db, this.#pragmas);
       this.#validateRows();
       if (!reconciling) this.#checkControl();
       const result = body();
@@ -443,6 +464,19 @@ export class SyntheticCognitionStoreV2 {
       sourceTrust: event.sourceTrust, observedAt: event.observedAt, role: "supports" } };
   }
 
+  /** T06 assigns producer trust; a parsed observation never supplies its authority. */
+  #recordResultInput(input: ResultInputObservationV1, boundary: TaskPersistenceBoundaryV1): { content: ContentRefV2; evidence: EvidenceRefV2 } {
+    if (input.scope.kind !== "task" || input.taskAttempt.taskId !== input.scope.taskId || !["verifier", "feedback"].includes(input.source)) fail("validation");
+    assertIdentifierV2(input.id); assertIsoTimestampV2(input.observedAt); if (input.observedAt > this.#now()) fail("validation");
+    const content = this.#writeTaskBody(input.scope, input.body, input.dependencies, boundary), stored = this.#content(content, input.scope);
+    const streamId = `outcome-${input.source}:${input.scope.taskId}`, sequence = number(this.#row("SELECT coalesce(max(last_sequence),0)+1 AS n FROM source_stream WHERE stream_id=?", streamId)!.n);
+    const event = parseObservationV2({ schemaVersion: 2, id: input.id, revision: 1, scope: input.scope, privacy: stored.privacy,
+      sourceTrust: input.source === "feedback" ? "user-direct" : "verified-tool", observedAt: input.observedAt, recordedAt: this.#now(), actor: input.source === "feedback" ? "user" : "tool", kind: input.source === "feedback" ? "feedback" : "tool_result",
+      source: { streamId, adapter: "outcome-verifier-v1", surface: input.source === "feedback" ? "local-api" : "synthetic", sourceSequence: sequence, runtime: null, productSessionId: null, runtimeSessionId: null, runtimeInstanceId: null, eventType: "criterion-observation" },
+      correlation: { taskAttempt: input.taskAttempt, turnId: null, toolCallId: null, causationId: null, correlationId: null }, content: { availability: "available", ref: content }, integrity: { status: "complete" } });
+    this.appendObservation(event, this.#currentFence(input.scope), boundary.ids.next("event"));
+    return { content, evidence: { source: { kind: "observation", id: event.id, revision: 1 }, scope: event.scope, privacy: event.privacy, sourceTrust: event.sourceTrust, observedAt: event.observedAt, role: "supports" } };
+  }
   stageContent(input: StageCognitiveContentV2): ContentRefV2 {
     plainDataRecord(input, ["ref", "reservationId", "fence", "privacy", "purpose", "retentionUntil", "bytes"]);
     assertContentRefV2(input.ref); assertIdentifierV2(input.reservationId); assertPrivacyV2(input.privacy);
@@ -1150,7 +1184,7 @@ export class SyntheticCognitionStoreV2 {
 
   #recoveryState(): CognitiveRecoveryStateV2 {
     const state = this.#state();
-    return { installationId: text(state.installation_id), schemaVersion: 6,
+    return { installationId: text(state.installation_id), schemaVersion: 7,
       controlSequence: number(state.applied_control_sequence), controlChecksum: text(state.applied_control_checksum),
       recoveryEpoch: number(state.recovery_epoch) };
   }
@@ -1372,6 +1406,7 @@ export class SyntheticCognitionStoreV2 {
       this.#taskEngine.validateRows(); this.#executionEngine.validateRows();
       this.#validateMemoryRows();
       this.#contextEngine.validateRows();
+      this.#outcomeEngine.validateRows();
       if (this.#db.prepare("PRAGMA foreign_key_check").all().length) fail("corruption");
     } catch (error) {
       if (error instanceof CognitiveStoreErrorV2 && error.code === "sqlite") throw error;

@@ -128,3 +128,5 @@ export {
 } from "./validation-v2.ts";
 export type { ContextClaimRefV1, ContextBudgetV1, ContextSelectionReasonV1, ContextMaterialSelectionV1, ContextCompilationReportV1, CognitiveContextCapsuleV1 } from "./context-v1.ts";
 export type { CognitiveDecisionV1, CognitiveDecisionInputV1 } from "./decision-v1.ts";
+export type { CriterionCheckV1, MemoryAdoptionCheckV1, OutcomeVerificationPlanV1, CriterionObservationPayloadV1, CriterionObservationV1, MemoryUseV1, TaskResultBundleV1 } from "./result-v1.ts";
+export { assertCriterionCheckV1, assertCriterionObservationV1, assertOutcomeVerificationPlanV1, assertMemoryUseV1 } from "./result-v1.ts";

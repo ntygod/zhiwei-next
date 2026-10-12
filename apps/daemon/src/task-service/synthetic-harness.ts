@@ -17,10 +17,14 @@ import { syntheticContextBoundaryV1 } from "./synthetic-context-boundary.ts";
 import { coordinateCognitiveBoundaryV1, type CognitiveCoordinationResultV1 } from "./cognitive-coordinator.ts";
 import { createSyntheticTaskDecisionModelV1 } from "./synthetic-decision-model.ts";
 import type { SyntheticDecisionFixtureV1 } from "../infrastructure/controlled-broker.ts";
+import { syntheticOutcomeBoundaryV1 } from "../result-service/synthetic-boundary.ts";
+import { createOutcomeServiceV1, type OutcomeServiceV1 } from "../result-service/service.ts";
+import { createSyntheticOutcomeReaderV1 } from "../result-service/synthetic-reader.ts";
 export interface SyntheticTaskSessionHarness {
   readonly mode: "synthetic-fixtures-only"; readonly production: "unsupported";
   readonly application: PersistentSessionApplication; readonly api: SyntheticSessionApi;
   readonly memories: MemoryPersistenceV1;
+  readonly outcomes: OutcomeServiceV1;
   evidence(context: SessionApiContext, taskId: string): Readonly<{ execution?: TaskExecutionDetailsV1; runtimeInputs: readonly RuntimeInputSnapshotV1[]; modelRequests: readonly TaskModelRequestSnapshotV1[] }>;
   runTask(context: SessionApiContext, taskId: string): Promise<void>;
   coordinateTask(context: SessionApiContext, taskId: string, fixture?: SyntheticDecisionFixtureV1): Promise<CognitiveCoordinationResultV1>;
@@ -62,7 +66,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     runtimeSourceIdentity: { bindingImplementation: "pi", adapter: "pi", implementation: "@earendil-works/pi-coding-agent", version: "0.84.1" },
     contentPolicy: { privacy: "model-allowed", retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reducePersistentTask });
   const recoveryOptions = () => ({ recoveryRoot, controlRoot, installationId, clock: { now: () => new Date().toISOString() }, taskPersistence: boundary(),
-    memoryPersistence: { contentPolicy: { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory }, contextPersistence: syntheticContextBoundaryV1 });
+    memoryPersistence: { contentPolicy: { privacy: "model-allowed" as const, retentionUntil: new Date(Date.now() + 86_400_000).toISOString() }, ids: { next: () => randomUUID() }, reduce: reduceExplicitMemory, qualifies: qualifiesExplicitMemory }, contextPersistence: syntheticContextBoundaryV1, outcomePersistence: syntheticOutcomeBoundaryV1 });
   try {
     coordinator = createSyntheticRecoveryCoordinatorV2({ ...recoveryOptions(), generationId: randomUUID() });
     coordinator.store.registerScope({ kind: "global" });
@@ -132,7 +136,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     },
   });
   const memories = createPersistentMemoryApplication({ store, authorize: application.authorize });
-  const apiOptions = () => ({ application, memory: memories, installationId, recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
+  const resultReader = createSyntheticOutcomeReaderV1(), outcomes = createOutcomeServiceV1({ store, application, reader: resultReader, ids: { next: randomUUID }, now: () => new Date().toISOString() });
+  const apiOptions = () => ({ application, memory: memories, outcomes, installationId, recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
   let api = createSyntheticSessionApi(apiOptions()), apiNeedsReplacement = false;
   const closeApi = async () => { await api.close(); apiNeedsReplacement = true; };
   const publishApi = () => { if (apiNeedsReplacement) { api = createSyntheticSessionApi(apiOptions()); apiNeedsReplacement = false; } };
@@ -167,6 +172,8 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
       supervisor = await createSyntheticControlledWorkerSupervisor({ ...runtime, scenario: "text", ...(compiled ? { compiledInput: compiled } : {}), taskIdentity: { executionUnitId: `execution-${randomUUID()}`, workspaceId: context.workspaceId, sessionId: task.sessionId, requestSnapshotRef: input.contentRef,
         fence: { installationId, recoveryEpoch: String(global.recoveryEpoch), owner: { kind: "task_attempt", id: attempt.id }, sourceTask: { taskId, attemptId: attempt.id, intentRevision: task.intent.revision }, contractRevision: 1, leaseEpoch: owner.ownerEpoch, cognition: { global: global.cognitionEpoch, workspace: workspace.cognitionEpoch }, policy: { global: global.policyEpoch, workspace: workspace.policyEpoch }, notAfter: new Date(Date.now() + 60_000).toISOString() } },
         beforeSyntheticModelReceive(record) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().executions.recordModelRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId, context: record.context, maxTokens: record.maxTokens }); application.committed(); },
+        afterSyntheticModelReceive(record, reply) { if (!supervisor || restarting || live.get(taskId)?.suspended) throw new Error("Missing current controlled binding."); store().outcomes.observeRequest(owner, { taskId, bindingId: supervisor.snapshot().binding.bindingId, requestId: record.requestId,
+          toolCalls: (reply.toolCalls ?? []).map(call => ({ callId: call.id, toolName: call.name, argumentsJson: canonicalJsonV1(call.arguments) })) }); },
       });
       unallocated.add(supervisor);
       const admitted = current(context, taskId);
@@ -255,7 +262,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
     if (recovered.length) { await serial; for (const [taskId, active] of recovered) releaseClosedCustody(taskId, active); }
   };
   return {
-    mode: "synthetic-fixtures-only", production: "unsupported", application, memories, get api() { return api; }, runTask, coordinateTask, runCognitiveTask,
+    mode: "synthetic-fixtures-only", production: "unsupported", application, memories, outcomes, get api() { return api; }, runTask, coordinateTask, runCognitiveTask,
     evidence(context, taskId) { const task = current(context, taskId), attemptId = task.attempts.at(-1)!.id, execution = store().executions.readExecutionDetails(context.workspaceId, taskId); return { ...(execution ? { execution } : {}), runtimeInputs: store().tasks.listRuntimeInputs(context.workspaceId, taskId, attemptId).value, modelRequests: store().executions.listModelRequests(context.workspaceId, taskId, attemptId) }; },
     async idle() { await serial; if (lastFailure) { const error = lastFailure; lastFailure = undefined; throw error; } },
     async interruptControlPlane() {
@@ -294,7 +301,7 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
           try { coordinator.close(); coordinatorClosed = true; }
           catch (error) { coordinatorCloseUncertain = true; throw error; }
         }
-        await fs.rm(root, { recursive: true, force: true }); closed = true;
+        resultReader.close(); await fs.rm(root, { recursive: true, force: true }); closed = true;
       } finally {
         closing = false;
         // Before terminal teardown, callers may retry any legal lifecycle operation. Afterwards

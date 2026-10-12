@@ -3,7 +3,7 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-11
+updated: 2026-10-12
 -->
 
 ## 当前工作：P1-07 结果验证、Episode 与使用记录 #123（2026-10-12）
@@ -12,7 +12,9 @@ canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分�
 
 P1-06 / [PR122](https://github.com/ntygod/zhiwei-next/pull/122) 已完成1125项原完整检查、精确 HEAD 独立 R3、Ready/live、受保护 squash 和 main 来源/分支审计；合入 tree `1fe13384ebc2a80116dcae73f9cfdf42e3d8baee` 与受审 `cfada9e48d8edc19cd198caab678880db0bbd47b` 一致，[最终交付](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6110983805)及 [#121 关闭记录](https://github.com/ntygod/zhiwei-next/issues/121#issuecomment-6110991431)补齐以下提交前状态。
 
-P1-07 本轮先以 [ADR0022](../adr/0022-outcome-episode-memory-use.md) Proposed 细化预绑定标准、真实观测、纯结果、T06 原子提交与独立 Exposure/Adoption。现有成功验证和 Episode 持久消费者尚未接线；按 R3 完成设计和最终 HEAD 独立审查，原完整检查与 Runtime/保护交付门不变。只使用自有合成临时资源，普通真实入口关闭；Z16/Z17 产品验收保持 not_run，P2 学习与 UI 不提前。
+唯一 primary 为 [Draft PR124](https://github.com/ntygod/zhiwei-next/pull/124)。[ADR0022](../adr/0022-outcome-episode-memory-use.md) 已获[有限独立设计批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6116074002)。实现接通首次派发前的不可变标准、固定文件/确定性检查/Runtime 动作读者、纯 Outcome、T06 原子 bundle、确认和否定 API，以及实际接收后的独立 Exposure；采用还须匹配同一请求的真实 tool call 和完成动作。原终态和判定历史保留，收益 unknown、学习 not-scheduled。固定 schema7 保留0001—0006和旧严格入口，当前结果/重放复验来源，正文进入现有清除依赖。
+
+Node22.23.1/npm10.9.8 下7项真实临时 SQLite/API/迁移场景及2项真实受控 Worker 场景通过；多记忆只证明一次采用，最后请求后纠正/遗忘且没有后续工具时拒收迟到 final，T06 预约后纠正拒绝提交，完成后纠正/遗忘阻止当前回读。strict183 roots通过。容器原完整 check 通过工具链、typecheck、架构、AGENTS 和 work-items，止于无法读取 Windows worktree Git 历史的 main provenance；不修环境或跳门，最终采用同 HEAD native CI。完整 CI、精确 HEAD 独立 R3、PR124 原 Runtime 来源及 Ready/live/受保护合入仍待结果，局部证明不冒充完整交付。普通真实入口关闭，Z16/Z17 产品验收 not_run，P2 学习与 UI 不提前。
 
 ## 已交付 P1-06：提交前历史（2026-10-11）
 

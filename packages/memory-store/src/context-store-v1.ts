@@ -50,7 +50,7 @@ export class ContextStoreEngineV1 implements ContextPersistenceV1 {
   #row(sql: string, ...values: (string | number)[]): Row | undefined { return this.#host.db.prepare(sql).get(...values) as Row | undefined; }
   #rows(sql: string, ...values: (string | number)[]): Row[] { return this.#host.db.prepare(sql).all(...values) as Row[]; }
   #configured(): ContextPersistenceBoundaryV1 { if (!this.#boundary || !this.#taskBoundary) this.#host.fail("unsupported"); return this.#boundary; }
-  #view(context: TaskStoreContextV1, taskId: string, query: string, requiredClaims: readonly ClaimVersionRefV2[]): ReadSet {
+  #view(context: TaskStoreContextV1, taskId: string, query: string, requiredClaims: readonly ClaimVersionRefV2[], operation: "runtime" | "result" = "runtime"): ReadSet {
     this.#configured(); exact(context, ["principalId", "workspaceId", "daemonInstanceId", "ownerEpoch"]);
     for (const field of ["principalId", "workspaceId", "daemonInstanceId"]) assertIdentifierV2(context[field]); assertRevisionV2(context.ownerEpoch);
     if (context.daemonInstanceId !== this.#taskBoundary!.daemonInstanceId) this.#host.fail("revision_conflict");
@@ -61,7 +61,7 @@ export class ContextStoreEngineV1 implements ContextPersistenceV1 {
     if (!session || !owner) this.#host.fail("unavailable");
     if (session.contract.compilerProfile.id !== "cognitive-context-v1" || session.contract.compilerProfile.revision !== 1) this.#host.fail("unsupported");
     if (owner.owner_instance_id !== context.daemonInstanceId || owner.owner_epoch !== context.ownerEpoch || owner.requires_reauthorization !== 0) this.#host.fail("revision_conflict");
-    if (!["READY", "RUNNING"].includes(task.state)) this.#host.fail("conflict");
+    if (!(operation === "runtime" ? ["READY", "RUNNING"] : ["VERIFYING", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "UNVERIFIABLE"]).includes(task.state)) this.#host.fail("conflict");
     const workingState = this.#host.tasks.readWorkingState(context.workspaceId, taskId).value;
     if (!workingState || workingState.privacy !== "model-allowed") this.#host.fail("unavailable");
     const inTask = (candidate: ScopeV2) => candidate.kind !== "global" && candidate.workspaceId === task.workspaceId
@@ -208,6 +208,26 @@ export class ContextStoreEngineV1 implements ContextPersistenceV1 {
   linkRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, requestId: string): void {
     const row = this.#runtimeCapsule(spec); if (!row) return;
     this.#host.db.prepare("INSERT INTO context_model_request_v1(binding_id,request_id,capsule_id) VALUES(?,?,?)").run(binding.bindingId, requestId, row.id!);
+  }
+  /** A distinct result operation; it never broadens the READY/RUNNING send guard above. */
+  resultSources(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1): ContextSnapshotV1 | undefined {
+    const row = this.#runtimeCapsule(spec); if (!row) return undefined;
+    const body = this.#body(row)!, current = this.#view(context, text(row.task_id), body.readSet.query, body.readSet.requiredClaims, "result");
+    const original = body.readSet.task, task = current.task, attempt = task.attempts.at(-1)!;
+    if (json(context) !== json(body.readSet.owner) || spec.prompt !== body.capsule.rendering.fullText || spec.workspaceId !== task.workspaceId
+      || spec.sessionId !== task.sessionId || binding.executionUnitId !== spec.executionUnitId || binding.leaseEpoch !== context.ownerEpoch
+      || spec.fence.sourceTask?.taskId !== task.id || spec.fence.sourceTask.attemptId !== attempt.id || spec.fence.sourceTask.intentRevision !== task.intent.revision
+      || attempt.id !== body.capsule.attemptId || task.intent.revision !== body.capsule.intentRevision || json(task.intent) !== json(original.intent)
+      || task.createdAt !== original.createdAt || json(current.session) !== json(body.readSet.session) || json(current.materials) !== json(body.readSet.materials)) this.#host.fail("revision_conflict");
+    const execution = this.#row("SELECT * FROM task_execution_v1 WHERE binding_id=? AND task_id=? AND attempt_id=?", binding.bindingId, task.id, attempt.id);
+    const start = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", task.id, original.revision + 1);
+    if (!execution || execution.task_revision !== original.revision || !start || start.state !== "RUNNING" || start.attempt_id !== attempt.id || start.owner_epoch !== context.ownerEpoch) this.#host.fail("conflict");
+    const started = this.#recordBody<{ command: { payload: { kind: string; event?: string } } }>(start, context.workspaceId, task.id)!;
+    if (started.command.payload.kind !== "task.runtime" || started.command.payload.event !== "start") this.#host.fail("conflict");
+    // Ledger receipts do not advance a cognition epoch; a new usable Claim or source
+    // invalidation does. Preserve the entire original source/policy read-set exactly.
+    if (json(current.fences) !== json(body.readSet.fences)) this.#host.fail("revision_conflict");
+    return this.#read(row);
   }
   #runtimeMaterials(context: TaskStoreContextV1, capsuleId: string, bindingId: string): readonly Material[] {
     const row = this.#capsule(context, capsuleId), execution = this.#row(`SELECT s.* FROM task_execution_v1 e JOIN task_execution_snapshot_v1 s

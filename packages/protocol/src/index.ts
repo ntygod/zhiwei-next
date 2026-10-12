@@ -52,3 +52,4 @@ export * from "./controlled-runtime-v1.ts";
 export * from "./session-api-v1.ts";
 export * from "./cognitive-decision-v1.ts";
 export * from "./cognitive-context-v1.ts";
+export * from "./task-result-v1.ts";
