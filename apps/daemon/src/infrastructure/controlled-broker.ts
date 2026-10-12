@@ -311,10 +311,10 @@ function syntheticReplyFixture(index: number, scenario: "text" | "tools" | "deci
 
 export async function createSyntheticControlledBroker(
   input: ExecutionSpecV1,
-  options: Readonly<{ scenario?: "text" | "tools" | "decision"; decisionFixture?: SyntheticDecisionFixtureV1; now?: () => number; beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void; memoryReader?: Readonly<{ read(): string }> }> = {},
+  options: Readonly<{ scenario?: "text" | "tools" | "decision"; decisionFixture?: SyntheticDecisionFixtureV1; now?: () => number; beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void; afterSyntheticModelReceive?: (record: SyntheticModelRequestRecord, reply: ControlledModelResult) => void; memoryReader?: Readonly<{ read(): string }> }> = {},
 ): Promise<SyntheticControlledBroker> {
   const spec = parseSyntheticBrokerSpec(input);
-  if (Object.keys(options).some(key => !["scenario", "decisionFixture", "now", "beforeSyntheticModelReceive", "memoryReader"].includes(key))) reject();
+  if (Object.keys(options).some(key => !["scenario", "decisionFixture", "now", "beforeSyntheticModelReceive", "afterSyntheticModelReceive", "memoryReader"].includes(key))) reject();
   const scenario = options.scenario ?? "text";
   if (scenario !== "text" && scenario !== "tools" && scenario !== "decision") reject("unsupported");
   const decisionFixture = options.decisionFixture ?? "execute";
@@ -322,6 +322,7 @@ export async function createSyntheticControlledBroker(
   if (scenario === "decision" && spec.toolProfile !== "none") reject("unsupported");
   if (options.now !== undefined && typeof options.now !== "function") reject();
   if (options.beforeSyntheticModelReceive !== undefined && typeof options.beforeSyntheticModelReceive !== "function") reject();
+  if (options.afterSyntheticModelReceive !== undefined && typeof options.afterSyntheticModelReceive !== "function") reject();
   if (options.memoryReader !== undefined && (scenario !== "tools" || typeof options.memoryReader.read !== "function")) reject();
   const memoryReader = options.memoryReader;
   const beforeSyntheticModelReceive = options.beforeSyntheticModelReceive;
@@ -357,6 +358,7 @@ export async function createSyntheticControlledBroker(
       // This is the complete local receiving boundary. It consumes the exact, already-recorded
       // model-visible projection and cannot reach an SDK, network, credential or host data source.
       received.push(record);
+      if (options.afterSyntheticModelReceive?.(record, reply) !== undefined) reject();
       return reply;
     }
     const drafts: { draftId: string; name: string; bytes: number }[] = [];

@@ -47,6 +47,7 @@ export interface TaskModelRequestSnapshotV1 {
   readonly createdAt: string;
   readonly contentRef: ContentRefV2;
 }
+export interface TaskExecutionEventSnapshotV1 { readonly envelope: NormalizedRuntimeEnvelopeV1; readonly contentRef: ContentRefV2 }
 /** Fixed server custody adapter. Returns only already-recorded close observations; no I/O in a transaction. */
 export interface TaskRecoveryCustodyV1 {
   observedClose(input: Readonly<{ spec: ExecutionSpecV1; binding: RuntimeBindingV1; executionRevision: number }>):
@@ -65,4 +66,5 @@ export interface TaskExecutionPersistenceV1 {
   readExecution(workspaceId: string, taskId: string): TaskExecutionReadV1 | undefined;
   readExecutionDetails(workspaceId: string, taskId: string): TaskExecutionDetailsV1 | undefined;
   listModelRequests(workspaceId: string, taskId: string, attemptId: string): readonly TaskModelRequestSnapshotV1[];
+  listEvents(workspaceId: string, taskId: string, attemptId: string): readonly TaskExecutionEventSnapshotV1[];
 }

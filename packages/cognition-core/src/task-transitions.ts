@@ -43,7 +43,7 @@ export interface TaskTransitionRecord {
   readonly attemptId: TaskAttemptId;
   readonly from: TaskState;
   readonly to: TaskState;
-  readonly reason: TaskAction["kind"] | "retry" | "revise-intent";
+  readonly reason: TaskAction["kind"] | "retry" | "revise-intent" | "revise-outcome";
   readonly previousRevision: number;
   readonly revision: number;
   readonly intentRevision: number;
@@ -231,4 +231,15 @@ export function reviseTaskIntent(task: Task, change: TaskChange, intent: TaskInt
   if (sameTaskIntent(intent, task.intent, false)) throw new Error("intent must change semantically");
   if (task.attempts.some(attempt => attempt.id === attemptId)) throw new Error("attempt id must not be reused");
   return commit(task, initialAttempt(attemptId, task.id, task.workspaceId, intent, change.now), change, "revise-intent", true);
+}
+/** Rechecks append evidence while retaining the original terminal state and all prior Outcomes. */
+export function appendTaskOutcome(task: Task, change: TaskChange, input: Readonly<{
+  outcomeId: OutcomeId; outcomeRevision: number; results: readonly CriterionResult[];
+}>): TaskTransition {
+  const current = checkChange(task, change);
+  if (current.state === "VERIFYING") return transitionTask(task, change, { kind: "finalize", ...input });
+  if (!isTerminalTaskState(current.state)) throw new Error("Outcome requires settled or terminal execution.");
+  const outcome = deriveOutcome(current, { id: input.outcomeId, revision: input.outcomeRevision, now: change.now, results: input.results });
+  const next = { ...current, updatedAt: change.now, outcomes: [...current.outcomes, outcome] };
+  assertOutcomeHistoryStatus(next); return commit(task, next, change, "revise-outcome");
 }

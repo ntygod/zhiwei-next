@@ -43,7 +43,8 @@ test("synthetic snapshot parser rejects unknown fields and self-reported accepta
   assert.equal(parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 4 }).schemaVersion, 4);
   assert.equal(parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 5 }).schemaVersion, 5);
   assert.equal(parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 6 }).schemaVersion, 6);
-  validation(() => parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 7 }));
+  assert.equal(parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 7 }).schemaVersion, 7);
+  validation(() => parseSyntheticSnapshotManifestV2({ ...manifest(), schemaVersion: 8 }));
   validation(() => parseSyntheticSnapshotManifestV2({ ...manifest(), recoveryEpoch: 5 }));
 });
 

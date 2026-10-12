@@ -196,14 +196,14 @@ jsonSha256                   a3f47e34c2bd78b16793c7aeacfdf4020c788e475dda2527796
 outer contract fingerprint   c99bcfb2872736e085750690965dd11dce1bc873b14b905b53a1e57defa3dcbf
 capture contract fingerprint 70ce5607549b2d8342d7abba1312b2231c1a069a038dd39a9dbf23dd65ccb9c7
 source state                 verified
-capture head                 5602bbc0c9b6792b9c42365a8584a7135f1a1a65
-capture workflow             38145094526
-capture artifact             11704029254
-capture artifact digest      sha256:c1190bc290dd093138999cb9452feb8c898610c4e89fcda7cb0372be77596af5
+capture head                 b35abd16cabde4a9c745c10a6d43e67596bb9ed9
+capture workflow             38197375872
+capture artifact             11723831889
+capture artifact digest      sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
 external Provider prompts    0
 ```
 
-该 SDK 来源 Run 属于 PR #117，Artifact 内唯一 `result.json` 与 committed Fixture 逐字节相同。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同单独续期，没有把同轮正常成功 Worker 作为该来源。最终候选须核验两来源 ancestry，Ready live provenance 仍必须在新的 exact HEAD 上实际运行并成功。
+该 SDK 来源 Run 属于 PR #124，Artifact 内唯一 `result.json` 与 committed Fixture 逐字节相同。同轮正常 Worker 也通过完整比较；当前 PR 的成对来源另由 run38198285079 / head3087846 的两个原 Worker attempts 完成，各原ZIP及72731字节 result.json 已通过原 validators，字节相同且与正常原件/完整冻结对象一致。临时 guard 已移除，正式 comparator 恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90。最终候选须核验两来源 ancestry，Ready live provenance 仍必须在新的 exact HEAD 上实际运行并成功。
 
 ## RPC Worker schema v2 当前合同
 

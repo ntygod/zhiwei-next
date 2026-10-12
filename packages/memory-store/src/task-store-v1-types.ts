@@ -18,7 +18,16 @@ export interface TaskRuntimeCommandV1 {
     evidenceRefs?: readonly TaskEvidenceRef[];
   }>;
 }
-export type TaskStoreCommandV1 = LocalApiCommandV1 | TaskRuntimeCommandV1;
+/** Only a currently composing T06 resolves this ID to stored observations; it carries no results. */
+export interface TaskResultCommandV1 {
+  readonly schemaVersion: 1;
+  readonly commandId: string;
+  readonly idempotencyKey: string;
+  readonly workspaceId: string;
+  readonly expectedRevision: number;
+  readonly payload: Readonly<{ kind: "task.verify"; taskId: string; verificationId: string }>;
+}
+export type TaskStoreCommandV1 = LocalApiCommandV1 | TaskRuntimeCommandV1 | TaskResultCommandV1;
 export interface TaskReductionContextV1 {
   readonly now: string;
   readonly session: SessionV1;
@@ -32,6 +41,7 @@ export interface TaskReductionContextV1 {
   readonly workingState?: WorkingStateV2;
   /** Resolved from a committed proposal by the Store; never copied from a user command. */
   readonly cognitiveDecision?: CognitiveDecisionV1;
+  readonly verification?: Readonly<{ plan: import("../../domain/src/index.ts").OutcomeVerificationPlanV1; observations: readonly import("../../domain/src/index.ts").CriterionObservationV1[] }>;
   readonly activeExecution?: Readonly<{ bindingId: string; state: string; dispatched: boolean; closed: boolean }>;
 }
 export interface TaskReductionV1 {

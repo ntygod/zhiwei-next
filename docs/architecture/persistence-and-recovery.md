@@ -2,6 +2,8 @@
 
 状态：architecture-1 逻辑 Schema 与提交合同，不是已应用 migration。P1-02/05 与 P4-06 按此实现；原 Ledger v1/0001/公开 parser/完整性检查不改。字段的业务含义仍由[领域模型](domain-model.md)决定。
 
+P1-07 的有限实现追加固定 `0007_task_result_v1.sql`，保存验证计划、I/O read-set 预约、criterion 观察、实际接收回执及结果 bundle 的不可变索引与受管正文引用。T06 在一个事务内提交 Task/WorkingState、Outcome、Episode、使用详情、原 Task revision 的 Outbox 通知和幂等回执；验证 I/O 在事务之外，提交时重复 CAS、来源与正文检查。打开安装使用物理 schema7，旧2—6严格入口保留，未知8拒绝；已应用0001—0006不改。当前结果、历史、清除依赖与前向恢复范围以 [ADR0022](../adr/0022-outcome-episode-memory-use.md) 为准。
+
 ## 1. 物理存储与权威性
 
 ```text

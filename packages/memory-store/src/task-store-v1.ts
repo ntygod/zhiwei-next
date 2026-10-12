@@ -28,6 +28,7 @@ export interface TaskStoreHostV1 {
   validateRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, request?: Readonly<{ context: JsonValue; maxTokens: number }>): void;
   linkRuntimeContext(context: TaskStoreContextV1, spec: ExecutionSpecV1, binding: RuntimeBindingV1, requestId: string): void;
   onExecutionSettled(context: TaskStoreContextV1, envelope: NormalizedRuntimeEnvelopeV1): void;
+  verificationForReduction?(context: TaskStoreContextV1, taskId: string, id: string): import("./outcome-store-v1-types.ts").TaskVerificationResolutionV1;
   fail(code: CognitiveStoreErrorCodeV2): never;
 }
 type Row = Record<string, SQLOutputValue>;
@@ -186,7 +187,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
     let command: TaskStoreCommandV1; try { command = this.#command(raw); } catch { return this.#host.fail("validation"); }
     this.#context(context, command.workspaceId);
     return this.#host.transaction(true, () => {
-      const taskId = command.payload.kind === "task.create" ? undefined : "targetRef" in command.payload ? command.payload.targetRef.id : command.payload.kind === "task.runtime" ? command.payload.taskId : this.#host.fail("unsupported");
+      const taskId = command.payload.kind === "task.create" ? undefined : "targetRef" in command.payload ? command.payload.targetRef.id : command.payload.kind === "task.runtime" || command.payload.kind === "task.verify" ? command.payload.taskId : this.#host.fail("unsupported");
       const currentRow = taskId ? this.#taskRow(context.workspaceId, taskId) : undefined; if (taskId && !currentRow) this.#host.fail("unavailable");
       const sessionId = command.payload.kind === "task.create" ? command.payload.sessionId : string(currentRow!.session_id);
       const sessionRow = this.#row("SELECT * FROM session_v1 WHERE workspace_id=? AND id=?", context.workspaceId, sessionId); if (!sessionRow) this.#host.fail("unavailable"); this.#owner(context, sessionRow);
@@ -203,12 +204,14 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         ? this.#pendingDecision(context, currentRow, command) : undefined;
       if (cognitive && activeExecution && !activeExecution.closed) this.#host.fail("conflict");
       if (command.payload.kind !== "task.runtime" && activeExecution && activeExecution.ownerEpoch < context.ownerEpoch && !activeExecution.closed) this.#host.fail("recovery_required");
-      const accepted = command.payload.kind === "task.runtime" ? undefined : this.#host.recordCommandEvidence(scope, command as LocalApiCommandV1, [ref(sessionRow), ...(currentRow ? [ref(currentRow)] : [])], this.#writeBoundary());
-      const evidence = accepted ? [accepted.evidence] : currentRow ? (this.#body(currentRow, scope)!.workingState as WorkingStateV2).evidence : [];
-      const runtimeDependencies = cognitive ? [ref(cognitive.row)] : command.payload.kind === "task.runtime" ? this.#runtimeEvidence(context, command as TaskRuntimeCommandV1, current!, activeExecution) : [];
-      const attemptId = this.#id("attempt"), outcomeId = this.#id("outcome");
+      const verification = command.payload.kind === "task.verify" ? this.#host.verificationForReduction?.(context, id, command.payload.verificationId) ?? this.#host.fail("unsupported") : undefined;
+      const accepted = command.payload.kind === "task.runtime" || command.payload.kind === "task.verify" ? undefined : this.#host.recordCommandEvidence(scope, command as LocalApiCommandV1, [ref(sessionRow), ...(currentRow ? [ref(currentRow)] : [])], this.#writeBoundary());
+      const evidence = verification?.evidence ?? (accepted ? [accepted.evidence] : currentRow ? (this.#body(currentRow, scope)!.workingState as WorkingStateV2).evidence : []);
+      const runtimeDependencies = verification ? [...verification.dependencies] : cognitive ? [ref(cognitive.row)] : command.payload.kind === "task.runtime" ? this.#runtimeEvidence(context, command as TaskRuntimeCommandV1, current!, activeExecution) : [];
+      const attemptId = this.#id("attempt"), outcomeId = verification && current?.attempts.at(-1)?.outcomes.at(-1)?.id || this.#id("outcome");
       const reduced = this.#writeBoundary().reduce(current ? structuredClone(current) : undefined, structuredClone(command), { now, session: structuredClone(session), taskId: id,
         attemptId, nextRevision: command.expectedRevision + 1, outcomeId, requiresReauthorization: currentRow?.owner_epoch !== context.ownerEpoch,
+        ...(verification ? { verification: { plan: structuredClone(verification.plan), observations: structuredClone(verification.observations) } } : {}),
         evidence: structuredClone(evidence), privacy: evidence.some(item => item.privacy === "local-only") ? "local-only" : this.#writeBoundary().contentPolicy.privacy,
         ...(priorWorking ? { workingState: structuredClone(priorWorking) } : {}), ...(cognitive ? { cognitiveDecision: structuredClone(cognitive.decision) } : {}), ...(activeExecution ? { activeExecution } : {}) });
       exact(reduced, ["versions"], ["workingStates"]);
@@ -257,7 +260,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       }
       const attempt = final.attempts.at(-1)!, ordinal = integer(this.#row("SELECT coalesce(max(ordinal),0)+1 AS ordinal FROM task_input_v1 WHERE attempt_id=?", attempt.id)!.ordinal);
       this.#run("INSERT INTO task_input_v1(id,task_id,attempt_id,task_revision,intent_revision,kind,ordinal,owner_epoch,content_id,content_version,scope_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        this.#id("input"), id, attempt.id, final.revision, final.intent.revision, command.payload.kind === "task.runtime" ? "internal_command" : "user_command", ordinal, context.ownerEpoch,
+        this.#id("input"), id, attempt.id, final.revision, final.intent.revision, command.payload.kind === "task.runtime" || command.payload.kind === "task.verify" ? "internal_command" : "user_command", ordinal, context.ownerEpoch,
         (accepted?.content ?? finalContent!).contentId, (accepted?.content ?? finalContent!).contentVersion, scopeKeyV2(scope));
       return this.#receipt(context, command, receipt, cursor, finalContent!, scope);
     });
@@ -310,7 +313,13 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       if (payload.kind === "task.revise-request" && (!prior || payload.intentRevision !== prior.intent.revision || final.intent.revision !== prior.intent.revision + 1)) this.#host.fail("revision_conflict");
     }
     for (const task of versions) for (const [index, attempt] of task.attempts.entries()) for (const outcome of attempt.outcomes.slice(prior?.attempts[index]?.outcomes.length ?? 0)) {
-      // There is no P1-07 successful criterion verifier in this bounded P1-04 integration.
+      if (payload.kind === "task.verify") {
+        const source = this.#row("SELECT * FROM outcome_verification_v1 WHERE id=? AND task_id=?", payload.verificationId, task.id);
+        if (!prior || !source || source.task_revision !== prior.revision || source.attempt_id !== attempt.id || source.intent_revision !== attempt.intent.revision
+          || versions.length !== 1 || prior.attempts.at(-1)!.id !== attempt.id || outcome.revision !== (prior.attempts.at(-1)!.outcomes.at(-1)?.revision ?? 0) + 1) this.#host.fail("validation");
+        continue;
+      }
+      // The legacy interruption path remains restricted to its original all-unknown result.
       if (payload.kind !== "task.runtime" || payload.event !== "interrupted" || outcome.status !== "unverifiable"
         || outcome.criteriaResults.some(result => result.status !== "unknown" || result.reason !== "incomplete" || result.evidence.length)) this.#host.fail("unsupported");
     }
@@ -332,6 +341,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       "task.revise-request": ["CREATED,READY", "CANCELLING,CANCELLED,CREATED,READY"],
       "task.respond": ["READY", "CANCELLING,CANCELLED,CREATED,READY"],
       "task.runtime": ["READY", "RUNNING", "VERIFYING", "CANCELLED", "PAUSED", "UNVERIFIABLE", "VERIFYING,UNVERIFIABLE", "WAITING_INPUT"],
+      "task.verify": ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "UNVERIFIABLE"],
     };
     if (!sequences[kind]?.includes(states)) throw new Error("command state span mismatch");
     let previous = prior;
@@ -345,6 +355,11 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
           || row.intent_revision !== integer(previous.intent_revision) + (kind === "task.revise-request" ? 1 : 0)
           || !["task.retry", "task.continue", "task.revise-request", "task.respond"].includes(kind)) throw new Error("new attempt metadata mismatch");
       } else {
+        if (kind === "task.verify") {
+          if (versions.length !== 1 || row.intent_revision !== previous.intent_revision
+            || previous.state !== "VERIFYING" && (!isTerminalTaskState(previous.state as TaskState) || row.state !== previous.state)) throw new Error("verification state metadata mismatch");
+          previous = row; continue;
+        }
         const transitions: Readonly<Partial<Record<TaskState, readonly TaskState[]>>> = {
           CREATED: ["READY"], READY: ["RUNNING", "CANCELLING", "WAITING_INPUT"], RUNNING: ["RUNNING", "VERIFYING", "PAUSED", "CANCELLING"],
           VERIFYING: ["UNVERIFIABLE", "CANCELLING"], WAITING_INPUT: ["READY", "CANCELLING"], WAITING_APPROVAL: ["READY", "CANCELLING"],
@@ -361,6 +376,11 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
   }
   #command(input: TaskStoreCommandV1): TaskStoreCommandV1 {
     const raw = JSON.parse(json(input)) as TaskStoreCommandV1;
+    if (raw?.payload?.kind === "task.verify") {
+      exact(raw, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]); if (raw.schemaVersion !== 1) this.#host.fail("validation");
+      for (const value of [raw.commandId, raw.idempotencyKey, raw.workspaceId]) assertIdentifierV2(value); assertRevisionV2(raw.expectedRevision);
+      exact(raw.payload, ["kind", "taskId", "verificationId"]); assertIdentifierV2(raw.payload.taskId); assertIdentifierV2(raw.payload.verificationId); return structuredClone(raw);
+    }
     if (raw?.payload?.kind !== "task.runtime") { const value = parseLocalApiCommandV1(raw); if (!value.payload.kind.startsWith("task.")) this.#host.fail("unsupported"); return value; }
     exact(raw, ["schemaVersion", "commandId", "idempotencyKey", "workspaceId", "expectedRevision", "payload"]); if (raw.schemaVersion !== 1) this.#host.fail("validation");
     for (const value of [raw.commandId, raw.idempotencyKey, raw.workspaceId]) assertIdentifierV2(value); assertRevisionV2(raw.expectedRevision);
@@ -623,16 +643,19 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       for (const row of this.#rows("SELECT * FROM task_outcome_v1")) {
         assertIdentifierV2(row.id);
         const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(row.task_id), integer(row.snapshot_revision));
+        const verified = this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='task_result_v1'")
+          && this.#row("SELECT * FROM task_result_v1 WHERE outcome_id=? AND outcome_revision=? AND task_id=? AND task_revision=?", string(row.id), integer(row.revision), string(row.task_id), integer(row.snapshot_revision));
         if (!snapshot || snapshot.attempt_id !== row.attempt_id || snapshot.intent_revision !== row.intent_revision || snapshot.created_at !== row.recorded_at
-          || row.status !== "unverifiable" || snapshot.state !== "UNVERIFIABLE" || row.revision !== 1) throw new Error("outcome snapshot projection mismatch");
+          || (verified ? !isTerminalTaskState(snapshot.state as TaskState) : row.status !== "unverifiable" || snapshot.state !== "UNVERIFIABLE" || row.revision !== 1)) throw new Error("outcome snapshot projection mismatch");
         const task = snapshots.get(json([row.task_id, row.snapshot_revision])), outcome = task?.attempts.find(attempt => attempt.id === row.attempt_id)?.outcomes.find(item => item.id === row.id && item.revision === row.revision);
         if (task && (!outcome || outcome.status !== row.status || outcome.intentRevision !== row.intent_revision || outcome.recordedAt !== row.recorded_at)) throw new Error("outcome projection mismatch");
       }
-      // The bounded P1-04 writer only appends an initial all-unknown interruption Outcome.
-      // No success verifier or subsequent adjudication writer exists in this version.
+      // Legacy interruption and new T06 each retain their distinct, complete write proof.
       for (const row of this.#rows("SELECT * FROM task_snapshot_v1 WHERE state IN ('COMPLETED','PARTIAL','FAILED','CANCELLED','UNVERIFIABLE')")) {
         const outcomes = this.#rows("SELECT * FROM task_outcome_v1 WHERE task_id=? AND snapshot_revision=?", string(row.task_id), integer(row.revision));
-        if (row.state === "UNVERIFIABLE" ? outcomes.length !== 1 : outcomes.length !== 0 || row.state !== "CANCELLED") throw new Error("terminal outcome coverage mismatch");
+        const verified = this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='task_result_v1'")
+          && this.#row("SELECT 1 FROM task_result_v1 WHERE task_id=? AND task_revision=?", string(row.task_id), integer(row.revision));
+        if (verified ? outcomes.length !== 1 : row.state === "UNVERIFIABLE" ? outcomes.length !== 1 : outcomes.length !== 0 || row.state !== "CANCELLED") throw new Error("terminal outcome coverage mismatch");
       }
       for (const task of currentTasks.values()) for (const attempt of task.attempts) for (const outcome of attempt.outcomes)
         if (!this.#row("SELECT 1 FROM task_outcome_v1 WHERE id=? AND revision=? AND task_id=? AND attempt_id=?", outcome.id, outcome.revision, task.id, attempt.id)) throw new Error("outcome missing");
@@ -649,6 +672,12 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
       }
       if (this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='cognitive_decision_v1'")) {
         for (const row of this.#rows("SELECT content_id,content_version FROM cognitive_decision_v1")) dependencyTargets.add(json([row.content_id, row.content_version]));
+      }
+      if (this.#row("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='task_result_v1'")) {
+        for (const row of this.#rows(`SELECT content_id,content_version FROM outcome_plan_v1 UNION SELECT content_id,content_version FROM outcome_verification_v1
+          UNION SELECT content_id,content_version FROM outcome_observation_v1 UNION SELECT content_id,content_version FROM outcome_request_receipt_v1
+          UNION SELECT content_id,content_version FROM task_result_v1
+          UNION SELECT e.content_id,e.content_version FROM observation_v2 e JOIN outcome_observation_v1 o ON o.input_observation_id=e.id`)) dependencyTargets.add(json([row.content_id, row.content_version]));
       }
       const edges = new Map<string, string[]>(), visiting = new Set<string>(), visited = new Set<string>();
       for (const edge of this.#rows("SELECT * FROM task_content_dependency_v1")) {
@@ -673,7 +702,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         const task = this.#row("SELECT * FROM task_v1 WHERE id=?", string(receipt.entity_id));
         const end = integer(receipt.revision), start = commandEnds.get(string(receipt.entity_id)) ?? 0;
         const snapshot = this.#row("SELECT * FROM task_snapshot_v1 WHERE task_id=? AND revision=?", string(receipt.entity_id), end);
-        if (!task || !snapshot || !["task.create", "task.cancel", "task.pause", "task.continue", "task.retry", "task.revise-request", "task.respond", "task.runtime"].includes(string(receipt.command_kind))
+        if (!task || !snapshot || !["task.create", "task.cancel", "task.pause", "task.continue", "task.retry", "task.revise-request", "task.respond", "task.runtime", "task.verify"].includes(string(receipt.command_kind))
           || task.workspace_id !== receipt.workspace_id || task.scope_key !== receipt.scope_key || json(ref(receipt)) !== json(ref(snapshot))
           || end <= start || end - start > 16 || (start === 0) !== (receipt.command_kind === "task.create")) throw new Error("command receipt projection mismatch");
         const scope = taskScope(string(task.workspace_id), string(task.id)), finalBody = this.#body(snapshot, scope, false);
@@ -691,7 +720,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         }
         // Required execution roles are known from the retained command span even when
         // its private evidenceRefs have been removed. All versions share the same proof.
-        const internal = receipt.command_kind === "task.runtime";
+        const runtimeCommand = receipt.command_kind === "task.runtime", internal = runtimeCommand || receipt.command_kind === "task.verify";
         if (internal && snapshot.state === "WAITING_INPUT") {
           const proposals = this.#rows(`SELECT d.*,b.task_revision,b.attempt_id,b.intent_revision,b.owner_epoch,b.task_id,b.workspace_id
             FROM cognitive_decision_v1 d JOIN cognitive_boundary_v1 b ON b.id=d.boundary_id
@@ -710,8 +739,8 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
               || json(working.pendingInput) !== json([pending.id]) || !working.unknown.includes(pending.prompt) || !working.nextSteps.includes(pending.prompt)) throw new Error("pending decision body mismatch");
           }
         }
-        const starts = internal && snapshot.state === "RUNNING";
-        const closes = internal && ["CANCELLED", "PAUSED", "UNVERIFIABLE"].includes(string(snapshot.state));
+        const starts = runtimeCommand && snapshot.state === "RUNNING";
+        const closes = runtimeCommand && ["CANCELLED", "PAUSED", "UNVERIFIABLE"].includes(string(snapshot.state));
         const replaces = previous && range.some(version => version.state === "CANCELLED" || version.state === "PAUSED" || version.attempt_id !== previous.attempt_id);
         const priorExecution = previous && this.#row("SELECT * FROM task_execution_v1 WHERE task_id=? AND attempt_id=?", string(task.id), string(previous.attempt_id));
         if (starts || closes || !internal && replaces && priorExecution) {
@@ -756,7 +785,7 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
         if (!internal) { const key = json(ref(row)); if (inputContents.has(key) || aggregateContents.has(key)) throw new Error("reused input content"); inputContents.add(key); }
         const candidates = this.#rows("SELECT * FROM task_receipt_v1 WHERE entity_kind='task' AND entity_id=? AND revision=?", string(row.task_id), integer(row.task_revision))
           .filter(receipt => runtime ? receipt.command_kind === "task.runtime-input" && json(ref(receipt)) === json(ref(row))
-            : receipt.command_kind !== "task.runtime-input" && (receipt.command_kind === "task.runtime") === internal && json(ref(receipt)) === json(ref(snapshot)));
+            : receipt.command_kind !== "task.runtime-input" && (receipt.command_kind === "task.runtime" || receipt.command_kind === "task.verify") === internal && json(ref(receipt)) === json(ref(snapshot)));
         if (candidates.length !== 1) throw new Error("input receipt missing");
         const receipt = candidates[0]!, cursor = integer(receipt.commit_cursor);
         const priorInput = inputHeads.get(string(row.attempt_id));
@@ -818,11 +847,17 @@ export class TaskStoreEngineV1 implements TaskPersistenceStoreV1 {
             || command.expectedRevision !== start || command.payload.kind !== receipt.command_kind) throw new Error("input command receipt mismatch");
           if (!runtime) {
             const parsed = command as TaskStoreCommandV1;
-            if (internal !== (parsed.payload.kind === "task.runtime") || parsed.payload.kind === "task.create" && parsed.payload.sessionId !== row.session_id
-              || parsed.payload.kind === "task.runtime" && parsed.payload.taskId !== row.task_id
+            if (internal !== (parsed.payload.kind === "task.runtime" || parsed.payload.kind === "task.verify") || parsed.payload.kind === "task.create" && parsed.payload.sessionId !== row.session_id
+              || (parsed.payload.kind === "task.runtime" || parsed.payload.kind === "task.verify") && parsed.payload.taskId !== row.task_id
               || "targetRef" in parsed.payload && parsed.payload.targetRef.id !== row.task_id) throw new Error("input command target mismatch");
           }
-          if (internal) {
+          if (internal && (command as TaskStoreCommandV1).payload.kind === "task.verify") {
+            const checked = this.#command(command as TaskStoreCommandV1); if (checked.payload.kind !== "task.verify") throw new Error("invalid verification command");
+            const source = this.#row("SELECT * FROM outcome_verification_v1 WHERE id=? AND task_id=? AND attempt_id=?", checked.payload.verificationId, string(row.task_id), string(row.attempt_id));
+            const result = source && this.#row("SELECT * FROM task_result_v1 WHERE verification_id=? AND task_revision=?", checked.payload.verificationId, integer(row.task_revision));
+            if (!source || !result || source.task_revision !== start || result.commit_cursor !== receipt.commit_cursor) throw new Error("verification input evidence missing");
+            dependency(source, snapshot);
+          } else if (internal) {
             const runtimeCommand = command as TaskRuntimeCommandV1;
             if (!["prepare", "cognitive-wait"].includes(runtimeCommand.payload.event) && !runtimeCommand.payload.evidenceRefs?.length) throw new Error("internal evidence missing");
             for (const evidence of runtimeCommand.payload.evidenceRefs ?? []) {

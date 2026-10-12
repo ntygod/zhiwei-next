@@ -3,10 +3,34 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-11
+updated: 2026-10-12
 -->
 
-## 当前工作：P1-06 认知协调与受预算上下文 #121（2026-10-11）
+## 当前工作：P1-07 结果验证、Episode 与使用记录 #123（2026-10-12）
+
+canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。
+
+P1-06 / [PR122](https://github.com/ntygod/zhiwei-next/pull/122) 已完成1125项原完整检查、精确 HEAD 独立 R3、Ready/live、受保护 squash 和 main 来源/分支审计；合入 tree `1fe13384ebc2a80116dcae73f9cfdf42e3d8baee` 与受审 `cfada9e48d8edc19cd198caab678880db0bbd47b` 一致，[最终交付](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6110983805)及 [#121 关闭记录](https://github.com/ntygod/zhiwei-next/issues/121#issuecomment-6110991431)补齐以下提交前状态。
+
+唯一 primary 为 [Draft PR124](https://github.com/ntygod/zhiwei-next/pull/124)。[ADR0022](../adr/0022-outcome-episode-memory-use.md) 已获[有限独立设计批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6116074002)。实现接通首次派发前的不可变标准、固定文件/确定性检查/Runtime 动作读者、纯 Outcome、T06 原子 bundle、确认和否定 API，以及实际接收后的独立 Exposure；采用还须匹配同一请求的真实 tool call 和完成动作。原终态和判定历史保留，收益 unknown、学习 not-scheduled。固定 schema7 保留0001—0006和旧严格入口，当前结果/重放复验来源，正文进入现有清除依赖。
+
+Node22.23.1/npm10.9.8 下7项真实临时 SQLite/API/迁移场景及2项真实受控 Worker 场景通过；多记忆只证明一次采用，最后请求后纠正/遗忘且没有后续工具时拒收迟到 final，T06 预约后纠正拒绝提交，完成后纠正/遗忘阻止当前回读。strict183 roots通过。容器原完整 check 通过工具链、typecheck、架构、AGENTS 和 work-items，止于无法读取 Windows worktree Git 历史的 main provenance；不修环境或跳门，最终采用同 HEAD native CI。完整 CI、精确 HEAD 独立 R3、PR124 原 Runtime 来源及 Ready/live/受保护合入仍待结果，局部证明不冒充完整交付。普通真实入口关闭，Z16/Z17 产品验收 not_run，P2 学习与 UI 不提前。
+
+首个实现 `b35abd1` 的 native CI38197375910 完整跑完1149项，1148通过、唯一失败为既有认知测试物理版本仍期待6；实际固定迁移已到7，版本断言已机械同步，WAL/完整性/旧严格拒绝/全部场景与时限保留。固定读者为每次真实产物观察分配新 snapshot 引用，文件变化形成新结果、原内容和终态不改写；正常场景通过。PR124 正常 SDK/Worker run38197375872 的两个原ZIP按原验证器完整比较成功；SDK已续期，Worker成对来源和最终门禁仍待完成。
+
+PR124 成对 Worker 原来源已完成：run38198285079 / head3087846 的原 jobs114645762635/114646126243，各自 capture/fresh/committed/upload 成功，仅在完整对象相等后显式 recapture guard 失败。第一份原ZIP保存后只重跑精确 Worker job，两个原ZIP的唯一 result.json 均72731字节、SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa、字节相同且与正常原件/完整 committed v2 对象一致；原 run/job/Artifact validators 全通过。正式 comparator 已恢复原 blobfba36da923a94cd2b9ba024f020089e3ef313d90，所有门禁不改。最终完整 CI、新 HEAD R3 与 Ready/live/保护交付仍须实际完成。
+
+`eb3461e` 的[独立 R3](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117141500) 为 BLOCKED：原执行期限过后仍能重新预约并提交 completed。修复使自动验证准备/提交检查原期限，预约和观察有效期取原期限与自身 TTL/保留期的最早值。正常过期及预约后跨期限回归通过；记录历史和新的用户确认保留独立语义。另一个正常来源纠正场景复现旧客观 pass 被新确认带入 completed，现对复用前一个结果重新核对原 read-set，不再有效的旧观察为 unknown，该回归已通过。
+
+同 HEAD CI38198738657 在原10分钟上限取消，没有完整成功记录。接收观测现在仅在已绑定结果计划的 Task 上接线：是否有不可变计划在 READY→RUNNING 后确定，无计划的旧任务仍保留原准备请求记录，不产生无消费者的 T06 接收正文。计划任务的实际接收/sent 与无计划任务仍只到 VERIFYING 的两项正常场景通过。工作流、时限、测试发现、全部断言和质量门不改；最终新 HEAD 仍须完整 CI 与新的独立 R3。
+
+`0011886` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117419874)，独立27项新检查、原来源/回滚检查全部通过，但原 CI38200550726 再次在10分钟上限取消。日志显示长时既有 Task 生命周期文件尚在执行；将本次新增4项 Worker/结果场景移动到同一应用的 `task-service/task-result.test.ts`，使原2个测试进程先启动既有长文件，并与新增场景并行。全部测试、数据、断言、发现与排序规则、进程隔离、原时限保留；只修正移动后的相对导入。新HEAD另需完整检查和新的独立R3，不移用旧批准。
+
+`baddca5` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117549562)，但原 CI38201766593 仍在10分钟上限取消，文件位置调整未解决耗时。一个正常 Worker 场景的 CPU 采样定位到反复解析相同 Schema SQL 与序列化固定期望 manifest；仅缓存这两种纯计算，实际 Schema 对象、列/索引、PRAGMA、迁移、行、integrity/外键及资格校验仍逐次执行。该场景通过，Schema 校验采样约1.58s→1.00s；缓存预热后实际新增索引仍拒绝，事务回滚后原 Schema 仍通过，8项正常迁移/连接检查通过。新实现 HEAD 仍需原完整检查、新的独立 R3 和 Ready/live；不延长时限或改变质量门。
+
+`a8731be` 获[新上下文独立 R3 代码批准](https://github.com/ntygod/zhiwei-next/pull/124#issuecomment-6117754416)，原 CI38203281145 推进到后段但仍在10分钟上限取消，未有完整 TAP 成功记录。进一步仅在单个事务内复用已逐次验证 envelope 的 record 序列化字节：键绑定实际文件摘要与格式，最多128条/1MiB，返回副本，在事务结束或异常时释放；实际文件/hash、完整 canonical envelope、当前依赖与全部 row 检查照旧执行，跨事务不留正文缓存。11项正常 SQLite/API/Worker 场景和既有 Worker 接收场景通过，strict183通过；新HEAD另需完整原检查与新的独立R3，旧批准不移用。
+
+## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
 
@@ -311,14 +335,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #120；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #124；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 5602bbc0c9b6792b9c42365a8584a7135f1a1a65
-capture workflow             38145094526
-capture artifact             11704029254
-capture artifact digest      sha256:c1190bc290dd093138999cb9452feb8c898610c4e89fcda7cb0372be77596af5
+capture head                 b35abd16cabde4a9c745c10a6d43e67596bb9ed9
+capture workflow             38197375872
+capture artifact             11723831889
+capture artifact digest      sha256:0a7a347554282c99a95000a18abc8997d10ba3ff7d7ec9221eb4ef3bac2ea009
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

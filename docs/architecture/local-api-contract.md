@@ -198,6 +198,10 @@ incomplete、cancelled、needs_reconciliation 是任务/操作结果中的明确
 
 ## 8. 界面与降级
 
+P1-07 仅在自有临时合成安装提供 `task-results` capability：`POST /v1/tasks/:id/verification-plan`、`verification`、`feedback` 与 `GET /v1/tasks/:id/result`、`result-history`。请求使用独立正式 v1 DTO；未知字段、URL/body 身份不符、过期 revision 和跨 Workspace 拒绝。验证命令不接受状态、证据正文、资源路径、脚本或权限开关；读者由 Daemon 固定。结果返回正式 `TaskResultBundleV1` 与原 durable receipt，计划返回精确不可变绑定。
+
+既有 `task.confirm-result` 通过 Task commands 路由消费，只支持预声明的 user-confirmation criterion，并须引用目标结果中该 criterion 的精确观察；配对主体的实际输入产生 user-direct 观察。否定走独立 `OutcomeFeedbackCommandV1`，绑定当前 Task、attempt/intent、Outcome 与 criterion revision 后追加新判定。最初缺确认的结果为 unverifiable，确认后查询最新 Outcome；原终态保留。无 `task-results` capability 的入口仍明确 unsupported；真实入口和 Z16/Z17 验收不由合成能力启用。
+
 Client State 以 server revision 为准。可乐观显示输入已提交中，但失败时回退并说明；审批、遗忘、结果完成不做伪成功乐观提交。SSE 断线显示最后确认时刻；模型不可用时仍可按权限查看项目、纠错与导出。缓存响应 no-store，正文不写持久浏览器存储。
 
 事件流格式与重连机制参考 [WHATWG Server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html)（2026-10-09 核对）；本设计额外定义 scope/epoch/版本语义，浏览器自动重连本身不证明业务连续性。

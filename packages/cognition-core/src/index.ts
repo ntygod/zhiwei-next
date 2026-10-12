@@ -85,9 +85,10 @@ export function correctClaim(current: MemoryClaim, correction: ClaimCorrection):
   return Object.freeze({ previous, current: replacement });
 }
 
-export { createTask, transitionTask, retryTask, reviseTaskIntent } from "./task-transitions.ts";
+export { createTask, transitionTask, retryTask, reviseTaskIntent, appendTaskOutcome } from "./task-transitions.ts";
 export type { AttemptReceipt, TaskAction, TaskChange, TaskTransitionRecord, TaskTransition } from "./task-transitions.ts";
 export { deriveOutcome } from "./outcome-rules.ts";
+export { evaluateCriterionObservationsV1, currentCriterionObservationsV1, buildResultEpisodeV1, deriveMemoryAdoptionV1 } from "./result-v1.ts";
 
 // Opt-in formal cognition contracts. No storage, production activation or permission is implied.
 export type { CognitionChangeV2 } from "./cognition-change-v2.ts";

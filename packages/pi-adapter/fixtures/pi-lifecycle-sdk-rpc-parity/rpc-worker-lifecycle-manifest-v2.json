@@ -10,16 +10,16 @@
   "captureContractFingerprint": "511441fd6e09e7138cd23f92b7076e1c2c3978785303c1d6ff392f27f4e69ab0",
   "source": {
     "state": "captured",
-    "head": "c53fc44148ab9d8942e4f1e4d382de6a2b0b96d7",
-    "workflowRun": 38146677440,
+    "head": "308784648d07988770bd394b0b9eb9a346b8110b",
+    "workflowRun": 38198285079,
     "runAttempt": 2,
-    "artifactId": 11705252888,
-    "artifactDigest": "sha256:ec4727cb5f5ac66c967fe28cfda30b5c96b7989ed5e0e17ea93ba61f82d321d8"
+    "artifactId": 11724362700,
+    "artifactDigest": "sha256:008cb8a2887f9d745b569e99de04546cd336643b4c6d489bbf5e046e698aabea"
   },
   "stability": {
     "comparisonRunAttempt": 1,
-    "comparisonArtifactId": 11704717642,
-    "comparisonArtifactDigest": "sha256:2b9643791773ed9c9554277cabcf9ea16f9c44b501279864dac16355d642262d",
+    "comparisonArtifactId": 11724243125,
+    "comparisonArtifactDigest": "sha256:e0b6c9310bba55d6e25b345522cd045c10e13b97e33928bf1855210420f0b06c",
     "artifactResultJsonBytes": 72731,
     "artifactResultJsonSha256": "87cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa",
     "byteIdenticalAcrossAttempts": true

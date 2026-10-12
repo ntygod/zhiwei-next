@@ -14,7 +14,7 @@ import {
 import type { ContextSnapshotV1 } from "../../../../packages/memory-store/src/index.ts";
 import { createControlledPiWorkerClient, type ControlledPiWorkerClient } from "../../../../packages/pi-adapter/src/index.ts";
 import {
-  createSyntheticControlledBroker, type SyntheticBrokerSnapshot, type SyntheticModelRequestRecord,
+  createSyntheticControlledBroker, type SyntheticBrokerSnapshot, type SyntheticModelRequestRecord, type ControlledModelResult,
 } from "../infrastructure/controlled-broker.ts";
 
 export type SyntheticSupervisorErrorCode = "unsupported" | "invalid_request" | "binding_mismatch" | "state" | "cleanup";
@@ -69,6 +69,7 @@ export interface SyntheticWorkerSupervisorOptions {
   readonly compiledInput?: ContextSnapshotV1;
   readonly memoryReader?: Readonly<{ read(): string }>;
   readonly beforeSyntheticModelReceive?: (record: SyntheticModelRequestRecord) => void;
+  readonly afterSyntheticModelReceive?: (record: SyntheticModelRequestRecord, reply: ControlledModelResult) => void;
 }
 
 /** No daemon HTTP route calls this factory. It can only dispatch its own generated synthetic input,
@@ -78,9 +79,10 @@ export interface SyntheticWorkerSupervisorOptions {
 export async function createSyntheticControlledWorkerSupervisor(input: SyntheticWorkerSupervisorOptions): Promise<SyntheticWorkerSupervisor> {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_request");
   const descriptors = Object.getOwnPropertyDescriptors(input);
-  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity", "compiledInput", "memoryReader", "beforeSyntheticModelReceive"].includes(key)
+  if (Reflect.ownKeys(input).some(key => typeof key !== "string" || !["packageDirectory", "nodeExecutable", "scenario", "taskIdentity", "compiledInput", "memoryReader", "beforeSyntheticModelReceive", "afterSyntheticModelReceive"].includes(key)
     || !descriptors[key] || !("value" in descriptors[key]) || !descriptors[key].enumerable)) fail("invalid_request");
   if (input.beforeSyntheticModelReceive !== undefined && typeof input.beforeSyntheticModelReceive !== "function") fail("invalid_request");
+  if (input.afterSyntheticModelReceive !== undefined && typeof input.afterSyntheticModelReceive !== "function") fail("invalid_request");
   const scenario = input.scenario ?? "text";
   if (typeof input.packageDirectory !== "string" || typeof input.nodeExecutable !== "string" || !["text", "tools"].includes(scenario)) fail("invalid_request");
   let taskIdentity: SyntheticTaskRuntimeIdentity | undefined;
@@ -133,7 +135,7 @@ export async function createSyntheticControlledWorkerSupervisor(input: Synthetic
   try {
     await mkdir(join(root, "workspace"), { mode: 0o700 });
     await mkdir(join(root, "state"), { mode: 0o700 });
-    broker = await createSyntheticControlledBroker(spec, { scenario, ...(input.beforeSyntheticModelReceive ? { beforeSyntheticModelReceive: input.beforeSyntheticModelReceive } : {}), ...(input.memoryReader ? { memoryReader: input.memoryReader } : {}) });
+    broker = await createSyntheticControlledBroker(spec, { scenario, ...(input.beforeSyntheticModelReceive ? { beforeSyntheticModelReceive: input.beforeSyntheticModelReceive } : {}), ...(input.afterSyntheticModelReceive ? { afterSyntheticModelReceive: input.afterSyntheticModelReceive } : {}), ...(input.memoryReader ? { memoryReader: input.memoryReader } : {}) });
   } catch {
     await rm(root, { recursive: true, force: true });
     throw new SyntheticSupervisorError("invalid_request");

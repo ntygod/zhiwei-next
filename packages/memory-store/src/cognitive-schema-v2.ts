@@ -51,6 +51,10 @@ const DECISION_MIGRATIONS_V1: readonly ObservationLedgerMigration[] = Object.fre
   Object.freeze({ version: 6, name: "cognitive-decision-record-v1",
     sql: readFileSync(new URL("../migrations/0006_cognitive_decision_record_v1.sql", import.meta.url), "utf8") }),
 ]);
+const OUTCOME_MIGRATIONS_V1: readonly ObservationLedgerMigration[] = Object.freeze([
+  ...DECISION_MIGRATIONS_V1,
+  Object.freeze({ version: 7, name: "task-result-v1", sql: readFileSync(new URL("../migrations/0007_task_result_v1.sql", import.meta.url), "utf8") }),
+]);
 
 export interface CognitivePragmaSnapshotV2 {
   readonly journalMode: string;
@@ -513,9 +517,18 @@ function requireIntegrity(database: DatabaseSync): readonly string[] {
   return result;
 }
 
+// Only a deterministic SQL transformation is cached. Live objects, columns and
+// indexes are still captured from SQLite on every verification.
+const normalizedSchemaSql = new Map<string | null, string>();
+
 function normalizeSchemaSql(sql: string | null): string {
+  const cached = normalizedSchemaSql.get(sql);
+  if (cached !== undefined) return cached;
   try {
-    return normalizeSqlSchemaSignature(sql);
+    const normalized = normalizeSqlSchemaSignature(sql);
+    if (normalizedSchemaSql.size >= 256) normalizedSchemaSql.clear();
+    normalizedSchemaSql.set(sql, normalized);
+    return normalized;
   } catch (error) {
     throw new ObservationLedgerCorruptionError(
       "Observation Ledger Schema SQL could not be tokenized.",
@@ -629,6 +642,10 @@ function captureSchemaManifest(
   };
 }
 
+// Expected manifests belong to the fixed module-owned migration prefixes.
+// Actual manifests and database validation results are never cached.
+const expectedSchemaJson = new WeakMap<ObservationLedgerSchemaManifest, string>();
+
 function requireSchemaManifest(
   database: DatabaseSync,
   expected: ObservationLedgerSchemaManifest,
@@ -637,7 +654,8 @@ function requireSchemaManifest(
     database,
     expected.tables.map((table) => table.name),
   );
-  const expectedJson = JSON.stringify(expected);
+  const expectedJson = expectedSchemaJson.get(expected) ?? JSON.stringify(expected);
+  expectedSchemaJson.set(expected, expectedJson);
   const actualJson = JSON.stringify(actual);
   if (actualJson !== expectedJson) {
     throw new ObservationLedgerCorruptionError(
@@ -746,7 +764,7 @@ const expectedSchemas = new Map<number, ObservationLedgerSchemaManifest>();
 function buildExpectedSchemaManifest(version: number): ObservationLedgerSchemaManifest {
   const cached = expectedSchemas.get(version);
   if (cached !== undefined) return cached;
-  const migrations = DECISION_MIGRATIONS_V1.slice(0, version);
+  const migrations = OUTCOME_MIGRATIONS_V1.slice(0, version);
   // Reject forbidden top-level transaction/PRAGMA SQL before executing reference DDL.
   if (migrations.length > 0) assertObservationLedgerMigrationSet(migrations);
   const reference = new DatabaseSync(":memory:");
@@ -877,6 +895,9 @@ export function applyContextMigrationsV1(database: DatabaseSync, options: Parame
 export function applyDecisionMigrationsV1(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1]): readonly AppliedObservationLedgerMigration[] {
   return applyProductMigrations(database, options, DECISION_MIGRATIONS_V1);
 }
+export function applyOutcomeMigrationsV1(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1]): readonly AppliedObservationLedgerMigration[] {
+  return applyProductMigrations(database, options, OUTCOME_MIGRATIONS_V1);
+}
 function applyProductMigrations(database: DatabaseSync, options: Parameters<typeof applyTaskMigrationsV1>[1], source: readonly ObservationLedgerMigration[]): readonly AppliedObservationLedgerMigration[] {
   try {
     return safeSqliteBoundary("Could not migrate task SQLite persistence.", () => {
@@ -922,6 +943,12 @@ export function verifyDecisionDatabaseV1(database: DatabaseSync, expectedPragmas
   return safeSqliteBoundary("Could not verify decision SQLite persistence.", () => {
     if (!database.isTransaction) throw new ObservationLedgerCorruptionError("Decision verification requires an explicit SQLite snapshot.");
     return verifyInstalledPrefix(database, expectedPragmas, 6, DECISION_MIGRATIONS_V1);
+  });
+}
+export function verifyOutcomeDatabaseV1(database: DatabaseSync, expectedPragmas: CognitivePragmaSnapshotV2): VerifiedCognitiveDatabaseV2 {
+  return safeSqliteBoundary("Could not verify outcome SQLite persistence.", () => {
+    if (!database.isTransaction) throw new ObservationLedgerCorruptionError("Outcome verification requires an explicit SQLite snapshot.");
+    return verifyInstalledPrefix(database, expectedPragmas, 7, OUTCOME_MIGRATIONS_V1);
   });
 }
 

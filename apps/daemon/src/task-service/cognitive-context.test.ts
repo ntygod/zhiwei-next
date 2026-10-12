@@ -145,7 +145,7 @@ test("one current view commits an immutable attributed capsule and exact Runtime
   f.reopen(); assert.deepEqual(f.store.contexts.read(context.workspaceId, f.taskId, saved.capsule.id), saved);
   const replay = f.prepare(saved.capsule.id); assert.equal(replay.runtimeInput.replay, true); assert.equal(replay.runtimeInput.snapshot.id, saved.runtimeInput.snapshot.id);
   const db = new DatabaseSync(join(f.dataRoot, "product.sqlite")); try {
-    assert.equal(db.prepare("PRAGMA journal_mode").get()!.journal_mode, "wal"); assert.equal(db.prepare("PRAGMA integrity_check").get()!.integrity_check, "ok"); assert.equal(db.prepare("PRAGMA user_version").get()!.user_version, 6);
+    assert.equal(db.prepare("PRAGMA journal_mode").get()!.journal_mode, "wal"); assert.equal(db.prepare("PRAGMA integrity_check").get()!.integrity_check, "ok"); assert.equal(db.prepare("PRAGMA user_version").get()!.user_version, 7);
     assert.ok(db.prepare("SELECT 1 FROM task_content_dependency_v1 WHERE source_id=? AND target_id=?").get(saved.contentRef.contentId, saved.runtimeInput.contentRef.contentId));
   } finally { db.close(); }
 });
