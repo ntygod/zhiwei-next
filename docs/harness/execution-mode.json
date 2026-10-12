@@ -130,9 +130,9 @@
       "implementation_depends": [
         "P1-06"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "acceptance_status": "not_run",
-      "implementation_evidence": [],
+      "implementation_evidence": ["https://github.com/ntygod/zhiwei-next/issues/123", "docs/adr/0022-outcome-episode-memory-use.md"],
       "acceptance_evidence": []
     },
     {

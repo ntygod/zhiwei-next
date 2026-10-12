@@ -1,25 +1,25 @@
 # 下一开发上下文交接
 
-当前唯一实现是 [#121](https://github.com/ntygod/zhiwei-next/issues/121) / `feat/121-cognitive-context`：原 P1-06 认知协调与受预算上下文。基线 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a` 已含 P1-04 / [PR117](https://github.com/ntygod/zhiwei-next/pull/117) 和 P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120)；#118 完成交付关闭，1095 项原完整 CI、最终 R3、Ready/live、合入树和 main provenance 均已回读，远端旧分支回收。
+当前唯一实现是 [#123](https://github.com/ntygod/zhiwei-next/issues/123) / `feat/123-task-outcomes`：P1-07 结果验证、Episode 与记忆使用记录。基线 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 已交付 P1-06 / [PR122](https://github.com/ntygod/zhiwei-next/pull/122)，完整1125项原检查、精确 HEAD R3、Ready/live、保护合入与 main 来源/分支审计成功，#121 已关闭；[交付记录](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6110983805)覆盖上一提交的待验证快照。
 
 ## 本项任务
 
-先读根与目标目录 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-06 合同](implementation-plan.md#p1-06--交付认知协调与受预算上下文)。领域、认知流水线和持久化仍为原事实源；不从本摘要推导额外权限。
+先读根和目标路径 AGENTS、[开发与验收分离](../harness/development-and-acceptance.md)、[执行索引](../harness/execution-mode.json)与原 [P1-07 合同](implementation-plan.md#p1-07--交付结果验证episode-与使用记录)。Outcome、Episode、MemoryUse 及结果复验以领域模型、认知流水线、Runtime 与持久化事实源为准。
 
-唯一primary为[Draft PR122](https://github.com/ntygod/zhiwei-next/pull/122)；[ADR0021](../adr/0021-bounded-coordination-context-snapshots.md)与不可变决定记录补充均已独立设计批准。实现已串起 compileCognitiveContextV1、同视图资格/read-set、protected capsule/RuntimeInput、持久两次调用上限、六动作决定和现有受控 Worker 的实际接收。澄清/等待问题保留在 Task/WorkingState，实际 task.respond 精确匹配问题后产生新 revision；取消/继续/查询走确定性路径，不能用 task.continue 跳过待输入。
+[ADR0022](../adr/0022-outcome-episode-memory-use.md) 仍 Proposed，先由独立上下文审查有限设计再实现。目标为执行前的标准绑定、获准真实观测、核心纯归约及 Task/Outcome/Episode/使用/Outbox 原子提交。工具成功和 Runtime settled 不自动完成目标；后续用户否定追加同 Outcome ID 新 revision，原终态/判定不改写。Exposure 只记录实际请求，接收前只能 uncertain；采用自报与可验证步骤分开，没有对照的收益仍 unknown。
 
-固定 schema5→6 保存预约、实际请求及每次不可变决定，保留0001—0005和旧严格读取器。实际请求重新计数，并在发送及最终事件落库复验当前来源；同 attempt 的 READY→RUNNING 必须有原准备证明。正常组件/临时存储/受控进程场景已验证预算失败、隐藏材料、两次上限、等待/回复、注入和发送前/最后请求后纠正。首个 Runtime 记忆工具只读当前胶囊已选且仍合格材料，结果连同精确引用进入实际请求；补检索由有界协调完成。完整原 check、当前 HEAD R3、PR122 原来源和 Ready/live/保护交付仍继续，不从局部绿色认定交付完成。
+新增固定前向 schema7 或版本化 DTO 时保留已应用0001—0006、旧严格入口和所有已有合同；正文进入现有受管内容/依赖。验证前后一致读取与提交屏障同样覆盖最后请求后纠正/遗忘且再无工具的 final。正常开发验证只补本次必要场景，真实存储用自有临时数据库，不做无改动重复矩阵。
 
-每个行为用最少足够的正常合成开发检查验证，复用已通过的相同源码证据；不重复无改动全量验证，不做假想攻防矩阵。最终完整 check、当前 HEAD 独立 R3、当前 PR 原 Runtime 来源、Ready/live 与受保护合入继续执行。
-
-正常重启问题回复已补齐：owner fencing 后确认停止旧 attempt，实际输入重新授权并建立新 attempt，历史问题/计数保留。cognitive-context-v1 必须关联已提交胶囊，不退回裸输入。PR122 的原 SDK/Worker 来源已按原完整比较和双 attempt ZIP验证续期（run38145094526 /38146677440），原比较器精确恢复；来源事实以两 manifest 为准。下一步完成当前 HEAD 原生完整 CI、独立 R3、实际 Ready/live 和保护交付。容器不能解析Windows worktree Git路径，不靠跳过main provenance获得绿色。
+最终完整 `npm run check` 使用原 Node22.23.1/npm10.9.8；当前 HEAD 独立 R3、当前 primary 原 Runtime 来源、Ready/live、保护合入和 main 来源回读仍须实际完成。不能把局部检查或历史 HEAD 批准写成当前实现交付。
 
 ## 保持边界
 
-真实入口关闭，只使用虚构临时材料。Z14/Z15 产品验收保持 not_run；官方 Pi+新扩展完整组合与 P0-01/02、D-04/D-08、G-2/G-5 不由本项认证。旧 #90/preintegration-safety、Private/链接替换/备份攻击及等价争议动态诊断禁跑，具体拒绝不得换路绕过。
+只使用虚构临时资源和固定注入的模型/I/O，普通真实入口关闭。Z16/Z17 产品验收保持 not_run；官方 Pi+新扩展完整组合、真实 tokenizer/structuredDecision 及 P0-01/02、D-04/D-08、G-2/G-5 不由本项认证。
 
-不接实际模型账户、凭据、个人数据、外发或部署；v1、已应用迁移和旧 Accepted 范围保持。胶囊不可变仍须发送/结果边界复验当前资格，遗忘不能随回滚复活。已交付 P1-04 的完整 OS 失去 custody/跨世代 orphan 回收仍 unsupported，不将这些实现偷偷加入本 PR。
+旧 #90/preintegration-safety、Private/链接替换/备份攻击、capture/restore 及等价争议实验禁跑，具体拒绝不得换路绕过。不接实际模型账户、凭据、个人数据、外发或部署；遗忘不能随代码/数据回滚复活。完整 OS 失去 custody 后的 orphan 回收仍 unsupported，不借本项补修。
+
+本项只形成结果与使用记录，不运行 P2 自动学习、Procedure 晋升或学习调度。UI 继续由所有者安排 Gemini，#98 原型状态保留。代码走新的受审 revert PR，数据和最新控制 journal 保留且仅前向修复。
 
 ## 后续
 
-本项完成保护交付与 reconciliation 后才进入 P1-07 验证/Episode；P1-08 接功能界面，P1-09 做 Alpha 产品验收。各项保留独立 canonical Issue/primary PR。
+P1-07 在本 primary 完成受保护交付与 reconciliation 后，下一候选为 P1-08；P1-09 做 Alpha 产品验收。后续各项仍采用独立 canonical Issue/primary PR。

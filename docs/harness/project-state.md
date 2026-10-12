@@ -6,7 +6,15 @@ status: active
 updated: 2026-10-11
 -->
 
-## 当前工作：P1-06 认知协调与受预算上下文 #121（2026-10-11）
+## 当前工作：P1-07 结果验证、Episode 与使用记录 #123（2026-10-12）
+
+canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。
+
+P1-06 / [PR122](https://github.com/ntygod/zhiwei-next/pull/122) 已完成1125项原完整检查、精确 HEAD 独立 R3、Ready/live、受保护 squash 和 main 来源/分支审计；合入 tree `1fe13384ebc2a80116dcae73f9cfdf42e3d8baee` 与受审 `cfada9e48d8edc19cd198caab678880db0bbd47b` 一致，[最终交付](https://github.com/ntygod/zhiwei-next/pull/122#issuecomment-6110983805)及 [#121 关闭记录](https://github.com/ntygod/zhiwei-next/issues/121#issuecomment-6110991431)补齐以下提交前状态。
+
+P1-07 本轮先以 [ADR0022](../adr/0022-outcome-episode-memory-use.md) Proposed 细化预绑定标准、真实观测、纯结果、T06 原子提交与独立 Exposure/Adoption。现有成功验证和 Episode 持久消费者尚未接线；按 R3 完成设计和最终 HEAD 独立审查，原完整检查与 Runtime/保护交付门不变。只使用自有合成临时资源，普通真实入口关闭；Z16/Z17 产品验收保持 not_run，P2 学习与 UI 不提前。
+
+## 已交付 P1-06：提交前历史（2026-10-11）
 
 canonical [#121](https://github.com/ntygod/zhiwei-next/issues/121)，分支 `feat/121-cognitive-context`，基于 protected main `d55a7d6e052c2bcb6ccfc83e5efa81409398a66a`。P1-05 / [PR120](https://github.com/ntygod/zhiwei-next/pull/120) 已经1095项原完整检查、最终独立R3、Ready/live、保护合入与main来源回读；tree与受审a81c470精确一致，#118关闭且远端分支回收。新reconciliation无开放PR/Incident、远端仅main，最新评论仅为已识别交付记录；无重复P1-06 execution。
 
