@@ -12,9 +12,9 @@ updated: 2026-10-13
 
 所有者已明确「先接通PC与安卓浏览器版，再打包客户端」。本primary先实现共享网页：保留当前源码的黑曜/冷瓷、电脑侧栏与手机底栏，复用BrowserWorkbench/正式DTO，替换LocalStorage演示真源、固定进度和假业务成功。[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)已获[独立R3设计批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6127573456)，仅绑定设计91502c7；最终实现HEAD另审。
 
-React19.3/Vite8.3.4及DOM验证依赖已按官方registry精确锁定，实际安装231项闭包，Pi原发布闭包/strict/既有门保留。首个Vite生产构建与strict195 roots通过；16项既有浏览器API场景和4项UI场景通过，实际HTTP/SQLite/React DOM与固定Worker已验证任务创建/继续、结果核验/反馈/原终态历史、记忆新版本/遗忘、失效弹层清除和显式未知写同字节核对。后续DOM不可信文本/权限断言与最终原完整CI/来源/冷审仍待实际完成。设计HEAD的CI38270798302触及原10分钟时限取消，不算完整成功。新版原完整本地check在工具链缺编译器场景先发现旧fixture未连接新增的真实依赖，现保留全部已安装包但仅排除typescript，原精确ENOENT断言不变；须重新实际验证。运行说明见[双端工作台](../../apps/web/README.md)；实际PC/安卓浏览器、USB/Cookie、窄屏视觉/200%产品验收not_run，不声称APK或跨设备产品已交付。
+React19.3/Vite8.3.4及DOM验证依赖已按官方registry精确锁定，实际安装231项闭包，Pi原发布闭包/strict/既有门保留。首个Vite生产构建与strict195 roots通过；16项既有浏览器API场景和4项UI场景通过，实际HTTP/SQLite/React DOM与固定Worker已验证任务创建/继续、结果核验/反馈/原终态历史、记忆新版本/遗忘、失效弹层清除和显式未知写同字节核对。后续DOM不可信文本/权限断言已通过；最终原完整CI/冷审仍待实际完成。设计HEAD的CI38270798302触及原10分钟时限取消，不算完整成功。新版原完整本地check在工具链缺编译器场景先发现旧fixture未连接新增的真实依赖，现保留全部已安装包但仅排除typescript，原精确ENOENT断言不变，复验通过。运行说明见[双端工作台](../../apps/web/README.md)；实际PC/安卓浏览器、USB/Cookie、窄屏视觉/200%产品验收not_run，不声称APK或跨设备产品已交付。
 
-PR128正常原SDK/Worker run38270798325 / design91502c7的两个原ZIP已核对摘要和完整冻结对象；SDK source字段机械续期。成对Worker原attempt来源仍待取得，临时有名recapture guard仅在正式完整对象比较通过之后形成既有failure-shape；最终必须精确恢复原blob，最终完整CI/冷审/Ready/live另跑，不以该临时Draft交付。
+PR128正常原SDK/Worker run38270798325 / design91502c7的两个原ZIP已核对摘要和完整冻结对象；SDK source字段机械续期。成对Worker run38277400372/head3fcc6c5的原jobs114906315009/114907306994、attempts1/2均完成capture/fresh/committed/upload，仅在完整比较通过后的有名recapture guard失败；原ZIP及其唯一72731字节result.json逐字节相同，SHA25687cde96b6e52166bff1f50478ab80721cdf322017d4babfdc09f0fe35ecc75aa，与正常原件/完整冻结对象一致，原validators通过。最终候选已精确恢复原comparator blobfba36da923a94cd2b9ba024f020089e3ef313d90。原完整本地check通过工具链6/6、strict195、生产构建、架构/AGENTS/work-items，止于容器无法解析Windows worktree Git pointer的main provenance；无环境修复/跳门。实际launcher的3份构建资产/CSP/退出清理通过。最终完整CI/冷审/Ready/live另跑，不以临时Draft或局部证明交付。
 
 R3；原完整检查、当前primary来源、精确HEAD独立R3、Ready/live、保护合入/main回读保持。真实入口关闭，仅自有新虚构临时安装和固定模型/I/O；旧受限实验/被拒浏览器不重试，不接真实账户/个人数据或外发/部署，不借共享接入推进P1-09/P2。P1-08仍in_progress、Z18not_run；产品/实际平台未验证项保持明确。回滚为新受审代码revert，数据/最新控制journal/纠正与历史不回退。
 
@@ -369,7 +369,7 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #128；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源和最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #128；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原validators验证；最终 HEAD 的真实 Ready/live provenance仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified

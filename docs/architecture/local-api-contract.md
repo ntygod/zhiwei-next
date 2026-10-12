@@ -202,6 +202,10 @@ incomplete、cancelled、needs_reconciliation 是任务/操作结果中的明确
 
 ## 8. 界面与降级
 
+P1-08共享界面在专用自有临时合成预览中提供`workbench` capability与受保护`GET /v1/workbench-context?workspaceId=...`。响应为独立严格v1 `WorkbenchContextV1`，包含获准工作区名称、实际组合提供的SessionContract模板和可执行的固定虚构请求；先按真实配对主体过滤范围，再在现有读取资格/期限内返回，缺读者明确unsupported。旧命令/事件DTO不增加必填字段。
+
+该预览组合只提供固定`/`、`/assets/workbench.js`与`/assets/workbench.css`，启动时预载，请求不接文件系统路径；所有资源no-store/nosniff和固定CSP。匿名`POST /__synthetic__/pairing`仅在这一新虚构组合存在：要求精确Host/Origin/Fetch Metadata及固定19字节请求，只为fixture-a签发既有一次性browser票据，不接受身份、Workspace、目录、模型或授权开关；秘密在内存转交`/v1/browser-pair`，后续Cookie/CSRF不变。普通Daemon及其他API组合不提供此初始化或真实数据入口。具体边界见[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)，运行和未验证平台见[工作台说明](../../apps/web/README.md)。
+
 P1-07 仅在自有临时合成安装提供 `task-results` capability：`POST /v1/tasks/:id/verification-plan`、`verification`、`feedback` 与 `GET /v1/tasks/:id/result`、`result-history`。请求使用独立正式 v1 DTO；未知字段、URL/body 身份不符、过期 revision 和跨 Workspace 拒绝。验证命令不接受状态、证据正文、资源路径、脚本或权限开关；读者由 Daemon 固定。结果返回正式 `TaskResultBundleV1` 与原 durable receipt，计划返回精确不可变绑定。
 
 既有 `task.confirm-result` 通过 Task commands 路由消费，只支持预声明的 user-confirmation criterion，并须引用目标结果中该 criterion 的精确观察；配对主体的实际输入产生 user-direct 观察。否定走独立 `OutcomeFeedbackCommandV1`，绑定当前 Task、attempt/intent、Outcome 与 criterion revision 后追加新判定。最初缺确认的结果为 unverifiable，确认后查询最新 Outcome；原终态保留。无 `task-results` capability 的入口仍明确 unsupported；真实入口和 Z16/Z17 验收不由合成能力启用。

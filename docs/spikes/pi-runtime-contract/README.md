@@ -203,7 +203,7 @@ capture artifact digest      sha256:a81926e876b8d39a03f3e97f98b309289075460231ea
 external Provider prompts    0
 ```
 
-该 SDK 来源 Run 属于 PR #128，Artifact 内唯一 `result.json` 与 committed Fixture 逐字节相同。同轮正常 Worker 原ZIP也通过完整比较；当前PR的成对来源续期尚待完成，不复用PR126的来源。最终候选须恢复原comparator blobfba36da923a94cd2b9ba024f020089e3ef313d90并核验两来源ancestry，Ready live provenance仍必须在新的exact HEAD上实际运行并成功。
+该 SDK 来源 Run 属于 PR #128，Artifact 内唯一 `result.json` 与 committed Fixture 逐字节相同。同轮正常 Worker 原ZIP也通过完整比较；当前PR成对来源为run38277400372 / head3fcc6c5的两个原Worker attempts。原ZIP和完整对象已通过原validators，最终候选恢复原comparator blobfba36da923a94cd2b9ba024f020089e3ef313d90；来源ancestry及新的exact HEAD Ready/live仍须实际通过。
 
 ## RPC Worker schema v2 当前合同
 

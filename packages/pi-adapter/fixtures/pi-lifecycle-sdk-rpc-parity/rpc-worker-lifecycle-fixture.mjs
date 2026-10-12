@@ -194,9 +194,6 @@ async function main() {
       );
     });
     console.log("Fresh RPC Worker v2 result matches the complete committed Fixture object.");
-    if (process.env.GITHUB_EVENT_NAME === "pull_request") {
-      throw new Error("PR128 Draft recapture-only guard: complete comparison already passed; retain failure-shape source for original provenance contract.");
-    }
     return;
   }
   if (outputIndex >= 0) {
