@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -30,7 +30,7 @@ async function mutateJson(root, file, mutate) {
 }
 
 test('reviewed installed dependency graph passes and actual manifest/lock drift fails', async t => {
-  assert.equal((await checkToolchain()).packages, 147);
+  assert.equal((await checkToolchain()).packages, 231);
   for (const [file, mutate, pattern] of [
     ['package.json', value => { value.devDependencies.typescript = '^5.9.3'; }, /Declared toolchain drift/],
     ['package-lock.json', value => { value.packages['node_modules/typescript'].version = '5.8.3'; }, /lock drift/],
@@ -48,10 +48,11 @@ test('reviewed installed dependency graph passes and actual manifest/lock drift 
 test('an actually missing installed compiler package fails before use', async t => {
   const root = await inputCopy(t);
   await rm(join(root, 'node_modules'));
-  await mkdir(join(root, 'node_modules', '@earendil-works'), { recursive: true });
-  await symlink(join(toolchainRoot, 'node_modules', '@earendil-works', 'pi-coding-agent'), join(root, 'node_modules', '@earendil-works', 'pi-coding-agent'), 'dir');
-  await mkdir(join(root, 'node_modules', '@types'));
-  await symlink(join(toolchainRoot, 'node_modules', '@types', 'node'), join(root, 'node_modules', '@types', 'node'), 'dir');
+  await mkdir(join(root, 'node_modules'));
+  for (const entry of await readdir(join(toolchainRoot, 'node_modules'), { withFileTypes: true })) {
+    if (entry.name !== 'typescript' && !entry.name.startsWith('.') && (entry.isDirectory() || entry.isSymbolicLink()))
+      await symlink(join(toolchainRoot, 'node_modules', entry.name), join(root, 'node_modules', entry.name), 'dir');
+  }
   // All dependencies before the compiler in the lock are real installed packages;
   // the missing compiler is not modeled with a mock or a false metadata flag.
   await assert.rejects(checkToolchain(root), error => error.code === 'ENOENT' && error.path === join(root, 'node_modules/typescript/package.json'));

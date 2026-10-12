@@ -6,6 +6,7 @@ import {
   type LocalApiErrorV1,
   canonicalJsonV1, parseLocalApiReceiptV1, deserializeLocalApiMemorySearchV1, deserializeLocalApiMemoryInputV1, deserializeLocalApiMemoryExplanationRequestV1,
   deserializeOutcomePlanCommandV1, deserializeOutcomeVerifyCommandV1, deserializeOutcomeFeedbackCommandV1, parseOutcomeVerificationPlanV1, parseTaskResultBundleV1,
+  parseWorkbenchContextV1, type WorkbenchContextV1,
 } from "../../../../packages/protocol/src/index.ts";
 import type { MemoryPersistenceV1, MemoryCommandV1, CognitiveReadQualificationV2 } from "../../../../packages/memory-store/src/index.ts";
 import { CognitiveStoreErrorV2 } from "../../../../packages/memory-store/src/index.ts";
@@ -14,6 +15,7 @@ import { SyntheticSessionAuthenticator, type SessionAuthentication, type Synthet
 import { SessionCursorCodec } from "./cursor.ts";
 import { SessionApiError, type SessionApiApplication, type SessionApiContext, type SessionApiReplay } from "./service.ts";
 import type { OutcomeServiceV1 } from "../result-service/service.ts";
+import { createWorkbenchAssetServer, type WorkbenchAssets } from "./web-assets.ts";
 export type { SessionApiApplication, SessionApiContext, SessionApiCommitted, SessionApiDurableReceipt, SessionApiSnapshot, SessionApiReplay, SessionApiTaskRead } from "./service.ts";
 export { SessionApiError } from "./service.ts";
 export { syntheticSessionIdentities } from "./auth.ts";
@@ -84,6 +86,7 @@ export interface SyntheticSessionApiOptions {
   readonly projectionGeneration?: () => number;
   readonly sessionTtlMs?: number;
   readonly drainTimeoutMs?: number;
+  readonly workbench?: Readonly<{ assets: WorkbenchAssets; context(context: SessionApiContext): WorkbenchContextV1; pairing: "owned-synthetic-a"; afterPlanBound?(context: SessionApiContext, taskId: string): void }>;
 }
 export interface SyntheticSessionApi {
   readonly mode: "synthetic-fixtures-only";
@@ -101,6 +104,8 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   const drainTimeoutMs = options.drainTimeoutMs ?? 2000;
   if (!options.installationId || !Number.isInteger(drainTimeoutMs) || drainTimeoutMs < 1 || drainTimeoutMs > 5000) invalid();
   if (options.memory && !options.readFence) throw new SessionApiError("unsupported", "runtime_capability", 422);
+  if (options.workbench && options.workbench.pairing !== "owned-synthetic-a") invalid();
+  const assetServer = options.workbench && createWorkbenchAssetServer(options.workbench.assets);
   const auth = new SyntheticSessionAuthenticator(now, options.sessionTtlMs);
   const cursor = new SessionCursorCodec({ installationId: options.installationId, recoveryEpoch: options.recoveryEpoch ?? (() => "synthetic-recovery-1"), projectionGeneration: options.projectionGeneration ?? (() => 1), now });
   const streams = new Set<ServerResponse>(); const wakeStreams = new Set<() => void>(); let origin = ""; let state: "idle" | "starting" | "listening" | "closed" = "idle";
@@ -220,6 +225,21 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (url.origin !== origin || url.pathname.includes("%") || url.pathname.includes("//") || url.pathname !== request.url.split("?")[0]) invalid();
       if (request.method !== "GET" && request.method !== "POST") invalid();
       if (request.method === "GET" && (request.headersDistinct["content-length"] || request.headersDistinct["transfer-encoding"])) invalid();
+      if (request.method === "GET" && assetServer && !url.pathname.startsWith("/v1/")) {
+        validateQuery(url, []);
+        if (request.headersDistinct.origin && (request.headersDistinct.origin.length !== 1 || request.headers.origin !== origin)
+          || request.headersDistinct["sec-fetch-site"] && (request.headersDistinct["sec-fetch-site"].length !== 1 || !["same-origin", "none"].includes(request.headers["sec-fetch-site"]!))) throw new SessionApiError("forbidden", "origin_mismatch", 403);
+        if (assetServer.serve(url.pathname, response)) return;
+        throw new SessionApiError("not_found", "not_found", 404);
+      }
+      if (request.method === "POST" && url.pathname === "/__synthetic__/pairing" && options.workbench) {
+        validateQuery(url, []);
+        if (request.headersDistinct.authorization || request.headersDistinct.origin?.length !== 1 || request.headers.origin !== origin
+          || request.headersDistinct["sec-fetch-site"]?.length !== 1 || request.headers["sec-fetch-site"] !== "same-origin") throw new SessionApiError("forbidden", "origin_mismatch", 403);
+        if (request.headersDistinct["content-length"]?.length !== 1 || request.headers["content-length"] !== "19" || request.headersDistinct["transfer-encoding"]) invalid();
+        if (await readBody(request) !== '{"schemaVersion":1}') invalid();
+        writeJson(response, 200, { schemaVersion: 1, mode: "synthetic-fixtures-only", workspaceId: "synthetic-workspace-a", bootstrapCode: auth.issuePairingCode("browser", "a") }); return;
+      }
       if (url.pathname === "/v1/pair" && request.method === "POST") {
         validateQuery(url, []);
         if (request.headersDistinct.authorization || request.headersDistinct.cookie || (request.headersDistinct.origin?.length ?? 0) > 1) invalid();
@@ -240,7 +260,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (url.pathname === "/v1/capabilities" && request.method === "GET") {
         validateQuery(url, []); authorize(authentication, authentication.context.workspaceId);
         writeJson(response, 200, { schemaVersion: 1, protocolVersions: [1], mode: "synthetic-fixtures-only", production: "unsupported", productAcceptance: "not_run",
-          features: ["sessions", "tasks", "snapshot", "events", ...(options.memory ? ["memory"] : []), ...(options.outcomes ? ["task-results"] : [])], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", ...(options.memory ? ["memory.remember", "memory.correct", "memory.dispute", "memory.forget"] : []), ...(options.outcomes ? ["task.confirm-result", "result.plan", "result.verify", "result.feedback"] : [])], unsupportedCommands: ["task.respond", ...(options.outcomes ? [] : ["task.confirm-result"])], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
+          features: ["sessions", "tasks", "snapshot", "events", ...(options.memory ? ["memory"] : []), ...(options.outcomes ? ["task-results"] : []), ...(options.workbench ? ["workbench"] : [])], supportedCommands: ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", ...(options.memory ? ["memory.remember", "memory.correct", "memory.dispute", "memory.forget"] : []), ...(options.outcomes ? ["task.confirm-result", "result.plan", "result.verify", "result.feedback"] : [])], unsupportedCommands: ["task.respond", ...(options.outcomes ? [] : ["task.confirm-result"])], runtime: { status: "limited", reason: "fixed-synthetic-fixtures-only", limitations: ["fixed-synthetic-request-only", "no-model-status-query", "no-production-authority"] }, limits: { bodyBytes: MAX_BODY, pageSize: 50, eventFrameBytes: MAX_SSE_FRAME, subscribers: 32 } }); return;
       }
       if (request.method === "POST") {
         validateQuery(url, []); const body = await readBody(request);
@@ -252,6 +272,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
           const context = authorize(authentication, command.workspaceId); if (command.taskId !== id) invalid();
           if (operation === "verification-plan") {
             const result = options.outcomes.bindPlan(context, command as ReturnType<typeof deserializeOutcomePlanCommandV1>);
+            if (!result.replay) options.workbench?.afterPlanBound?.(context, id);
             qualifiedJson(authentication, context, response, 201, () => ({ schemaVersion: 1, plan: responseValue(parseOutcomeVerificationPlanV1, result.plan), replay: result.replay })); return;
           }
           const result = operation === "verification" ? options.outcomes.verify(context, command as ReturnType<typeof deserializeOutcomeVerifyCommandV1>)
@@ -312,6 +333,14 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
           : options.outcomes!.history(context, id).map(item => responseValue(parseTaskResultBundleV1, item)) })); return;
       }
       const resource = /^\/v1\/(sessions|tasks)\/([^/]+)$/.exec(url.pathname);
+      if (url.pathname === "/v1/workbench-context") {
+        validateQuery(url, ["workspaceId"]); const context = authorize(authentication, readIdentifier(url.searchParams.get("workspaceId")));
+        if (!options.workbench) throw new SessionApiError("unsupported", "runtime_capability", 422);
+        qualifiedJson(authentication, context, response, 200, () => {
+          const value = responseValue(parseWorkbenchContextV1, options.workbench!.context(context));
+          if (value.workspaceId !== context.workspaceId) throw new SessionApiError("corruption", "integrity_failed", 500); return value;
+        }); return;
+      }
       if (!["/v1/tasks", "/v1/snapshot", "/v1/events"].includes(url.pathname) && !resource) throw new SessionApiError("not_found", "not_found", 404);
       validateQuery(url, url.pathname === "/v1/tasks" ? ["workspaceId", "state", "cursor", "limit"] : url.pathname === "/v1/events" ? ["workspaceId", "afterCursor"] : url.pathname === "/v1/snapshot" ? ["workspaceId", "cursor"] : ["workspaceId"]);
       const context = authorize(authentication, readIdentifier(url.searchParams.get("workspaceId")));

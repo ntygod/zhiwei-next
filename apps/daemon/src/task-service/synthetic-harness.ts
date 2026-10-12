@@ -8,7 +8,8 @@ import { isTerminalTaskState, type Task } from "../../../../packages/domain/src/
 import { createSyntheticSessionApi, type SyntheticSessionApi } from "../session-api/server.ts";
 import { SessionApiError, type SessionApiContext } from "../session-api/service.ts";
 import { createSyntheticControlledWorkerSupervisor, type SyntheticWorkerSupervisor } from "../runtime/controlled-worker-supervisor.ts";
-import { createPersistentSessionApplication, syntheticTaskPrompt, type PersistentSessionApplication } from "./application.ts";
+import { createPersistentSessionApplication, syntheticTaskPrompt, syntheticCognitiveTaskSessionContract, type PersistentSessionApplication } from "./application.ts";
+import { createWorkbenchAssetServer, type WorkbenchAssets } from "../session-api/web-assets.ts";
 import { reducePersistentTask } from "./task-reducer.ts";
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "../memory-service/memory-rules.ts";
 import { createPersistentMemoryApplication } from "../memory-service/application.ts";
@@ -31,14 +32,18 @@ export interface SyntheticTaskSessionHarness {
   runCognitiveTask(context: SessionApiContext, taskId: string): Promise<CognitiveCoordinationResultV1>;
   idle(): Promise<void>; restart(): Promise<void>; interruptControlPlane(): Promise<void>; reconcileRetainedWorkers(): Promise<void>; close(): Promise<void>;
 }
-export interface SyntheticTaskSessionHarnessOptions { readonly runtime?: Readonly<{ packageDirectory: string; nodeExecutable: string }> }
+export interface SyntheticTaskSessionHarnessOptions { readonly runtime?: Readonly<{ packageDirectory: string; nodeExecutable: string }>; readonly webAssets?: WorkbenchAssets }
 /** Owns a new temporary installation. No caller data root, application, credentials, prompts,
  * authorization switches or production enablement. Normal daemon startup stays diagnostics-only. */
 export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSessionHarnessOptions = {}): Promise<SyntheticTaskSessionHarness> {
   const invalid = (): never => { throw new SessionApiError("validation", "invalid_shape", 400); };
   if (!options || typeof options !== "object" || Array.isArray(options)) invalid();
   const descriptors = Object.getOwnPropertyDescriptors(options);
-  if (Reflect.ownKeys(options).some(key => key !== "runtime" || !("value" in descriptors.runtime!))) invalid();
+  if (Reflect.ownKeys(options).some(key => typeof key !== "string" || !["runtime", "webAssets"].includes(key) || !("value" in descriptors[key]!))) invalid();
+  const selectedAssets: unknown = descriptors.webAssets?.value;
+  const webAssets = selectedAssets === undefined ? undefined : selectedAssets as WorkbenchAssets;
+  if (webAssets) createWorkbenchAssetServer(webAssets); // Validate descriptors before consulting its strings.
+  if (selectedAssets !== undefined && !webAssets) invalid();
   let runtime: SyntheticTaskSessionHarnessOptions["runtime"];
   const selected: unknown = descriptors.runtime?.value;
   if (selected !== undefined) {
@@ -139,6 +144,13 @@ export async function createSyntheticTaskSessionHarness(options: SyntheticTaskSe
   const resultReader = createSyntheticOutcomeReaderV1(), outcomes = createOutcomeServiceV1({ store, application, reader: resultReader, ids: { next: randomUUID }, now: () => new Date().toISOString() });
   const apiOptions = () => ({ application, memory: memories, outcomes, installationId,
     readFence: <T>(context: SessionApiContext, read: () => T) => store().withReadQualification(context, read),
+    ...(webAssets ? { workbench: { assets: webAssets, pairing: "owned-synthetic-a" as const,
+      context: (context: SessionApiContext) => ({ schemaVersion: 1 as const, workspaceId: context.workspaceId, workspaceLabel: "虚构工作区", sessionContract: syntheticCognitiveTaskSessionContract, exampleRequest: syntheticTaskPrompt }),
+      afterPlanBound(context: SessionApiContext, taskId: string) {
+        const task = current(context, taskId);
+        if (runtime && task.state === "READY" && task.intent.request === syntheticTaskPrompt && task.intent.constraints.length === 0)
+          void runCognitiveTask(context, taskId).catch(error => { lastFailure = error; });
+      } } } : {}),
     recoveryEpoch: () => String(store().currentFence({ kind: "global" }).recoveryEpoch) });
   let api = createSyntheticSessionApi(apiOptions()), apiNeedsReplacement = false;
   const closeApi = async () => { await api.close(); apiNeedsReplacement = true; };

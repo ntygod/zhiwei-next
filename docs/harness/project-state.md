@@ -3,14 +3,18 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-12
+updated: 2026-10-13
 -->
 
 ## 当前工作：P1-08 双端共享界面接入 #127（2026-10-12）
 
 所有者提供`banxing-agent-ui-v0.2`并直接要求接入PC/安卓客户端。canonical [#127](https://github.com/ntygod/zhiwei-next/issues/127)，唯一分支`feat/127-workbench-ui`，基线protected main734f4e698a3887e518545a8351829af06c137c02 / tree6540dd53d25033cf9ee9d4febd3f4f7e75803a20。开工无开放PR/Incident、远端仅main、developmentPause=false，相关搜索只有已闭合API切片和不同范围#98原型；#44/#67原文与#98状态保持。根目录原型及其他未跟踪用户文件保留原样，使用已有干净owned worktree。
 
-先接入网页/可安装壳均需要的共享界面：保留当前源码的黑曜/冷瓷、电脑侧栏与手机底栏，复用BrowserWorkbench/正式DTO，替换LocalStorage演示真源、固定进度和假业务成功。可安装PC/APK目标已提问，未答复前不声称手机布局就是安卓交付。[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)为Proposed，静态资源/界面上下文/新合成样例入口须独立R3设计批准后实施，最终实现另审。
+所有者已明确「先接通PC与安卓浏览器版，再打包客户端」。本primary先实现共享网页：保留当前源码的黑曜/冷瓷、电脑侧栏与手机底栏，复用BrowserWorkbench/正式DTO，替换LocalStorage演示真源、固定进度和假业务成功。[ADR0024](../adr/0024-shared-workbench-ui-and-owned-preview.md)已获[独立R3设计批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6127573456)，仅绑定设计91502c7；最终实现HEAD另审。
+
+React19.3/Vite8.3.4及DOM验证依赖已按官方registry精确锁定，实际安装231项闭包，Pi原发布闭包/strict/既有门保留。首个Vite生产构建与strict195 roots通过；16项既有浏览器API场景和4项UI场景通过，实际HTTP/SQLite/React DOM与固定Worker已验证任务创建/继续、结果核验/反馈/原终态历史、记忆新版本/遗忘、失效弹层清除和显式未知写同字节核对。后续DOM不可信文本/权限断言与最终原完整CI/来源/冷审仍待实际完成。设计HEAD的CI38270798302触及原10分钟时限取消，不算完整成功。新版原完整本地check在工具链缺编译器场景先发现旧fixture未连接新增的真实依赖，现保留全部已安装包但仅排除typescript，原精确ENOENT断言不变；须重新实际验证。运行说明见[双端工作台](../../apps/web/README.md)；实际PC/安卓浏览器、USB/Cookie、窄屏视觉/200%产品验收not_run，不声称APK或跨设备产品已交付。
+
+PR128正常原SDK/Worker run38270798325 / design91502c7的两个原ZIP已核对摘要和完整冻结对象；SDK source字段机械续期。成对Worker原attempt来源仍待取得，临时有名recapture guard仅在正式完整对象比较通过之后形成既有failure-shape；最终必须精确恢复原blob，最终完整CI/冷审/Ready/live另跑，不以该临时Draft交付。
 
 R3；原完整检查、当前primary来源、精确HEAD独立R3、Ready/live、保护合入/main回读保持。真实入口关闭，仅自有新虚构临时安装和固定模型/I/O；旧受限实验/被拒浏览器不重试，不接真实账户/个人数据或外发/部署，不借共享接入推进P1-09/P2。P1-08仍in_progress、Z18not_run；产品/实际平台未验证项保持明确。回滚为新受审代码revert，数据/最新控制journal/纠正与历史不回退。
 
@@ -365,14 +369,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #124；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原 failure-shape 合同完成；最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #128；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源和最终 HEAD 的真实 Ready/live provenance 仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 aa997c471251f24ab6f0124a93f070b4daefa10a
-capture workflow             38213988697
-capture artifact             11730676012
-capture artifact digest      sha256:eb9565f08d4bec0f6f418397e239d7a109950b59bc14887e475e67fe4fa31fcc
+capture head                 91502c7d190a4d6743cfff59d0ca051e76257598
+capture workflow             38270798325
+capture artifact             11756029114
+capture artifact digest      sha256:a81926e876b8d39a03f3e97f98b309289075460231eaf014ee8bdb1335ac3b6a
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。

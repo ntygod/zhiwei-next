@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 test("Browser production closure compiles with actual DOM libraries and no Node declarations", () => {
-  const root = fileURLToPath(new URL("./workbench.ts", import.meta.url));
-  const program = ts.createProgram([root], { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
+  const roots = ["workbench.ts", "controller.ts", "app.ts", "main.ts"].map(path => fileURLToPath(new URL(path, import.meta.url)));
+  const program = ts.createProgram(roots, { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
     lib: ["lib.es2023.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"], types: [], strict: true, noEmit: true, allowImportingTsExtensions: true,
     verbatimModuleSyntax: true, erasableSyntaxOnly: true, skipLibCheck: false });
   const diagnostics = ts.getPreEmitDiagnostics(program);
