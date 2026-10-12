@@ -24,6 +24,8 @@ R3；原完整检查、最终 HEAD 新上下文独立审查、当前 primary 原
 
 `9f3bf38` 的[最终独立 R3](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6120696074)为 BLOCKED：首次 capture 已提交后，响应资格复验仍可410，客户端误标 rejected并丢失核对资格。修复将该返回保留 unknown；真实 HTTP/SQLite 在两次资格读取之间推进时间，确认一次实际提交/持久Observation、unknown/canRetry=true与同字节重试。该 HEAD 的原 CI38222977900在既有10分钟时限取消，未完成全套测试；原门、时限与旧场景不改。新候选仍需完整 CI 和新的独立 R3，不沿用旧批准或局部32/32检查。
 
+`543798a` 获[全新独立 R3 实现批准](https://github.com/ntygod/zhiwei-next/pull/126#issuecomment-6120972683)，独立52/52相关测试通过，但原 CI38225261487 实际全跑1167项、1166通过，唯一失败为既有 CLI 任务流因新资格标识变化收到 snapshot_required。浏览器记忆失效合同现在按真实配对凭据种类限定浏览器流，原 CLI 的逐帧身份/Scope/cursor和事件正文校验保留；浏览器纠正/自然到期仍必须清除正文并结束旧流。新增同一实际 HTTP/SQLite 组合同时验证两种消费者，既有失败测试不修改。新 HEAD 仍须原完整检查与新的独立 R3，旧批准不代替。
+
 ## 已交付 P1-07：提交前历史（2026-10-12）
 
 canonical [#123](https://github.com/ntygod/zhiwei-next/issues/123)，唯一分支 `feat/123-task-outcomes`，从 protected main `f02349bc45ade4c7ed6dd650c9fe6e9168302722` 开始。开工 reconciliation 无开放 PR/Incident、远端仅 main、developmentPause=false；#44/#67 无新增人类约束，#98/Gemini 原型暂停状态保留。已搜索 P1-07、结果验证与 Episode，无重复 execution。

@@ -143,6 +143,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
   };
   const openEvents = (request: IncomingMessage, response: ServerResponse, authentication: SessionAuthentication, context: SessionApiContext, initial: number) => {
     if (streams.size >= 32) throw new SessionApiError("budget_exceeded", "rate_limit", 429);
+    const browser = auth.clientKind(authentication) === "browser";
     let after = initial; let closed = false; let scheduled: ReturnType<typeof setTimeout> | undefined; let drainTimer: ReturnType<typeof setTimeout> | undefined;
     let waitingDrain = false; let heartbeat: ReturnType<typeof setInterval> | undefined; let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let qualification: CognitiveReadQualificationV2; let initialDeadline: number;
@@ -167,6 +168,8 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
     const schedule = notify;
     const checkQualification = () => {
       authorize(authentication, context.workspaceId);
+      // Browser streams invalidate the loaded memory view; CLI keeps its original task-event contract.
+      if (!browser) return;
       const current = qualifiedRead(context, () => undefined).qualification;
       if (current.qualificationKey !== qualification.qualificationKey || readDeadline(authentication, qualification) <= now())
         throw new SessionApiError("unavailable", "snapshot_required", 410);
@@ -202,7 +205,7 @@ export function createSyntheticSessionApi(options: SyntheticSessionApiOptions): 
       if (closed || waitingDrain) return;
       try { checkQualification(); write(": heartbeat\n\n"); } catch (error) { finish(error); }
     }, 15_000);
-    expiryTimer = setTimeout(() => finish(new SessionApiError("unavailable", "snapshot_required", 410)), Math.max(1, initialDeadline - now()));
+    if (browser) expiryTimer = setTimeout(() => finish(new SessionApiError("unavailable", "snapshot_required", 410)), Math.max(1, initialDeadline - now()));
     pump();
   };
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {

@@ -97,6 +97,9 @@ export class SyntheticSessionAuthenticator {
   expiresAt(authentication: SessionAuthentication): number {
     if (!this.current(authentication)) deny(); return this.#credentials.get(authentication.key)!.expires;
   }
+  clientKind(authentication: SessionAuthentication): ClientKind {
+    if (!this.current(authentication)) deny(); return this.#credentials.get(authentication.key)!.kind;
+  }
   revoke(fixture: SyntheticSessionFixture): void {
     if (!Object.hasOwn(syntheticSessionIdentities, fixture)) deny();
     for (const [key, value] of this.#credentials) if (value.context.principalId === syntheticSessionIdentities[fixture].principalId) this.#credentials.delete(key);

@@ -13,6 +13,7 @@ import { createPersistentMemoryApplication } from "../../daemon/src/memory-servi
 import { reduceExplicitMemory, qualifiesExplicitMemory } from "../../daemon/src/memory-service/memory-rules.ts";
 import { createSyntheticTaskSessionHarness } from "../../daemon/src/task-service/synthetic-harness.ts";
 import { createSyntheticWorkerTestPackage } from "../../daemon/src/runtime/controlled-worker-test-fixture.ts";
+import { createSessionDataClient, pairSyntheticSessionCli } from "../../cli/src/session-client.ts";
 import { BrowserWorkbench, WorkbenchError } from "./workbench.ts";
 
 const context = { principalId: "synthetic-principal-a", workspaceId: "synthetic-workspace-a" }, scope = { kind: "workspace" as const, workspaceId: context.workspaceId };
@@ -148,6 +149,26 @@ test("Memory invalidation cancels a response already received by transport and l
   assert.equal(f.client.view.memory, undefined); assert.ok(f.client.view.lastConfirmed); release.resolve(); await failedRead; assert.equal(f.client.view.memory, undefined);
   f.port.hook(); await f.client.search(query()); assert.equal(f.client.view.memory!.material[0]!.claim.version, 2);
 });
+test("CLI retains task events while the browser stream invalidates its loaded memory after a correction", async t => {
+  const f = await fixture(t); await f.pair(); const original = await f.remember();
+  const session = await f.client.createSession({ ...envelope(), expectedRevision: 0, payload: { kind: "session.create", contract: syntheticTaskSessionContract } });
+  await f.client.refresh();
+  const paired = await pairSyntheticSessionCli(f.origin, f.api.issuePairingCode("cli")), cli = createSessionDataClient({ baseUrl: f.origin, credential: paired.credential, timeoutMs: 10_000 });
+  const snapshot = await cli.snapshot(context.workspaceId), controller = new AbortController();
+  const iterator = cli.events(context.workspaceId, snapshot.asOfCursor, controller.signal)[Symbol.asyncIterator]();
+  const next = iterator.next();
+  const opened = deferred<void>(); f.port.hook(async (path, response) => { if (path.startsWith("/v1/events")) opened.resolve(); return response; });
+  const browser = f.client.watchEvents(), invalidated = assert.rejects(browser, (error: unknown) => error instanceof WorkbenchError && error.code === "snapshot_required"); await opened.promise;
+  f.memory.execute(context, { ...envelope(), expectedRevision: original.revision, payload: { kind: "memory.correct", scope,
+    targetRef: { kind: "claim", id: original.id, revision: original.revision }, targetVersion: { claimId: original.id, version: original.version }, privacy: original.privacy, claimKind: original.kind,
+    statement: "SYNTHETIC_ONLY：虚构灯塔使用琥珀色报告。", evidenceRefs: [original.evidence[0]!], validFrom: original.validFrom } });
+  await invalidated; assert.equal(f.client.view.memory, undefined);
+  const task = await f.client.command({ ...envelope(), expectedRevision: 0, payload: { kind: "task.create", sessionId: session.receipt!.aggregate.id, executionProfile: syntheticTaskSessionContract.runtimeProfile,
+    request: syntheticTaskPrompt, constraints: [], acceptanceChecks: [{ id: "criterion-synthetic", revision: 1, description: "Independently verify synthetic output", required: true, method: "deterministic-test" }] } });
+  const frame = await next; assert.equal(frame.done, false); assert.equal(frame.value!.event.aggregate.id, task.receipt!.aggregate.id);
+  controller.abort(); await iterator.return(undefined);
+});
+
 test("Natural body/source expiry changes qualification without any commit and an independent SSE deadline ends the stream", async t => {
   const f = await fixture(t, 500); await f.pair(); const original = await f.remember(); await f.client.refresh(); await f.client.search(query());
   const before = f.store.withReadQualification(context, () => undefined).qualification, fence = f.store.currentFence(scope);
