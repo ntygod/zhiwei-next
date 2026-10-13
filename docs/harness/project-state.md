@@ -6,7 +6,17 @@ status: active
 updated: 2026-10-13
 -->
 
-## 当前工作：P1-08 浏览器验收与基础客户端顺序调整 #127（2026-10-13）
+## 当前工作：P1-08 PC 浏览器接入修复与验收 #129（2026-10-13）
+
+canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一分支 `fix/129-browser-acceptance`，基于 protected main `81265f0139dcbe49be281841ed639175a6f2897c`。开工已搜索去重，无开放 PR/Incident、远端仅 main、developmentPause=false；用户原型及原有未跟踪文件、#44/#67/#98 状态保持。
+
+共享界面 [#127/PR128](https://github.com/ntygod/zhiwei-next/pull/128) 已由完整 1174 项检查、当前 HEAD 独立 R3、Ready/live 和 Autonomous Merge 保护合入；受审 `36a7bc967d27959c70cf8ecd88ba76df26e849cc` 与 squash 的 tree 同为 `e6667b022df53a69d0a0723046282b739593a07c`，main 来源、Dispatch、Hygiene 和分支回收审计成功，#127 已关闭。仅 CI 整项预算按所有者明确授权增至 20 分钟，原检查、断言与 Runtime 期限保留。
+
+新 PC 实际浏览器验收发现原生 fetch 的接收者丢失：Node 传输适配未复现，原正式构建两次首次配对失败；临时脱敏包装正常。默认原生传输现绑定 globalThis，必要回归在修复前失败、修复后通过；无诊断包装的正式构建已完成真实 Cookie 配对、任务创建、核验、反馈/两版结果历史和记忆添加/纠正及键盘弹层检查。操作期间资格失效清除正文仍保留，界面改为显示处理中的状态，避免将正常同步误报为连接失败。最终完整检查和当前 HEAD 独立 R3 尚待完成，不能把局部结果写为已交付。
+
+所有者随后明确「暂不调试手机端」，安卓实际设备/USB/Chrome 本轮暂缓。PC 全状态、窄窗口和 200% 仍在验收；P1-08 in_progress / Z18 not_run，普通真实入口保持关闭。只使用新临时虚构安装与固定 Worker，不接个人资料、真实模型或外发。双端浏览器通过后再另行打包 PC 客户端和连接 PC Agent 的安卓前端；手机不复制认知真源，不改变监听、Origin、CORS 或认证边界。回滚通过新的受审代码 revert，不回退数据/控制 journal/历史。
+
+## 已交付共享界面：#127 提交前历史（2026-10-13）
 
 所有者要求按「解决当前CI阻塞 → 完成PC与安卓浏览器验收 → 客户端打包」继续，并明确安卓首版连接PC上的Agent。任务目录已调整P1-08的分段完成条件，基础客户端复用共享UI；完整桌面系统集成仍归P4，学习/主动性与原产品启用前置保持。[ADR0025](../adr/0025-browser-first-client-delivery.md)设计c98ba76已获[独立R3批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6136080370)，最终实现HEAD另审；计划结构检查不认证产品或批准。
 

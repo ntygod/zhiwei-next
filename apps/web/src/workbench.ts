@@ -68,7 +68,7 @@ export class BrowserWorkbench {
     if (origin.origin !== options.origin || origin.protocol !== "http:" || origin.hostname !== "127.0.0.1" || !origin.port
       || typeof globalThis.location !== "undefined" && globalThis.location.origin !== options.origin) throw new WorkbenchError("invalid_configuration");
     parseWorkbenchIdentifierV1(options.workspaceId);
-    this.#options = options; this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#options = options; this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#now = () => { const value = (options.now ?? Date.now)(); if (!Number.isSafeInteger(value) || value < 0) throw new WorkbenchError("invalid_configuration"); return value; }; this.#timeout = options.timeoutMs ?? 5000;
     if (!Number.isSafeInteger(this.#timeout) || this.#timeout < 1 || this.#timeout > 30_000 || !Number.isFinite(this.#now())) throw new WorkbenchError("invalid_configuration");
     this.#schedule = options.schedule ?? ((callback, delay) => { const timer = setTimeout(callback, delay); return () => clearTimeout(timer); });
