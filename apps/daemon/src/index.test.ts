@@ -187,7 +187,7 @@ test("daemon executable refuses invalid configuration without leaking environmen
     { ZHIWEI_DIAGNOSTIC_TOKEN: token, ZHIWEI_HOST: "0.0.0.0" },
     { ZHIWEI_DIAGNOSTIC_TOKEN: token, ZHIWEI_PORT: `4265${marker}` },
   ]) {
-    const result = spawnSync(process.execPath, ["--experimental-strip-types", "apps/daemon/src/index.ts"], { env, encoding: "utf8", timeout: 3000 });
+    const result = spawnSync(process.execPath, ["--experimental-strip-types", "apps/daemon/src/main.ts"], { env, encoding: "utf8", timeout: 3000 });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /invalid_configuration/);
     assert.doesNotMatch(result.stdout + result.stderr, new RegExp(`${marker}|${token}|listening`));
@@ -216,7 +216,7 @@ test("rejected upgrades, tunnels and parser errors cannot hold daemon shutdown h
 
 test("daemon executable closes on SIGTERM and makes its port reusable", async () => {
   const port = await availablePort();
-  const child = spawn(process.execPath, ["--experimental-strip-types", "apps/daemon/src/index.ts"], {
+  const child = spawn(process.execPath, ["--experimental-strip-types", "apps/daemon/src/main.ts"], {
     env: { ZHIWEI_PORT: String(port), ZHIWEI_DIAGNOSTIC_TOKEN: token },
   });
   let output = "";

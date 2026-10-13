@@ -20,6 +20,7 @@
 ## 实际调用链与错误合同
 
 - `apps/daemon/src/index.ts` 的 `createDaemonServer`、`startDaemon` 接受显式配置；返回有界 `listen` / `close` 生命周期，不暴露 Node Server 的任意 listen options。`DaemonDiagnosticError.code` 为固定配置/网络/生命周期类别。
+- `npm run start:daemon` 的可执行入口为 `apps/daemon/src/main.ts`，先核对配置再加载服务模块；`index.ts`仅提供组合API。无效配置不加载合成服务闭包，原配置拒绝、错误脱敏、关闭与诊断权限不变。
 - `apps/daemon/src/local-api-security.ts` 在现有路由前验证 peer、Host、Origin、Authorization、body、method、原始 request-target；`GET /health`、`GET /v1/meta` 是唯一成功路径。重复 Host/Authorization 也拒绝，浏览器 Origin 包含空值/null 时仍拒绝；Expect 进入同一认证边界，不发送默认 100/417，超过每连接一个请求的 pipelining 直接关闭。凭据不授权未来新路由。
 - `apps/cli/src/doctor.ts` 的 `checkDaemonHealth` 直接请求已解析 numeric 地址，不跟随重定向，不读取代理配置。2 秒整体期限、8192-byte headers、4096-byte body，包括未结束的流；每个结果立即销毁请求并清理 timer。显式测试期限只允许 1..5000 ms。
 - `packages/protocol/src/local-diagnostics-v1.ts` 只承载有限 DTO、凭据文本格式与 health 解析、错误枚举，不包含授权策略或 Node I/O。原 Runtime Event v1 的字段/版本/fixture 不变。

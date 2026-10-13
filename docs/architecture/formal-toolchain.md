@@ -27,7 +27,7 @@ sh scripts/formal-toolchain.sh install
 npm run check
 ```
 
-完整测试仍由`scripts/test.mjs`发现并排序`apps`/`packages`的全部`.test.ts`，每个文件使用独立Node进程。调度取`min(4, os.availableParallelism())`，实际并发和文件数写入日志；两核容器仍为2，四核环境为4，不提供环境变量覆盖。此调度只使用已有CPU，原完整check链、测试发现、断言、失败退出、Worker屏障与CI时限保持。当前public Linux runner的4核规格见[GitHub官方文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories)；以实际运行日志为执行证据。
+完整测试仍由`scripts/test.mjs`发现并排序`apps`/`packages`的全部`.test.ts`，每个文件使用独立Node进程，并发固定为2。四进程调度和JSON遍历/事务复用试验未解决完整CI阻塞，均已撤回；原检查链、测试发现、断言、失败退出和Worker/RPC期限不变。所有者2026-10-13明确授权仅将CI static-contracts整项作业预算增至20分钟；[ADR0026](../adr/0026-ci-complete-check-budget.md)记录依据和约束。
 
 shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、NODE_PATH、HOME、npm、Pi 和凭证变量。安装器再创建临时 HOME、空 npm user/global config、临时 cache，核验实际 npm 版本后执行 `npm ci --ignore-scripts --no-audit --no-fund --install-strategy=hoisted`，核对 lock 未变、完整图及安装版本。依赖 lifecycle scripts 不执行。
 

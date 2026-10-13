@@ -63,7 +63,9 @@ test("the cognitive compiler profile rejects raw Runtime input without a committ
   assert.equal(f.prepare().runtimeInput.snapshot.kind, "runtime_input");
 });
 test("Runtime memory tools return only current selected scoped material and actual requests retain it", async t => {
-  const f = fixture(t, syntheticContextBoundaryV1, "controlled-read-memory-draft-v1", true), memory = f.remember(), hidden = f.remember("SYNTHETIC_ONLY：灯塔 private-tool-data", "local-only");
+  // Material qualification uses the injected store clock. Real RPC/Worker
+  // deadlines remain unchanged; expiry is asserted explicitly below.
+  const f = fixture(t, syntheticContextBoundaryV1, "controlled-read-memory-draft-v1"), memory = f.remember(), hidden = f.remember("SYNTHETIC_ONLY：灯塔 private-tool-data", "local-only");
   const initial = f.prepare(), port = await model(f, initial, "execute"); t.after(() => port.close());
   const result = await coordinateCognitiveBoundaryV1({ store: () => f.store, context, initial, model: port, ids: { next: randomUUID } });
   const peer = await createSyntheticWorkerTestPackage(); t.after(() => peer.remove());
@@ -87,12 +89,19 @@ test("Runtime memory tools return only current selected scoped material and actu
   const ready = f.store.executions.readExecution(context.workspaceId, f.taskId)!, commandId = randomUUID();
   f.store.tasks.executeTask(context, { schemaVersion: 1, commandId, idempotencyKey: commandId, workspaceId: context.workspaceId, expectedRevision: task.revision,
     payload: { kind: "task.runtime", taskId: f.taskId, event: "start", evidenceRefs: [{ id: binding.bindingId, revision: ready.revision }] } });
+  f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: supervisor.snapshot().binding });
+  f.time(supervisor.spec.fence.notAfter);
+  assert.throws(() => f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: supervisor!.snapshot().binding }), { code: "conflict" });
+  f.time(T0);
+  f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: supervisor.snapshot().binding });
   const collecting = (async () => { for await (const envelope of supervisor!.runtime.events(binding.bindingId)) {
     f.store.executions.observeExecutionBinding(context, { taskId: f.taskId, binding: supervisor!.snapshot().binding }); f.store.executions.ingestExecutionEvent(context, { taskId: f.taskId, envelope });
     if (envelope.event.stability === "settled") break;
   } })(); void collecting.catch(() => undefined);
   f.store.executions.markExecutionDispatched(context, { taskId: f.taskId, bindingId: binding.bindingId }); await supervisor.runtime.dispatch(binding.bindingId); await collecting;
-  const close = await supervisor.runtime.dispose(binding.bindingId); f.store.executions.closeExecution(context, { taskId: f.taskId, evidence: close });
+  const close = await supervisor.runtime.dispose(binding.bindingId);
+  f.time(close.observedAt); // Validate the actual physical close against its observed time.
+  f.store.executions.closeExecution(context, { taskId: f.taskId, evidence: close });
   assert.equal(reads, 1); const requests = f.store.executions.listModelRequests(context.workspaceId, f.taskId, initial.capsule.attemptId);
   assert.equal(requests.length, 4); assert.deepEqual(supervisor.snapshot().broker.modelRequests, supervisor.snapshot().broker.receiverRequests);
   assert.ok(JSON.stringify(requests.at(-1)!.context).includes(memory.id)); assert.ok(!JSON.stringify(requests).includes("private-tool-data"));
