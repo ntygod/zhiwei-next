@@ -16,6 +16,8 @@ canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一分�
 
 所有者随后明确「暂不调试手机端」，安卓实际设备/USB/Chrome 本轮暂缓。PC 全状态、窄窗口和 200% 仍在验收；P1-08 in_progress / Z18 not_run，普通真实入口保持关闭。只使用新临时虚构安装与固定 Worker，不接个人资料、真实模型或外发。双端浏览器通过后再另行打包 PC 客户端和连接 PC Agent 的安卓前端；手机不复制认知真源，不改变监听、Origin、CORS 或认证边界。回滚通过新的受审代码 revert，不回退数据/控制 journal/历史。
 
+初始 PC 修复 `b47bdfb` 已获当前5文件独立 R3 源码批准，原 native `npm run check` 实际通过1175/1175、strict196；CI38341892642整轮仅因 PR 说明未声明治理路径而失败，已按原门补齐标记。当前 primary 的正常 SDK/Worker 原 ZIP 和两次 Worker 原 attempt 按完整原 validators 核对，SDK122178、三份Worker72731字节结果与冻结对象一致；临时 compare guard 只在完整相等后失败，最终精确恢复原 comparator。来源事实见对应 manifests，旧PR128原件保持。最终新增来源字段后的 HEAD 另做完整检查、独立 R3 与 Ready/live，不沿用旧批准。
+
 ## 已交付共享界面：#127 提交前历史（2026-10-13）
 
 所有者要求按「解决当前CI阻塞 → 完成PC与安卓浏览器验收 → 客户端打包」继续，并明确安卓首版连接PC上的Agent。任务目录已调整P1-08的分段完成条件，基础客户端复用共享UI；完整桌面系统集成仍归P4，学习/主动性与原产品启用前置保持。[ADR0025](../adr/0025-browser-first-client-delivery.md)设计c98ba76已获[独立R3批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6136080370)，最终实现HEAD另审；计划结构检查不认证产品或批准。

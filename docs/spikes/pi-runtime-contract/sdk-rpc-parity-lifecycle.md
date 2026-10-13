@@ -325,7 +325,7 @@ artifact id      11787745032
 artifact digest  sha256:2a40757de393084d98584961ba2810230709d48008208e1de5d2486d19b92c41
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38341892618` 属于当前 PR #130，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；正常 SDK/Worker 原 ZIP 的摘要、原 run/job/artifact 身份和完整冻结对象已回读核对。Worker成对来源仍待本primary续期，旧PR128原件保持；最终候选须恢复原comparator。不能用Draft跳过的Ready gate声称完整provenance通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与上面的`artifactDigest`一致，`result.json`摘要与`jsonSha256`一致，并与Loader从committed分片还原的JSON逐字节相同。Run `38341892618` 属于当前 PR #130，机器 `display_title` 绑定 PR action、更新时间与 Capture HEAD；正常 SDK/Worker 原 ZIP 的摘要、原 run/job/artifact 身份和完整冻结对象已回读核对。Worker成对来源为run38342945819/headc983ced的原attempts1/2，两份72731字节result.json相同并与正常原件/完整冻结对象相等；原run/job/ZIP/metadata/content validators通过，旧PR128原件保持。最终候选恢复原comparator。不能用Draft跳过的Ready gate声称完整provenance通过。Manifest是provenance的机器事实源；叙述性文档不能覆盖其`candidate` / `verified`状态。
 
 ## 安全与脱敏
 
