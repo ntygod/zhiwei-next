@@ -8,7 +8,7 @@ updated: 2026-10-13
 
 ## 当前工作：P1-08 浏览器验收与基础客户端顺序调整 #127（2026-10-13）
 
-所有者要求按「解决当前CI阻塞 → 完成PC与安卓浏览器验收 → 客户端打包」继续，并明确安卓首版连接PC上的Agent。任务目录已调整P1-08的分段完成条件，基础客户端复用共享UI；完整桌面系统集成仍归P4，学习/主动性与原产品启用前置保持。见[ADR0025](../adr/0025-browser-first-client-delivery.md)，当前Proposed，设计/最终实现仍须新独立R3；计划结构检查不认证产品或批准。
+所有者要求按「解决当前CI阻塞 → 完成PC与安卓浏览器验收 → 客户端打包」继续，并明确安卓首版连接PC上的Agent。任务目录已调整P1-08的分段完成条件，基础客户端复用共享UI；完整桌面系统集成仍归P4，学习/主动性与原产品启用前置保持。[ADR0025](../adr/0025-browser-first-client-delivery.md)设计c98ba76已获[独立R3批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6136080370)，最终实现HEAD另审；计划结构检查不认证产品或批准。
 
 继续唯一canonical[#127](https://github.com/ntygod/zhiwei-next/issues/127) / feat/127-workbench-ui / [Draft PR128](https://github.com/ntygod/zhiwei-next/pull/128)，protected main734f4e698a3887e518545a8351829af06c137c02不变。当前周期active，先完成CI及共享浏览器切片，不并行新建打包primary；用户原型、未跟踪文件、#44/#67/#98和数据历史保持。真实入口关闭，P1-08in_progress / Z18not_run。
 

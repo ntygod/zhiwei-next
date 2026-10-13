@@ -1,6 +1,6 @@
 # ADR 0025：先验收双端浏览器，再交付基础客户端
 
-- 状态：Proposed（所有者已明确交付顺序与安卓角色；新最终 HEAD 仍需独立 R3 审查）
+- 状态：Accepted（设计c98ba76c0349ca7afa44b1709cf5938437667d7e获[独立R3批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6136080370)；最终实现HEAD另审）
 - 日期：2026-10-13
 - 工作项：#127；P1-08
 - 被取代关系：补充 ADR0016/0024 的交付拆分；完整桌面系统集成仍归 P4，不改变认知、Runtime 或真实启用许可
