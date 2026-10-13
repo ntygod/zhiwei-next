@@ -32,7 +32,7 @@
 | P1-05 | 交付可纠正记忆与检索 | P1-04 | R3 |
 | P1-06 | 交付认知协调与受预算上下文 | P1-05, P0-04 | R3 |
 | P1-07 | 交付结果验证、Episode 与使用记录 | P1-06 | R2 |
-| P1-08 | 交付项目工作台与记忆纠错界面 | P1-07 | R3 |
+| P1-08 | 交付双端工作台与基础客户端 | P1-07 | R3 |
 | P1-09 | 验收连续协作 Alpha | P1-08 | R3 |
 | P2-01 | 自动提取与冲突候选 | P1-09 | R2 |
 | P2-02 | 做法候选、试用与退役 | P2-01 | R2 |
@@ -359,32 +359,38 @@
 
 **不做：**不把模型自评当事实，不自动晋升做法。
 
-## P1-08 · 交付项目工作台与记忆纠错界面
+## P1-08 · 交付双端工作台与基础客户端
 
-**结果：**用户在浏览器完整走通开始、继续、查看依据、纠正和检查产物。
+**结果：**用户先在 PC 与安卓浏览器走通开始、继续、查看依据、纠正和检查产物，再安装复用同一 UI 的基础 PC/安卓客户端；安卓连接 PC Agent。
 
 **验收/启用前置：**P1-07；**风险：**R3；**类型：**必需。
 
-**触及：**`apps/web`、`apps/daemon`。
+**触及：**`apps/web`、`apps/daemon`、`apps/desktop`、`apps/android`。
 
-**合同：**[ui-design.md](../../docs/product/ui-design.md)、[product-vision.md](../../docs/product/product-vision.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)。
+**合同：**[ui-design.md](../../docs/product/ui-design.md)、[product-vision.md](../../docs/product/product-vision.md)、[trust-and-safety.md](../../docs/architecture/trust-and-safety.md)、[local-api-contract.md](../../docs/architecture/local-api-contract.md)、[deployment-and-operations.md](../../docs/architecture/deployment-and-operations.md)、[0025-browser-first-client-delivery.md](../../docs/adr/0025-browser-first-client-delivery.md)。
 
 **完成条件：**
 
+- 先解决当前 CI 阻塞并完成接线交付；原完整检查、断言、测试发现、时限、独立审查和保护合入保持
 - React/TypeScript/Vite 同源界面与受保护 API；依赖精确锁定
 - 今天/项目/记忆/设置及任务/产物详情按合同实现
 - 正常/空/加载/错误/权限/降级、键盘与 200% 缩放验收
+- 分别取得实际 PC 与安卓浏览器的 Cookie/配对、断线恢复、窄屏、键盘/触屏与 200% 证据；模拟视口和 Node/DOM 不替代设备验收
+- 双端浏览器验收后，以独立 execution/primary 复用同一 UI 交付基础 PC 安装包与安卓 APK，安装、启动、失联和卸载分别留证
+- 安卓首版连接 PC Agent，不复制认知真源或运行 Pi；具体连接、设备认证和撤权方案须独立 ADR/R3 审查后实施
+- 代码、浏览器验收、安装包和真实启用分别记录；真实数据/模型入口仍受原验收依赖约束
 
 **必须验证的失败：**
 
 - 断线/后端重启显示最后确认状态
 - 未获准附件、跨 origin 与不可信 HTML 无执行
+- 手机失联、设备未配对或授权撤销时拒绝操作并清除无资格正文，不伪造任务结果
 
 **场景：**Z18。
 
 **回滚：**关闭 Web 写入口，CLI 仍按相同授权访问；UI revert 不改变数据。
 
-**不做：**不提前做桌面自动升级，不复制后端状态真源。
+**不做：**不提前做完整托盘/系统凭据/自动升级、学习、主动性或同步；不复制后端状态真源，不把 USB 开发转发当远程产品支持。
 
 ## P1-09 · 验收连续协作 Alpha
 

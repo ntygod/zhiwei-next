@@ -27,6 +27,8 @@ sh scripts/formal-toolchain.sh install
 npm run check
 ```
 
+完整测试仍由`scripts/test.mjs`发现并排序`apps`/`packages`的全部`.test.ts`，每个文件使用独立Node进程。调度取`min(4, os.availableParallelism())`，实际并发和文件数写入日志；两核容器仍为2，四核环境为4，不提供环境变量覆盖。此调度只使用已有CPU，原完整check链、测试发现、断言、失败退出、Worker屏障与CI时限保持。当前public Linux runner的4核规格见[GitHub官方文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories)；以实际运行日志为执行证据。
+
 shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、NODE_PATH、HOME、npm、Pi 和凭证变量。安装器再创建临时 HOME、空 npm user/global config、临时 cache，核验实际 npm 版本后执行 `npm ci --ignore-scripts --no-audit --no-fund --install-strategy=hoisted`，核对 lock 未变、完整图及安装版本。依赖 lifecycle scripts 不执行。
 
 有企业网络代理的环境可以显式提供 `--https-proxy=<无凭证URL> --use-system-ca`；仅支持 http/https 且拒绝用户名/密码，不读取或自动继承宿主代理配置，不关闭 TLS 验证。受控代理与系统 CA 只改变传输，registry URL、精确版本和 integrity 仍核对。2026-10-08 本地新建空 cache 的完整 npm ci 已实际通过此模式。

@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { availableParallelism } from "node:os";
 
 const roots = ["apps", "packages"];
 const tests = [];
@@ -27,9 +28,13 @@ if (tests.length === 0) {
   process.exit(1);
 }
 
+// Each file still runs in its own process. Respect the host/container CPU bound
+// and use up to four workers; discovery, test assertions and deadlines are unchanged.
+const concurrency = Math.min(4, availableParallelism());
+console.log(`Running all ${tests.length} discovered test files with ${concurrency} isolated workers.`);
 const result = spawnSync(
   process.execPath,
-  ["--experimental-strip-types", "--test", "--test-concurrency=2", ...tests],
+  ["--experimental-strip-types", "--test", `--test-concurrency=${concurrency}`, ...tests],
   { stdio: "inherit" },
 );
 

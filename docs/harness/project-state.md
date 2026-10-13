@@ -6,7 +6,19 @@ status: active
 updated: 2026-10-13
 -->
 
-## 当前工作：P1-08 双端共享界面接入 #127（2026-10-12）
+## 当前工作：P1-08 浏览器验收与基础客户端顺序调整 #127（2026-10-13）
+
+所有者要求按「解决当前CI阻塞 → 完成PC与安卓浏览器验收 → 客户端打包」继续，并明确安卓首版连接PC上的Agent。任务目录已调整P1-08的分段完成条件，基础客户端复用共享UI；完整桌面系统集成仍归P4，学习/主动性与原产品启用前置保持。见[ADR0025](../adr/0025-browser-first-client-delivery.md)，当前Proposed，设计/最终实现仍须新独立R3；计划结构检查不认证产品或批准。
+
+继续唯一canonical[#127](https://github.com/ntygod/zhiwei-next/issues/127) / feat/127-workbench-ui / [Draft PR128](https://github.com/ntygod/zhiwei-next/pull/128)，protected main734f4e698a3887e518545a8351829af06c137c02不变。当前周期active，先完成CI及共享浏览器切片，不并行新建打包primary；用户原型、未跟踪文件、#44/#67/#98和数据历史保持。真实入口关闭，P1-08in_progress / Z18not_run。
+
+此前c7cb6a3的完整npm run test为1174/1174、strict195与构建通过，已获[新独立R3代码批准](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6129580461)。其原CI38285138309两次完整attempt及自动CI38314979244均超过原10分钟上限，缺完整绿色；[最终阻塞记录](https://github.com/ntygod/zhiwei-next/pull/128#issuecomment-6133690522)不表示当前新HEAD已通过。
+
+本轮分析原始TAP与真实UI/固定Worker CPU采样；事务JSON复用试验未减少总耗时已撤回，Store源码保持c7原字节。完整测试调度由固定2进程改为按实际可用CPU最多4，每个文件仍隔离，发现、断言、失败退出、Worker屏障、完整check链与原CI时限均保留。实际两核/四核容器分别报告2/4；新候选完整检查及新HEAD独立R3尚待运行。实际PC/安卓浏览器、Cookie、USB、窄屏/200%证据尚无，不能从DOM或移动布局宣称平台验收；打包在双端浏览器通过后另作独立交付。
+
+### 共享界面实现与来源历史
+
+### 当前工作：P1-08 双端共享界面接入 #127（2026-10-12）
 
 所有者提供`banxing-agent-ui-v0.2`并直接要求接入PC/安卓客户端。canonical [#127](https://github.com/ntygod/zhiwei-next/issues/127)，唯一分支`feat/127-workbench-ui`，基线protected main734f4e698a3887e518545a8351829af06c137c02 / tree6540dd53d25033cf9ee9d4febd3f4f7e75803a20。开工无开放PR/Incident、远端仅main、developmentPause=false，相关搜索只有已闭合API切片和不同范围#98原型；#44/#67原文与#98状态保持。根目录原型及其他未跟踪用户文件保留原样，使用已有干净owned worktree。
 
