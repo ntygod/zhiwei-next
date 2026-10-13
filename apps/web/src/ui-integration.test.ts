@@ -44,6 +44,36 @@ test("Actual context/task/correction versions render in DOM; dialogs keep focus 
   await act(async () => { root.render(createElement(WorkbenchApp, { controller })); }); assert.match(container.textContent!, /进入开发样例/); assert.ok(container.querySelector(".sidebar")); assert.ok(container.querySelector(".bottom-nav"));
   await act(async () => { await controller.connect(); }); assert.equal(controller.view!.connection, "connected"); assert.equal(controller.view!.context!.workspaceId, context.workspaceId); assert.throws(() => parseWorkbenchContextV1({ ...controller.view!.context, accountSecret: "SYNTHETIC_ONLY" }));
   await act(async () => { await controller.createTask(syntheticTaskPrompt, "我确认固定样例结果"); }); assert.equal(controller.view!.task!.value.state, "READY"); assert.equal(harness.application.snapshot(context).tasks.length, 1); assert.match(container.textContent!, /我确认固定样例结果/);
+  // The task tablist is one keyboard stop; switching views must never send commands.
+  const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  assert.equal(tabs.length, 3);
+  const sentBeforeTabs = port.sent.length;
+  function selectedTab(index: number) {
+    for (const [position, button] of tabs.entries()) {
+      assert.equal(button.tabIndex, position === index ? 0 : -1);
+      assert.equal(button.getAttribute("aria-selected"), String(position === index));
+    }
+    const panel = dom.window.document.getElementById(tabs[index]!.getAttribute("aria-controls")!);
+    assert.ok(panel); assert.equal(panel.getAttribute("role"), "tabpanel");
+    assert.equal(panel.getAttribute("aria-labelledby"), tabs[index]!.id);
+    assert.equal(panel.tabIndex, 0);
+    assert.equal(container.querySelector<HTMLElement>(".conversation")!.hidden, index !== 0);
+    assert.equal(container.querySelectorAll<HTMLElement>(".conversation")[1]!.hidden, index !== 2);
+    assert.equal(container.querySelector<HTMLElement>(".artifact-pane")!.hidden, index === 2);
+  }
+  selectedTab(0); tabs[0]!.focus();
+  async function key(value: string, expected: number, prevented = true) {
+    const event = new dom.window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true });
+    await act(async () => { dom.window.document.activeElement!.dispatchEvent(event); });
+    assert.equal(event.defaultPrevented, prevented);
+    assert.equal(dom.window.document.activeElement, tabs[expected]); selectedTab(expected);
+  }
+  await key("ArrowLeft", 2); await key("ArrowRight", 0); await key("ArrowRight", 1);
+  await key("End", 2); await key("Home", 0); await key("ArrowDown", 0, false);
+  await key("Tab", 0, false); // jsdom has no native tab traversal; do not simulate it as browser evidence.
+  await act(async () => { tabs[2]!.click(); }); selectedTab(2);
+  await act(async () => { tabs[0]!.click(); }); selectedTab(0);
+  assert.equal(port.sent.length, sentBeforeTabs);
   await act(async () => { await controller.taskCommand("task.cancel"); }); assert.equal(controller.view!.task!.value.state, "CANCELLED"); await act(async () => { await controller.taskCommand("task.continue"); }); assert.equal(controller.view!.task!.value.attempts.length, 2);
   await act(async () => { await controller.go("memory"); controller.newMemory(); await controller.saveMemory("SYNTHETIC_ONLY：虚构灯塔的报告是紫色。"); }); const first = controller.view!.memory!.material[0]!.claim; assert.equal(first.version, 1); assert.equal(first.privacy, "local-only");
   const trigger = dom.window.document.getElementById("trigger")! as HTMLElement; trigger.focus(); await act(async () => { await controller.memoryDetail(first.id, "memory-edit"); });

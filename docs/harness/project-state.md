@@ -6,7 +6,18 @@ status: active
 updated: 2026-10-13
 -->
 
-## 当前工作：P1-08 PC 浏览器接入修复与验收 #129（2026-10-13）
+## 当前工作：P1-08 任务详情键盘交互 #129（2026-10-13）
+
+云端接手重新核对 protected main `11e7eff5050fdad8279e169bf1aa740579e89167`；PR130 已合入、原完整检查1175项通过，远端仅 main，无开放 PR/Incident，developmentPause=false。本工作区无在途修改；旧 PR130 和原验证记录保留。#44/#67/#98 没有改变本切片方向的新要求。
+
+沿用 canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一新分支 `fix/129-task-keyboard-navigation`，补齐任务详情页签的方向键/Home/End、单一 Tab 停靠点与内容区关联。桌面默认双栏保留，切换只改呈现，不发送任务命令；不涉及授权、持久化、Runtime 或质量门。风险按 R2（本状态文件机器下限），新最终 HEAD 的完整检查、独立审查、Draft/Ready CI 和受保护交付须分别取得，不能继承 PR130 的批准。
+
+PC 原生200%仍未验证，当前云环境没有可用桌面显示会话，不以CSS缩放、窄视窗或DOM测试替代。安卓按所有者要求暂缓；P1-08 in_progress / Z18 not_run，普通真实入口关闭、打包未开始。仅自有虚构临时资料与固定Worker；回滚通过新受审代码revert，不回退数据或版本历史。
+
+## PR130 已交付：PC 浏览器接入修复的提交前记录
+
+以下为 PR130 提交前历史，最终交付以 [#129 的保护合入记录](https://github.com/ntygod/zhiwei-next/issues/129#issuecomment-6138430822) 为准。
+
 
 canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一分支 `fix/129-browser-acceptance`，基于 protected main `81265f0139dcbe49be281841ed639175a6f2897c`。开工已搜索去重，无开放 PR/Incident、远端仅 main、developmentPause=false；用户原型及原有未跟踪文件、#44/#67/#98 状态保持。
 
