@@ -24,6 +24,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 
 /** Node transport adapter for HTTP/SQLite tests; this does not prove real browser Cookie behavior. */
 function cookiePort(origin: string) {
+  const nativeFetch = globalThis.fetch;
   let cookie = "", storeCookie = true; const sent: { path: string; body?: string }[] = [];
   let hook: ((path: string, response: Response) => Promise<Response>) | undefined;
   const port: typeof fetch = async (input, init) => {
@@ -31,7 +32,7 @@ function cookiePort(origin: string) {
     assert.equal(init?.cache, "no-store"); assert.equal(init?.redirect, "manual");
     const headers = new Headers(init?.headers); headers.set("origin", origin); headers.set("sec-fetch-site", "same-origin"); if (cookie) headers.set("cookie", cookie);
     sent.push({ path, ...(typeof init?.body === "string" ? { body: init.body } : {}) });
-    const response = await fetch(origin + path, { ...init, headers }); const next = response.headers.get("set-cookie"); if (next && storeCookie) cookie = next.split(";")[0]!;
+    const response = await nativeFetch(origin + path, { ...init, headers }); const next = response.headers.get("set-cookie"); if (next && storeCookie) cookie = next.split(";")[0]!;
     return hook ? hook(path, response) : response;
   };
   return { port, sent, get cookie() { return cookie; }, storage(enabled: boolean) { storeCookie = enabled; }, hook(value?: typeof hook) { hook = value; } };
@@ -61,6 +62,21 @@ async function fixture(t: TestContext, retentionMs = 86_400_000) {
   };
   return { api, origin, port, client, store, application, memory, pair, remember, get now() { return now; }, time(value: number) { now = value; }, get cleared() { return cleared; }, get qualificationReads() { return qualificationReads; }, afterRead(callback?: () => void) { afterQualificationRead = callback; } };
 }
+test("Default browser transport preserves the native fetch receiver through pairing and authorized reads", async t => {
+  const f = await fixture(t);
+  t.mock.method(globalThis, "fetch", function(this: unknown, input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return f.port.port(input, init);
+  });
+  const client = new BrowserWorkbench({ origin: f.origin, workspaceId: context.workspaceId, nonce: () => "n".repeat(43), clearFragment() {}, now: () => f.now });
+  try {
+    await client.pair(f.api.issuePairingCode("browser"));
+    assert.equal(client.view.connection, "connected");
+    assert.equal(client.view.status, "empty");
+    assert.deepEqual(f.port.sent.map(request => request.path.split("?")[0]), ["/v1/browser-pair", "/v1/capabilities", "/v1/snapshot"]);
+  } finally { client.close(); }
+});
+
 test("Actual HTTP/SQLite pairing, session/task commands and memory correction retain exact backend versions", async t => {
   const f = await fixture(t); await f.pair(); assert.ok(f.cleared > 0); await f.client.capabilities(); assert.ok(f.client.view.capabilities!.features.includes("memory"));
   await f.client.refresh(); assert.equal(f.client.view.status, "empty");
