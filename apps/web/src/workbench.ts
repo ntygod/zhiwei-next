@@ -5,7 +5,7 @@ import { canonicalJsonV1, parseBrowserPairResponseV1, parseSessionPairRequestV1,
   parseWorkbenchCapabilitiesV1, parseWorkbenchTaskReadV1, parseWorkbenchSessionReadV1, parseWorkbenchMemoryInputResponseV1,
   parseWorkbenchMemorySearchResponseV1, parseWorkbenchMemoryExplanationResponseV1, parseWorkbenchPlanResponseV1,
   parseWorkbenchResultResponseV1, parseWorkbenchResultReadV1, parseWorkbenchResultHistoryV1, parseWorkbenchReadNotAfterV1, parseWorkbenchIdentifierV1, parseWorkbenchCursorV1,
-  type SessionSnapshotV1, type ProductEventV1, type SessionApiReceiptV1, type TaskSummaryV1,
+  parseWorkbenchContextV1, type SessionSnapshotV1, type ProductEventV1, type SessionApiReceiptV1, type TaskSummaryV1,
 } from "../../../packages/protocol/src/index.ts";
 import { WorkbenchError, bytes, checkResponse, eventFrames, responseJson } from "./transport.ts";
 export { WorkbenchError } from "./transport.ts";
@@ -26,6 +26,7 @@ export interface WorkbenchView {
   readonly result?: ReturnType<typeof parseWorkbenchResultReadV1>; readonly resultHistory?: ReturnType<typeof parseWorkbenchResultHistoryV1>;
   readonly lastEvent?: ProductEventV1; readonly lastConfirmed?: Readonly<{ at: string; tasks: readonly TaskSummaryV1[] }>;
   readonly write: WorkbenchWriteState;
+  readonly context?: ReturnType<typeof parseWorkbenchContextV1>;
 }
 export interface WorkbenchOptions {
   readonly origin: string; readonly workspaceId: string; readonly nonce: () => string; readonly clearFragment: () => void;
@@ -35,7 +36,7 @@ export interface WorkbenchOptions {
 type ParsedWrite = Readonly<{ receipt?: SessionApiReceiptV1; evidence?: WorkbenchView["evidence"]; plan?: WorkbenchView["plan"]; result?: WorkbenchView["result"] }>;
 interface PendingWrite { readonly authGeneration: number; readonly workspaceId: string; readonly path: string; readonly body: string; readonly operation: string; readonly commandId: string;
   readonly parse: (input: unknown) => ParsedWrite; readonly targetId?: string; readonly lease: boolean }
-interface ReadTicket { readonly facet: "snapshot" | "task" | "session" | "memory" | "explanation" | "result" | "resultHistory"; readonly sequence: number }
+interface ReadTicket { readonly facet: "snapshot" | "task" | "session" | "memory" | "explanation" | "result" | "resultHistory" | "context"; readonly sequence: number }
 /** Bounded event transport tracking, without selecting any domain transition or Outcome. */
 class EventTracker {
   readonly #seen = new Map<string, string>(); readonly #revisions = new Map<string, number>();
@@ -186,6 +187,12 @@ export class BrowserWorkbench {
   async capabilities(): Promise<void> {
     const read = await this.#query("/v1/capabilities", parseWorkbenchCapabilitiesV1, undefined, false);
     this.#live(read.generation, this.#authGeneration, read.deadline); this.#view = { ...this.#view, capabilities: read.value }; this.#notify();
+  }
+  async context(): Promise<void> {
+    const ticket = this.#beginRead("context"), read = await this.#query(`/v1/workbench-context?${new URLSearchParams({ workspaceId: this.#view.workspaceId })}`, parseWorkbenchContextV1, undefined, true, this.#timeout, ticket);
+    this.#publishRead(read, ticket);
+    if (read.value.workspaceId !== this.#view.workspaceId) return this.#failure(new WorkbenchError("invalid_response"), read.generation);
+    this.#retainLease(read.deadline); this.#view = { ...this.#view, context: read.value, status: "normal" }; this.#notify();
   }
   async refresh(): Promise<void> {
     this.#identity(); const generation = this.#readGeneration, authGeneration = this.#authGeneration, workspaceId = this.#view.workspaceId, started = this.#now();

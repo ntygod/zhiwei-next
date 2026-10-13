@@ -2,9 +2,9 @@ import { assertEvidenceRefV2, assertMemoryClaimV2, assertScopeV2, isScopeWithinV
   type EvidenceRefV2, type MemoryClaimV2, type ScopeV2 } from "../../domain/src/index.ts";
 import { identifier, invalid, keys, list, member, object, revision, textValue, timestamp, unique, version, wireBoundary } from "./cognitive-wire.ts";
 import { parseObservationV2 } from "./observation-v2.ts";
-import { parseSessionApiReceiptV1, parseSessionTaskRecoveryV1, parseSessionTaskV1, parseSessionV1 } from "./session-api-v1.ts";
+import { parseSessionApiReceiptV1, parseSessionTaskRecoveryV1, parseSessionTaskV1, parseSessionV1, parseSessionContractV1 } from "./session-api-v1.ts";
 import { parseOutcomeVerificationPlanV1, parseTaskResultBundleV1 } from "./task-result-v1.ts";
-import type { SessionApiReadV1, SessionPairResponseV1 } from "./session-api-v1-types.ts";
+import type { SessionApiReadV1, SessionPairResponseV1, SessionContractV1 } from "./session-api-v1-types.ts";
 
 const statuses = ["ACTIVE", "SUPERSEDED", "DISPUTED", "EXPIRED", "FORGOTTEN"] as const;
 const commands = ["session.create", "task.create", "task.continue", "task.pause", "task.cancel", "task.retry", "task.revise-request", "task.respond",
@@ -26,7 +26,7 @@ export function parseWorkbenchCapabilitiesV1(input: unknown) {
     keys(value, ["schemaVersion", "protocolVersions", "mode", "production", "productAcceptance", "features", "supportedCommands", "unsupportedCommands", "runtime", "limits"]);
     version(value.schemaVersion, 1); if (list(value.protocolVersions, 1, 1)[0] !== 1) invalid();
     member(value.mode, ["synthetic-fixtures-only"]); member(value.production, ["unsupported"]); member(value.productAcceptance, ["not_run"]);
-    const features = list(value.features, 6).map(item => member(item, ["sessions", "tasks", "snapshot", "events", "memory", "task-results"])); unique(features);
+    const features = list(value.features, 7).map(item => member(item, ["sessions", "tasks", "snapshot", "events", "memory", "task-results", "workbench"])); unique(features);
     const supportedCommands = list(value.supportedCommands, commands.length).map(item => member(item, commands)); unique(supportedCommands);
     const unsupportedCommands = list(value.unsupportedCommands, commands.length).map(item => member(item, commands)); unique(unsupportedCommands);
     if (supportedCommands.some(item => unsupportedCommands.includes(item))) invalid();
@@ -122,3 +122,24 @@ export const parseWorkbenchResultReadV1 = (input: unknown) => wireBoundary(input
 export const parseWorkbenchResultHistoryV1 = (input: unknown) => wireBoundary(input, value => {
   keys(value, ["schemaVersion", "value"]); version(value.schemaVersion, 1); return { schemaVersion: 1 as const, value: list(value.value, 100).map(parseTaskResultBundleV1) };
 });
+
+export interface WorkbenchContextV1 {
+  readonly schemaVersion: 1; readonly workspaceId: string; readonly workspaceLabel: string;
+  readonly sessionContract: SessionContractV1; readonly exampleRequest: string;
+}
+export function parseWorkbenchContextV1(input: unknown): WorkbenchContextV1 {
+  return wireBoundary(input, value => {
+    keys(value, ["schemaVersion", "workspaceId", "workspaceLabel", "sessionContract", "exampleRequest"]); version(value.schemaVersion, 1);
+    identifier(value.workspaceId); textValue(value.workspaceLabel, 128); textValue(value.exampleRequest, 4096);
+    return { schemaVersion: 1, workspaceId: value.workspaceId as string, workspaceLabel: value.workspaceLabel as string,
+      sessionContract: parseSessionContractV1(value.sessionContract), exampleRequest: value.exampleRequest as string };
+  });
+}
+export interface SyntheticWorkbenchPairingV1 { readonly schemaVersion: 1; readonly mode: "synthetic-fixtures-only"; readonly workspaceId: string; readonly bootstrapCode: string }
+export function parseSyntheticWorkbenchPairingV1(input: unknown): SyntheticWorkbenchPairingV1 {
+  return wireBoundary(input, value => {
+    keys(value, ["schemaVersion", "mode", "workspaceId", "bootstrapCode"]); version(value.schemaVersion, 1); member(value.mode, ["synthetic-fixtures-only"]); identifier(value.workspaceId);
+    if (typeof value.bootstrapCode !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value.bootstrapCode)) invalid();
+    return value as unknown as SyntheticWorkbenchPairingV1;
+  });
+}

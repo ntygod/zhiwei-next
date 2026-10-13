@@ -18,7 +18,7 @@ G-3a 选择 ADR 0006 既有 Ledger 支持范围（>=22.16.0 <23）中的一个�
 
 ## 闭包与安装
 
-根 lock 共 147 个依赖条目。Pi 官方 shrinkwrap 的全部 143 个子条目按原版本/URL/依赖/平台字段保留，npm 仅传播 `dev: true`；其中 6 个内部 Pi 包的官方 shrinkwrap 没有 integrity，根 lock 额外补入官方 registry 精确 0.84.1 的 sha512。这是本地 lock 的可审计增强，不宣称与发布 shrinkwrap 逐字相同；原发布 shrinkwrap 本身保持原字节，sha256 为 `a724da15dc849d0ab2fe346845f8986b059ab89339a03a365b5910b23217c0c3`。增补来源与摘要逐项记录在 `toolchain.json`。
+根 lock 共 231 个依赖条目：#127新增精确React19.3.0/ReactDOM19.3.0及类型、Vite8.3.4构建输入、jsdom30.1.2及类型用于共享UI与开发DOM检查，作为构建/检查依赖，Node运行时不新增生产依赖；实际浏览器行为不由jsdom认证。Pi 官方 shrinkwrap 的全部 143 个子条目按原版本/URL/依赖/平台字段保留，npm 仅传播 `dev: true`；其中 6 个内部 Pi 包的官方 shrinkwrap 没有 integrity，根 lock 额外补入官方 registry 精确 0.84.1 的 sha512。这是本地 lock 的可审计增强，不宣称与发布 shrinkwrap 逐字相同；原发布 shrinkwrap 本身保持原字节，sha256 为 `a724da15dc849d0ab2fe346845f8986b059ab89339a03a365b5910b23217c0c3`。增补来源与摘要逐项记录在 `toolchain.json`。
 
 安装入口：先选择上述 Node/npm，在仓库根运行：
 
@@ -26,6 +26,8 @@ G-3a 选择 ADR 0006 既有 Ledger 支持范围（>=22.16.0 <23）中的一个�
 sh scripts/formal-toolchain.sh install
 npm run check
 ```
+
+完整测试仍由`scripts/test.mjs`发现并排序`apps`/`packages`的全部`.test.ts`，每个文件使用独立Node进程，并发固定为2。四进程调度和JSON遍历/事务复用试验未解决完整CI阻塞，均已撤回；原检查链、测试发现、断言、失败退出和Worker/RPC期限不变。所有者2026-10-13明确授权仅将CI static-contracts整项作业预算增至20分钟；[ADR0026](../adr/0026-ci-complete-check-budget.md)记录依据和约束。
 
 shell 入口在 Node 启动前用 env allowlist 去掉继承的 Node preload、NODE_PATH、HOME、npm、Pi 和凭证变量。安装器再创建临时 HOME、空 npm user/global config、临时 cache，核验实际 npm 版本后执行 `npm ci --ignore-scripts --no-audit --no-fund --install-strategy=hoisted`，核对 lock 未变、完整图及安装版本。依赖 lifecycle scripts 不执行。
 

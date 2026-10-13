@@ -163,7 +163,7 @@ Repository Hygiene 负责：
 - Pi source/runtime 契约；
 - 自动化测试。
 
-`npm run test` 保留对 `apps/**`、`packages/**` 全部 `.test.ts` 的发现和排序；Node测试文件各自在隔离进程执行，文件并发数固定为2，避免执行时长随主机默认并发数变化。任何测试失败、取消或子进程异常仍使原检查失败，测试断言及CI时限保持原值。
+`npm run test` 保留对 `apps/**`、`packages/**` 全部 `.test.ts` 的发现和排序；Node测试文件各自在隔离进程执行，文件并发固定为2。任何测试失败、取消或子进程异常仍使原检查失败，测试断言与Worker屏障保持原值。所有者2026-10-13明确授权仅将CI的static-contracts整项作业预算从10增至20分钟，以完整运行原check；见[ADR0026](../adr/0026-ci-complete-check-budget.md)，不放宽产品或运行时期限。
 
 CI先由`static-contracts`固定 Node 22.23.1，以空 HOME/npm 配置和临时 cache 执行 npm 10.9.8 的 `ci --ignore-scripts`，再执行上述静态合同并计算Probe gate。工具链文件变化追加触发原兼容矩阵；原 job/权限/证据聚合不变。内部`CI required evidence`通过`needs`聚合CI内五个动态Job，并以workflow filename endpoint、`run.path`、机器`display_title`、repo/ref/SHA和时间戳匹配三套standalone run；不比较会映射为自定义显示标题的Actions `run.name`。三套success候选ID都须连续quiet 60秒才整体通过，任一latest变化或pending都会清除对应稳定候选。Ruleset要求的唯一`check`只观察当前run attempt内evidence；仅“Re-run failed jobs”可能缺evidence，恢复需“Re-run all jobs”。
 
