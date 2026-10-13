@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { createElement as h, useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import type { WorkbenchView } from "./workbench.ts";
 import { WorkbenchController, type WorkbenchPage } from "./controller.ts";
 
@@ -38,13 +38,34 @@ function Result({ controller, view, busy }: { controller: WorkbenchController; v
       h("p", { className: "muted mt8" }, result.explanation), h("div", { className: "row mt16" }, h(Button, { label: "符合要求", action: () => void controller.feedback(result.criterionId, result.criterionRevision, "accepted"), disabled: busy || result.method !== "user-confirmation" }), h(Button, { label: "需要修改", action: () => void controller.feedback(result.criterionId, result.criterionRevision, "rejected"), disabled: busy || result.method !== "user-confirmation" }))))),
     h("details", { className: "mt24" }, h("summary", null, "查看核验依据与历史"), h("div", { className: "stack mt16" }, ...bundle.observations.map(observation => h("div", { className: "card", key: observation.id }, h("strong", null, observation.payload.kind), h("p", { className: "muted" }, `记录时间 ${time(observation.observedAt)}`))), view.resultHistory && h("p", null, `已保留 ${view.resultHistory.value.length} 个历史结果版本。`))));
 }
+const taskTabs = [["conversation", "要求与执行"], ["artifact", "成果与核验"], ["log", "操作记录"]] as const;
 function TaskDetail({ controller, view, busy }: { controller: WorkbenchController; view: WorkbenchView; busy: boolean }) {
-  const [tab, setTab] = useState("conversation"), task = view.task?.value;
+  const [tab, setTab] = useState<string>("conversation"), task = view.task?.value;
+  const tabId = useId(), panelId = `${tabId}-panel`;
+  const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
+  function navigateTab(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft": next = (index + taskTabs.length - 1) % taskTabs.length; break;
+      case "ArrowRight": next = (index + 1) % taskTabs.length; break;
+      case "Home": next = 0; break;
+      case "End": next = taskTabs.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    setTab(taskTabs[next]![0]);
+    tabButtons.current[next]?.focus();
+  }
   if (!task || task.id !== controller.presentation.taskId) return h(Empty, { title: busy || view.status === "loading" ? "正在确认任务状态" : "当前任务正文不可用", text: busy || view.status === "loading" ? "正在与服务同步当前任务，请稍候。" : "重新同步后再查看，页面不会继续展示已失效的旧正文。" });
   return h("section", { className: `task-layout${tab === "artifact" ? " show-artifact" : ""}` }, h("div", { className: "task-header" }, h("div", { className: "between" }, h("h1", null, task.intent.request), h("div", { className: "row task-controls" }, h(Button, { label: "暂停", action: () => void controller.taskCommand("task.pause"), icon: "pause", disabled: busy }), h(Button, { label: "停止", action: () => void controller.taskCommand("task.cancel"), icon: "close", disabled: busy }), h(Button, { label: "继续", action: () => void controller.taskCommand("task.continue"), icon: "play", disabled: busy }))),
     h("div", { className: "row mt8" }, h(Status, { state: task.state }), h("span", { className: "muted small" }, "当前状态由服务确认"))),
-    h("div", { className: "task-tabs", role: "tablist", "aria-label": "任务详情" }, ...[["conversation", "要求与执行"], ["artifact", "成果与核验"], ["log", "操作记录"]].map(([id, label]) => h("button", { key: id, role: "tab", "aria-selected": tab === id, className: tab === id ? "active" : "", onClick: () => setTab(id!) }, label))),
-    h("div", { className: "task-panes" }, h("div", { className: "conversation", hidden: tab === "log" || tab === "artifact" }, h("div", { className: "user-message" }, task.intent.request), h("div", { className: "agent-message" }, h("div", { className: "row" }, h(Brand), h("strong", null, "知微")), h("p", { className: "mt16" }, "已按你给出的要求和完成条件记录这项任务。运行能力与结果以当前服务回执为准。")),
+    h("div", { className: "task-tabs", role: "tablist", "aria-label": "任务详情" }, ...taskTabs.map(([id, label], index) => h("button", {
+      key: id, id: `${tabId}-${id}`, type: "button", role: "tab", "aria-selected": tab === id, "aria-controls": panelId,
+      tabIndex: tab === id ? 0 : -1, ref: (button: HTMLButtonElement | null) => { tabButtons.current[index] = button; },
+      className: tab === id ? "active" : "", onClick: () => setTab(id), onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => navigateTab(event, index),
+    }, label))),
+    h("div", { className: "task-panes", id: panelId, role: "tabpanel", "aria-labelledby": `${tabId}-${tab}`, tabIndex: 0 }, h("div", { className: "conversation", hidden: tab === "log" || tab === "artifact" }, h("div", { className: "user-message" }, task.intent.request), h("div", { className: "agent-message" }, h("div", { className: "row" }, h(Brand), h("strong", null, "知微")), h("p", { className: "mt16" }, "已按你给出的要求和完成条件记录这项任务。运行能力与结果以当前服务回执为准。")),
       h("section", { className: "card mt24" }, h("h3", null, "完成条件"), ...task.intent.criteria.map(criterion => h("p", { key: criterion.id, className: "mt8" }, h(Icon, { name: "shield", size: 14 }), " ", criterion.description))),
       h("section", { className: "card mt16" }, h("h3", null, "当前执行"), h("div", { className: "row mt8" }, h(Status, { state: task.state })), h("p", { className: "muted mt8" }, "没有可靠总量时不显示百分比。当前样例不会通过模型询问进度。"))),
       h("div", { className: "conversation", hidden: tab !== "log" }, h("h2", null, "执行与判定历史"), ...task.attempts.map(attempt => h("section", { className: "card mt16", key: attempt.id }, h(Status, { state: attempt.state }), h("p", { className: "muted mt8" }, `要求版本 ${attempt.intent.revision}`), ...attempt.outcomes.map(outcome => h("p", { key: `${outcome.id}:${outcome.revision}`, className: "mt8" }, `结果版本 ${outcome.revision} · ${outcome.status} · ${time(outcome.recordedAt)}`))))),
