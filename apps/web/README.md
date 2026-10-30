@@ -22,6 +22,12 @@ npm run preview:web
 
 本轮使用 Windows 上的 Codex 内置浏览器，后端使用 Linux 正式 Node22.23.1 的新临时虚构安装；这不证明 Windows 原生持久后端或 PC 安装包已经可用。所有者明确「暂不调试手机端」，本轮不执行安卓真机/USB/Chrome 验收，不将 PC 窄窗口当作安卓平台证据。双端浏览器通过后再进行客户端打包。
 
+## 任务详情键盘操作
+
+任务详情页签是一个 Tab 停靠点；左右方向键循环选择「要求与执行 / 成果与核验 / 操作记录」，Home/End跳到首尾。Tab进入当前内容区，再按原顺序访问操作按钮；上下方向键及组合键保留浏览器默认行为。页签通过aria-controls关联共享内容区，内容区名称随选择更新；桌面「要求与执行」仍保留双栏结果视图。切换只改变呈现，不自动核验或发送任务命令。
+
+开发回归覆盖焦点、选择、内容关联、首尾循环与无额外请求；React/jsdom不证明实际浏览器Tab遍历、读屏或原生200%验收。键盘模式参考[WAI-ARIA页签模式](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)。
+
 ## 安卓浏览器的开发连接
 
 同一页面按设备宽度显示手机布局。服务只监听 literal loopback；安卓设备可在所有者已启用 USB 调试并授权的开发连接中，按[Android 官方反向端口转发说明](https://developer.android.com/develop/ui/views/layout/webapps/access-local-server)转发同一端口。将 SERIAL 和 PORT 替换为目标设备与预览实际端口：

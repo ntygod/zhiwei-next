@@ -3,10 +3,31 @@
 <!-- zhiwei-project-state
 milestone: P0
 status: active
-updated: 2026-10-13
+updated: 2026-10-30
 -->
 
-## 当前工作：P1-08 PC 浏览器接入修复与验收 #129（2026-10-13）
+## 当前工作：恢复 PR131 证据链并完成 PC 验收（2026-10-30）
+
+本轮开工基线 protected main 为 `11e7eff5050fdad8279e169bf1aa740579e89167`；P1-01—P1-07 的正式合成实现已合入，PR128 交付共享工作台，PR130 交付 PC 配对/加载/到期修复。最近完整合入检查为1175项，P1-08仍为 `in_progress`、Z18为 `not_run`，真实入口关闭。不要以本文件下方的提交前历史替代最新 Issue/PR 状态。
+
+唯一当前 execution 为 [#129](https://github.com/ntygod/zhiwei-next/issues/129)，primary 为 [PR131](https://github.com/ntygod/zhiwei-next/pull/131)，分支 `fix/129-task-keyboard-navigation`。原4dddec0代码已完成页签方向键/Home/End、焦点和ARIA关联，并取得独立审查及1175项完整检查；此前后续CI38355031419已成功，原 PR 正文的“新CI待结果”已过时。
+
+所有者2026-10-30要求先解除证据链阻塞并合入PR131，再补PC验收，同时同步进度文档，手机端继续暂缓。当前配置连接可正常到达原Artifact存储域名，未修改代理或网络路由；旧Artifact列表已空。原SDK/Worker工作流38355031441的完整attempt2已重跑成功，新原ZIP已下载，SDK122178字节与Worker72731字节经原完整校验与冻结对象一致。Worker成对来源的原run/job/ZIP/content校验已通过，两份72731字节结果与正常原件逐字节一致，比较器精确恢复原fba36da；最终HEAD完整检查/独立R3、Ready/live及保护合入仍需各自成功，不沿用4dddec0的旧批准。
+
+本轮风险R3，触及当前来源登记、进度事实与既有键盘交互交付；原完整检查、断言、运行期限、20分钟整项CI预算及比较器保持。回滚为新受审代码revert，不回退数据/控制journal/历史。只使用新自有临时虚构资料与固定Worker；PC原生200%、实际键盘与读屏尚待合入后验证，不以DOM、CSS缩放或窄视口替代。安卓、客户端打包、真实账户/模型/个人资料与外发均不在本轮启用范围。
+
+## PR131 提交前历史：任务详情键盘交互（2026-10-13）
+
+云端接手重新核对 protected main `11e7eff5050fdad8279e169bf1aa740579e89167`；PR130 已合入、原完整检查1175项通过，远端仅 main，无开放 PR/Incident，developmentPause=false。本工作区无在途修改；旧 PR130 和原验证记录保留。#44/#67/#98 没有改变本切片方向的新要求。
+
+沿用 canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一新分支 `fix/129-task-keyboard-navigation`，补齐任务详情页签的方向键/Home/End、单一 Tab 停靠点与内容区关联。桌面默认双栏保留，切换只改呈现，不发送任务命令；不涉及授权、持久化、Runtime 或质量门。风险按 R2（本状态文件机器下限），新最终 HEAD 的完整检查、独立审查、Draft/Ready CI 和受保护交付须分别取得，不能继承 PR130 的批准。
+
+PC 原生200%仍未验证，当前云环境没有可用桌面显示会话，不以CSS缩放、窄视窗或DOM测试替代。安卓按所有者要求暂缓；P1-08 in_progress / Z18 not_run，普通真实入口关闭、打包未开始。仅自有虚构临时资料与固定Worker；回滚通过新受审代码revert，不回退数据或版本历史。
+
+## PR130 已交付：PC 浏览器接入修复的提交前记录
+
+以下为 PR130 提交前历史，最终交付以 [#129 的保护合入记录](https://github.com/ntygod/zhiwei-next/issues/129#issuecomment-6138430822) 为准。
+
 
 canonical [#129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一分支 `fix/129-browser-acceptance`，基于 protected main `81265f0139dcbe49be281841ed639175a6f2897c`。开工已搜索去重，无开放 PR/Incident、远端仅 main、developmentPause=false；用户原型及原有未跟踪文件、#44/#67/#98 状态保持。
 
@@ -401,14 +422,14 @@ public-free-ruleset
 
 ## SDK / RPC verified Fixture 连续性
 
-本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #130；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原validators验证；最终 HEAD 的真实 Ready/live provenance仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
+本 SDK 连续性表按现行 Harness 与 SDK manifest 同步至 PR #131；既往来源保留在 Runtime 历史记录。Worker 当前 PR 双 attempt 来源已按原validators验证；最终 HEAD 的真实 Ready/live provenance仍待实际运行。SDK / RPC parity当前 `verified` Fixture身份：
 
 ```text
 source state                 verified
-capture head                 b47bdfb44b5cd92c206bec707b9dd8ef9962eaad
-capture workflow             38341892618
-capture artifact             11787745032
-capture artifact digest      sha256:2a40757de393084d98584961ba2810230709d48008208e1de5d2486d19b92c41
+capture head                 4dddec0fef4b9cd42133392b178a65add0656929
+capture workflow             38355031441
+capture artifact             12960193664
+capture artifact digest      sha256:f6f69f4dfc79023e90d34006dfb4096b86ebf2cb67a2dbb2aeb282401fb36cf1
 ```
 
 PR #71 历史取证：2026-10-08 的 Ready 检查发现旧公开 Artifact 返回 404。本次重新绑定 SDK/RPC 的成功 Draft Capture，以及 RPC Worker run `37748698280` 在 `44336fbaa512ef6351ef39d01380323ad6562b78` 的 attempts 2/3；两份 Worker `result.json` 各 72,731 bytes、逐字节一致，且与完整 committed Fixture 相等。正式协议、Payload、Normalizer、内容哈希、Workflow 和检查器保持不变；临时 recapture-only guard 已从最终候选恢复。公开 Artifact 有保留期限，续期和单作业重跑的核验方式见 [Runtime 取证记录](../spikes/pi-runtime-contract/README.md)。
