@@ -325,7 +325,7 @@ artifact id      12960193664
 artifact digest  sha256:f6f69f4dfc79023e90d34006dfb4096b86ebf2cb67a2dbb2aeb282401fb36cf1
 ```
 
-Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与`artifactDigest`一致，结果与Loader还原的committed JSON逐字节相同。当前PR131正常来源为run38355031441/attempt2/head4dddec0；正常SDK和Worker原ZIP、metadata与完整冻结对象已实际下载并按原validators核对。Worker双attempt来源待当前primary续期；最终候选必须恢复原comparator，Draft跳过的Ready gate不构成live provenance成功。Manifest是机器事实源。
+Artifact ZIP内只有一个`122178`字节的`result.json`；ZIP摘要与`artifactDigest`一致，结果与Loader还原的committed JSON逐字节相同。当前PR131正常来源为run38355031441/attempt2/head4dddec0；正常SDK和Worker原ZIP、metadata与完整冻结对象已实际下载并按原validators核对。Worker双attempt来源为run41019832252/head538d29d的原attempts1/2；原run/job/ZIP/content validators、首份ZIP回读及与正常Worker原件逐字节比较通过，最终候选精确恢复原comparator，Draft跳过的Ready gate不构成live provenance成功。Manifest是机器事实源。
 
 ## 安全与脱敏
 

@@ -8,11 +8,11 @@ updated: 2026-10-30
 
 ## 当前工作：恢复 PR131 证据链并完成 PC 验收（2026-10-30）
 
-当前 protected main 为 `11e7eff5050fdad8279e169bf1aa740579e89167`；P1-01—P1-07 的正式合成实现已合入，PR128 交付共享工作台，PR130 交付 PC 配对/加载/到期修复。最近完整合入检查为1175项，P1-08仍为 `in_progress`、Z18为 `not_run`，真实入口关闭。不要以本文件下方的提交前历史替代最新 Issue/PR 状态。
+本轮开工基线 protected main 为 `11e7eff5050fdad8279e169bf1aa740579e89167`；P1-01—P1-07 的正式合成实现已合入，PR128 交付共享工作台，PR130 交付 PC 配对/加载/到期修复。最近完整合入检查为1175项，P1-08仍为 `in_progress`、Z18为 `not_run`，真实入口关闭。不要以本文件下方的提交前历史替代最新 Issue/PR 状态。
 
 唯一当前 execution 为 [#129](https://github.com/ntygod/zhiwei-next/issues/129)，primary 为 [PR131](https://github.com/ntygod/zhiwei-next/pull/131)，分支 `fix/129-task-keyboard-navigation`。原4dddec0代码已完成页签方向键/Home/End、焦点和ARIA关联，并取得独立审查及1175项完整检查；此前后续CI38355031419已成功，原 PR 正文的“新CI待结果”已过时。
 
-所有者2026-10-30要求先解除证据链阻塞并合入PR131，再补PC验收，同时同步进度文档，手机端继续暂缓。当前配置连接可正常到达原Artifact存储域名，未修改代理或网络路由；旧Artifact列表已空。原SDK/Worker工作流38355031441的完整attempt2已重跑成功，新原ZIP已下载，SDK122178字节与Worker72731字节经原完整校验与冻结对象一致。Worker成对来源、最终HEAD完整检查/独立R3、Ready/live及保护合入仍需各自成功，不沿用4dddec0的旧批准。
+所有者2026-10-30要求先解除证据链阻塞并合入PR131，再补PC验收，同时同步进度文档，手机端继续暂缓。当前配置连接可正常到达原Artifact存储域名，未修改代理或网络路由；旧Artifact列表已空。原SDK/Worker工作流38355031441的完整attempt2已重跑成功，新原ZIP已下载，SDK122178字节与Worker72731字节经原完整校验与冻结对象一致。Worker成对来源的原run/job/ZIP/content校验已通过，两份72731字节结果与正常原件逐字节一致，比较器精确恢复原fba36da；最终HEAD完整检查/独立R3、Ready/live及保护合入仍需各自成功，不沿用4dddec0的旧批准。
 
 本轮风险R3，触及当前来源登记、进度事实与既有键盘交互交付；原完整检查、断言、运行期限、20分钟整项CI预算及比较器保持。回滚为新受审代码revert，不回退数据/控制journal/历史。只使用新自有临时虚构资料与固定Worker；PC原生200%、实际键盘与读屏尚待合入后验证，不以DOM、CSS缩放或窄视口替代。安卓、客户端打包、真实账户/模型/个人资料与外发均不在本轮启用范围。
 

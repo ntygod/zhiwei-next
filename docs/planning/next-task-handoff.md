@@ -5,14 +5,14 @@
 ## 当前工作与顺序
 
 - canonical [Issue129](https://github.com/ntygod/zhiwei-next/issues/129)，唯一 primary [PR131](https://github.com/ntygod/zhiwei-next/pull/131)，分支 `fix/129-task-keyboard-navigation`。
-- protected main `11e7eff5050fdad8279e169bf1aa740579e89167` 已包含 PR128 工作台接入和 PR130 PC 配对/加载/到期修复。P1-01—P1-07 合成实现已交付；不再从旧“下一项 P1-01”或 PR127/128 的 CI 快照选工。
+- 接手基线 protected main `11e7eff5050fdad8279e169bf1aa740579e89167` 已包含 PR128 工作台接入和 PR130 PC 配对/加载/到期修复。P1-01—P1-07 合成实现已交付；不再从旧“下一项 P1-01”或 PR127/128 的 CI 快照选工。
 - 所有者本轮明确：先恢复 PR131 的证据链并完成合入，再补齐 PC 实际验收，同时同步文档；手机端继续暂缓。基础 PC/APK 打包仍等待双端浏览器验收，不开启新的产品 WIP。
 
 ## PR131 的事实与剩余门
 
 原 `4dddec0fef4b9cd42133392b178a65add0656929` 实现任务详情页签的方向键/Home/End、焦点停靠和 ARIA 面板关联；切换只改呈现，不发送业务命令。其独立代码审查、本地1175项完整检查以及最后的 Draft CI38355031419 已成功。
 
-原 Artifact 下载曾被环境代理 CONNECT403 阻止；当前配置连接已能到达存储域名，旧Artifact列表为空。2026-10-30重跑原SDK/Worker工作流38355031441完整attempt2，新原ZIP已实际下载并经原validators/完整冻结对象校验。Worker双attempt来源续期和最终HEAD的原完整检查、新独立R3、Ready/live、保护合入及main回读仍须实际完成；这些门不由旧代码批准或Draft跳过的检查代替。
+原 Artifact 下载曾被环境代理 CONNECT403 阻止；当前配置连接已能到达存储域名，旧Artifact列表为空。2026-10-30重跑原SDK/Worker工作流38355031441完整attempt2，新原ZIP已实际下载并经原validators/完整冻结对象校验。Worker双attempt原来源已完成完整校验，最终HEAD的原完整检查、新独立R3、Ready/live、保护合入及main回读仍须实际完成；这些门不由旧代码批准或Draft跳过的检查代替。
 
 来源的机器事实源为 SDK/Worker manifests，原件身份与比较边界见[SDK记录](../spikes/pi-runtime-contract/sdk-rpc-parity-lifecycle.md)和[Worker记录](../../packages/pi-adapter/fixtures/pi-lifecycle-sdk-rpc-parity/rpc-worker-lifecycle.md)。仅同步真实身份，不重写冻结对象/normalizer；临时取证guard只允许在原完整比较之后失败，最终恢复原比较器。CI整项预算为所有者已授权的20分钟，原测试发现、断言及Daemon/Worker/RPC期限保持。
 
