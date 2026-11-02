@@ -26,6 +26,10 @@ Router 可以提出工作拆分；Coordinator 校验每个子任务有独立结�
 
 租约仅表达协调权，不是持续授权。租约过期的 Worker 可能仍在运行；Gateway 与 Execution Agent 必须拒绝旧 fencing token 的新动作。
 
+ResourceClaim 的运行租约与未决效果隔离分开。任何写 action 已获得可执行许可、已派发或结果 unknown 时，关联资源进入或保持 quarantined；租约到期、Worker 丢失、任务取消/终结都不能自动释放。不同 Task/Workspace/SourceAccount 对同一物理或外部目标必须得到同一 resourceKey，不能换身份绕过隔离。
+
+释放需要具体证据：动作确已终结且回执/状态已核对，或最终资源端原子验证 expectedVersion/fencing 并能证明旧请求以后不会再提交。仅在派发前读过 baseVersion、仅观察当前值或等待一段时间都不够。无法取得最终性证据时阻塞该资源的冲突写，允许不冲突的只读/独立资源工作；不以普通“继续”或新 Grant 解除。恢复时从独立 EffectFence 重建这些隔离项。
+
 ## 4. 异步 Job 生命周期
 
 ```text
@@ -39,18 +43,23 @@ Job 输出分块有 sequence 与字节上限；大正文进入获准内容对象
 
 取消 Job 先停止接纳新步骤，再请求中断；仅在实际进程/远端状态得到确认后显示 stopped。网络超时、进程被杀与外部动作已撤销是不同事实。
 
+Runtime 返回“已启动”后休止时，Task 保存必要 Job/子任务/待应用输入集合并进入 waiting-job，而不直接验证结束。Job 完成事件先更新该集合，再唤醒原任务的有效 Assignment；Worker 内存已释放时按当前 Checkpoint 重建。崩溃前已接纳动作的真实回执可以由 Gateway 追加到原 action 的历史，但旧 Worker 不得直接修改当前 Task。必要工作仍 pending 时不产生 partial/unverifiable 终态；取消或显式放弃某个必要步骤必须记录新的用户决定和真实部分成果。
+
 ## 5. 动作派发与权限
 
 Action Gateway 每次检查：绑定身份、当前版本/epoch、主体、动作、资源、目的地、数据类别、次数/费用/时长和有效期。ALLOW/ASK/DENY 的原因与所用 Grant revision 持久记录。
 
 ```text
-T1：验证当前状态，登记 ActionAttempt 和预算 reservation，提交
-T2：取得短 admission 锁，再验撤销/版本，标记 dispatching，提交
+T1：验证当前状态，登记稳定 logicalOperationId、ActionAttempt 和预算 reservation，提交
+独立记录：将 EffectFence intent 持久到普通备份之外，取得 durable receipt
+T2：取得短 admission 锁，再验撤销/版本与 EffectFence，标记 dispatched，提交
 外部 I/O：只接受登记过的 actionId 和短期签名能力
-T3：保存发送观察/回执，结算预算，提交结果与 Outbox
+T3：先持久独立效果回执，再保存控制库观察/回执、结算预算并提交 Outbox
 ```
 
 数据库事务不跨网络等待。撤权与接纳同一动作必须通过同一序列化边界；DB 提交与远端真正执行之间仍存在不可消除的故障窗口。能力令牌仅限单一 actionId、参数摘要、资源、到期和执行节点，节点不得将其解释为通用凭据。
+
+这里 dispatched 表示已经进入“可能发生效果”的边界，不证明远端实际执行；实际发送观察与最终确认分别记录。EffectFence 服务不可用时不签发新的外部效果令牌。效果已发生但独立回执写入失败时保留 intent/unknown 和资源隔离，不能先确认完成。详细的恢复屏障见[提交合同](contracts.md)。
 
 在途操作可能已经完成，不能许诺撤权瞬间撤回远端效果。控制面失联时 Execution Agent 默认停止接纳新动作；已接纳的动作按其短期许可完成或中断并报告。
 
@@ -60,6 +69,8 @@ T3：保存发送观察/回执，结算预算，提交结果与 Outbox
 
 内部投递至少一次；接收者以 actionId/inputId/eventId 去重。相同 ID 不同内容拒绝并保留诊断。预算预留也按 actionId 幂等，恢复和重试不能再次获得完整额度。
 
+logicalOperationId 在首次动作意图提交时分配，绑定 Task/intent/计划步骤，跨 attempt、Worker 和普通恢复保持稳定；已存在的效果不能通过生成新 actionId 重做。恢复还会按 Task/资源设置整段时间窗的核对屏障，防止重新规划出新步骤 ID 绕过历史效果。
+
 只有 transient 且可证明安全的步骤允许自动重试，默认一次。认证失败、撤销、数据损坏、协议不兼容、未知副作用不进入自动重试。重试策略及累计消耗是任务状态，不由 Runtime 默默重置。
 
 ## 7. 结果验证
@@ -68,7 +79,7 @@ T3：保存发送观察/回执，结算预算，提交结果与 Outbox
 
 文件存在不等于内容合格；shell 退出 0 不等于任务目标达到；模型评审只能作为特定质量建议，不能独自认证授权、安全、外部效果或数据正确性。
 
-Outcome 归约规则：必需项全部 pass 且无未知效果才 completed；有可用成果但不完整为 partial；有确定失败为 failed；证据不足为 unverifiable。用户取消优先保留 cancelled 及实际部分成果。后续新证据产生新 Outcome revision，不改写旧判定。
+只有[待办屏障](domain.md)满足后才归约终态。必需项全部 pass 且无未知效果为 completed；工作已经结束且有可用成果但不完整为 partial；有确定失败为 failed；工作已经结束但证据不足为 unverifiable。正在运行的 Job 和检查不是“缺证据失败”。用户取消优先保留 cancelled 及实际部分成果；未知效果和资源隔离仍独立存续。后续新证据产生新 Outcome revision，不改写旧判定。
 
 ## 8. Supervisor 与进展
 

@@ -13,10 +13,10 @@
   "requirements": [
     {"id":"REQ01","title":"默认云端、本地与混合部署","chapters":["overview","deployment"],"scenarios":["D01","D02","D03","D04"]},
     {"id":"REQ02","title":"复用 Runtime，不自研 Agent Loop","chapters":["runtime"],"scenarios":["R01","R02","R08"]},
-    {"id":"REQ03","title":"统一协调与独立执行","chapters":["overview","execution"],"scenarios":["E04","X01","X03"]},
+    {"id":"REQ03","title":"统一协调与独立执行","chapters":["overview","execution"],"scenarios":["E04","X01","X03","X07"]},
     {"id":"REQ04","title":"事件过滤、去重、订阅直通","chapters":["events-and-interaction"],"scenarios":["E01","E02","E03"]},
     {"id":"REQ05","title":"执行中持续接收并处理新要求","chapters":["events-and-interaction","runtime"],"scenarios":["E04","E05","E06","E07","R03","R04"]},
-    {"id":"REQ06","title":"持久任务、等待与恢复","chapters":["domain","execution","deployment"],"scenarios":["D02","D03","D05","D06"]},
+    {"id":"REQ06","title":"持久任务、等待与恢复","chapters":["domain","execution","deployment"],"scenarios":["D02","D03","D05","D06","D09"]},
     {"id":"REQ07","title":"异步工具、推送进度、效果核对","chapters":["execution","events-and-interaction"],"scenarios":["E08","R05","R06","X02"]},
     {"id":"REQ08","title":"Markdown 记忆及并发提交","chapters":["memory","contracts"],"scenarios":["M01","M02","M03","M07"]},
     {"id":"REQ09","title":"来源、纠正、失效与遗忘","chapters":["domain","memory","security"],"scenarios":["M04","M05","M06","M08","M09","M10"]},

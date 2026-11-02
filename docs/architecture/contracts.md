@@ -111,6 +111,7 @@ Router 和 Worker 看到的是这些端口的受限工具投影。端口实现�
 | durable_job / job_event | dueAt、owner、lease、deadline、attempt、结果；调度可重领不重复效果 |
 | grant / approval / budget_reservation | 精确作用域与额度；reservation UQ(actionId)，审批版本绑定 |
 | action_attempt / receipt | 派发前登记、回执/unknown/核对；同键不同参数拒绝 |
+| effect_fence_projection / recovery_barrier | 独立效果日志的工作投影；备份水位之后的 Task/资源核对屏障，普通恢复不得清空 |
 | memory_document / memory_version / memory_dependency | 不可变对象引用、当前提交版本、来源/生命周期/访问元数据；不存记忆正文作为事实副本 |
 | artifact / outcome / criterion_result / memory_use | 精确产物与标准；exposure/adoption/benefit 分开 |
 | opportunity / opportunity_feedback / learning_run | topicKey、来源版本、再次评估条件、预算与可撤回版本 |
@@ -148,7 +149,17 @@ Router 和 Worker 看到的是这些端口的受限工具投影。端口实现�
 
 若新版本正文丢失但旧版本已被确认失效，恢复结果是 unavailable，而不是重新使用旧版本。外部控制域的可靠存储和恢复演练是生产启用条件，不可用普通对象桶中一个可任意覆盖的 JSON 冒充。
 
-## 8. 错误与兼容
+## 8. 不随普通备份回退的效果记录
+
+与失效记录同属独立恢复控制域，但使用独立的 EffectFence 序列与 head。每个有外部副作用的动作和 Delivery 在取得执行令牌前，先持久登记 logicalOperationId、actionId、Task/intent/step、resourceKey、目的地类别、预算引用和最小参数完整性标识。确认回执也在控制库确认完成之前写入该域。该域不包含原始思维链或正文；敏感目标/回执细节放受保留策略控制的对象，最小记录用 opaque ID。细节被清除后不能据此推断“可以安全重做”。
+
+普通备份记录 effectHead 水位。恢复时必须取得当前独立 effectHead，重放备份水位之后的所有 intent/receipt：已 confirmed 的效果恢复为已发生；无确定终态的 intent 进入核对；所属 Task 在备份中不存在时创建不可执行的恢复占位，关联已知资源与效果。上下文资料丢失显示 missing-context，不凭空重建请求。
+
+受影响的 Task/资源在 recovery-barrier 未解除前禁止新的冲突外部动作，即使用户重新授予 Grant、模型重新规划或生成新的步骤 ID。屏障只因既有效果已映射并核对、无剩余未知而解除；不能把重新登录/授权当作效果核对。新任务若命中同一 quarantined resourceKey 也受屏障约束。
+
+独立效果域与主控制库同时丢失时，不保证知道外部发生过什么；整个可能受影响时间窗的 Source/资源保持写入关闭，需从目的系统或用户提供的具体证据重建。此时不允许空初始化效果账本后继续自动写。资源 key 的规范化规则与安装身份不随普通备份回退，跨账号/Workspace 的相同实际目标不能产生不同隔离键。
+
+## 9. 错误与兼容
 
 公开错误类别：validation、unauthorized、forbidden、not-found、conflict、stale、unsupported、budget-exhausted、waiting-dependency、unavailable、needs-reconciliation。不存在性对无权限主体统一处理；日志不返回秘密或未获准路径。
 

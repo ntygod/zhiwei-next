@@ -20,6 +20,7 @@
 | Assignment | Task 某次执行与 Worker/设备/Runtime 的绑定 | 控制库 |
 | InputReceipt | 新消息的接收、归属、投递和生效状态 | 控制库 |
 | Job / ActionAttempt | 异步工具工作及其外部效果，幂等键、派发证据、回执 | 控制库；设备保留最小未确认回执 |
+| EffectFence | 不随普通备份回退的动作意图/确认记录，logicalOperationId、actionId、task/intent、resourceKey | 独立恢复控制域；控制库为工作投影 |
 | Outcome / Artifact | 逐项验收结果与精确产物版本 | 控制库 + 内容对象 |
 | MemoryDocument | 一份有来源的事实、偏好、经历、假设或做法 | 不可变 Markdown 对象 + 有效版本目录 |
 | MemoryUse | 暴露、采用、结果和收益的分别记录 | 控制库 |
@@ -51,7 +52,7 @@
 ```text
 Task:
   queued -> running -> verifying -> completed | partial | failed | unverifiable
-  queued/running -> waiting-input | waiting-event | waiting-device | waiting-approval
+  queued/running -> waiting-input | waiting-event | waiting-job | waiting-device | waiting-approval
   waiting-* -> queued（条件满足且仍有授权）
   running -> pausing -> paused
   非终态 -> cancelling -> cancelled | needs-reconciliation
@@ -68,6 +69,9 @@ ActionAttempt:
   prepared -> authorized -> dispatched -> confirmed | failed | unknown
   unknown -> reconciled | needs-user
 
+ResourceClaim:
+  leased -> quarantined（在途/unknown）-> released（最终性证据）
+
 MemoryDocument:
   candidate -> active -> superseded | disputed | expired | forgotten
   inferred 文档保持 hypothesis 类型，不能仅凭置信度成为 verified
@@ -81,7 +85,9 @@ Procedure:
   candidate -> trial -> active -> suspended | retired
 ```
 
-`pausing/cancelling` 是请求，`paused/cancelled` 是已观察到的边界。Runtime idle/settled 只使 Task 进入验证；Task 完成不能从进程退出或最后一句文本推导。
+`pausing/cancelling` 是请求，`paused/cancelled` 是已观察到的边界。Runtime idle/settled 只更新 Runtime 活动事实，不直接改变 Task 为 verifying。仍有必要 Job、子任务、未应用控制输入或待核对效果时，Task 保持 running/background 或进入对应 waiting-*；Worker 的暂时休止不结束其任务所有权。
+
+进入 verifying 必须有绑定当前 intentRevision 的完成提案，并满足待办屏障：必要 Job/子任务已终结，已接纳输入均已应用、被新输入取代或明确拒绝，未知效果已核对，且没有未解决的用户决定。Verifier 判断证据质量；“还在执行”和“执行完但缺证据”必须区分。验证过程中需要异步检查时回到 waiting-job/event，取得检查结果后再 verifying，不提前生成 unverifiable 终态。独立后继工作必须正式转交给另一个有授权的 Task，不能通过遗忘子任务来满足屏障。
 
 修改目标/验收/读取范围使 `intentRevision` 增加；单纯进度更新只增加对象 revision。已完成任务的新要求创建新 attempt 或后继 Task，保留旧 Outcome；不得抹去失败历史。用户修改验收标准必须有明确来源，模型不能为自己放宽标准。
 
@@ -103,3 +109,5 @@ Procedure:
 - D08：运行数据与模型会话分离；丢失 Session 不等于丢失目标或恢复授权。
 - D09：缓存、向量、摘要不是授权或证据真源。
 - D10：本项目不持久化原始思维链；解释只来自可观察事实和标明性质的摘要。
+- D11：普通备份恢复不能擦除已发生或可能发生的效果事实；重新授权不解除恢复核对屏障。
+- D12：写资源隔离的释放依据是效果最终性，不是租约到期、Runtime 退出或 Task 显示终态。
