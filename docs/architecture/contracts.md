@@ -96,6 +96,8 @@ SSE cursor 绑定 owner、workspace、audience、权限版本和 recoveryEpoch�
 | DeliveryPort | prepare/send/reconcile；目的地、内容版本、回执 |
 | SupervisorPort | inspect/request-recovery/pause；无普通写工具 |
 
+内部 `POST /internal/lifecycle/drain` 只接受已认证的部署/Supervisor 身份，绑定进程实例、当前 epoch、原因与 deadline。返回 draining/drained/incomplete 及 receipt，不作为模型工具或普通用户任意管理端口；同一请求可重读结果。drained 需所有规定的业务收尾与检查点已确认，原生进程退出不代替该回执。正常部署流程取得此结果后才发送 SIGTERM；未取得回执按异常恢复处理。
+
 Router 和 Worker 看到的是这些端口的受限工具投影。端口实现不暴露控制库连接、对象桶管理权限或通用凭据读取工具。
 
 ## 5. 控制库逻辑表

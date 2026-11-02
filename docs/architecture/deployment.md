@@ -34,7 +34,7 @@
 
 内部 API 使用独立服务身份，连接同时验证安装 ID、Owner、设备与协议版本。外部请求不能选择任意 worker address 或数据库 schema。PostgreSQL、内容桶和内部 Gateway 不直接暴露公网。
 
-服务镜像、Node、Harness/Cordis、知微 Bundle、连接器和数据库扩展固定精确版本/digest。制品构建与源代码调研分开；源码 HEAD 支持某接口，不等于发布制品已满足合同。两个 Harness Profile 使用各自隔离的 DSH_HOME、工作目录、环境和已核验组合；禁用隐式机器/home overlay、默认日志上传、原始会话持久化、非白名单 Provider/工具以及 Agent 可用的插件管理。
+服务镜像、Node、Harness/Cordis、知微 Bundle、连接器和数据库扩展固定精确版本/digest。制品构建与源代码调研分开；源码 HEAD 支持某接口，不等于发布制品已满足合同。两个 Harness Profile 使用各自隔离的 DSH_HOME、工作目录、环境和已核验组合；禁用隐式机器/home overlay、默认日志上传、原始会话持久化、非白名单 Provider/工具以及 Agent 可用的插件管理。进程启动前预置只读 Profile，并用不可写挂载/ACL 封锁 DSH_HOME/logs 的原始启动诊断文件；stdio 由易失管道捕获，不让容器日志驱动原样收集。该限制必须同时通过正常启动与含合成秘密的失败启动验证。
 
 Profile 成员在生产中固定，不使用 HMR 热切换活跃执行。配置更新先冻结新接纳、排空或记录未决工作、切换组合并验证 readiness，再恢复；失败保留明确的不可用/回滚状态，不能把上游 Loader 的部分激活当成原子配置提交。所有调度器、监听器和注册由 Cordis effect 持有；需要先后顺序的停止、回执核对、Agent dispose 和连接释放必须放在同一个显式有序 disposer，不能假定不同异步 disposer 串行执行。
 
@@ -44,7 +44,11 @@ Profile 成员在生产中固定，不使用 HMR 热切换活跃执行。配置�
 
 未完成恢复之前不启动模型、Connector 写入或自动任务。业务 readiness 与进程 liveness 分开。
 
-关闭顺序：拒绝新派发 → 保存队列/输入 → 请求 Worker/Job drain → 保存回执或 unknown → 关闭订阅与来源游标 → 释放 lease 和连接。默认优雅关闭预算 15 秒，超时保留未确定状态，不标为成功停止。
+正常关闭先调用知微内部 drain 端口，而非直接发送 SIGTERM：拒绝新派发 → 保存队列/输入 → Worker/Job drain → 保存回执或 unknown → 显式 dispose AgentHandle → 确认业务 drain 结果。控制面的 Gateway、账本与回执通道保持可用，先排空 Worker，控制面最后排空。
+
+知微业务 drain 的默认预算为 15 秒。之后 Supervisor 发送 SIGTERM，官方 CLI 的原生 root 清理预算固定为最多 5 秒；部署终止宽限须覆盖业务 drain、原生清理及通信余量，默认至少 25 秒。平台的 pre-stop/服务停止流程必须调用 drain 端口，不能只是把 SIGTERM 后的等待设为 15 秒并假定 CLI 会等待。
+
+业务 drain 超时、直接 SIGTERM/SIGINT、第二次信号导致立即退出或强杀，都记录为未证明干净关闭。原生退出 0 不改变业务成功状态；保留或恢复 unknown、丢失绑定与资源 quarantine，再按 EffectFence/Checkpoint 核对。无法保存的最新状态如实标 incomplete，不假称关闭一定保存最终 turn/end。
 
 ## 5. 高可用与扩展
 

@@ -91,7 +91,7 @@ dsh --profile zhiwei-dev
 
 交付预构建 npm 包或 tarball，不要求服务器在安装时执行任意 Git prepare 脚本。完整制品包括：固定 Harness 及其依赖、知微 Bundle、受审 Profile 清单、版本/digest、数据迁移和回滚说明。
 
-生产使用独立 DSH_HOME、固定工作目录和最小环境；禁止额外 home/CLI overlay 和动态安装改变已核验组合。启动器仍是官方 dsh，知微提供配置生成/预检和部署入口，不复制其 Agent Loop。
+生产使用独立 DSH_HOME、固定工作目录和最小环境；禁止额外 home/CLI overlay 和动态安装改变已核验组合。启动前封锁 CLI 的 DSH_HOME/logs 原始诊断写入，捕获其 stderr 回落且不原样收集；正常停止先走知微 drain，再进入官方 CLI 的 5 秒清理。具体边界与验收见[部署合同](deployment.md)。启动器仍是官方 dsh，知微提供配置生成/预检和部署入口，不复制其 Agent Loop。
 
 升级时在候选组合中运行完整契约、取消、插件清理、数据边界与恢复场景，再切换实际配置。源码 checkout 的调试修改必须通过正式补丁/制品登记才能上线；同一版本字符串不能掩盖不同构建内容。
 

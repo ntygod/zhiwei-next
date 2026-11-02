@@ -40,6 +40,8 @@
 
 后续所有者明确选择 DeepSeek Harness，并询问源码与知微代码的开发关系。ADR 0030 改为专用 Profile/Bundle 与公开插件侧 API，原 Pi ADR 0028 保留历史并标记 Superseded；知微仍是独立仓库，UI/产品实现未启动。该修改需要绑定新 HEAD 的独立 R3 设计审查，不能沿用 871c2bcd 的批准。
 
+Harness 专项独立审查补充了两个上游边界：CLI 启动诊断直接写原始错误文件，以及收到信号后的5秒清理硬上限。当前设计分别增加启动前持久写封锁及stderr回落控制、业务drain先于SIGTERM的停机协议，并扩充S11/R09/D02；这些仍是待真实运行验证的合同。
+
 ## 回滚方法
 
 通过新的受审 revert 恢复基线树，不 reset/force-push main。工作树恢复可从上述基线 commit 或 bundle 生成；未跟踪文件从仓库外归档按原相对路径恢复并核对 manifest。

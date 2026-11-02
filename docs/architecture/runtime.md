@@ -89,11 +89,19 @@ Harness 不挂载 session persistence backend 时，Session 留在内存。本�
 
 原生 stdout/stderr 和未处理异常也不是默认可持久日志。Worker 进程的原始流只能进入有界易失捕获，持久诊断仅输出白名单字段；部署不得让容器日志驱动直接归档这些原始流。未知错误对象不展开为全文日志，无法覆盖该输出路径时 profile 不启用。
 
+官方 CLI 的 `reportStartupFailure` 还会绕过 Profile 日志插件，直接把完整 error/cause/隐藏属性写入 `$DSH_HOME/logs/startup-*.log`；写失败又把全文输出到 stderr。控制面与 Worker 均须在启动 dsh **之前**将该固定日志目录置于不可写挂载/ACL 下，宿主非特权运行，并接管原始 stdout/stderr 为有界易失管道。Profile 预置并只读挂载；其他必要 scratch 只用不收集、不备份的易失存储。readiness 插件启动后才禁日志已经太晚。
+
+启动失败只能向用户/持久日志输出白名单错误类别、受控 ID 和退出状态；文件写入失败的 stderr 回落同样不能被容器日志、终端录制或 Supervisor 原样保存。若某平台无法在不破坏正常启动的情况下封锁直接诊断写入，则保持 unsupported，或对该具体行为采用单独登记、审查和验证的上游脱敏补丁；不得默默允许落盘。
+
 重启以当前 CheckpointManifest、合格记忆和未决输入建立新的原生 Agent/Session，标记为宿主重建，而非逐 token 原生 resume。原生 in-memory inbox 不提供跨进程耐久性，知微 Inbox/Outbox/EffectFence 继续负责重放与核对。未知效果先核对，旧权限不随 Session 重建复活。
 
 ## 8. 清理与配置变化
 
-注册、监听器、连接和 watcher 由 Cordis effect 拥有。必须有序的关闭流程放在同一个 disposer 中：冻结派发 → 取消/排空 → 保存回执或 unknown/checkpoint → dispose AgentHandle → 释放连接与租约。不同异步 disposer 可能并发，不能以插件声明顺序代替这个合同。
+注册、监听器、连接和 watcher 由 Cordis effect 拥有，但官方 CLI 收到 SIGTERM/SIGINT 后会立即开始 root disposal，并有 5 秒硬上限；原生 Agent 的拥有者/工厂还有自己的清理注册。知微的一个 disposer 不能保证这些上游清理都等待业务排空。
+
+正常停机必须先经受认证的知微 drain 端口，在 root 仍 active 时执行：冻结派发 → 取消/排空必要工作 → 保存回执或 unknown/checkpoint → 显式 dispose AgentHandle → 确认业务 drain 结果。只有这一步结束后，Supervisor 才发送 SIGTERM 进入原生 root 清理并释放剩余连接。知微自有资源中必须串行的释放放在同一个 disposer，不能以多个插件的注册顺序代替。
+
+未先 drain 的直接信号、重复信号、强杀、依赖突然卸载或业务 drain 超时都走异常停止路径。CLI 的退出码 0 不证明 Task 已完成或回执已持久；相关绑定进入 lost/unknown 并由 EffectFence、Inbox 和 Checkpoint 恢复核对。不得依赖 root disposal 获得完整的业务排空时间。
 
 Gateway、账本和必要回执通道在收尾期间保持可用。依赖消失触发卸载时，也要保留 Task 的明确阻塞/未知状态。原生 root shutdown 存在最终 turn/end 可能未持久的已知边界，所以业务完成从不依赖该事件单独证明。
 
