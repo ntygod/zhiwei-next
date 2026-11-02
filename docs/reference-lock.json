@@ -16,6 +16,13 @@
     "commit": "6337fc823ce20251c8de8085948165c81aaa701e",
     "evidence": "documentation-and-selected-source-read"
   },
+  "selectedFramework": {
+    "package": "@deepseek-ai/cordis",
+    "version": "4.0.6-alpha.1",
+    "integrity": "sha512-GgUFYPkAERAhjq/H7ASM9G2tWu07bY6XOD/q16jUXqsj/arawh0EIZKB+PjTXLjC7vgG3XptSvJ/8dZkkIWsfQ==",
+    "evidence": "source-and-published-dsh-agent-peer-and-registry-metadata-read",
+    "runtimeVerification": "not-run"
+  },
   "deepseekHarness": {
     "repository": "deepseek-ai/deepseek-harness",
     "commit": "ce7073d51254c26cd63b22a60835b8f948deb447",

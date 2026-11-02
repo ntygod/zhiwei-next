@@ -51,17 +51,19 @@ Bundle manifest 示意（包名为项目内部约定，不代表已经发布）�
   "engines": { "dsh": "0.2.2-alpha.2" },
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "0.2.2-alpha.2",
+    "@deepseek-ai/cordis": "4.0.6-alpha.1",
     "@deepseek-ai/dsh-agent": "0.2.2-alpha.2"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "0.2.2-alpha.2",
+    "@deepseek-ai/cordis": "4.0.6-alpha.1",
     "@deepseek-ai/dsh-agent": "0.2.2-alpha.2"
   }
 }
 ```
 
 需要共享实例的 dsh/Cordis 包声明 peer + dev dependency，遵循上游 runtime resolution；不要用任意 `npm link` 方式装出两份不一致的宿主服务。独立第三方依赖按普通依赖处理。整体 lockfile 与运行制品摘要一并保存。
+
+Cordis 使用独立版本号，不能把所有包都填成 dsh 的版本。已核对发布的 `dsh-agent@0.2.2-alpha.2` 要求 Cordis `~4.0.6-alpha.1`，本设计固定为 `4.0.6-alpha.1`；其 loader/include 依赖也要按发布清单和 lockfile 解析。上述示意只列直接使用的宿主 peers，不代替完整依赖闭包验证。
 
 ## 4. 本地联调
 

@@ -45,6 +45,7 @@ DeepSeek Harness 当前选定 commit：`ce7073d51254c26cd63b22a60835b8f948deb447
 - [CLI 组合与默认值](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/apps/cli/reference/README.md)：首次自定义 Profile 的 base、重置语义、默认日志上传与环境读取。知微必须预检最终组合。
 - [vendor 边界](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/vendor/README.md)：Loader 变更不是完整事务，启动失败可能部分应用。
 - [Harness npm 元数据](https://registry.npmjs.org/%40deepseek-ai%2Fdsh/0.2.2-alpha.2)。
+- [Cordis npm 元数据](https://registry.npmjs.org/%40deepseek-ai%2Fcordis/4.0.6-alpha.1)及[dsh-agent 发布 peer 要求](https://registry.npmjs.org/%40deepseek-ai%2Fdsh-agent/0.2.2-alpha.2)：Cordis 的版本独立于 dsh，示例与锁文件不能直接复制同一个版本号。
 
 - [SDK Server](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/sdk/server/README.md)：入队、事件、resume 与 shutdown。
 - [SDK Protocol](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/sdk/protocol/README.md)：当前无单会话 cancel/session-close；无协议版本协商承诺。

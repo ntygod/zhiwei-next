@@ -22,6 +22,13 @@ assert.equal(contract.productPhases, 'none');
 assert.equal(sources.selectedRuntime.runtimeVerification, 'not-run');
 assert.match(sources.selectedRuntime.sourceCommit, /^[0-9a-f]{40}$/);
 assert.match(sources.selectedRuntime.integrity, /^sha512-[A-Za-z0-9+/]+=*$/);
+assert.match(sources.selectedFramework.integrity, /^sha512-[A-Za-z0-9+/]+=*$/);
+const development = await read('docs/architecture/harness-development.md');
+const bundleExample = JSON.parse(development.match(/```json\n([\s\S]*?)\n```/)[1]);
+assert.equal(bundleExample.engines.dsh, sources.selectedRuntime.version);
+assert.equal(bundleExample.peerDependencies['@deepseek-ai/cordis'], sources.selectedFramework.version);
+assert.equal(bundleExample.devDependencies['@deepseek-ai/cordis'], sources.selectedFramework.version);
+assert.equal(bundleExample.peerDependencies['@deepseek-ai/dsh-agent'], sources.selectedRuntime.version);
 assert.match(sources.resetBase, /^[0-9a-f]{40}$/);
 
 const unique = (values, label) => {
