@@ -1,8 +1,0 @@
-import { defineConfig } from "vite";
-import { fileURLToPath } from "node:url";
-
-export default defineConfig({
-  root: fileURLToPath(new URL("./", import.meta.url)),
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, cssCodeSplit: false,
-    rollupOptions: { output: { entryFileNames: "assets/workbench.js", chunkFileNames: "assets/[name].js", assetFileNames: "assets/workbench[extname]" } } },
-});
