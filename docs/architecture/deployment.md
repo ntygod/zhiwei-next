@@ -27,14 +27,16 @@
   -> 反向代理 / Owner 身份认证
   -> control-plane（API、Router 协调、Connector、Memory、队列）
      -> PostgreSQL / 内容对象 / Secret Manager
-     -> worker-host pool（Pi SDK；仅经 Gateways）
+     -> worker-host pool（独立 Harness Profile；仅经 Gateways）
      -> execution-agent（受认证出站连接；具体 Job）
   supervisor（独立进程，只读监测与有限恢复命令）
 ```
 
 内部 API 使用独立服务身份，连接同时验证安装 ID、Owner、设备与协议版本。外部请求不能选择任意 worker address 或数据库 schema。PostgreSQL、内容桶和内部 Gateway 不直接暴露公网。
 
-服务镜像、Node、Pi、连接器和数据库扩展固定精确版本/digest。制品构建与源代码调研分开；源码 HEAD 支持某接口，不等于发布制品已满足合同。
+服务镜像、Node、Harness/Cordis、知微 Bundle、连接器和数据库扩展固定精确版本/digest。制品构建与源代码调研分开；源码 HEAD 支持某接口，不等于发布制品已满足合同。两个 Harness Profile 使用各自隔离的 DSH_HOME、工作目录、环境和已核验组合；禁用隐式机器/home overlay、默认日志上传、原始会话持久化、非白名单 Provider/工具以及 Agent 可用的插件管理。
+
+Profile 成员在生产中固定，不使用 HMR 热切换活跃执行。配置更新先冻结新接纳、排空或记录未决工作、切换组合并验证 readiness，再恢复；失败保留明确的不可用/回滚状态，不能把上游 Loader 的部分激活当成原子配置提交。所有调度器、监听器和注册由 Cordis effect 持有；需要先后顺序的停止、回执核对、Agent dispose 和连接释放必须放在同一个显式有序 disposer，不能假定不同异步 disposer 串行执行。
 
 ## 4. 启动与关闭
 

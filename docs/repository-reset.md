@@ -38,6 +38,8 @@
 
 复审进一步要求将备份重放起点绑定到同一数据库快照中完整连续投影的 applied 水位；当前合同分别定义 appliedEffectHead / appliedInvalidationHead，独立域 head 只作恢复上界，并覆盖日志已提交但数据库未提交的故障窗口。
 
+后续所有者明确选择 DeepSeek Harness，并询问源码与知微代码的开发关系。ADR 0030 改为专用 Profile/Bundle 与公开插件侧 API，原 Pi ADR 0028 保留历史并标记 Superseded；知微仍是独立仓库，UI/产品实现未启动。该修改需要绑定新 HEAD 的独立 R3 设计审查，不能沿用 871c2bcd 的批准。
+
 ## 回滚方法
 
 通过新的受审 revert 恢复基线树，不 reset/force-push main。工作树恢复可从上述基线 commit 或 bundle 生成；未跟踪文件从仓库外归档按原相对路径恢复并核对 manifest。

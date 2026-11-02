@@ -26,7 +26,7 @@ LearningRun 由持久事件驱动，键为 sourceEvent/version + learnerVersion 
 已提交 Outcome / 用户纠正 / 新证据
 -> 构建合格 Episode 与使用记录
 -> 判定有无新信息
--> Pi Learner 提出候选（事实、解释、做法、无需学习）
+-> Harness 中受限 Learner Agent 提出候选（事实、解释、做法、无需学习）
 -> schema / 来源 / 范围 / 冲突 / 新鲜度检查
 -> 明确规则接受、进入试用、等待确认或拒绝
 -> Markdown 新版本 + 目录提交 + 依赖通知

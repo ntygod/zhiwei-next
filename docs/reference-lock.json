@@ -2,12 +2,13 @@
   "schemaVersion": 1,
   "checkedAt": "2026-11-02",
   "selectedRuntime": {
-    "name": "pi-sdk",
-    "package": "@earendil-works/pi-coding-agent",
-    "version": "1.4.0",
-    "sourceCommit": "c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8",
-    "integrity": "sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==",
-    "evidence": "source-and-registry-metadata-read",
+    "name": "deepseek-harness-native",
+    "package": "@deepseek-ai/dsh",
+    "version": "0.2.2-alpha.2",
+    "sourceCommit": "ce7073d51254c26cd63b22a60835b8f948deb447",
+    "integrity": "sha512-mdcpgF8D1eFQV8Gu3T/sYLkBwfw9h/Li0uPIxXyby1VybJgrFg8BU1Le40FiMnN+heL7k3zOMuAVe7sFq/JO4w==",
+    "integration": "native-plugin-api-profile-bundle",
+    "evidence": "native-plugin-source-and-registry-metadata-read",
     "runtimeVerification": "not-run"
   },
   "deepseekPrototype": {
@@ -19,7 +20,15 @@
     "repository": "deepseek-ai/deepseek-harness",
     "commit": "ce7073d51254c26cd63b22a60835b8f948deb447",
     "sourceVersion": "0.2.2-alpha.2",
-    "evidence": "sdk-client-server-protocol-read",
+    "evidence": "native-agent-loop-tools-llm-jobs-composition-and-sdk-read",
+    "runtimeVerification": "not-run"
+  },
+  "piAlternative": {
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "1.4.0",
+    "sourceCommit": "c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8",
+    "integrity": "sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==",
+    "status": "not-selected",
     "runtimeVerification": "not-run"
   },
   "codex": {

@@ -1,6 +1,6 @@
 # ADR 0028：Pi SDK 作为首选执行 Runtime
 
-- 状态：Proposed，待独立设计审查；真实接入合同未运行。
+- 状态：Superseded by [ADR 0030](0030-harness-host.md)。下文保留原先基于 SDK 接入面的选择记录，不再作为当前选型；真实接入合同未运行。
 - 日期：2026-11-02。
 - 工作项：[#132](https://github.com/ntygod/zhiwei-next/issues/132)。
 - 替代：旧 ADR 0001、0013、0019 的默认版本、CLI-only 接入方向及其与新架构冲突的部分。

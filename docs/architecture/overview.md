@@ -17,7 +17,7 @@ flowchart TB
   S[主对话及获准 Sources] --> I[Ingress：身份、准入、去重、持久化]
   I --> B[Durable Inbox / Thread Registry]
   B --> R[Router：沟通、关联、分派]
-  B -->|已确认订阅直通| W[Task Workers：Pi Sessions]
+  B -->|已确认订阅直通| W[Task Workers：Harness Agents]
   R --> T[Task Coordinator / Scheduler]
   T --> W
   W --> G[Action Gateway / Model Gateway]
@@ -39,7 +39,7 @@ flowchart TB
   H --> E
 ```
 
-箭头表示受控端口，不表示允许任意读写。Router、Worker、学习和监督所需模型能力均由选定 Runtime 承载；宿主提供状态机、事件队列、工具和权限，不实现另一套 ReAct Loop。
+箭头表示受控端口，不表示允许任意读写。Router、Worker、学习和监督所需模型能力由 Harness 原生 Agent Loop 承载；知微通过插件提供状态机、事件队列、工具和权限，不实现另一套 ReAct Loop。
 
 ## 3. 职责与部署单元
 
@@ -48,7 +48,7 @@ flowchart TB
 | Ingress / Connector Host | 认证、来源游标、事件正规化、附件隔离 | 从消息正文识别授权身份 |
 | Router | 统一交互、任务归属、跨任务协调、最终答复组织 | shell、直接外部写、宣布任务验收成功 |
 | Task Coordinator | 持久状态、计划依赖、分配、等待、取消、预算 | 替代 Worker 内部推理与工具选择 |
-| Worker Host | 管理一个 Assignment 的 Pi Session、输入和事件 | 直接写控制数据库或长期记忆 |
+| Worker Host | 在专用 Harness Profile 中管理 Assignment 的 Agent、输入与事件 | 直接写控制数据库或长期记忆 |
 | Action / Model Gateway | 每次执行与模型发送的授权、预算、回执 | 由模型文本扩大 Grant |
 | Execution Agent | 在指定环境执行获准 Job，报告真实结果 | 全局认知和其他设备的权限 |
 | Verifier | 根据预声明标准判断成果 | 用 Worker 自评独自认证成功 |
@@ -56,7 +56,9 @@ flowchart TB
 | Delivery | 对正确受众投递获准内容、去重与回执 | 任意复制内部全局上下文 |
 | Supervisor | 基础设施和任务进展监督、有限恢复 | 修改权限、验收标准或任意补丁自修复 |
 
-默认部署三个程序：`control-plane`、`worker-host`、`execution-agent`。Connector、Memory、Learning、Attention、Verifier 是控制面中的模块；后台模型推理通过 Worker Host 的专用会话执行，不阻塞控制面。Supervisor 是独立进程，拥有只读状态和有限恢复端口。
+默认部署 `control-plane`、`worker-host`、`execution-agent` 三类进程。前两者由固定 `dsh` 启动器加载各自的知微 Profile/Bundle，使用不同进程与权限；Execution Agent 作为受控设备程序。Connector、Memory、Learning、Attention、Verifier 是知微控制面插件；后台模型推理通过 Worker Host 的专用 Agent 执行，不阻塞控制面。Supervisor 是独立进程，拥有只读状态和有限恢复端口。
+
+插件化负责能力组合、依赖和清理，不重新定义业务真源。Policy、Task Ledger、Memory 资格和 EffectFence 是部署必需服务，模型无权卸载、替换或改其配置。未就绪或组合不合格时，知微 readiness gate 拒绝公开 API/模型/工具接纳，不依赖上游对非必需插件失败的告警即继续行为。
 
 ## 4. 逻辑 Router 与作用域
 
@@ -79,7 +81,7 @@ flowchart TB
 | 层 | SA1 决策 |
 |---|---|
 | 应用 | TypeScript strict、Node.js 24 系列；部署制品固定精确版本与摘要 |
-| Agent Runtime | Pi Coding Agent SDK；官方 agent loop、工具事件和输入队列 |
+| 应用宿主 / Agent Runtime | DeepSeek Harness 0.2.2-alpha.2；Cordis 组合与原生 Agent Loop，调用公开插件侧 Agent API |
 | 服务通信 | HTTPS 命令 + SSE 事实订阅；内部受认证的流式 RPC |
 | 控制存储 | PostgreSQL 17：事务状态、租约、预算、Inbox/Outbox、记忆提交目录 |
 | 内容 | 私有 S3 对象存储；本地部署可用满足同一合同的文件对象适配器 |
@@ -92,10 +94,10 @@ flowchart TB
 
 ## 7. 模块边界
 
-目标代码组织是 `apps/control-plane`、`apps/worker-host`、`apps/execution-agent`、`apps/supervisor`，以及 `packages/contracts`、`domain`、`runtime-pi`、`storage`、`connectors`。这是未来实现的责任映射，本次不创建空实现。
+目标代码组织是 `apps/execution-agent`、`apps/supervisor`，以及 `packages/contracts`、`domain`、`harness-bridge`、`bundle-control-plane`、`bundle-worker`、`plugins`、`storage`、`connectors`。控制面与 Worker Host 的应用入口由两个 Bundle 提供，仍使用 `dsh --profile <name>` 启动。这是未来实现的责任映射，本次不创建空实现。
 
 - `contracts` 不依赖 Runtime；`domain` 不执行 I/O；应用组合端口。
-- 只有 `runtime-pi` 可导入 Pi 类型。Worker Host 通过该包启动 Runtime。
+- Harness/Cordis 类型只出现在 `harness-bridge`、Bundle 与插件入口；领域、控制库和 API DTO 保持知微自有合同。
 - Connector 的读端与写端分开；同一个帐号连接不意味着所有读写都获准。
 - 权限、完成判定、scope 和版本是核心语义，不能被插件或 Prompt 覆盖。
 - 配置有版本；新 Session 固定模型/工具/Runtime 配置，权限收紧立即生效。配置扩大需要新的授权。

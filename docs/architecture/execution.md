@@ -1,6 +1,6 @@
 # 任务调度、工具与结果
 
-状态：SA1 设计。所有执行由同一 Task/Assignment/Action 账本解释；Runtime 的内部多步推理继续由 Pi 管理。
+状态：SA1 设计。所有执行由同一 Task/Assignment/Action 账本解释；Runtime 的内部多步推理由 Harness 原生 Agent Loop 管理。原生进程内 Job registry 不能代替知微的持久任务/效果账本。
 
 ## 1. 创建与计划
 

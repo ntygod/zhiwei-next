@@ -26,20 +26,33 @@
 
 ## 3. Runtime 源码与官方文档
 
-Pi 调查 commit：`c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8`，源码包版本 1.4.0，MIT。npm 元数据核对了版本与 integrity；真实安装/编译/模型合同尚未验证。
+Pi 备选调查 commit：`c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8`，源码包版本 1.4.0，MIT。npm 元数据核对了版本与 integrity；真实安装/编译/模型合同尚未验证。当前默认选择已由 ADR 0030 改为 Harness 宿主。
 
 - [Pi SDK](https://github.com/earendil-works/pi/blob/c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8/packages/coding-agent/docs/sdk.md)：prompt、steer/followUp、abort、事件、inMemory 与资源控制。
 - [Pi extensions](https://github.com/earendil-works/pi/blob/c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8/packages/coding-agent/docs/extensions.md)：provider/tool/context hooks；扩展有宿主权限。
 - [Pi 权限说明](https://github.com/earendil-works/pi/blob/c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8/README.md)：不自带文件/进程/网络/凭据隔离。
 - [Pi npm 元数据](https://registry.npmjs.org/%40earendil-works%2Fpi-coding-agent/1.4.0)。
 
-DeepSeek Harness 调查 commit：`ce7073d51254c26cd63b22a60835b8f948deb447`，源码根版本 0.2.2-alpha.2，MIT。
+DeepSeek Harness 当前选定 commit：`ce7073d51254c26cd63b22a60835b8f948deb447`，源码根版本 0.2.2-alpha.2，MIT；`@deepseek-ai/dsh` 同版本 npm 元数据与 integrity 已核对，真实安装/运行未验证。
+
+- [公开 Agent API](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/core/agent/README.md)：插件侧 create/resume/steer/followup/inject/cancel/whenIdle。此前将此接入面笼统称为“内部 API”不准确。
+- [原生 Agent Loop](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/core/agent-loop/README.md)：未挂持久化后端时 memory-only；已知 root shutdown 与预算边界需额外合同。
+- [工具执行链](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/core/tools/README.md)：固定 executor、单调 guard；自定义 executor 可不使用共享链路，不能假设可选 hook 覆盖全部路径。
+- [统一模型服务](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/llm/llm/README.md)：主请求、压缩和辅助调用通过模型 seam。
+- [后台 Job](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/jobs/jobs/README.md)：完成通知与 owner 边界；默认后端随进程结束。
+- [插件生命周期](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/docs/cordis-tutorial/02-lifecycle-and-effects.zh.md)：effect 清理；不同异步 disposer 可能并发。
+- [打包与安装](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/docs/user/develop/basic/publish.zh.md)：独立 Bundle、Profile、本地链接、peer + dev 依赖和预构建分发。
+- [CLI 组合与默认值](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/apps/cli/reference/README.md)：首次自定义 Profile 的 base、重置语义、默认日志上传与环境读取。知微必须预检最终组合。
+- [vendor 边界](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/vendor/README.md)：Loader 变更不是完整事务，启动失败可能部分应用。
+- [Harness npm 元数据](https://registry.npmjs.org/%40deepseek-ai%2Fdsh/0.2.2-alpha.2)。
 
 - [SDK Server](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/sdk/server/README.md)：入队、事件、resume 与 shutdown。
 - [SDK Protocol](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/sdk/protocol/README.md)：当前无单会话 cancel/session-close；无协议版本协商承诺。
 - [官方产品入口](https://www.deepseek.com/en/harness/)确认开源与开发文档入口。
 
 Codex 使用[官方 App Server 文档](https://learn.chatgpt.com/docs/app-server)：Thread/Turn/Item、turn/steer、turn/interrupt、事件与审批。该文档为滚动来源，尚未选定并测试具体 Codex 发布制品，不据此承诺替换即兼容。
+
+SDK wire 的限制不代表原生插件 API 的能力限制；本次选择的是后者，并显式保留跨进程桥接的实现与验收责任。
 
 ## 4. 基础设施依据
 

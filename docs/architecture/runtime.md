@@ -1,33 +1,40 @@
-# Runtime 选择与适配合同
+# Harness 宿主与 Runtime 合同
 
-状态：源码/官方文档已核对，真实安装、模型请求、沙箱与故障合同尚未运行。选择依据与固定来源见[来源登记](references.md)。
+状态：SA1 设计。已核对固定源码及 npm 元数据，真实安装、类型、模型、插件清理与沙箱合同均未运行。选择由 [ADR 0030](../adr/0030-harness-host.md) 替代原 Pi 方案。
 
-## 1. 决策
+## 1. 当前选择
 
-SA1 默认使用 **`@earendil-works/pi-coding-agent` 1.4.0 的 TypeScript SDK**，在隔离 Worker Host 进程中创建 AgentSession。调查源码为 `c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8`；npm 的 1.4.0 元数据与 integrity 已取得，但本次未下载/执行制品。
+使用 **DeepSeek Harness 0.2.2-alpha.2** 作为应用宿主，Cordis 管理插件组合与生命周期，`dsh-agent-loop` 提供原生模型/工具执行循环。调查源码为 `ce7073d51254c26cd63b22a60835b8f948deb447`，npm `@deepseek-ai/dsh` 同版本的 integrity 已核对；不把源码阅读当作运行验收。
 
-选择原因：有受支持的 prompt/steer/followUp/abort、事件订阅、in-memory SessionManager、自定义 ResourceLoader 和工具/模型边界。知微需要完全控制长期数据、输入归属和工具能力；这些接入点比包装交互式终端输出更合适。它不提供操作系统权限隔离，必须由本系统补齐。
+知微以独立仓库中的 TypeScript 插件/Bundle 扩展，产品通过固定 `dsh` 启动器加载专用 Profile。主要使用公开的插件侧 `ctx.agents` / `AgentHandle` / `Agent` API，不通过缺少单会话取消的 SDK JSON-RPC 路线承载核心控制。
 
-不使用 `createAgentSession()` 的默认环境发现：默认会加载工作目录资源、设置、凭据和工具。宿主显式提供 cwd、模型路由、内存设置、SessionManager、ResourceLoader、工具集合和唯一受信扩展；不能由用户材料中的路径、插件名或 `AGENTS.md` 自动获得执行权。
+这不要求 Fork 上游、不复制 Agent Loop，也不直接运行默认 `web`、`headless` 或 `sdk-minimal` 组合。默认组合的工具、持久化、日志上传与环境发现不能自动成为知微的权限或数据策略。
 
-## 2. 三个候选的边界
+## 2. 接入面的区别
 
-| 能力 | Pi SDK：本版选择 | DeepSeek Harness SDK | Codex App Server |
-|---|---|---|---|
-| 接入 | TypeScript AgentSession | TypeScript SDK / stdio JSON-RPC | `codex app-server` JSON-RPC |
-| 执行中输入 | steer / followUp，明确队列行为 | session/prompt 快速入队，event/status 订阅 | turn/steer，绑定 expectedTurnId |
-| 取消 | abort；再监督 Job 与子进程 | 当前公开协议无 cancel/session-close，关闭 runtime 进程退出 | turn/interrupt，完成通知带 interrupted |
-| 会话恢复 | SessionManager；本项目采用宿主重建 | session/resume；问题等待句柄为进程局部 | thread/resume，按协议恢复 |
-| 工具与模型约束 | 自定义工具、资源与 provider hooks | composition/plugin 提供，SDK 不是完整权限系统 | sandbox/审批/MCP 等接口，需逐项能力验证 |
-| 已知代价 | 无内置 OS 沙箱；宿主需 Gateway 与隔离 | alpha 协议无版本协商承诺，单会话取消缺口 | Runtime 与模型/认证生态约束，动态工具部分接口为实验性 |
+| 路线 | 能力与取舍 | SA1 处置 |
+|---|---|---|
+| Harness 原生插件 API | `create/resume`、`steer/followup/inject/cancel/whenIdle`、作用域与 effect；公开服务接口 | 默认，版本固定并做契约验收 |
+| Harness SDK JSON-RPC | 进程外入队/事件/resume；当前无 cancel/session-close | 不用于核心 Worker 控制；该限制不能泛化为整个 Harness 无取消能力 |
+| Pi SDK | 轻量嵌入与输入队列，但应用组合/生命周期主要由我们组织 | 保留替换参考，不同时启用第二套默认循环 |
+| Codex App Server | Thread/Turn、steer/interrupt、事件与审批 | 可评估为特定执行后端，不伪装为已兼容插件 |
 
-这些是当前公开接入面的差异，不是三个项目质量排名。DeepSeek 的原型直接使用 Harness 内部服务，不可把原型能调用的方法当成其 SDK 已承诺的跨进程方法。Codex 适配若启用，应使用 App Server 而非解析 TUI 或单次 `exec` 输出。
+Harness 为开发预览，公开接口也可能破坏兼容。使用其服务定义、事件和 seam，避免引用包的私有类/文件；升级在独立候选制品中验证，不追随 master 自动更新。
 
-SA1 只要求 Pi 适配器实际通过验收；其他候选保留明确的替换决策依据，不创建返回假成功的空适配器。替换需要相同黑盒场景及能力矩阵，不能热切换正在执行的原生 Session 身份。
+## 3. Profile 与进程
 
-## 3. 宿主端口
+- `zhiwei-control`：Router、Owner API、来源接收、任务/记忆/权限/学习/Attention 的知微插件。Router 仅有协调和合格读取工具。
+- `zhiwei-worker`：隔离进程中的原生 Agent Loop、固定工具 executor、Model Gateway adapter、Task/Job 桥接插件。一个 active Assignment 对应一个受控 Agent。
+- Execution Agent：在指定环境执行具体获准 Job，不承担全局认知。
+- Supervisor：独立于前两者，监测与请求有限恢复，不具有任意管理插件的能力。
 
-以下为知微自有接口，不宣称是 Pi/Codex/DSH 的原生 API：
+控制面与 Worker 之间需要知微自己的窄桥接协议。Worker 进程内的桥接插件调用公开 Agent API，向外暴露受认证的 start/input/cancel/events/close；不会因为插件内存在 cancel 方法就假设官方 SDK wire 自动拥有该方法。
+
+桥接携带 Task/Assignment/epoch/输入 ID，验证真实传输身份。原生 AgentId、进程局部 initiator scope 和 `ctx.agents.isOwnedBy()` 仅是运行事实，不是跨进程授权。长期身份与权限由知微账本决定。
+
+## 4. 可替换端口
+
+以下为知微合同，不宣称是上游原生方法名：
 
 ```typescript
 interface RuntimeAdapter {
@@ -42,46 +49,56 @@ interface RuntimeAdapter {
 }
 ```
 
-`start` 返回宿主受控入队回执，不等待 `session.prompt()` 的最终 Promise；适配器持有该 Promise 并将成功、异常和 settled 转为事件，保证没有未处理 rejection。订阅在 prompt 前建立。每个输入携带 inputId、taskId、assignmentEpoch、intentRevision、用途和内容版本。
+宿主 start/enqueue 映射为已识别输入的 `agent.followup()`，steer 映射为 `agent.steer()`，interrupt 调用 `agent.cancel(cause)`，清理由拥有者的 `handle.dispose()` 执行；`agent.inject()` 只注入上下文而不唤醒。`whenIdle()` 只说明原生 Agent 暂时休止，不表示 Task/异步 Job/子任务已经完成。
 
-RuntimeEvent 区分输入已观察、消息完成、工具生命周期、重试、压缩、settled、异常和进程关闭。保留 sourceSurface、native IDs、host IDs 和各流 sequence，不从文本猜测事件。
+在发送输入前订阅事件。适配器保存 inputId 与原生 messageId 的关联，区分 `agent/inbox/inserted`、claimed/discarded、真正进入模型请求和完成；claimed 不自动算 applied。无法证明应用关系时保持 delivered/unknown。取消清理原生 inbox 后，知微 durable Inbox 仍需为每条输入登记取消、取代或待恢复，不能静默丢掉已接纳请求。
 
-## 4. 全双工的具体实现
+RuntimeEvent 保留 native/host 身份、各流 sequence 和实际来源；不制造跨进程全序。旧绑定回执可作为历史效果事实核对，不能改写当前 Task。
 
-Router 使用 Pi Session，但只挂载任务/记忆/关联/准备/答复提案工具。`task.start` 等工具登记作业即返回；不等待另一个 Worker 完成。Router 能在后台任务运行时处理新的用户输入。
+## 5. 原生循环与异步工具
 
-Worker 的耗时工具返回 JobHandle，Job 进展和完成通过订阅注入其 input queue。只有用户明确“做完当前任务再处理”时使用 followUp；普通兼容补充使用 steer；撤权、删除和不兼容修改先由宿主冻结旧版本，再决定 abort/rebuild。
+Router 的 task/start、prepare 等工具登记持久工作即返回。Worker 的长工具返回 JobHandle，进度与完成通过事件桥接进入其 inbox；通知完成时需 steer/followup 唤醒，单独 inject 不足以恢复工作。
 
-Pi 的 steer 不是任意时刻的原地抢占：当前 assistant turn 和工具调用仍可能先完成。因此必须有外部 Action Gateway 的撤销检查，不能把“已经发送 steer”当作旧动作已经停止。
+原生 steer 的下一步骤接纳不等于任意时刻抢占。控制面撤权/停止先阻止 Gateway 新派发，再取消原生活动并核对外部 Job；已发出的请求不能通过取消 Promise 假装撤回。
 
-## 5. Role profile
+上游 `jobs-local` 是进程内后端。知微持久 Job 由 Task/Action 账本与 Execution Agent 承担，通过知微 Job provider/桥接工具向原生会话呈现。稳定 canonicalJobId 属于 Task，暴露给当前 Agent 的原生句柄/别名属于当前绑定；重建后重新授权并登记映射，不把旧 SessionId 当作新 Agent 的控制权，也不重复创建底层工作。
 
-| 角色 | 模型任务 | 允许的工具 |
+原生工具并发与任务间资源冲突分开。上游 parallel-safe 分类不能替代跨 Task 的 ResourceClaim、quarantine 和最终资源侧条件写。Task 终态继续服从[待办屏障](domain.md)与[结果验证](execution.md)。
+
+## 6. 插件角色与强制边界
+
+| 角色 | 上游能力 | 知微承担 |
 |---|---|---|
-| Router | 理解意图、关联任务、组织回复 | scoped recall、task propose/control、reference lookup、delivery propose |
-| Worker | 完成明确任务 | 获准 read、job start/read/stop、artifact stage、question、report |
-| Learner | 归纳/比较/生成候选 | 合格材料读取、受控调查提案、candidate propose |
-| Assessor | 主动价值或停滞诊断 | 限定快照，默认无执行工具 |
-| Verifier assistant | 对主观质量提供建议 | 只读精确产物；不能授予安全通过 |
+| Router / Worker | Agent、Agent Loop、输入队列与事件 | Task 归属、长期状态、预算和受众分区 |
+| Tools | `ctx.tools`、固定 native executor、guard 与执行链 | 每 action 的 Grant、资源、版本、效果登记 |
+| LLM | `ctx.llm` / provider adapter seam | 唯一允许的 Gateway provider、目的地和真实发送检查 |
+| Memory / Learning | 依赖/作用域/effect 组合 | Markdown 内容、提交资格、来源、纠正、主动求证 |
+| Sources / Attention | 服务与类型化事件 | 持久游标、候选、通知预算及外部投递 |
 
-模型可以按角色配置，选择由版本化 ModelProfile 决定。模型不可用时保留状态并显式暂停，未经预先声明不切换模型或泄露到新 Provider。工具集合变化只影响新请求快照；每次真正执行仍通过 Gateway。
+Profile 必须显式列出必需服务、允许的 executor/adapter、禁止项与配置摘要。上游允许非必需插件启动失败后继续，也允许自定义 executor 不使用共享执行链；知微不能只注册一个可选 hook 就宣称全路径强制。
 
-## 6. 会话持久化与原始思维链
+知微 readiness gate 在任何声明式 Agent、公开业务 API 或派发开始前验证全部必需插件实际就绪。缺失、disabled、版本拒绝或 PENDING 均不开放业务。固定 executor 必须经过单调 guard 和 Action Gateway；所有主请求、压缩、标题、学习等模型调用只能经过受控 adapter。插件管理工具、动态代码插件、任意安装和生产 HMR 不对 Agent 开放。
 
-使用 `SessionManager.inMemory()`，禁用默认 file-backed 设置、原生会话文件、调试 Prompt 日志和非受信扩展。模型的临时推理内容只允许停留在 Runtime 的必要易失内存中；不得写入消息账本、遥测、异常正文、crash dump 或对象存储。
+Context 的作用域是能力组合机制，不是 OS 隔离。插件是受信宿主代码；工具和不可信代码执行在独立沙箱，模型没有直接文件/进程/网络或数据库凭据。用户内容不能修改 Profile、安装代码或切换 executor。
 
-知微持久化用户消息、批准过的上下文引用、可观察动作、工具回执、公开回答和紧凑的工作摘要。压缩摘要是可重建派生材料，不成为新证据。每次正常休止保存 CheckpointManifest：任务版本、仍有效的引用、已完成动作、未决输入与未知副作用。
+## 7. 会话与原始思维链
 
-进程重启时从 Manifest 和当前资格重新建立一个新的 Pi Session。这是 **宿主重建**，不是逐 token 原生续跑；新 runtimeSessionId 必须可见于审计。已发生动作先核对，旧权限和已失效内容不会随历史恢复。不能为“完整重放”而存储原始思维链。
+Harness 不挂载 session persistence backend 时，Session 留在内存。本项目采用这一方式保存易失 Runtime 历史；不挂载默认 JSONL 持久化、Session 上传、原始流日志、stdout reasoning exporter 或未经许可的遥测插件。
 
-## 7. 模型与工具边界
+知微持久记录合格用户消息、输入关联、动作、回执、公开回答、紧凑摘要和精确引用；原始思维链不落盘、不出现在活动 API。不能将“先写完整 Session，再删敏感块”当成符合保留策略。
 
-模型网络只可访问受控 Model Gateway；Provider 长期密钥在 Gateway/Vault 中，工具执行环境拿不到。Provider 请求前检查内容来源、目的地许可、预算和 epoch；实际发送有观察回执，准备好请求不等于已经发送。
+原生 stdout/stderr 和未处理异常也不是默认可持久日志。Worker 进程的原始流只能进入有界易失捕获，持久诊断仅输出白名单字段；部署不得让容器日志驱动直接归档这些原始流。未知错误对象不展开为全文日志，无法覆盖该输出路径时 profile 不启用。
 
-关闭默认 built-in shell/read/write 和动态发现，只注册通过 Action Gateway 的具体工具。工具进程运行在另一执行沙箱；不能因为 Pi 扩展可信就让任意模型调用获得 Worker Host 的 OS 权限。
+重启以当前 CheckpointManifest、合格记忆和未决输入建立新的原生 Agent/Session，标记为宿主重建，而非逐 token 原生 resume。原生 in-memory inbox 不提供跨进程耐久性，知微 Inbox/Outbox/EffectFence 继续负责重放与核对。未知效果先核对，旧权限不随 Session 重建复活。
 
-Pi 扩展和 SDK 都是高权限宿主代码，纳入供应链固定与完整性验证。Hooks 是观察和约束的接入点，不单独充当 OS 安全边界。任一绕过 Gateway 的模型/工具路径未被证实时，该 profile 不能启用。
+## 8. 清理与配置变化
 
-## 8. 接入验收
+注册、监听器、连接和 watcher 由 Cordis effect 拥有。必须有序的关闭流程放在同一个 disposer 中：冻结派发 → 取消/排空 → 保存回执或 unknown/checkpoint → dispose AgentHandle → 释放连接与租约。不同异步 disposer 可能并发，不能以插件声明顺序代替这个合同。
 
-R01—R08 覆盖：精确版本与包完整性、没有宿主自动发现、streaming 时 steer/followUp、abort 与外部 Job 区别、工具所有路径经过 Gateway、模型 payload/目的地检查、无原始思维链落盘、Session 重建与监听重新绑定。SDK 编译通过不代替这些真实契约场景。
+Gateway、账本和必要回执通道在收尾期间保持可用。依赖消失触发卸载时，也要保留 Task 的明确阻塞/未知状态。原生 root shutdown 存在最终 turn/end 可能未持久的已知边界，所以业务完成从不依赖该事件单独证明。
+
+生产 Profile 固定版本且禁用 HMR。变更先预检最终组合和依赖，排空旧绑定，再启动新组合；失败拒绝 readiness，不宣称 Loader 的局部更新是原子切换。
+
+## 9. 接入验收
+
+R01—R09 / S11 覆盖精确制品和 peer 解析、无隐式资源、输入应用、取消、Gateway 所有调用路径、原始思维链零落盘、会话重建、缺依赖/卸载/桥接与生产组合预检。真实接入通过前只将这些列为设计要求；文档检查不是运行验证。
