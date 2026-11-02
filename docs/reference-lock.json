@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-02",
+  "selectedRuntime": {
+    "name": "pi-sdk",
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "1.4.0",
+    "sourceCommit": "c9f4c7b9fcd0f3e6b5bbc35c7c9b6cda35580eb8",
+    "integrity": "sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==",
+    "evidence": "source-and-registry-metadata-read",
+    "runtimeVerification": "not-run"
+  },
+  "deepseekPrototype": {
+    "repository": "deepseek-ai/dsh-superagent-prototype",
+    "commit": "6337fc823ce20251c8de8085948165c81aaa701e",
+    "evidence": "documentation-and-selected-source-read"
+  },
+  "deepseekHarness": {
+    "repository": "deepseek-ai/deepseek-harness",
+    "commit": "ce7073d51254c26cd63b22a60835b8f948deb447",
+    "sourceVersion": "0.2.2-alpha.2",
+    "evidence": "sdk-client-server-protocol-read",
+    "runtimeVerification": "not-run"
+  },
+  "codex": {
+    "documentation": "https://learn.chatgpt.com/docs/app-server",
+    "evidence": "official-documentation-read",
+    "releaseSelection": "not-selected",
+    "runtimeVerification": "not-run"
+  },
+  "resetBase": "e95bf24fd61d0da9c1b59ef26f330ed40468111d"
+}

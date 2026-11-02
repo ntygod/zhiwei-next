@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "baseline": "SA1",
+  "status": "design-only",
+  "language": "TypeScript",
+  "defaultDeployment": "cloud",
+  "runtime": "pi-sdk",
+  "memoryContent": "markdown",
+  "controlStore": "postgresql-17",
+  "uiDesign": "excluded",
+  "productPhases": "none",
+  "chapters": ["overview", "domain", "events-and-interaction", "runtime", "execution", "memory", "learning", "proactivity", "security", "deployment", "contracts", "acceptance", "references"],
+  "requirements": [
+    {"id":"REQ01","title":"默认云端、本地与混合部署","chapters":["overview","deployment"],"scenarios":["D01","D02","D03","D04"]},
+    {"id":"REQ02","title":"复用 Runtime，不自研 Agent Loop","chapters":["runtime"],"scenarios":["R01","R02","R08"]},
+    {"id":"REQ03","title":"统一协调与独立执行","chapters":["overview","execution"],"scenarios":["E04","X01","X03"]},
+    {"id":"REQ04","title":"事件过滤、去重、订阅直通","chapters":["events-and-interaction"],"scenarios":["E01","E02","E03"]},
+    {"id":"REQ05","title":"执行中持续接收并处理新要求","chapters":["events-and-interaction","runtime"],"scenarios":["E04","E05","E06","E07","R03","R04"]},
+    {"id":"REQ06","title":"持久任务、等待与恢复","chapters":["domain","execution","deployment"],"scenarios":["D02","D03","D05","D06"]},
+    {"id":"REQ07","title":"异步工具、推送进度、效果核对","chapters":["execution","events-and-interaction"],"scenarios":["E08","R05","R06","X02"]},
+    {"id":"REQ08","title":"Markdown 记忆及并发提交","chapters":["memory","contracts"],"scenarios":["M01","M02","M03","M07"]},
+    {"id":"REQ09","title":"来源、纠正、失效与遗忘","chapters":["domain","memory","security"],"scenarios":["M04","M05","M06","M08","M09","M10"]},
+    {"id":"REQ10","title":"经验学习与主动求证","chapters":["learning"],"scenarios":["L01","L02","L03","L04","L05","L06","L07","L08"]},
+    {"id":"REQ11","title":"低打扰主动帮助","chapters":["proactivity"],"scenarios":["A01","A02","A03","A04","A05","A06","A07","A08"]},
+    {"id":"REQ12","title":"独立结果验证","chapters":["execution","learning"],"scenarios":["X04","X05","L07"]},
+    {"id":"REQ13","title":"身份、权限、凭据与受众隔离","chapters":["security","contracts"],"scenarios":["S01","S02","S03","S04","S05","S06","S07","S08","S09","S10"]},
+    {"id":"REQ14","title":"持续运行、监督与停滞恢复","chapters":["execution","deployment"],"scenarios":["X06","D07","D08"]},
+    {"id":"REQ15","title":"协议与输入生效回执","chapters":["contracts","events-and-interaction"],"scenarios":["E01","E05","E06","E08"]},
+    {"id":"REQ16","title":"禁止持久化原始思维链","chapters":["runtime","security"],"scenarios":["R07","S06"]}
+  ]
+}

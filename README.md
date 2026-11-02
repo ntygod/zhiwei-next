@@ -1,88 +1,42 @@
-# 知微 Next · ZhiWei
+# 知微 · Super Agent
 
-> 持续理解目标，完成任务，从结果学习，在合适时机帮助。
+知微是持续在线、跨入口协作的个人 Agent：接收用户与环境事件，理解目标，并行推进任务，形成可纠正的长期记忆，在适当时机提供帮助。
 
-知微是本地优先的完整个人 Agent。它把可纠正记忆、任务执行、结果学习、主动帮助与有界授权连成长期合作体验；Pi 是首个执行 Runtime，认知真源由知微维护。
+本仓库已按所有者 2026-11-02 的明确指令重建。当前交付为 **SA1 完整架构设计**，不是产品实现或可运行演示。不按开发阶段拆分架构；UI 设计不在本次范围。旧实现、测试与设计可从 Git 历史恢复。
 
-## 设计与开发入口
+## 已选定的设计
 
-- [完整设计总览](docs/planning/design-baseline.md)
-- [产品与使用场景](docs/product/product-vision.md)、[交互设计](docs/product/ui-design.md)
-- [系统架构](docs/architecture/system-architecture.md)、[领域模型](docs/architecture/domain-model.md)
-- [详细架构设计与模块合同](docs/architecture/detailed-design.md)
-- [认知循环](docs/architecture/cognitive-loop.md)、[学习与评估](docs/architecture/learning-and-evaluation.md)
-- [主动与执行](docs/architecture/proactivity-and-execution.md)、[数据与接口](docs/architecture/data-and-api.md)、[安全](docs/architecture/trust-and-safety.md)
-- [P0—P5 路线图](docs/planning/roadmap.md)、[完整任务卡](docs/planning/implementation-plan.md)、[验收标准](docs/planning/acceptance-criteria.md)
-- [旧设计过渡](docs/planning/design-transition.md)、[下一任务交接](docs/planning/next-task-handoff.md)
+- TypeScript；默认云端部署，同一控制面支持本地与混合部署。
+- 采用 DeepSeek Super-agent 的 Router / Worker、事件过滤与订阅直通、异步交互、计算/状态/执行环境分离和独立监督思路。
+- 默认 Runtime 为 **Pi Coding Agent SDK**；不自研模型/工具执行循环。DeepSeek Harness、Codex App Server 的适配差异有明确记录。
+- **Markdown 保存记忆正文及语义元数据**；PostgreSQL 保存当前有效版本、权限、任务、队列和提交状态；对象存储保存文档与证据。该方案不是“全系统无关系型数据库”。
+- 模型提出判断与行动；服务验证身份、范围、版本、预算和完成证据。长期认知不属于 Runtime 会话。
 
-## 当前实现
+## 阅读入口
 
-当前产品验收阶段为 **design-v2 / P0**。已交付 Runtime v1、SQLite Ledger v1、固定工具链与 CLI 方向、受保护本地诊断、场景运行器，以及按[开发与验收分离](docs/harness/development-and-acceptance.md)推进的 Task/Outcome、预算、P1 领域合同与 v2 认知持久化。当前 [P1-03 受控 Worker/Broker](docs/architecture/controlled-pi-worker.md)只接固定合成材料和接收器；完整会话/真实授权、学习、主动、工作台和桌面仍待相应任务与验收，不能从组件已实现推导产品可用。
+| 问题 | 事实源 |
+|---|---|
+| 完整系统如何组织 | [架构总览](docs/architecture/overview.md) |
+| 对象、真源与状态如何划分 | [领域模型](docs/architecture/domain.md) |
+| 事件如何路由，执行中如何继续对话 | [事件与全双工交互](docs/architecture/events-and-interaction.md) |
+| 如何接入现成 Runtime | [Runtime 选择与合同](docs/architecture/runtime.md) |
+| 如何调度、调用工具并避免重复副作用 | [执行与调度](docs/architecture/execution.md) |
+| Markdown 记忆如何可靠工作 | [记忆与存储](docs/architecture/memory.md) |
+| 如何主动学习并证明效果 | [学习系统](docs/architecture/learning.md) |
+| 何时保持安静、准备、提醒和行动 | [主动协作](docs/architecture/proactivity.md) |
+| 云端、设备与外部内容的权限边界 | [安全与身份](docs/architecture/security.md) |
+| 常驻、扩容、掉线、备份与恢复 | [部署与运维](docs/architecture/deployment.md) |
+| 外部接口、内部端口及数据提交 | [接口合同](docs/architecture/contracts.md) |
+| 如何验收整个产品 | [场景与验收](docs/architecture/acceptance.md) |
+| 哪些来自论文，哪些是本项目决策 | [来源与差异](docs/architecture/references.md) |
+| 为什么清空以及如何恢复旧仓库 | [重建记录](docs/repository-reset.md) |
 
-新顺序为：接入前置 → 连续协作 Alpha → 可验证学习 → 主动协作 → 可靠委托与完整桌面 v1 → 跨 Runtime 扩展。P1 就有可用工作台与结果验证；原 M0—M7 计划保留为历史，不再自动决定下一任务。全部既有质量与合并门保留。
+长期决策见 [ADR 0027](docs/adr/0027-super-agent-reset.md)、[ADR 0028](docs/adr/0028-pi-runtime.md)、[ADR 0029](docs/adr/0029-markdown-memory.md)。
 
-本仓库不兼容旧知微数据库，不以旧功能迁移率评价进度。实际已合入状态与限制见[项目状态](docs/harness/project-state.md)。
-## Bootstrap 运行方式
+## 检查
 
-固定 Node 22.23.1 / npm 10.9.8 / TypeScript 5.9.3。先完成无凭证隔离安装，再执行真实 strict noEmit 编译和原有 Node 类型擦除行为测试；支持边界与 root SDK 声明限制见[工具链说明](docs/architecture/formal-toolchain.md)。
-
-```bash
-# 精确依赖安装（临时 HOME/cache，禁止 lifecycle scripts）
-sh scripts/formal-toolchain.sh install
-
-# 严格类型检查 + 架构约束 + 全部测试
+```sh
 npm run check
-
-# 先由用户或可信启动器向两个进程注入同一个 ZHIWEI_DIAGNOSTIC_TOKEN
-# 必填 64 字符十六进制值；此处不提供或保存实际凭据
-# 启动本地 Daemon（默认 http://127.0.0.1:4265）
-npm run start:daemon
-
-# 另一个终端检查状态
-npm run start:cli -- doctor
 ```
 
-配置、兼容变化、错误类别和未保证边界见[本地诊断说明](docs/architecture/local-diagnostics.md)。未配置凭据时 Daemon/doctor 在 I/O 前失败；help/version 不受影响。
-
-> Node.js 的 Type Stripping 在 Node 22 中仍可能输出实验性提示；运行时擦除与编译检查是两条独立验证路径；正式构建/生产执行路径仍待后续里程碑。
-
-## 仓库结构
-
-```text
-apps/
-  daemon/              本地认知服务进程
-  cli/                 开发与诊断入口
-  desktop/             桌面壳（P4 目标）
-  web/                 产品工作台（P1 目标）
-
-packages/
-  domain/              纯领域类型和不变量
-  cognition-core/      候选、Claim、纠正和生命周期
-  memory-store/        存储端口、SQLite Ledger 与后续认知持久化
-  context-compiler/    上下文胶囊编译
-  protocol/            与 Runtime 无关的事件协议
-  pi-adapter/          唯一允许接触 Pi 类型的边界
-  evals/               长期场景评估
-docs/
-  product/             产品与交互设计
-  architecture/        长期架构
-  planning/            里程碑与验收
-  adr/                 不可轻易反复的架构决策
-  design/prototype/    低保真 UI 原型
-```
-
-## 架构红线
-
-1. `domain`、`cognition-core`、`memory-store`、`context-compiler` 不得依赖 Pi。
-2. LLM 只能提出 `MemoryCandidate`，不能直接写入长期 `MemoryClaim`。
-3. 任何可使用的 Claim 都必须有证据、作用域、状态和有效时间。
-4. 用户明确纠正必须创建新版本并 supersede 旧版本。
-5. 先做结构化作用域过滤，再做相关性排序；跨 Workspace 泄漏目标为零。
-6. 主动发现与外部执行分离；默认不能因 Attention 直接产生副作用。
-7. 不为旧知微保留兼容层，不复制未经重新证明的旧模块。
-
-## 许可证
-
-仓库当前公开可读，许可证仍标记为 `UNLICENSED`；公开仓库不表示已授予开源许可。在首次产品发布前单独完成许可证决策，不默认沿用旧仓库许可证。
-
-P1-04 当前合成实施边界见[持久任务与会话](docs/architecture/persistent-task-sessions.md)；不启用真实入口。
+当前命令仅检查架构文档链接、机器合同、来源登记和需求/验收映射。它不证明 Runtime、事务、隔离、恢复或模型效果已实现。不存在产品启动命令。重建前旧检查的真实结果及合并限制见[重建记录](docs/repository-reset.md)。
