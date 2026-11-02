@@ -36,6 +36,8 @@
 
 首轮独立审查指出异步 Job 终态屏障、备份后的外部效果遗漏和未决写资源释放三处阻塞，当前设计已分别增加等待屏障、独立 EffectFence 与资源 quarantine，并加入对应场景。修订必须由独立上下文复核后才能称设计审查通过。
 
+复审进一步要求将备份重放起点绑定到同一数据库快照中完整连续投影的 applied 水位；当前合同分别定义 appliedEffectHead / appliedInvalidationHead，独立域 head 只作恢复上界，并覆盖日志已提交但数据库未提交的故障窗口。
+
 ## 回滚方法
 
 通过新的受审 revert 恢复基线树，不 reset/force-push main。工作树恢复可从上述基线 commit 或 bundle 生成；未跟踪文件从仓库外归档按原相对路径恢复并核对 manifest。

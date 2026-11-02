@@ -116,7 +116,7 @@ Router 和 Worker 看到的是这些端口的受限工具投影。端口实现�
 | artifact / outcome / criterion_result / memory_use | 精确产物与标准；exposure/adoption/benefit 分开 |
 | opportunity / opportunity_feedback / learning_run | topicKey、来源版本、再次评估条件、预算与可撤回版本 |
 | outbox / delivery | 内容引用、受众、幂等键、发送观察与回执 |
-| invalidation_operation / control_head_cache | 当前失效操作与独立恢复 head 的应用位置；cache 不是外部 head 真源 |
+| invalidation_operation / control_projection_head | 当前失效操作；数据库事务内完整、连续投影的 appliedInvalidationHead / appliedEffectHead；不是独立日志最新 head 的缓存替身 |
 
 所有带正文的字段实际保存 ContentRef 或受保留策略管理的有限数据；受限索引表独立标为 derived。SQL schema/迁移须在实现时版本化，不能把本表当作已经存在的数据库。
 
@@ -147,13 +147,19 @@ Router 和 Worker 看到的是这些端口的受限工具投影。端口实现�
 
 第 2 步失败时保持冻结并显示 pending，不假称遗忘完成。独立 head 已推进但 DB 未完成，重启/恢复必须先重放失效再开放。并行操作按安装控制序列串行提交；旧备份不能创建较低的 head。部署管理员同时恶意替换所有状态不在此保证内。
 
+`appliedInvalidationHead` 只在数据库事务已经完整施加该记录及其以前全部连续记录时前移，和失效/epoch/依赖状态同事务提交。收到独立域的 durable receipt 不能单独前移该水位。发生缺口时等待补齐，不能跳到后面的已收到记录。
+
 若新版本正文丢失但旧版本已被确认失效，恢复结果是 unavailable，而不是重新使用旧版本。外部控制域的可靠存储和恢复演练是生产启用条件，不可用普通对象桶中一个可任意覆盖的 JSON 冒充。
 
 ## 8. 不随普通备份回退的效果记录
 
 与失效记录同属独立恢复控制域，但使用独立的 EffectFence 序列与 head。每个有外部副作用的动作和 Delivery 在取得执行令牌前，先持久登记 logicalOperationId、actionId、Task/intent/step、resourceKey、目的地类别、预算引用和最小参数完整性标识。确认回执也在控制库确认完成之前写入该域。该域不包含原始思维链或正文；敏感目标/回执细节放受保留策略控制的对象，最小记录用 opaque ID。细节被清除后不能据此推断“可以安全重做”。
 
-普通备份记录 effectHead 水位。恢复时必须取得当前独立 effectHead，重放备份水位之后的所有 intent/receipt：已 confirmed 的效果恢复为已发生；无确定终态的 intent 进入核对；所属 Task 在备份中不存在时创建不可执行的恢复占位，关联已知资源与效果。上下文资料丢失显示 missing-context，不凭空重建请求。
+`appliedEffectHead` 只在数据库事务已完整投影连续的 intent/receipt，以及所需 action/资源隔离/恢复屏障状态后前移。独立域已经到序号 101、数据库只投影到 99 时，该数据库水位仍是 99，不能从独立 head 或回执最大序号推导为 101。
+
+普通备份从与所备份表内容完全相同的一致快照读取 `appliedEffectHead` 和 `appliedInvalidationHead`，这两个值才是恢复重放起点。独立域当前 heads 是恢复时取得的上界。恢复从各自 applied 水位之后重放全部记录；快照内早于水位但仍 pending/unknown 的动作也必须核对。备份清单与实际恢复数据库的 applied 水位不一致时拒绝开放，不能用较大的清单值跳过记录。
+
+已 confirmed 的效果恢复为已发生；无确定终态的 intent 进入核对；所属 Task 在备份中不存在时创建不可执行的恢复占位，关联已知资源与效果。上下文资料丢失显示 missing-context，不凭空重建请求。
 
 受影响的 Task/资源在 recovery-barrier 未解除前禁止新的冲突外部动作，即使用户重新授予 Grant、模型重新规划或生成新的步骤 ID。屏障只因既有效果已映射并核对、无剩余未知而解除；不能把重新登录/授权当作效果核对。新任务若命中同一 quarantined resourceKey 也受屏障约束。
 
